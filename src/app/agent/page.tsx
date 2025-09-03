@@ -580,8 +580,8 @@ export default function AgentPage() {
 
   // Show loading while client is initializing
   if (!isClient) {
-    return (
-      <main className="mx-auto max-w-xl p-6 space-y-6">
+  return (
+    <main className="mx-auto max-w-xl p-6 space-y-6">
         <H2>Loading...</H2>
       </main>
     );
@@ -593,16 +593,16 @@ export default function AgentPage() {
       <main className="mx-auto max-w-xl p-6 space-y-6">
         <H2>Agent Login</H2>
         <div className="space-y-4">
-          <label className="block space-y-2">
+      <label className="block space-y-2">
             <div className="text-sm text-white/70">Your work email</div>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-md bg-white/10 text-white placeholder-white/40 px-3 py-2 ring-1 ring-white/10 focus:outline-none"
-              placeholder="agent@company.com"
-            />
-          </label>
+          placeholder="agent@company.com"
+        />
+      </label>
           <PrimaryButton onClick={saveEmail} className="w-full">
             Start Working
           </PrimaryButton>
