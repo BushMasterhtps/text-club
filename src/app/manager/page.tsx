@@ -3,6 +3,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { PieChart, Pie, Cell, Tooltip } from "recharts";
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
+import { useAutoLogout } from '@/hooks/useAutoLogout';
+import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
+import SessionTimer from '@/app/_components/SessionTimer';
 
 /* ========== Shared types ========== */
 type AssignResult = Record<string, string[]>;
@@ -2210,6 +2213,22 @@ function UsersAdminSection() {
 /*  PAGE                                                                       */
 /* ========================================================================== */
 export default function ManagerPage() {
+  // Auto-logout functionality
+  const {
+    timeLeft,
+    showWarning,
+    extendSession,
+    formatTime
+  } = useAutoLogout({
+    timeoutMinutes: 120, // 2 hours
+    warningMinutes: 5,   // 5 minutes warning
+    onLogout: () => {
+      localStorage.removeItem('currentRole');
+      fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login';
+    }
+  });
+
   // Navigation state
   const [activeSection, setActiveSection] = useState<string>("overview");
   
@@ -2559,6 +2578,12 @@ export default function ManagerPage() {
           
           {/* Action Buttons */}
           <div className="flex items-center gap-3">
+            {/* Session Timer */}
+            <SessionTimer 
+              timeLeft={timeLeft} 
+              onExtend={extendSession} 
+            />
+            
             {/* Switch to Agent Button (only if user has MANAGER_AGENT role) */}
             {currentUserRole === 'MANAGER_AGENT' && (
               <button
@@ -2919,6 +2944,18 @@ export default function ManagerPage() {
           setShowPasswordModal(false);
           // Refresh the page to update the JWT token
           window.location.reload();
+        }}
+      />
+
+      {/* Auto-Logout Warning Modal */}
+      <AutoLogoutWarning
+        isOpen={showWarning}
+        timeLeft={timeLeft}
+        onExtend={extendSession}
+        onLogout={() => {
+          localStorage.removeItem('currentRole');
+          fetch('/api/auth/logout', { method: 'POST' });
+          window.location.href = '/login';
         }}
       />
     </main>
