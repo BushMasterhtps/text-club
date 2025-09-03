@@ -1,0 +1,111 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const email = searchParams.get('email');
+    
+    if (!email) {
+      return NextResponse.json({ success: false, error: "Email parameter required" }, { status: 400 });
+    }
+
+    // Find the user by email
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      select: { id: true, isLive: true }
+    });
+
+    if (!user) {
+      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+    }
+
+    if (!user.isLive) {
+      return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
+    }
+
+    // Get tasks assigned to this user with statuses that agents can work on
+    const tasks = await prisma.task.findMany({
+      where: {
+        assignedToId: user.id,
+        status: {
+          in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"]
+        }
+      },
+      select: {
+        id: true,
+        brand: true,
+        phone: true,
+        text: true,
+        status: true,
+        assignedToId: true,
+        startTime: true,
+        endTime: true,
+        durationSec: true,
+        disposition: true,
+        assistanceNotes: true,
+        managerResponse: true,
+        createdAt: true,
+        updatedAt: true,
+        rawMessage: {
+          select: {
+            brand: true,
+            phone: true,
+            text: true
+          }
+        }
+      },
+      orderBy: [
+        { status: "asc" }, // PENDING first, then IN_PROGRESS, then ASSISTANCE_REQUIRED
+        { updatedAt: "desc" } // Most recently updated first (responses will be on top)
+      ]
+    });
+
+    // Transform tasks to include brand/phone/text from rawMessage if not set on task
+    const transformedTasks = tasks.map(task => ({
+      ...task,
+      brand: task.brand || task.rawMessage?.brand || "Unknown",
+      phone: task.phone || task.rawMessage?.phone || "",
+      text: task.text || task.rawMessage?.text || "",
+      rawMessage: undefined // Remove from response
+    }));
+
+    // Debug: Check if any tasks have manager responses
+    const tasksWithResponses = transformedTasks.filter(t => t.managerResponse);
+    if (tasksWithResponses.length > 0) {
+      console.log("🔍 API Debug: Found tasks with manager responses:", tasksWithResponses.length);
+      tasksWithResponses.forEach((task, index) => {
+        console.log(`🔍 API Debug: Task ${index + 1} - ID: ${task.id}, Status: ${task.status}, Response: ${task.managerResponse}`);
+      });
+    } else {
+      console.log("🔍 API Debug: No tasks with manager responses found");
+      console.log("🔍 API Debug: Total tasks returned:", transformedTasks.length);
+      console.log("🔍 API Debug: Sample task:", transformedTasks[0] ? {
+        id: transformedTasks[0].id,
+        status: transformedTasks[0].status,
+        hasManagerResponse: !!transformedTasks[0].managerResponse
+      } : "No tasks");
+    }
+
+    // Additional debugging: Check raw data before transformation
+    console.log("🔍 API Debug: Raw tasks from database:", tasks.length);
+    const rawTasksWithResponses = tasks.filter(t => t.managerResponse);
+    console.log("🔍 API Debug: Raw tasks with responses:", rawTasksWithResponses.length);
+    if (rawTasksWithResponses.length > 0) {
+      rawTasksWithResponses.forEach((task, index) => {
+        console.log(`🔍 API Debug: Raw Task ${index + 1} - ID: ${task.id}, Status: ${task.status}, Has Response: ${!!task.managerResponse}`);
+      });
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      tasks: transformedTasks 
+    });
+  } catch (err: any) {
+    console.error("Error fetching agent tasks:", err);
+    return NextResponse.json({ 
+      success: false, 
+      error: err?.message || "Failed to fetch tasks" 
+    }, { status: 500 });
+  }
+}

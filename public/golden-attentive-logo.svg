@@ -1,0 +1,57 @@
+<svg width="300" height="80" viewBox="0 0 300 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Golden glow filter -->
+    <filter id="goldenGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- White glow filter -->
+    <filter id="whiteGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background - transparent to merge with UI -->
+  <rect width="300" height="80" fill="transparent"/>
+  
+  <!-- Stylized G with extension -->
+  <g transform="translate(20, 20)">
+    <!-- Main G shape -->
+    <path d="M25 0 C40 0 45 5 45 20 C45 35 40 40 25 40 C10 40 5 35 5 20 C5 5 10 0 25 0 Z" 
+          fill="none" 
+          stroke="#FFD700" 
+          stroke-width="4"
+          filter="url(#goldenGlow)"/>
+    
+    <!-- Horizontal extension from G -->
+    <line x1="45" y1="20" x2="65" y2="20" stroke="#FFD700" stroke-width="4" filter="url(#goldenGlow)"/>
+    
+    <!-- Inner G details -->
+    <path d="M25 5 C35 5 40 10 40 20 C40 30 35 35 25 35 C15 35 10 30 10 20 C10 10 15 5 25 5 Z" 
+          fill="none" 
+          stroke="#FFD700" 
+          stroke-width="2.5"
+          filter="url(#goldenGlow)"/>
+    
+    <!-- Horizontal bar inside G -->
+    <line x1="25" y1="20" x2="40" y2="20" stroke="#FFD700" stroke-width="3" filter="url(#goldenGlow)"/>
+  </g>
+  
+  <!-- GOLDEN text -->
+  <text x="70" y="35" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#FFD700" text-transform="uppercase" filter="url(#goldenGlow)">
+    GOLDEN
+  </text>
+  
+  <!-- ATTENTIVE text -->
+  <text x="70" y="55" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-transform="uppercase" filter="url(#whiteGlow)">
+    ATTENTIVE
+  </text>
+</svg>

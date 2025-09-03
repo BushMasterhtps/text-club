@@ -1,0 +1,244 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/////////////////////////////////////
+// Enums
+/////////////////////////////////////
+
+enum Role {
+  MANAGER
+  AGENT
+  MANAGER_AGENT
+}
+
+enum TaskStatus {
+  PENDING
+  SPAM_REVIEW
+  IN_PROGRESS
+  ASSISTANCE_REQUIRED
+  RESOLVED
+  COMPLETED
+}
+
+enum RawStatus {
+  READY
+  SPAM_REVIEW
+  PROMOTED
+  SPAM_ARCHIVED
+}
+
+/**
+ * NEW: matching mode for spam rules
+ * - CONTAINS: substring match on normalized text
+ * - LONE: whole-message equals normalized pattern
+ * - REGEX: JavaScript regex against raw text (advanced)
+ */
+enum SpamMode {
+  CONTAINS
+  LONE
+  REGEX
+}
+
+/////////////////////////////////////
+// Core user & task models
+/////////////////////////////////////
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  role      Role     @default(AGENT)
+  isActive  Boolean  @default(true)
+  mustChangePassword Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  isLive   Boolean   @default(false)
+  lastSeen DateTime?
+  maxOpen  Int       @default(200)
+
+  tasks      Task[]              @relation("UserTasks")
+  assistance AssistanceRequest[]
+  histories  TaskHistory[]       @relation("UserHistory")
+
+  @@index([isLive, lastSeen])
+}
+
+model Task {
+  id    String  @id @default(cuid())
+  phone String?
+  email String?
+  text  String?
+  brand String?
+
+  assignedToId String?
+  assignedTo   User?   @relation("UserTasks", fields: [assignedToId], references: [id])
+
+  // 🔗 Link a task back to its source RawMessage
+  rawMessageId String?
+  rawMessage   RawMessage? @relation(fields: [rawMessageId], references: [id])
+
+  status      TaskStatus @default(PENDING)
+  startTime   DateTime?
+  endTime     DateTime?
+  durationSec Int?
+
+  disposition     String?
+  sfOrderNumber   String?
+  sfCaseNumber    String?
+  assistanceNotes String?
+  managerResponse String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assistance AssistanceRequest[]
+  history    TaskHistory[]
+  labels     SpamLabel[]
+
+  @@index([assignedToId])
+  @@index([status, createdAt])
+  @@index([rawMessageId])
+}
+
+model AssistanceRequest {
+  id      String @id @default(cuid())
+  taskId  String
+  task    Task   @relation(fields: [taskId], references: [id])
+  agentId String
+  agent   User   @relation(fields: [agentId], references: [id])
+
+  message      String
+  status       String    @default("REQUIRED")
+  responseText String?
+  respondedBy  String?
+  respondedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([agentId])
+}
+
+model TaskHistory {
+  id     String @id @default(cuid())
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id])
+
+  actorId String?
+  actor   User?   @relation("UserHistory", fields: [actorId], references: [id])
+
+  action     String
+  prevStatus TaskStatus?
+  newStatus  TaskStatus?
+  note       String?
+  createdAt  DateTime    @default(now())
+
+  @@index([taskId])
+  @@index([actorId])
+}
+
+/////////////////////////////////////
+// Ingestion scaffold
+/////////////////////////////////////
+
+model ImportBatch {
+  id         String   @id @default(cuid())
+  sourceName String
+  rowCount   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  messages RawMessage[]
+}
+
+model RawMessage {
+  id            String      @id @default(cuid())
+  importBatchId String
+  importBatch   ImportBatch @relation(fields: [importBatchId], references: [id])
+
+  receivedAt DateTime?
+  phone      String?
+  email      String?
+  brand      String?
+  text       String?
+  source     String?
+
+  hashKey String @unique
+
+  status         RawStatus @default(READY)
+  previewMatches Json?
+
+  createdAt DateTime @default(now())
+
+  // 🔁 Backref to tasks created from/promoted from this message
+  tasks Task[]
+
+  @@index([importBatchId])
+  @@index([createdAt])
+  @@index([status])
+  @@index([status, createdAt])
+}
+
+/////////////////////////////////////
+// SpamSimple (phrase-based spam)
+/////////////////////////////////////
+
+model SpamRule {
+  id          String    @id @default(cuid())
+  pattern     String
+  patternNorm String    @default("")
+  mode        SpamMode  @default(CONTAINS)  // NEW
+  brand       String?                     // NEW: scope rule to a brand (optional)
+  enabled     Boolean   @default(true)
+  note        String?                      // NEW: optional admin note
+  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+
+  labels SpamLabel[]
+
+  /// Prevent exact duplicates (same normalized text, same mode, same brand)
+  @@unique([patternNorm, mode, brand], name: "patternNorm_mode_brand")
+  @@index([enabled])
+  @@index([brand])
+}
+
+model SpamLabel {
+  id        String    @id @default(cuid())
+  taskId    String
+  task      Task      @relation(fields: [taskId], references: [id])
+  ruleId    String?
+  rule      SpamRule? @relation(fields: [ruleId], references: [id])
+  createdAt DateTime  @default(now())
+
+  @@index([taskId])
+  @@index([ruleId])
+  @@index([createdAt])
+}
+
+/////////////////////////////////////
+// Archive for confirmed spam
+/////////////////////////////////////
+
+model SpamArchive {
+  id String @id @default(cuid())
+
+  textHash String  @unique
+  text     String?
+  brand    String?
+
+  firstSeen DateTime @default(now())
+  lastSeen  DateTime @updatedAt
+  hitCount  Int      @default(1)
+
+  @@index([brand])
+}
