@@ -128,23 +128,51 @@ export default function AgentPage() {
   useEffect(() => {
     if (!isClient) return;
     
-    const savedEmail = localStorage.getItem('agentEmail');
-    if (savedEmail) {
-      console.log("🔐 Agent authenticated:", savedEmail);
-      setEmail(savedEmail);
+    // First check if user is authenticated via API
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/me', { cache: 'no-store' });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.user) {
+            // User is authenticated, set their email
+            const userEmail = data.user.email;
+            localStorage.setItem('agentEmail', userEmail);
+            setEmail(userEmail);
+            console.log("🔐 Agent authenticated via API:", userEmail);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("Auth check failed:", error);
+      }
       
-      // Send initial heartbeat
-      sendHeartbeat(savedEmail);
-      
-      // Wait a bit for state to update, then start polling
-      setTimeout(() => {
-        console.log("🚀 Starting initial load and polling...");
-        loadTasks(savedEmail);
-        loadStats(savedEmail);
-        startPolling();
-      }, 100);
-    }
+      // Fallback to localStorage check
+      const savedEmail = localStorage.getItem('agentEmail');
+      if (savedEmail) {
+        console.log("🔐 Agent authenticated via localStorage:", savedEmail);
+        setEmail(savedEmail);
+      }
+    };
+    
+    checkAuth();
   }, [isClient]);
+
+  // Start polling when email is set
+  useEffect(() => {
+    if (!email) return;
+    
+    // Send initial heartbeat
+    sendHeartbeat(email);
+      
+    // Wait a bit for state to update, then start polling
+    setTimeout(() => {
+      console.log("🚀 Starting initial load and polling...");
+      loadTasks(email);
+      loadStats(email);
+      startPolling();
+    }, 100);
+  }, [email]);
 
   // Send heartbeat every 30 seconds to update lastSeen
   useEffect(() => {
@@ -585,49 +613,6 @@ export default function AgentPage() {
         <H2>Loading...</H2>
       </main>
     );
-  }
-
-  // Check if user is authenticated and has agent role
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [userEmail, setUserEmail] = useState<string>('');
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const response = await fetch('/api/auth/me', { cache: 'no-store' });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.user) {
-            setIsAuthenticated(true);
-            setUserEmail(data.user.email);
-            // Set agentEmail in localStorage for consistency
-            localStorage.setItem('agentEmail', data.user.email);
-          } else {
-            setIsAuthenticated(false);
-          }
-        } else {
-          setIsAuthenticated(false);
-        }
-      } catch (error) {
-        setIsAuthenticated(false);
-      }
-    };
-    checkAuth();
-  }, []);
-
-  // Show loading while checking authentication
-  if (isAuthenticated === null) {
-    return (
-      <main className="mx-auto max-w-xl p-6 space-y-6">
-        <div className="text-center text-white/60">Loading...</div>
-      </main>
-    );
-  }
-
-  // Redirect to login if not authenticated
-  if (isAuthenticated === false) {
-    window.location.href = '/login';
-    return null;
   }
 
   // Check if user is coming from role switching (has agentEmail) or needs to login

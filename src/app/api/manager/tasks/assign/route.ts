@@ -37,20 +37,74 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "Agent not found." }, { status: 400 });
       }
 
-      // Write each update inside one transaction (no leaking tx outside)
-      // Use updateMany with conditions to avoid race conditions
-      const updateResult = await prisma.task.updateMany({
+      // First, check if these are Task IDs or RawMessage IDs
+      // Try to find them as Tasks first
+      const existingTasks = await prisma.task.findMany({
         where: { 
           id: { in: ids },
-          assignedToId: null, // Only update unassigned tasks
-          status: "PENDING"   // Only update pending tasks
-        },
-        data: {
-          assignedToId: agent.id,
-          status: "PENDING", // Keep as PENDING until agent clicks Start
-          // Don't set startTime yet - agent will set it when they click Start
-        },
+          assignedToId: null,
+          status: "PENDING"
+        }
       });
+
+      let updateResult = { count: 0 };
+
+      if (existingTasks.length > 0) {
+        // These are existing Task records
+        updateResult = await prisma.task.updateMany({
+          where: { 
+            id: { in: existingTasks.map(t => t.id) },
+            assignedToId: null,
+            status: "PENDING"
+          },
+          data: {
+            assignedToId: agent.id,
+            status: "PENDING", // Keep as PENDING until agent clicks Start
+          },
+        });
+      }
+
+      // If we didn't find any existing tasks, try to find them as RawMessages
+      if (updateResult.count === 0) {
+        const rawMessages = await prisma.rawMessage.findMany({
+          where: { 
+            id: { in: ids },
+            status: "READY"
+          }
+        });
+
+        if (rawMessages.length > 0) {
+          // Promote and assign raw messages
+          const result = await prisma.$transaction(async (tx) => {
+            const createdTasks = [];
+            for (const rm of rawMessages) {
+              const task = await tx.task.create({
+                data: {
+                  phone: rm.phone ?? null,
+                  email: rm.email ?? null,
+                  text: rm.text ?? null,
+                  brand: rm.brand ?? null,
+                  rawMessageId: rm.id,
+                  status: "PENDING",
+                  assignedToId: agent.id,
+                  createdAt: rm.createdAt,
+                },
+              });
+              createdTasks.push(task);
+            }
+
+            // Mark raw messages as promoted
+            await tx.rawMessage.updateMany({
+              where: { id: { in: rawMessages.map(rm => rm.id) } },
+              data: { status: "PROMOTED" },
+            });
+
+            return createdTasks;
+          });
+
+          updateResult = { count: result.length };
+        }
+      }
 
       if (updateResult.count === 0) {
         return NextResponse.json({ 
