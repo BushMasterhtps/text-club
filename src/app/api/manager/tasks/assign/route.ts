@@ -47,8 +47,8 @@ export async function POST(req: Request) {
         },
         data: {
           assignedToId: agent.id,
-          status: "IN_PROGRESS", // matches your Prisma enum
-          startTime: new Date(),
+          status: "PENDING", // Keep as PENDING until agent clicks Start
+          // Don't set startTime yet - agent will set it when they click Start
         },
       });
 

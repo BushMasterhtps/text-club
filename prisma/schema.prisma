@@ -242,3 +242,21 @@ model SpamArchive {
 
   @@index([brand])
 }
+
+/////////////////////////////////////
+// Blocked Phone Numbers
+/////////////////////////////////////
+
+model BlockedPhone {
+  id          String   @id @default(cuid())
+  phone       String   @unique
+  brand       String?
+  reason      String?
+  blockedAt   DateTime @default(now())
+  blockedBy   String?  // User ID who blocked it
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("BlockedPhone")
+}

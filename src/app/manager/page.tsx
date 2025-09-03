@@ -6,6 +6,7 @@ import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
 import SessionTimer from '@/app/_components/SessionTimer';
+import BlockedPhonesSection from '@/app/_components/BlockedPhonesSection';
 
 /* ========== Shared types ========== */
 type AssignResult = Record<string, string[]>;
@@ -2929,6 +2930,7 @@ export default function ManagerPage() {
       {activeSection === "admin" && (
         <div className="space-y-8">
           <UsersAdminSection />
+          <BlockedPhonesSection />
           <RulesSection />
           <SpamImportSection />
         </div>

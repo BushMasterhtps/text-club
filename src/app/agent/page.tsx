@@ -587,6 +587,49 @@ export default function AgentPage() {
     );
   }
 
+  // Check if user is authenticated and has agent role
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [userEmail, setUserEmail] = useState<string>('');
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/me', { cache: 'no-store' });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.user) {
+            setIsAuthenticated(true);
+            setUserEmail(data.user.email);
+            // Set agentEmail in localStorage for consistency
+            localStorage.setItem('agentEmail', data.user.email);
+          } else {
+            setIsAuthenticated(false);
+          }
+        } else {
+          setIsAuthenticated(false);
+        }
+      } catch (error) {
+        setIsAuthenticated(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  // Show loading while checking authentication
+  if (isAuthenticated === null) {
+    return (
+      <main className="mx-auto max-w-xl p-6 space-y-6">
+        <div className="text-center text-white/60">Loading...</div>
+      </main>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (isAuthenticated === false) {
+    window.location.href = '/login';
+    return null;
+  }
+
   // Check if user is coming from role switching (has agentEmail) or needs to login
   if (!localStorage.getItem('agentEmail')) {
     return (
