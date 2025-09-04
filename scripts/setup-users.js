@@ -28,21 +28,21 @@ async function setupUsers() {
              }
            });
 
-    // Create or update agent user
-    const agentPassword = await bcrypt.hash('agent123', 10);
-               const agent = await prisma.user.upsert({
+    // Create or update Daniel's user with Manager+Agent role
+    const danielPassword = await bcrypt.hash('Simple123', 10);
+               const daniel = await prisma.user.upsert({
              where: { email: 'daniel.murcia@goldenboltllc.com' },
              update: {
-               password: agentPassword,
-               role: 'AGENT',
+               password: danielPassword,
+               role: 'MANAGER_AGENT',
                isActive: true,
                name: 'Daniel Murcia',
                mustChangePassword: true
              },
              create: {
                email: 'daniel.murcia@goldenboltllc.com',
-               password: agentPassword,
-               role: 'AGENT',
+               password: danielPassword,
+               role: 'MANAGER_AGENT',
                isActive: true,
                name: 'Daniel Murcia',
                mustChangePassword: true
@@ -93,7 +93,7 @@ async function setupUsers() {
 
                console.log('Users created successfully!');
            console.log('Manager:', manager.email, '- Password: manager123');
-           console.log('Agent:', agent.email, '- Password: agent123');
+           console.log('Daniel (Manager+Agent):', daniel.email, '- Password: Simple123');
            console.log('Test Agent:', testAgent.email, '- Password: test123');
            console.log('Dual Role User:', dualRoleUser.email, '- Password: dual123');
            console.log('\n⚠️  IMPORTANT: Change these passwords after first login!');
