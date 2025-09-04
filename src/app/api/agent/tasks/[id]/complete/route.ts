@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { learnFromSpamDecision } from "@/lib/spam-detection";
 
 export async function POST(
   req: Request,
@@ -42,7 +43,15 @@ export async function POST(
       select: {
         id: true,
         status: true,
-        startTime: true
+        startTime: true,
+        text: true,
+        brand: true,
+        rawMessage: {
+          select: {
+            text: true,
+            brand: true
+          }
+        }
       }
     });
 
@@ -78,6 +87,21 @@ export async function POST(
         disposition: true
       }
     });
+
+    // Learn from agent's decision (legitimate vs spam)
+    try {
+      const taskText = task.text || task.rawMessage?.text;
+      const taskBrand = task.brand || task.rawMessage?.brand;
+      
+      if (taskText) {
+        // If disposition is SPAM, learn as spam; otherwise learn as legitimate
+        const isSpam = disposition === 'SPAM';
+        await learnFromSpamDecision(taskText, isSpam, taskBrand, 'agent');
+      }
+    } catch (error) {
+      console.error('Failed to learn from agent decision:', error);
+      // Don't fail the task completion if learning fails
+    }
 
     return NextResponse.json({ 
       success: true, 

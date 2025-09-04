@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SpamMode, RawStatus } from "@prisma/client";
+import { getImprovedSpamScore } from "@/lib/spam-detection";
 
 /** simple normalize: lowercase, strip punctuation, collapse spaces */
 function norm(s: string | null | undefined) {
@@ -46,27 +47,54 @@ export async function GET() {
   });
 
   let matchedCount = 0;
+  let learningMatchedCount = 0;
   const matches: Array<{
     taskId: string;
     brand: string | null;
     text: string | null;
     matchedPatterns: string[];
+    learningScore?: number;
+    learningReasons?: string[];
   }> = [];
 
   for (const rm of raws) {
     const hits: string[] = [];
+    let learningScore = 0;
+    let learningReasons: string[] = [];
+    
+    // Check simple phrase rules
     for (const r of rules) {
       if (ruleMatchesText(r, rm.brand, rm.text)) {
         hits.push(r.pattern);
       }
     }
-    if (hits.length) {
+    
+    // Check learning system
+    try {
+      if (rm.text) {
+        const learningResult = await getImprovedSpamScore(rm.text, rm.brand || undefined);
+        learningScore = learningResult.score;
+        learningReasons = learningResult.reasons;
+        
+        // If learning system says it's spam (score >= 70), count it
+        if (learningScore >= 70) {
+          learningMatchedCount++;
+        }
+      }
+    } catch (error) {
+      console.error('Error getting learning score:', error);
+    }
+    
+    // Count as matched if either simple rules OR learning system catches it
+    if (hits.length > 0 || learningScore >= 70) {
       matchedCount++;
       matches.push({
         taskId: rm.id, // kept name "taskId" for your existing UI type
         brand: rm.brand,
         text: rm.text,
         matchedPatterns: hits,
+        learningScore: learningScore > 0 ? learningScore : undefined,
+        learningReasons: learningReasons.length > 0 ? learningReasons : undefined,
       });
     }
   }
@@ -76,6 +104,7 @@ export async function GET() {
     totalPending: raws.length,
     rules: rules.map((r) => r.pattern),
     matchedCount,
+    learningMatchedCount,
     matches,
   });
 }

@@ -66,6 +66,10 @@ export async function GET(req: Request) {
 
   const take = Math.min(Math.max(Number(url.searchParams.get("take") ?? 50), 1), 200);
   const skip = Math.max(Number(url.searchParams.get("skip") ?? 0), 0);
+  
+  // Sorting parameters
+  const sortBy = url.searchParams.get("sortBy") ?? "receivedAt";
+  const sortOrder = url.searchParams.get("sortOrder") ?? "desc";
 
   // tolerant "assigned" key: any | unassigned | id | name | email
   const assignedRaw =
@@ -186,12 +190,36 @@ export async function GET(req: Request) {
   const where: Prisma.RawMessageWhereInput =
     and.length > 0 ? { AND: and } : {};
 
+  /* ---------- build orderBy ---------- */
+  const buildOrderBy = (): Prisma.RawMessageOrderByWithRelationInput => {
+    const direction = sortOrder === "asc" ? "asc" : "desc";
+    
+    switch (sortBy) {
+      case "brand":
+        return { brand: direction };
+      case "text":
+        return { text: direction };
+      case "createdAt":
+        return { createdAt: direction };
+      case "assignedTo":
+        // Sort by assigned user name/email
+        return { 
+          tasks: {
+            _count: direction
+          }
+        };
+      case "receivedAt":
+      default:
+        return { receivedAt: direction };
+    }
+  };
+
   /* ---------- query: total + page ---------- */
   const [total, rows] = await Promise.all([
     prisma.rawMessage.count({ where }),
     prisma.rawMessage.findMany({
       where,
-      orderBy: { receivedAt: "desc" },
+      orderBy: buildOrderBy(),
       skip,
       take,
       include: {

@@ -8,6 +8,8 @@ import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
 import SessionTimer from '@/app/_components/SessionTimer';
 import BlockedPhonesSection from '@/app/_components/BlockedPhonesSection';
 import ThemeToggle from '@/app/_components/ThemeToggle';
+import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
+import SpamInsights from '@/app/_components/SpamInsights';
 
 /* ========== Shared types ========== */
 type AssignResult = Record<string, string[]>;
@@ -55,6 +57,8 @@ type PreviewSummary = {
   totalPending: number;
   rulesEnabled: number;
   wouldMarkSpamReview: number;
+  learningMatchedCount: number;
+  totalMatched: number;
   unaffected: number;
   topPhrases: PreviewTopPhrase[];
   sampleMatches: Array<{
@@ -62,6 +66,8 @@ type PreviewSummary = {
     brand: string | null;
     text: string | null;
     matchedPatterns: string[];
+    learningScore?: number;
+    learningReasons?: string[];
   }>;
 };
 
@@ -71,6 +77,9 @@ type SpamReviewItem = {
   text: string | null;
   previewMatches: string[] | string | null;
   createdAt: string;
+  learningScore?: number;
+  learningReasons?: string[];
+  spamSource?: 'manual' | 'automatic' | 'learning';
 };
 
 type SpamArchiveItem = {
@@ -574,6 +583,9 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   // selection
   const [selected, setSelected] = useState<Record<string, boolean>>({});
 
+  // sorting
+  const [sort, setSort] = useState<{ key: string; direction: SortDirection } | null>(null);
+
   // agents list for dropdowns
   const [agents, setAgents] = useState<Array<{ id: string; email: string; name: string | null; isLive: boolean; lastSeen: string | null }>>([]);
 
@@ -602,6 +614,12 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
       params.set("skip", String((p - 1) * PAGE_SIZE));
       if (q.trim()) params.set("q", q.trim());
       if (assignedTo.trim()) params.set("assigned", assignedTo.trim());
+      
+      // Add sorting parameters
+      if (sort?.key && sort.direction) {
+        params.set("sortBy", sort.key);
+        params.set("sortOrder", sort.direction);
+      }
 
       const res = await fetch(`/api/manager/tasks?${params.toString()}`, { cache: "no-store" });
       const data = await res.json().catch(() => null);
@@ -616,9 +634,13 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   }
 
   useEffect(() => { loadAgents(); }, []);
-  useEffect(() => { fetchPage(1); /* eslint-disable-next-line */ }, [status, assignedTo]);
+  useEffect(() => { fetchPage(1); /* eslint-disable-next-line */ }, [status, assignedTo, sort]);
 
   const onSearch = () => fetchPage(1);
+  
+  const handleSort = (key: string, direction: SortDirection) => {
+    setSort(direction ? { key, direction } : null);
+  };
   const onPrev = () => page > 1 && fetchPage(page - 1);
   const onNext = () => page < totalPages && fetchPage(page + 1);
 
@@ -667,6 +689,28 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.success) { alert(data?.error || "Send to Spam Review failed"); return; }
+    
+    // Learn from manual spam decisions and mark as manual source
+    try {
+      const spamItems = items.filter(item => checkedIds.includes(item.id));
+      for (const item of spamItems) {
+        if (item.text) {
+          await fetch("/api/spam/learn", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: item.text,
+              brand: item.brand,
+              isSpam: true,
+              source: 'manual'
+            })
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to learn from manual spam decisions:', error);
+    }
+    
     await fetchPage(page);
   }
 
@@ -695,9 +739,8 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   }
 
   return (
-    <Card className="p-5 space-y-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <H2>📋 Pending Tasks</H2>
         <div className="text-sm text-white/60">{total} total</div>
       </div>
 
@@ -778,10 +821,37 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
           <thead className="bg-white/[0.04]">
             <tr className="text-left text-white/60">
               <th className="px-3 py-2 w-10">Sel</th>
-              <th className="px-3 py-2 w-40">Brand</th>
-              <th className="px-3 py-2">Text</th>
-              <th className="px-3 py-2 w-56">Assigned</th>
-              <th className="px-3 py-2 w-44">Created</th>
+              <SortableHeader 
+                sortKey="brand" 
+                currentSort={sort} 
+                onSort={handleSort}
+                className="w-40"
+              >
+                Brand
+              </SortableHeader>
+              <SortableHeader 
+                sortKey="text" 
+                currentSort={sort} 
+                onSort={handleSort}
+              >
+                Text
+              </SortableHeader>
+              <SortableHeader 
+                sortKey="assignedTo" 
+                currentSort={sort} 
+                onSort={handleSort}
+                className="w-56"
+              >
+                Assigned
+              </SortableHeader>
+              <SortableHeader 
+                sortKey="createdAt" 
+                currentSort={sort} 
+                onSort={handleSort}
+                className="w-44"
+              >
+                Created
+              </SortableHeader>
               <th className="px-3 py-2 w-56">Actions</th>
             </tr>
           </thead>
@@ -861,10 +931,26 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
         </div>
         <div className="flex items-center gap-2">
           <SmallButton onClick={onPrev} disabled={loading || page <= 1}>Prev</SmallButton>
+          
+          {/* Page Selection Dropdown */}
+          <select
+            value={page}
+            onChange={(e) => fetchPage(Number(e.target.value))}
+            disabled={loading || totalPages <= 1}
+            className="border-none rounded-lg px-2 py-1 bg-white/10 text-white text-xs ring-1 ring-white/10 focus:outline-none min-w-[60px]"
+            title="Jump to page"
+          >
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <option key={pageNum} value={pageNum}>
+                {pageNum}
+              </option>
+            ))}
+          </select>
+          
           <SmallButton onClick={onNext} disabled={loading || page >= totalPages}>Next</SmallButton>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -878,7 +964,9 @@ function PreviewSummaryBlock({ preview }: { preview: PreviewResponse | null }) {
     const totalPending = preview.totalPending ?? 0;
     const rulesEnabled = preview.rules?.length ?? 0;
     const matchedCount = preview.matchedCount ?? 0;
-    const unaffected = Math.max(0, totalPending - matchedCount);
+    const learningMatchedCount = preview.learningMatchedCount ?? 0;
+    const totalMatched = matchedCount; // This is the combined count from the API
+    const unaffected = Math.max(0, totalPending - totalMatched);
 
     const freq = new Map<string, number>();
     for (const m of preview.matches || []) {
@@ -894,7 +982,9 @@ function PreviewSummaryBlock({ preview }: { preview: PreviewResponse | null }) {
     return {
       totalPending,
       rulesEnabled,
-      wouldMarkSpamReview: matchedCount,
+      wouldMarkSpamReview: matchedCount - learningMatchedCount, // Only phrase rules
+      learningMatchedCount,
+      totalMatched,
       unaffected,
       topPhrases,
       sampleMatches: (preview.matches || []).slice(0, 100).map((m, i) => ({
@@ -902,6 +992,8 @@ function PreviewSummaryBlock({ preview }: { preview: PreviewResponse | null }) {
         brand: m.brand,
         text: m.text,
         matchedPatterns: m.matchedPatterns || [],
+        learningScore: m.learningScore,
+        learningReasons: m.learningReasons,
       })),
     };
   }, [preview]);
@@ -910,11 +1002,13 @@ function PreviewSummaryBlock({ preview }: { preview: PreviewResponse | null }) {
 
   return (
     <div className="text-sm text-white/80">
-      <div className="font-medium mb-1 text-white/90">Spam Preview (Phrases — Simple)</div>
+      <div className="font-medium mb-1 text-white/90">Spam Preview (Phrases + Learning)</div>
       <ul className="list-disc pl-5 space-y-1">
         <li>Rows considered (Ready to Assign): {summary.totalPending}</li>
         <li>Rules enabled: {summary.rulesEnabled}</li>
-        <li>Would mark “Spam Review”: {summary.wouldMarkSpamReview}</li>
+        <li>Would mark "Spam Review": {summary.totalMatched}</li>
+        <li className="text-blue-400">  ↳ From phrase rules: {summary.wouldMarkSpamReview}</li>
+        <li className="text-green-400">  ↳ From learning system: {summary.learningMatchedCount}</li>
         <li>Unaffected: {summary.unaffected}</li>
       </ul>
 
@@ -926,12 +1020,45 @@ function PreviewSummaryBlock({ preview }: { preview: PreviewResponse | null }) {
           <div className="flex flex-wrap gap-2 mt-1">
             {summary.topPhrases.map((t) => (
               <Badge key={t.pattern} tone="muted">
-                “{t.pattern}” — {t.count}
+                "{t.pattern}" — {t.count}
               </Badge>
             ))}
           </div>
         )}
       </div>
+
+      {/* Show sample matches with learning system highlighting */}
+      {summary.sampleMatches.length > 0 && (
+        <div className="mt-4">
+          <div className="font-medium text-white/90 mb-2">Sample matches:</div>
+          <div className="space-y-2 max-h-40 overflow-y-auto">
+            {summary.sampleMatches.slice(0, 5).map((match, index) => (
+              <div 
+                key={match.id} 
+                className={`p-2 rounded border ${
+                  match.learningScore && match.learningScore >= 70 
+                    ? 'bg-green-500/10 border-green-500/30' 
+                    : 'bg-white/5 border-white/10'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="text-white/80 text-sm truncate">
+                      {match.text?.substring(0, 80)}...
+                    </div>
+                    <div className="text-white/50 text-xs">
+                      {match.brand} • {match.matchedPatterns.length} phrase rules
+                      {match.learningScore && match.learningScore >= 70 && (
+                        <span className="text-green-400 ml-2">• 🧠 Learning: {match.learningScore}%</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -941,6 +1068,7 @@ function SpamPreviewCaptureSection() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [captureLoading, setCaptureLoading] = useState(false);
   const [captureMsg, setCaptureMsg] = useState<string | null>(null);
+  const [showInsights, setShowInsights] = useState(false);
 
   async function doPreview() {
     try {
@@ -978,9 +1106,16 @@ function SpamPreviewCaptureSection() {
         <PrimaryButton onClick={doCapture} disabled={captureLoading}>
           {captureLoading ? "Capturing…" : "Capture Spam"}
         </PrimaryButton>
+        <SmallButton onClick={() => setShowInsights(true)}>
+          🧠 View Learning Insights
+        </SmallButton>
       </div>
 
       <PreviewSummaryBlock preview={preview} />
+      
+      {showInsights && (
+        <SpamInsights onClose={() => setShowInsights(false)} />
+      )}
     </Card>
   );
 }
@@ -1009,6 +1144,9 @@ function SpamReviewSection({
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [whitelistToggles, setWhitelistToggles] = useState<Record<string, boolean>>({});
   const [applyLoading, setApplyLoading] = useState(false);
+  
+  // sorting
+  const [sort, setSort] = useState<{ key: string; direction: SortDirection } | null>(null);
 
   const totalPages = Math.max(1, Math.ceil((total || 0) / PAGE_SIZE));
 
@@ -1018,6 +1156,13 @@ function SpamReviewSection({
   }
 
   useEffect(() => { if (open) { resetPaging(); fetchPage(1); } }, [open]);
+  
+  // Fetch page when sort changes
+  useEffect(() => {
+    if (open) {
+      fetchPage(1);
+    }
+  }, [sort]);
 
   async function fetchPage(targetPage: number) {
     setLoading(true);
@@ -1029,6 +1174,13 @@ function SpamReviewSection({
       params.set("offset", String(offset));
       params.set("skip", String(offset));
       if (q.trim()) params.set("q", q.trim());
+      
+      // Add sorting parameters
+      if (sort?.key && sort.direction) {
+        params.set("sortBy", sort.key);
+        params.set("sortOrder", sort.direction);
+      }
+      
       const startCursor = nextCursorByPage[targetPage - 1];
       if (targetPage > 1 && startCursor) params.set("cursor", startCursor);
 
@@ -1052,6 +1204,16 @@ function SpamReviewSection({
   async function onSearch() { resetPaging(); await fetchPage(1); }
   const onPrev = () => page > 1 && fetchPage(page - 1);
   const onNext = () => page < totalPages && fetchPage(page + 1);
+  
+  const handleSort = (key: string, direction: SortDirection) => {
+    setSort(direction ? { key, direction } : null);
+    // Clear cache when sorting changes to force fresh data
+    setCacheByPage({});
+    setNextCursorByPage({});
+    setItems([]);
+    setTotal(0);
+    setPage(1);
+  };
 
   async function restoreBase(row: SpamReviewItem, whitelist: string[]) {
     const res = await fetch("/api/manager/spam/review/restore", {
@@ -1061,6 +1223,24 @@ function SpamReviewSection({
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.success) throw new Error(data?.error || "Restore failed");
+    
+    // Remove from learning data to prevent future false positives
+    try {
+      if (row.text) {
+        await fetch("/api/spam/unlearn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: row.text,
+            brand: row.brand,
+            isSpam: true // Remove spam learning for this text
+          })
+        });
+      }
+    } catch (error) {
+      console.error('Failed to unlearn from restored item:', error);
+      // Don't fail the restore if unlearning fails
+    }
   }
 
   async function restore(row: SpamReviewItem) {
@@ -1157,10 +1337,37 @@ function SpamReviewSection({
             <table className="w-full text-sm rounded-xl overflow-hidden">
               <thead className="bg-white/[0.04]">
                 <tr className="text-left text-white/60">
-                  <th className="px-3 py-2 w-32">Brand</th>
-                  <th className="px-3 py-2">Text</th>
-                  <th className="px-3 py-2 w-56">Matched</th>
-                  <th className="px-3 py-2 w-44">Created</th>
+                  <SortableHeader 
+                    sortKey="brand" 
+                    currentSort={sort} 
+                    onSort={handleSort}
+                    className="w-32"
+                  >
+                    Brand
+                  </SortableHeader>
+                  <SortableHeader 
+                    sortKey="text" 
+                    currentSort={sort} 
+                    onSort={handleSort}
+                  >
+                    Text
+                  </SortableHeader>
+                  <SortableHeader 
+                    sortKey="matched" 
+                    currentSort={sort} 
+                    onSort={handleSort}
+                    className="w-56"
+                  >
+                    Matched
+                  </SortableHeader>
+                  <SortableHeader 
+                    sortKey="createdAt" 
+                    currentSort={sort} 
+                    onSort={handleSort}
+                    className="w-44"
+                  >
+                    Created
+                  </SortableHeader>
                   <th className="px-3 py-2 w-44">Whitelist?</th>
                   <th className="px-3 py-2 w-[260px]">Action</th>
                 </tr>
@@ -1175,10 +1382,39 @@ function SpamReviewSection({
                   const on = whitelistToggles[row.id] ?? true;
 
                   return (
-                    <tr key={`${row.id}-${row.createdAt}-${idx}`} className="text-white/90 align-top">
-                      <td className="px-3 py-2">{row.brand || "—"}</td>
+                    <tr 
+                      key={`${row.id}-${row.createdAt}-${idx}`} 
+                      className={`text-white/90 align-top ${
+                        row.learningScore && row.learningScore >= 70 
+                          ? 'bg-green-500/5 border-l-4 border-green-500/50' 
+                          : ''
+                      }`}
+                    >
+                      <td className="px-3 py-2">
+                        {row.brand || "—"}
+                        {row.learningScore && row.learningScore >= 70 && (
+                          <div className="text-xs text-green-400 mt-1">🧠 Learning: {row.learningScore}%</div>
+                        )}
+                        {row.spamSource && (
+                          <div className={`text-xs mt-1 ${
+                            row.spamSource === 'manual' ? 'text-orange-400' :
+                            row.spamSource === 'learning' ? 'text-green-400' :
+                            'text-blue-400'
+                          }`}>
+                            {row.spamSource === 'manual' ? '👤 Manual' :
+                             row.spamSource === 'learning' ? '🧠 Learning' :
+                             '🤖 Automatic'}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <Bubble><div className="line-clamp-3">{row.text || "—"}</div></Bubble>
+                        {row.learningReasons && row.learningReasons.length > 0 && (
+                          <div className="text-xs text-green-400 mt-1">
+                            {row.learningReasons.slice(0, 2).join(', ')}
+                            {row.learningReasons.length > 2 && '...'}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
@@ -1221,6 +1457,22 @@ function SpamReviewSection({
             </div>
             <div className="flex items-center gap-2">
               <SmallButton onClick={() => onPrev()} disabled={loading || page <= 1}>Prev</SmallButton>
+              
+              {/* Page Selection Dropdown */}
+              <select
+                value={page}
+                onChange={(e) => fetchPage(Number(e.target.value))}
+                disabled={loading || totalPages <= 1}
+                className="border-none rounded-lg px-2 py-1 bg-white/10 text-white text-xs ring-1 ring-white/10 focus:outline-none min-w-[60px]"
+                title="Jump to page"
+              >
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <option key={pageNum} value={pageNum}>
+                    {pageNum}
+                  </option>
+                ))}
+              </select>
+              
               <SmallButton onClick={() => onNext()} disabled={loading || page >= totalPages}>Next</SmallButton>
             </div>
           </div>
@@ -1795,6 +2047,22 @@ function SpamArchiveSection() {
             <div className="text-xs text-white/60">Page {page} of {totalPages} · Showing {items.length} of {total}</div>
             <div className="flex items-center gap-2">
               <SmallButton onClick={() => onPrev()} disabled={loading || page <= 1}>Prev</SmallButton>
+              
+              {/* Page Selection Dropdown */}
+              <select
+                value={page}
+                onChange={(e) => fetchPage(Number(e.target.value))}
+                disabled={loading || totalPages <= 1}
+                className="border-none rounded-lg px-2 py-1 bg-white/10 text-white text-xs ring-1 ring-white/10 focus:outline-none min-w-[60px]"
+                title="Jump to page"
+              >
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <option key={pageNum} value={pageNum}>
+                    {pageNum}
+                  </option>
+                ))}
+              </select>
+              
               <SmallButton onClick={() => onNext()} disabled={loading || page >= totalPages}>Next</SmallButton>
             </div>
           </div>
@@ -2233,6 +2501,7 @@ export default function ManagerPage() {
 
   // Navigation state
   const [activeSection, setActiveSection] = useState<string>("overview");
+  const [showPendingTasks, setShowPendingTasks] = useState(true);
   
   // Summary counters
   const [pending, setPending] = useState<number | null>(null);
@@ -2851,8 +3120,19 @@ export default function ManagerPage() {
         </div>
       </Card>
 
-      {/* Pending next; pass callback to live-refresh agents after mutations */}
-          <PendingTasksSection onTasksMutated={loadAgents} />
+      {/* Pending Tasks Section with Hide/Unhide Toggle */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <H2>📋 Pending Tasks</H2>
+          <button
+            onClick={() => setShowPendingTasks(!showPendingTasks)}
+            className="px-3 py-1 text-sm bg-white/10 hover:bg-white/20 rounded-lg text-white/80 transition-colors"
+          >
+            {showPendingTasks ? '👁️ Hide' : '👁️ Show'}
+          </button>
+        </div>
+        {showPendingTasks && <PendingTasksSection onTasksMutated={loadAgents} />}
+      </Card>
           <SpamPreviewCaptureSection />
           <SpamReviewSection
             onChangedCounts={(deltaReady, deltaSpam) => {

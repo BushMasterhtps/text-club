@@ -244,6 +244,27 @@ model SpamArchive {
 }
 
 /////////////////////////////////////
+// Spam Learning (AI-like pattern learning)
+/////////////////////////////////////
+
+model SpamLearning {
+  id        String   @id @default(cuid())
+  text      String   // The message text (truncated)
+  brand     String?  // Brand context
+  isSpam    Boolean  // Manual decision (true = spam, false = not spam)
+  score     Int      // Calculated spam score (0-100)
+  reasons   String[] // Array of reasons for the score
+  patterns  String   // JSON string of detected patterns
+  source    String?  // Source of the decision: 'manual', 'automatic', 'learning', 'agent'
+  createdAt DateTime @default(now())
+
+  @@index([brand])
+  @@index([isSpam])
+  @@index([source])
+  @@index([createdAt])
+}
+
+/////////////////////////////////////
 // Blocked Phone Numbers
 /////////////////////////////////////
 
