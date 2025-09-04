@@ -7,6 +7,7 @@ import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
 import SessionTimer from '@/app/_components/SessionTimer';
 import BlockedPhonesSection from '@/app/_components/BlockedPhonesSection';
+import ThemeToggle from '@/app/_components/ThemeToggle';
 
 /* ========== Shared types ========== */
 type AssignResult = Record<string, string[]>;
@@ -2561,8 +2562,8 @@ export default function ManagerPage() {
   ];
 
   return (
-    <main className="mx-auto max-w-[1400px] p-6 text-white">
-      <header className="sticky top-0 z-30 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 backdrop-blur-sm border-b border-white/10 shadow-lg">
+    <main className="mx-auto max-w-[1400px] p-6 text-white dark:text-white light:text-slate-800 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
+      <header className="sticky top-0 z-30 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 dark:from-neutral-900 dark:via-neutral-900/95 dark:to-neutral-900/80 light:from-white light:via-white/95 light:to-white/80 backdrop-blur-sm border-b border-white/10 dark:border-white/10 light:border-slate-200 shadow-lg">
         <div className="px-6 pt-4 pb-3">
           <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
@@ -2579,6 +2580,9 @@ export default function ManagerPage() {
           
           {/* Action Buttons */}
           <div className="flex items-center gap-3">
+            {/* Theme Toggle */}
+            <ThemeToggle />
+            
             {/* Session Timer */}
             <SessionTimer 
               timeLeft={timeLeft} 

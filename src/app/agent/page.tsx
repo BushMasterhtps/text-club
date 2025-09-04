@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
+import ThemeToggle from '@/app/_components/ThemeToggle';
 
 /* ========== Tiny UI atoms (iOS-ish) ========== */
 function Card({
@@ -13,7 +14,7 @@ function Card({
 }) {
   return (
     <section
-      className={`rounded-2xl bg-white/[0.02] ring-1 ring-white/10 backdrop-blur-md ${className}`}
+      className={`rounded-2xl bg-white/[0.02] dark:bg-white/[0.02] light:bg-white/80 ring-1 ring-white/10 dark:ring-white/10 light:ring-gray-200 backdrop-blur-md ${className}`}
     >
       {children}
     </section>
@@ -22,7 +23,7 @@ function Card({
 
 function H2({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-lg font-semibold text-white/90 tracking-tight">{children}</h2>
+    <h2 className="text-lg font-semibold text-white/90 dark:text-white/90 light:text-gray-800 tracking-tight">{children}</h2>
   );
 }
 
@@ -55,7 +56,7 @@ function SmallButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       {...rest}
-      className={`px-2.5 py-1 rounded-md text-xs font-medium bg-white/5 hover:bg-white/10 active:bg-white/15 ring-1 ring-white/10 text-white disabled:opacity-50 ${className}`}
+      className={`px-2.5 py-1 rounded-md text-xs font-medium bg-white/5 dark:bg-white/5 light:bg-gray-100 hover:bg-white/10 dark:hover:bg-white/10 light:hover:bg-gray-200 active:bg-white/15 dark:active:bg-white/15 light:active:bg-gray-300 ring-1 ring-white/10 dark:ring-white/10 light:ring-gray-300 text-white dark:text-white light:text-gray-800 disabled:opacity-50 ${className}`}
     />
   );
 }
@@ -609,7 +610,7 @@ export default function AgentPage() {
   // Show loading while client is initializing
   if (!isClient) {
   return (
-    <main className="mx-auto max-w-xl p-6 space-y-6">
+    <main className="mx-auto max-w-xl p-6 space-y-6 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
         <H2>Loading...</H2>
       </main>
     );
@@ -618,16 +619,19 @@ export default function AgentPage() {
   // Check if user is coming from role switching (has agentEmail) or needs to login
   if (!localStorage.getItem('agentEmail')) {
     return (
-      <main className="mx-auto max-w-xl p-6 space-y-6">
+      <main className="mx-auto max-w-xl p-6 space-y-6 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
+        <div className="flex justify-end mb-4">
+          <ThemeToggle />
+        </div>
         <H2>Agent Login</H2>
         <div className="space-y-4">
       <label className="block space-y-2">
-            <div className="text-sm text-white/70">Your work email</div>
+            <div className="text-sm text-white/70 dark:text-white/70 light:text-gray-600">Your work email</div>
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md bg-white/10 text-white placeholder-white/40 px-3 py-2 ring-1 ring-white/10 focus:outline-none"
+              className="w-full rounded-md bg-white/10 dark:bg-white/10 light:bg-white text-white dark:text-white light:text-gray-800 placeholder-white/40 dark:placeholder-white/40 light:placeholder-gray-500 px-3 py-2 ring-1 ring-white/10 dark:ring-white/10 light:ring-gray-300 focus:outline-none"
           placeholder="agent@company.com"
         />
       </label>
@@ -640,7 +644,7 @@ export default function AgentPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl p-6 space-y-6">
+    <main className="mx-auto max-w-4xl p-6 space-y-6 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
       {/* Header with Stats */}
       <div className="space-y-4">
         {/* Company Logo Header */}
@@ -651,8 +655,9 @@ export default function AgentPage() {
               alt="Golden Attentive" 
               className="h-12 w-auto"
             />
-            <div className="text-sm text-white/60">Agent Portal</div>
+            <div className="text-sm text-white/60 dark:text-white/60 light:text-gray-600">Agent Portal</div>
           </div>
+          <ThemeToggle />
         </div>
         
         {/* Welcome Message and Controls */}

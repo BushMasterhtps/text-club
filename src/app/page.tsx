@@ -1,8 +1,17 @@
 
 
+"use client";
+
+import ThemeToggle from './_components/ThemeToggle';
+
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 bg-gradient-to-br from-neutral-900 to-black">
+    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
+      {/* Theme Toggle - Top Right */}
+      <div className="absolute top-6 right-6">
+        <ThemeToggle />
+      </div>
+      
       <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
         {/* Company Logo */}
         <div className="flex flex-col items-center gap-6">
@@ -11,13 +20,13 @@ export default function Home() {
             alt="Golden Attentive" 
             className="h-20 w-auto"
           />
-          <div className="text-center text-white/60">
+          <div className="text-center text-white/60 dark:text-white/60 light:text-slate-600">
             <span className="text-sm">Customer Care Management System</span>
           </div>
         </div>
-        <div className="text-center text-white/80 space-y-4">
+        <div className="text-center text-white/80 dark:text-white/80 light:text-slate-800 space-y-4">
           <h2 className="text-2xl font-semibold">Customer Care Management System</h2>
-          <p className="text-white/60 max-w-md">
+          <p className="text-white/60 dark:text-white/60 light:text-slate-600 max-w-md">
             Streamline your customer support operations with our integrated task management and analytics platform.
           </p>
         </div>
@@ -30,14 +39,14 @@ export default function Home() {
             Manager Dashboard
           </a>
           <a
-            className="rounded-full border border-solid border-white/20 transition-colors flex items-center justify-center hover:bg-white/10 text-white font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto"
+            className="rounded-full border border-solid border-white/20 dark:border-white/20 light:border-slate-300 transition-colors flex items-center justify-center hover:bg-white/10 dark:hover:bg-white/10 light:hover:bg-slate-200 text-white dark:text-white light:text-slate-800 font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto"
             href="/agent"
           >
             Agent Portal
           </a>
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center text-white/40 text-sm">
+      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center text-white/40 dark:text-white/40 light:text-slate-500 text-sm">
         <div className="flex items-center gap-2">
           <span>© 2024 Golden Customer Care</span>
         </div>

@@ -51,7 +51,7 @@
   </text>
   
   <!-- ATTENTIVE text -->
-  <text x="70" y="55" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-transform="uppercase" filter="url(#whiteGlow)">
+  <text x="70" y="55" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-transform="uppercase" filter="url(#whiteGlow)" class="logo-attentive">
     ATTENTIVE
   </text>
 </svg>
