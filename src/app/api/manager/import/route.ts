@@ -209,27 +209,39 @@ export async function POST(req: Request) {
       const toInsert = candidates.filter((c) => !existingSet.has(c.hashKey));
 
       let inserted = 0;
-      let skippedExisting = 0;
+      const skippedExisting = candidates.length - toInsert.length;
       
       if (toInsert.length) {
-        // Handle duplicates by inserting one by one and catching unique constraint errors
-        for (const record of toInsert) {
-          try {
-            await prisma.rawMessage.create({
-              data: record,
-            });
-            inserted++;
-          } catch (error) {
-            if (error instanceof Error && error.message.includes('Unique constraint failed on the fields: (`hashKey`)')) {
-              // This is a duplicate, skip it
-              skippedExisting++;
-              console.log(`Skipping duplicate record with hashKey: ${record.hashKey}`);
-            } else {
-              // This is a different error, re-throw it
-              throw error;
+        // Insert new records in batches for speed
+        const batchSize = 100; // Insert in batches of 100
+        for (let i = 0; i < toInsert.length; i += batchSize) {
+          const batch = toInsert.slice(i, i + batchSize);
+            try {
+              const result = await prisma.rawMessage.createMany({
+                data: batch,
+                skipDuplicates: true // This will skip any duplicates that might have been created between our check and insert
+              });
+              inserted += result.count;
+            } catch (error) {
+              // If batch insert fails, fall back to individual inserts for this batch
+              console.log(`Batch insert failed, falling back to individual inserts for batch ${i}-${i + batchSize}`);
+              for (const record of batch) {
+                try {
+                  await prisma.rawMessage.create({ data: record });
+                  inserted++;
+                } catch (individualError) {
+                  if (individualError instanceof Error && individualError.message.includes('Unique constraint failed on the fields: (`hashKey`)')) {
+                    skippedExisting++;
+                  } else {
+                    throw individualError;
+                  }
+                }
+              }
             }
           }
         }
+        
+        console.log(`File ${file.name}: ${inserted} inserted, ${skippedExisting} skipped (duplicates)`);
       }
 
       await prisma.importBatch.update({
