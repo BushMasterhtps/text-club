@@ -239,7 +239,6 @@ export async function POST(req: Request) {
               }
             }
           }
-        }
         
         console.log(`File ${file.name}: ${inserted} inserted, ${skippedExisting} skipped (duplicates)`);
       }
