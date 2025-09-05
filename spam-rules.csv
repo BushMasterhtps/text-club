@@ -1,0 +1,533 @@
+Phrase,Mode,Brand,Enabled,Note
+sent from my,Contains,,TRUE,
+driving,Contains,,FALSE,
+iH Hotels Venezia Salute Palace,Contains,,TRUE,
+SI scccccccccxcx gecko,Contains,,TRUE,
+are you ok?,Contains,,TRUE,
+are you ok ,Contains,,FALSE,auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+altima,Lone,,TRUE,
+sentra,Lone,,TRUE,
+no J9 8th,Contains,,TRUE,
+"TO MISTER CHUCK NORRIS AND FAMILY, SCRIPTURE",Contains,,TRUE,
+food,Lone,,FALSE,
+treats,Lone,,TRUE,
+all,Lone,,TRUE,
+booster,Lone,,TRUE,
+woof,Contains,,FALSE,
+no thank you,Contains,,TRUE,
+no thanks,Contains,,TRUE,
+no thx,Contains,,TRUE,
+-&$(?&'xm I'm,Lone,,TRUE,
+Lll p pbut but Let the l Pop Pop please l,Contains,,TRUE,
+parmasean,Contains,,TRUE,
+�,Contains,,FALSE,auto: empty after normalization | auto: empty after normalization | auto: empty after normalization
+track,Contains,,FALSE,
+trac,Contains,,TRUE,
+trak,Contains,,TRUE,
+enjoy,Contains,,TRUE,
+replied,Contains,,TRUE,
+message,Contains,,FALSE,
+driving,Contains,,FALSE,auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+ driving with focus turned on,Contains,,TRUE,
+"Driving, can't text. Sent from MY ROGUE",Contains,,TRUE,
+"Driving, can't text.Sent from MY VERSA",Contains,,TRUE,
+thegr rv g red yntggggggrggggrggrrgrgrrhirr e�eededee,Contains,,TRUE,
+"i am for almighty god (our heavenly father) and his sovereignty over the earth (he was and is jesus's father, also, in fact, jesus's heavenly name was michael when he was an archangel, before he willingly came to earth to become a perfect sacrifice. before he was born, mary was told to call him jesus by the angel who spoke with her, so there was a name change to jesus done by our heavenly father and the angel told mary as he was instructed to say by our father in heaven.",Contains,,TRUE,
+????? to �?dr. marty pets: tariff surcharge$0.your dog's nature's blend is made with the best ingredients on earth right here in the u.s.a. so there are no extra fees.but heads up: our on-sale inventory is in the red zone.unlock your discount on your dog's delicious food while you still can drmartypets.attn.tv/aqp8b9eiggco?�?,Contains,,TRUE,
+"driving, can't text.",Contains,,TRUE,
+"ok, thank you!",Contains,,TRUE,
+treats & food,Contains,,TRUE,
+"mgfk($, m a a as as",Contains,,TRUE,
+"i'll x a/l""",Contains,,TRUE,
+God,Contains,,TRUE,
+god,Contains,,FALSE,auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+Jesus,Contains,,FALSE,bible citation
+Amen,Contains,,TRUE,bible citation
+text5,Contains,,FALSE,noise reply (brand-specific)
+liked an image,Contains,,TRUE,iMessage reaction
+arroz,Contains,,TRUE,spanish word -rice
+sent from my,Contains,,FALSE,mobile/email footer | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+i'm driving,Contains,,TRUE,auto-reply while driving
+im driving,Contains,,FALSE,variant | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+driving,Contains,,FALSE,generic driving autoresponse | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+reacted,Contains,,TRUE,iMessage reaction
+liked,Contains,,FALSE,iMessage reaction
+loved,Contains,,TRUE,iMessage reaction
+laughed at,Contains,,TRUE,iMessage reaction
+emphasized,Contains,,TRUE,iMessage reaction
+questioned,Contains,,TRUE,iMessage reaction
+disliked,Contains,,TRUE,iMessage reaction
+not receiving notifications,Contains,,TRUE,notification noise
+http,Contains,,TRUE,any link
+www.,Contains,,TRUE,any link
+attn.tv,Contains,,TRUE,short link
+bit.ly,Contains,,TRUE,short link
+tinyurl,Contains,,TRUE,short link
+tap.to,Contains,,TRUE,short link
+lnk.,Contains,,TRUE,short link
+psalm,Contains,,TRUE,bible citation
+romans,Contains,,TRUE,bible citation
+corinthians,Contains,,TRUE,bible citation
+genesis,Contains,,TRUE,bible citation
+proverbs,Contains,,TRUE,bible citation
+revelation,Contains,,TRUE,bible citation
+apocalipsis,Contains,,TRUE,bible citation (ES)
+scripture,Contains,,TRUE,religious content
+prayer,Contains,,TRUE,religious content
+amen,Contains,,FALSE,religious content | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+woof,Contains,,FALSE,noise reply (brand-specific) | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+wht?,Lone,,TRUE,very short question
+track,Lone,,FALSE,single-word “track”
+tracking,Lone,,TRUE,single-word “tracking”
+price?,Lone,,FALSE,single-word question
+yes,Lone,,TRUE,only the word “yes”
+thx,Lone,,TRUE,only “thx”
+good,Lone,,FALSE,only “good”
+ok,Lone,,FALSE,only “ok”
+k,Lone,,TRUE,only “k”
+kk,Lone,,TRUE,only “kk”
+text5,Contains,,FALSE,internal tag | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+txt5,Contains,,TRUE,internal tag
+gmdtxt5,Contains,,TRUE,internal tag
+Original?,Contains,,FALSE,legit spam
+Smoked Gouda?,Contains,,TRUE,legit spam
+cheesy,Contains,,TRUE,legit spam
+Vietnamese,Contains,,TRUE,legit spam
+t's 2 o'clock in the morning,Contains,,TRUE,legit spam
+Love you,Contains,,TRUE,legit spam
+cheese,Contains,,TRUE,legit spam
+chocolate shakes,Contains,,FALSE,Manual Spam Move Over
+xupbosrd,Contains,,TRUE,Manual Spam Move Over
+just did a ton of yardwork and i'm recuperating ,Contains,,TRUE,Manual Spam Move Over
+junk,Contains,,TRUE,Manual Spam Move Over
+x,Lone,,TRUE,Manual Spam Move Over
+yay!,Contains,,TRUE,Manual Spam Move Over
+no,Lone,,TRUE,Manual Spam Move Over
+gregory norbert,Lone,,TRUE,Manual Spam Move Over
+legacy law,Contains,,TRUE,Manual Spam Move Over
+2006 house built but redid hvac in 2013,Contains,,TRUE,Manual Spam Move Over
+Nnmbu6wb ju gi,Regex,,TRUE,Manual Spam Move Over
+Brussel sprouts receipt,Contains,,TRUE,Manual Spam Move Over
+He loves Israel,Contains,,TRUE,Manual Spam Move Over
+yay!,Contains,,FALSE,Manual Spam Move Over | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+the lottery.,Contains,,TRUE,Manual Spam Move Over
+y,Lone,,TRUE,Manual Spam Move Over
+Le encant' una imagen,Contains,,TRUE,Manual Spam Move Over
+not junk,Contains,,TRUE,Manual Spam Move Over
+Ok,Lone,,FALSE,Manual Spam Move Over | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+si ass,Contains,,TRUE,Manual Spam Move Over
+dog,Lone,,TRUE,Manual Spam Move Over
+food,Lone,,FALSE,Manual Spam Move Over | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+all,Lone,,FALSE,Manual Spam Move Over | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+? ,Lone,,FALSE,Manual Spam Move Over | auto: empty after normalization | auto: empty after normalization | auto: empty after normalization
+,Contains,,FALSE,Manual Spam Move Over | auto: empty after normalization | auto: empty after normalization | auto: empty after normalization
+call me asap,Contains,,TRUE,Manual Spam Move Over
+ex rela-ax,Contains,,TRUE,Manual Spam Move Over
+good,Contains,,FALSE,Manual Spam Move Over
+fodd,Contains,,TRUE,Manual Spam Move Over
+food,Contains,,FALSE,Manual Spam Move Over
+nearly,Contains,,TRUE,Manual Spam Move Over
+"liked �activatedyou: ~ for vip eyes only ~ your gigantic labor day sale is just around the corner - up to 58% off morning complete! want to beat the rush and claim your jars a full day early? join our early access list to get your discount on friday, august 28. reply imearly to unlock your status.�",Contains,,TRUE,Manual Spam Move Over
+imearly,Contains,,TRUE,Manual Spam Move Over
+imearly,Contains,,FALSE,Manual Spam Move Over | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode | auto: duplicate phrase+brand+mode
+imearly,Regex,,TRUE,Manual Spam Move Over
+imearly,Lone,,TRUE,Manual Spam Move Over
+ok,Contains,,FALSE,Manual Spam Move Over
+woo f,Contains,,TRUE,Manual Spam Move Over
+remind me please,Contains,,TRUE,Manual Spam Move Over
+loved �badlands ranch: just a heads up:our labor day ea��,Contains,,TRUE,Manual Spam Move Over
+"(i�m not receiving notifications. if this is urgent, reply �urgent� to send a notification through with your original message.)",Contains,,TRUE,Manual Spam Move Over
+i�m driving with focus turned on. i�ll see your message when i get where i�m going.,Contains,,TRUE,Manual Spam Move Over
+30 ft,Contains,,TRUE,Manual Spam Move Over
+MEOW,Contains,,TRUE,Manual Spam Move Over
+Hello,Lone,,TRUE,Manual Spam Move Over
+Rrrii8rrtt??????????????????????????????????,Lone,,TRUE,Manual Spam Move Over
+"(I�m not receiving notifications. If this is urgent, reply �urgent� to send a notification through with your original message.)",Contains,,TRUE,Manual Spam Move Over
+I�m driving with Focus turned on. I�ll see your message when I get where I�m going.,Contains,,TRUE,Manual Spam Move Over
+I'm Driving- Sent from My Car,Contains,,TRUE,Manual Spam Move Over
+Text5,Contains,,TRUE,Manual Spam Move Over
+TEXT5,Contains,,TRUE,Manual Spam Move Over
+IMEARLY,Lone,,TRUE,Manual Spam Move Over
+Imearly,Contains,,TRUE,Manual Spam Move Over
+FOOD,Lone,,TRUE,Manual Spam Move Over
+"(I�m not receiving notifications. If this is urgent, reply �urgent� to send a notification through with your original message.)",Contains,,TRUE,Manual Spam Move Over
+I�m driving with �do not disturb� turned on. I�ll see your message when I get where I�m going.,Contains,,TRUE,Manual Spam Move Over
+TXT5,Lone,,TRUE,Manual Spam Move Over
+-,Lone,,TRUE,
+"Energy,digestion,weight or all",Lone,,TRUE,
+👍,Lone,,TRUE,
+Thank you,Lone,,TRUE,
+That's fineThanks Robin,Lone,,TRUE,
+No cat,Lone,,TRUE,
+Fi,Lone,,TRUE,
+Ai equity checks,Lone,,TRUE,
+I'm in in,Lone,,TRUE,
+I'm,Lone,,TRUE,
+buy 1 get 1 free baskets & furniture wall shelves,Lone,,TRUE,
+blue star ⭐️ yellow star & dot toys buy 1 get 1 75% off,Lone,,TRUE,
+lamps 50 off,Lone,,TRUE,
+mirrors & clocks 50 % off,Lone,,TRUE,
+Weight,Lone,,TRUE,
+WEIGHT,Lone,,TRUE,
+Energy,Lone,,TRUE,
+"Duffel
+~ Mary Miller ~",Lone,,TRUE,
+"hmm 😒 
+By. V
+5 nb b b c",Lone,,TRUE,
+"As teachers we are expected to wear many hats.  You are teaching welding, plant care, work safety, painting, woodworking, flower arranging and on and on.  But more importantly you are modeling acceptance, integrity, excellence and hard work.  For these lessons you are all doing well.",Lone,,TRUE,
+Club early access starts now,Lone,,TRUE,
+Salient health,Lone,,TRUE,
+POWER,Lone,,TRUE,
+Thank you,Lone,,TRUE,
+Joints,Lone,,TRUE,
+Yes rec it thku,Lone,,TRUE,
+Ok,Lone,,TRUE,
+🎁10 SHEIN freebies and a $50 allowance for the lucky.Just click and claim—so easy! 🙌,Contains,,TRUE,
+Weight,Lone,,TRUE,
+WEIGHT,Lone,,TRUE,
+It hasn't,Lone,,TRUE,
+Kidneys,Lone,,TRUE,
+SKIP,Lone,,TRUE,
+What,Lone,,TRUE,
+Must bullshit . Try using a real person. Da!!!!!,Lone,,TRUE,
+ty,Lone,,TRUE,
+Woof,Lone,,TRUE,
+Great,Lone,,TRUE,
+Khaleesi,Lone,,TRUE,
+Django,Lone,,TRUE,
+I9,Lone,,TRUE,
+TILLY,Lone,,TRUE,
+Wood,Lone,,TRUE,
+R u here,Lone,,TRUE,
+TU,Lone,,TRUE,
+Beef,Lone,,TRUE,
+😁,Lone,,TRUE,
+"FOOD TREATS,ALL OR BOOSTERS",Lone,,TRUE,
+IMYEARLY,Lone,,TRUE,
+AGING,Lone,,TRUE,
+Health,Lone,,TRUE,
+"Eby
+~ Mary Miller ~",Lone,,TRUE,
+Update,Lone,,TRUE,
+Update,Lone,,TRUE,
+Updates ony order,Lone,,TRUE,
+Update,Lone,,TRUE,
+cool,Lone,,TRUE,
+Thanks,Lone,,TRUE,
+FYI,Lone,,TRUE,
+Thankyou!,Lone,,TRUE,
+Oh there were ready for,Lone,,TRUE,
+"Great, thanks!",Lone,,TRUE,
+Superfood....?,Lone,,TRUE,
+Sweet potato with duck wrapped around it,Lone,,TRUE,
+turkey,Lone,,TRUE,
+Good,Lone,,TRUE,
+BEST,Lone,,TRUE,
+Boosters,Lone,,TRUE,
+Liked �Gundry MD: Never miss a message from Gundry MD! Tap this card to save us to your contacts.�,Lone,,TRUE,
+UDATES,Lone,,TRUE,
+I'm so happy,Lone,,TRUE,
+H,Lone,,TRUE,
+E,Lone,,TRUE,
+I'm so anxious,Lone,,TRUE,
+Right on,Lone,,TRUE,
+Woohoo!,Lone,,TRUE,
+I want,Lone,,TRUE,
+Liam,Lone,,TRUE,
+Theo,Lone,,TRUE,
+TEXT,Lone,,TRUE,
+Okay thank you,Lone,,TRUE,
+Both,Lone,,TRUE,
+B,Lone,,TRUE,
+Cat,Lone,,TRUE,
+How's it going?,Lone,,TRUE,
+Can I call you later?,Lone,,TRUE,
+"Thank you, thank you thank you",Lone,,TRUE,
+.metcimoku,Lone,,TRUE,
+No... He likes his own...,Lone,,TRUE,
+Done,Lone,,TRUE,
+No SS I ooo,Lone,,TRUE,
+I will. Thanks,Lone,,TRUE,
+https://www.facebook.com/share/p/12LdZguDR5u/,Lone,,TRUE,
+Chewy my account,Lone,,TRUE,
+Powerball on line,Lone,,TRUE,
+Hi DonI have your mail and started getting you belongings out of Paul's place.  Do you need anything?How about some bananas and fritos?,Lone,,TRUE,
+Nature's blend,Lone,,TRUE,
+Try cats like in 10 cats,Lone,,TRUE,
+"Willow, German shepherd n Blu, put bull",Lone,,TRUE,
+Fantastic,Lone,,TRUE,
+Vino here's a place to find help as needed is:Task Rabbit website or App.on your phone.Hope this helps out. ??,Lone,,TRUE,
+Have plenty still,Lone,,TRUE,
+N mm m.    MomMummyUhu,Lone,,TRUE,
+Removed a like from an image,Lone,,TRUE,
+719 e 29 st,Lone,,TRUE,
+WQ,Lone,,TRUE,
+Nice work,Lone,,TRUE,
+Attn Dave from John topham,Lone,,TRUE,
+I use computer to order,Lone,,TRUE,
+"Good morning babe!!!
+
+Watermelon $1.75
+Brats $2 
+Blueberries $1.25
+Peanutbutter and Jelly sandwich $1.75
+Egg salad sandwich $2
+Granola $1
+Granola bar $.75
+Pop $2
+Banana $.50
+Cookies $1
+Pistachios $1.25
+Sunflower $16
+Water $1.75
+Popcorn $.75
+Fritos $1.25
+
+Total - $20 per day
+
+
+(brats were dirt cheap for this lunch and not including condiments, seasoning, dish soap, zip locks, tinfoil, etc... and TIME it is closer to $25)
+
+So taking water and pops and having a $25 avg  daily lunch budget should save us money in the long run.",Lone,,TRUE,
+Sweet,Lone,,TRUE,
+I'm early,Lone,,TRUE,
+I already use it ??,Lone,,TRUE,
+Did u get bloodwork,Lone,,TRUE,
+Just got this as I was typing lol,Lone,,TRUE,
+I am working later - till prob 5.,Lone,,TRUE,
+Done,Lone,,TRUE,
+I will wait for a better sale,Lone,,TRUE,
+Way too expensive for such a small amount.,Lone,,TRUE,
+Just checking my connection,Lone,,TRUE,
+I don't get paid until September 3rd,Lone,,TRUE,
+My order is in transit,Lone,,TRUE,
+Yea k,Lone,,TRUE,
+Done,Lone,,TRUE,
+Walmart delivery comes today,Lone,,TRUE,
+Hello. Please resend the Authorization forms. Never received Thanks TerryJoyce,Lone,,TRUE,
+Just reading about bad dog breath.,Lone,,TRUE,
+Did you get your money?,Lone,,TRUE,
+Got it!  Thank you.,Lone,,TRUE,
+ready,Lone,,TRUE,
+"We have company, Phoebe's friends came to visit from California. I think David said he can go if it's later we will plan on going, what should we bring?",Lone,,TRUE,
+I am hungry.  Heading out but won't be back until tonight.  Mom is sleeping.,Lone,,TRUE,
+In the hospital!!,Lone,,TRUE,
+"Roseann Brookbank[Mobile ] (918) 230-0104[Home] (918) 230-0104[Home] rabrookbank@att.net[Home] 3310 Birdie CourtClaremore, Ok 74019[Home] 3310 Birdie CourtClaremore,Ok 74019[Birthday] --07-09",Lone,,TRUE,
+Just in case your interested,Lone,,TRUE,
+Jo,Lone,,TRUE,
+Best product!,Lone,,TRUE,
+CLDX,Lone,,TRUE,
+I wanting o purchase the formula for procrastination,Lone,,TRUE,
+Up dates,Lone,,TRUE,
+Sent,Lone,,TRUE,
+Way,Lone,,TRUE,
+TK8qw,Lone,,TRUE,
+No le gusta la imagen,Lone,,TRUE,
+234172,Lone,,TRUE,
+H,Lone,,TRUE,
+E,Lone,,TRUE,
+I'm so anxious,Lone,,TRUE,
+Can I call you later?,Lone,,TRUE,
+Right on,Lone,,TRUE,
+Woohoo!,Lone,,TRUE,
+Hey Mike,Lone,,TRUE,
+Changed my mind.,Lone,,TRUE,
+I want,Lone,,TRUE,
+Need Sugars food,Lone,,TRUE,
+Ok interesting,Lone,,TRUE,
+Will do,Lone,,TRUE,
+Liam,Lone,,TRUE,
+Theo,Lone,,TRUE,
+TEXT,Lone,,TRUE,
+Both,Lone,,TRUE,
+B,Lone,,TRUE,
+Cat,Lone,,TRUE,
+Mr. Jan.,Lone,,TRUE,
+How's it going?,Lone,,TRUE,
+BAGS #3,Lone,,TRUE,
+.metcimoku,Lone,,TRUE,
+Done,Lone,,TRUE,
+Okay,Lone,,TRUE,
+Sweet,Lone,,TRUE,
+Done,Lone,,TRUE,
+Yea k,Lone,,TRUE,
+ready,Lone,,TRUE,
+Up-Dates,Lone,,TRUE,
+Jo,Lone,,TRUE,
+CLDX,Lone,,TRUE,
+Up dates,Lone,,TRUE,
+Sent,Lone,,TRUE,
+Way,Lone,,TRUE,
+TK8qw,Lone,,TRUE,
+234172,Lone,,TRUE,
+H,Lone,,TRUE,
+E,Lone,,TRUE,
+Can I call you later?,Lone,,TRUE,
+Right on,Lone,,TRUE,
+Woohoo!,Lone,,TRUE,
+Hey Mike,Lone,,TRUE,
+I want,Lone,,TRUE,
+Will do,Lone,,TRUE,
+Liam,Lone,,TRUE,
+Theo,Lone,,TRUE,
+TEXT,Lone,,TRUE,
+Both,Lone,,TRUE,
+B,Lone,,TRUE,
+Cat,Lone,,TRUE,
+7726,Lone,,TRUE,
+Mr. Jan.,Lone,,TRUE,
+Who is,Lone,,TRUE,
+Price?,Lone,,TRUE,
+Day,Lone,,TRUE,
+can i call you later?,Lone,,TRUE,
+WQ,Lone,,TRUE,
+UDATES,Lone,,TRUE,
+We,Lone,,TRUE,
+I'm a skinny queen,Lone,,TRUE,
+Oh no!,Lone,,TRUE,
+5,Lone,,TRUE,
+One happy dog and mama!????????,Lone,,TRUE,
+Nancy Erika Ercy make,Lone,,TRUE,
+Ok,Lone,,TRUE,
+Pinky,Lone,,TRUE,
+23345Dogs,Lone,,TRUE,
+I ordered,Lone,,TRUE,
+Thanks,Lone,,TRUE,
+Thomas Manion AIA,Lone,,TRUE,
+"If you can please reach out to Bruce Willis family. He has dementia and not doing so well 
+I saw something on the internet about his condition.  Please
+Have your office reach out to him please.  Thank you",Lone,,TRUE,
+WHAT is that,Lone,,TRUE,
+weight or all,Lone,,TRUE,
+"Pp 
+Plop",Lone,,TRUE,
+Story,Lone,,TRUE,
+Penny,Lone,,TRUE,
+Weight,Lone,,TRUE,
+"7 - ~ / . . . - I .,,,- 1 . . . i - . .\ 1 ..",Lone,,TRUE,
+Iq blast,Lone,,TRUE,
+"No, I haven't",Lone,,TRUE,
+"i'm so so sorry 
+I'm still at work Frank just called me
+i completely forgot to reschedule 
+i will call tomorrow to reschedule",Lone,,TRUE,
+2,Lone,,TRUE,
+9,Lone,,TRUE,
+Updated,Lone,,TRUE,
+I use computer to order,Lone,,TRUE,
+Im 5 years old,Lone,,TRUE,
+"Heyyy I'm sorry to blow you up but your last text said you had 104 temp, which can be super dangerous, then you went radio silent. I'm worried about you. But also idk if you're ghosting me. You're the first guy I've been with in sooo long and the only reason I let things get as far as they did was bc I felt so connected with you. I understand if you've just been too sick to be on your phone. Or even if you got cold feet and don't want to see me. But please just don't ghost me. That would honestly crush me after opening up to you??",Lone,,TRUE,
+Food treats,Lone,,TRUE,
+"The ""new low price"" ISN'T.",Lone,,TRUE,
+Shopping later today.,Lone,,TRUE,
+I already have a subscription!,Lone,,TRUE,
+Yogi,Lone,,TRUE,
+I just placed an order with you.,Lone,,TRUE,
+4,Lone,,TRUE,
+It's too expensive  for me. My fixed budget won't allow it🙁,Lone,,TRUE,
+Unsecured website...won't open,Lone,,TRUE,
+overweight,Lone,,TRUE,
+"I retired from my job 25 years ago. I am now 83 years old an I was a licensed architect and t n e Chief Regional  Architect for The Department of Housing and Urban Development in San Francisco, California in charge of the 24 westèrn states.",Lone,,TRUE,
+Sounds good,Lone,,TRUE,
+Digestion,Lone,,TRUE,
+"Well Tommy We do not have video ofHandjive of IKo  Do you think theze 3Tunes (open Rocket88, (2)She Fine, (close)Blue heaven will work in that order?",Lone,,TRUE,
+No problem!,Lone,,TRUE,
+"Sorry, no.",Lone,,TRUE,
+Wow ok je vais montrer a Martial,Lone,,TRUE,
+Marty lol,Lone,,TRUE,
+That's good,Lone,,TRUE,
+What about B-INFANTIS??  Let me know when that is included,Lone,,TRUE,
+"Hey, Ash! Just wondering when you guys planned to pick up your car. I was thinking of putting the boxes in there for you to take home with you. There aren't very many. Please let me know ASAP so I can get them in there if that works for you guys.",Lone,,TRUE,
+V p,Lone,,TRUE,
+I have already ordered it.,Lone,,TRUE,
+For Wyni,Lone,,TRUE,
+Roundhouse chuck norris morning kick,Lone,,TRUE,
+"Liked �Roundhouse Provisions: Ready for your next exclusive offer? Just reply to this message with your biggest health concern, and you'll receive a code for a SECRET sale: 
+
+Reply ENERGY, DIGESTION, WEIGHT or ALL�",Lone,,TRUE,
+No I haven't. Just got home from the hospital but I will look soon,Lone,,TRUE,
+We have people wanting,Lone,,TRUE,
+I still have several...,Lone,,TRUE,
+That sounds great,Lone,,TRUE,
+Unscribe,Lone,,TRUE,
+Do you wanna just roll it around like that,Lone,,TRUE,
+Still have plenty.,Lone,,TRUE,
+18007946225,Lone,,TRUE,
+I need something else.,Lone,,TRUE,
+Amazon,Lone,,TRUE,
+Too exprnsive,Lone,,TRUE,
+Dr?,Lone,,TRUE,
+I'm good thanks,Lone,,TRUE,
+I put the vegetables in the oven 310,Lone,,TRUE,
+Gundry is an acquisitive huckster dissatisfied with the wealth he acquired as a surgeon and who seeks ill gotten lucre from hocking products with arguable but negligible health benefit. Fie.,Lone,,TRUE,
+Io,Lone,,TRUE,
+I came to work today and I was like what the hell happened to you,Lone,,TRUE,
+Football schedulr,Lone,,TRUE,
+Football schedule,Lone,,TRUE,
+have grown vitamin,Lone,,TRUE,
+"Thanks, I'll look into it ????",Lone,,TRUE,
+Not now will laterWayne,Lone,,TRUE,
+"Rb0k I.  Kk09?9 n mm.  J. N okay.Yeah, I guess I'd go this one I found just a flood really bad right now.Remember, I remember that and I really remember that they fix that, and I was like, ohxxx
+What is it you're looking forward to it again? Don't you call me from let cats? In fact, we're a neighborhood with so many steps in that's what you need. Company, we're great. We home, you're all locked up. Do you remember having social? Why don't love this for dinner Sunday dinner? Yeah, little girl. You are Lord, oh my gosh, the kitchen this one. Well.
+You're not resent.No, that anyone else we'll have put into if I have to take them.Yes, I love that senator with them.I'll have been here today at least that's no one's no makes the size of refrigerator it's really the same time.There's not right, and then there's no pantry tech have the way.Yeah, I think more cabinet in storage c",Lone,,TRUE,
+COVID tests,Lone,,TRUE,
+Maybe,Lone,,TRUE,
+Hi by.  A a sSAsS C lL l       N N N N.        Z�.                            I.                                  A.                                           N.                                                I'm  WePlayI'mO IPPy oh no,Lone,,TRUE,
+Ahorros del d�a!!! Aqu� ni ahorros se puede dar el gusto un ciudadano de a pie y los precios de ustedes est�n por los cielos,Lone,,TRUE,
+�00,Lone,,TRUE,
+Fresh books,Lone,,TRUE,
+You're beginning to sound like a huckster.,Lone,,TRUE,
+Thank You SIR??,Lone,,TRUE,
+A new word from my Great Grandson.Kaaaaaaaaa!,Lone,,TRUE,
+Son las que te di????,Lone,,TRUE,
+No recuerdo,Lone,,TRUE,
+Vance Patterson,Lone,,TRUE,
+Causation interpretation,Lone,,TRUE,
+Ellas les  p   E,Lone,,TRUE,
+I ?? did !Thank you ??!,Lone,,TRUE,
+Ive fillef this in 3 times,Lone,,TRUE,
+1,Lone,,TRUE,
+I�m traveling with Do Not Disturb While Driving turned on. I�ll see your message when I get where I�m going. Thank you.,Lone,,TRUE,
+When we talked I said I should be home before six.  But that was like a week ago.  I am home now.,Lone,,TRUE,
+I wasn't going to sit in shed tonight.,Lone,,TRUE,
+Already ordered,Lone,,TRUE,
+Terrific,Lone,,TRUE,
+Doesn't matter,Lone,,TRUE,
+Oh lol ok then,Lone,,TRUE,
+Liquor storeTequila,Lone,,TRUE,
+Mr. Cooper,Lone,,TRUE,
+J j,Lone,,TRUE,
+L  ppl,Lone,,TRUE,
+I'm ready,Lone,,TRUE,
+I am buying it through Amazon,Lone,,TRUE,
+This phone number is no longer in service.,Lone,,TRUE,
+Hey,Lone,,TRUE,
+Elsie are we meeting at Hurricanes on Indian st tonight,Lone,,TRUE,
+J ju jjjjjjjjjjjjjjjjjjj,Lone,,TRUE,
+B1,Lone,,TRUE,
+Fresh pet,Lone,,TRUE,
+800.468.3785,Lone,,TRUE,
+lol,Lone,,TRUE,
+I still have some ! Thxs,Lone,,TRUE,
+"got it, thanks!",Lone,,TRUE,
+Thank you  for lerring me know.??,Lone,,TRUE,
+Thank you for letting me know.,Lone,,TRUE,
+"Cooks dim sum, say",Lone,,TRUE,
+Thank you for booking with Take It Ezy Ranch. We look forward to your stay. Please let us know if there is anything you may need.AmySue Take It Ezy Ranch,Lone,,TRUE,
+1  no,Lone,,TRUE,
+No id no dl,Lone,,TRUE,
+Good ideas,Lone,,TRUE,
+"Ok, thanks",Lone,,TRUE,
+Chicken,Lone,,TRUE,
+Hi! Still have time ?,Lone,,TRUE,
+"Sissy, Didnyoo talki to Rotter Rooter that the problem wasn't solved yet..",Lone,,TRUE,
+Thank u!,Lone,,TRUE,
+Are you available?,Lone,,TRUE,
+Uh ifee see,Lone,,TRUE,
+Lm,Lone,,TRUE,
+Thank you for that information,Lone,,TRUE,
+"She said Carla has 93,000 dollars in a checking account tim knows nothing about",Lone,,TRUE,
+L2-8,Lone,,TRUE,
+Sms,Lone,,TRUE,
+It works,Lone,,TRUE,

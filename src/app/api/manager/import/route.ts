@@ -68,13 +68,18 @@ export async function GET() {
  */
 export async function POST(req: Request) {
   try {
+    console.log("Import API called");
     const form = await req.formData();
+    console.log("Form data received");
 
     const files = form.getAll("files").filter((f): f is File => f instanceof File);
     const single = form.get("file");
     if (files.length === 0 && single instanceof File) files.push(single);
 
+    console.log(`Processing ${files.length} files`);
+
     if (files.length === 0) {
+      console.log("No files provided");
       return NextResponse.json({ success: false, error: "No CSV files provided" }, { status: 400 });
     }
 
@@ -88,13 +93,33 @@ export async function POST(req: Request) {
     }> = [];
 
     for (const file of files) {
+      console.log(`Processing file: ${file.name}, size: ${file.size} bytes`);
+      
+      // Check file size (Vercel has a 4.5MB limit for serverless functions)
+      if (file.size > 4 * 1024 * 1024) {
+        console.error(`File ${file.name} is too large: ${file.size} bytes`);
+        perFileResults.push({
+          fileName: file.name,
+          brand: brandFromFilename(file.name),
+          inserted: 0,
+          skippedExisting: 0,
+          totalRows: 0,
+          importBatchId: "(error - file too large)",
+        });
+        continue;
+      }
+
       const buf = Buffer.from(await file.arrayBuffer());
       const csv = buf.toString("utf8");
+      console.log(`File ${file.name} content length: ${csv.length} characters`);
+      
       const rows = parse(csv, {
         columns: true,
         skip_empty_lines: true,
         trim: true,
       }) as Array<Record<string, string>>;
+      
+      console.log(`File ${file.name} parsed into ${rows.length} rows`);
 
       if (!rows.length) {
         perFileResults.push({
@@ -211,6 +236,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, results: perFileResults });
   } catch (err) {
     console.error("CSV import failed:", err);
-    return NextResponse.json({ success: false, error: "Failed to import CSV" }, { status: 500 });
+    console.error("Error details:", {
+      name: err instanceof Error ? err.name : 'Unknown',
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined
+    });
+    return NextResponse.json({ 
+      success: false, 
+      error: "Failed to import CSV",
+      details: err instanceof Error ? err.message : String(err)
+    }, { status: 500 });
   }
 }
