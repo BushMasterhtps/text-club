@@ -209,7 +209,7 @@ export async function POST(req: Request) {
       const toInsert = candidates.filter((c) => !existingSet.has(c.hashKey));
 
       let inserted = 0;
-      const skippedExisting = candidates.length - toInsert.length;
+      let skippedExisting = candidates.length - toInsert.length;
       
       if (toInsert.length) {
         // Insert new records in batches for speed
