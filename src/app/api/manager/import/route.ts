@@ -209,13 +209,27 @@ export async function POST(req: Request) {
       const toInsert = candidates.filter((c) => !existingSet.has(c.hashKey));
 
       let inserted = 0;
+      let skippedExisting = 0;
+      
       if (toInsert.length) {
-        // When you later bump prisma, you can add: skipDuplicates: true
-        const res = await prisma.rawMessage.createMany({
-          data: toInsert,
-          // skipDuplicates: true, // keep commented until your prisma types include it
-        });
-        inserted = res.count;
+        // Handle duplicates by inserting one by one and catching unique constraint errors
+        for (const record of toInsert) {
+          try {
+            await prisma.rawMessage.create({
+              data: record,
+            });
+            inserted++;
+          } catch (error) {
+            if (error instanceof Error && error.message.includes('Unique constraint failed on the fields: (`hashKey`)')) {
+              // This is a duplicate, skip it
+              skippedExisting++;
+              console.log(`Skipping duplicate record with hashKey: ${record.hashKey}`);
+            } else {
+              // This is a different error, re-throw it
+              throw error;
+            }
+          }
+        }
       }
 
       await prisma.importBatch.update({
@@ -227,7 +241,7 @@ export async function POST(req: Request) {
         fileName: file.name,
         brand,
         inserted,
-        skippedExisting: candidates.length - inserted,
+        skippedExisting: skippedExisting,
         totalRows: rows.length,
         importBatchId: batch.id,
       });
