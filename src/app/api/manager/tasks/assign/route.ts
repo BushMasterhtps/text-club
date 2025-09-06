@@ -38,28 +38,45 @@ export async function POST(req: Request) {
       }
 
       // First, check if these are Task IDs or RawMessage IDs
-      // Try to find them as Tasks first
-      const existingTasks = await prisma.task.findMany({
+      // Try to find them as Tasks first (by task ID)
+      const existingTasksById = await prisma.task.findMany({
         where: { 
-          id: { in: ids },
-          assignedToId: null,
-          status: "PENDING"
+          id: { in: ids }
         }
       });
+      
+      // Also try to find tasks by rawMessageId (in case the IDs are RawMessage IDs)
+      const existingTasksByRawMessageId = await prisma.task.findMany({
+        where: { 
+          rawMessageId: { in: ids }
+        }
+      });
+      
+      // Combine both results, avoiding duplicates
+      const existingTasks = [
+        ...existingTasksById,
+        ...existingTasksByRawMessageId.filter(task => 
+          !existingTasksById.some(existing => existing.id === task.id)
+        )
+      ];
 
       let updateResult = { count: 0 };
 
       if (existingTasks.length > 0) {
-        // These are existing Task records
+        // These are existing Task records - allow reassignment regardless of current status
         updateResult = await prisma.task.updateMany({
           where: { 
-            id: { in: existingTasks.map(t => t.id) },
-            assignedToId: null,
-            status: "PENDING"
+            id: { in: existingTasks.map(t => t.id) }
           },
           data: {
             assignedToId: agent.id,
-            status: "PENDING", // Keep as PENDING until agent clicks Start
+            status: "IN_PROGRESS", // Set to IN_PROGRESS when assigned to agent
+            startTime: null, // Clear start time so new agent can start fresh
+            endTime: null, // Clear end time
+            durationSec: null, // Clear duration
+            disposition: null, // Clear disposition
+            assistanceNotes: null, // Clear assistance notes
+            managerResponse: null, // Clear manager response
           },
         });
       }

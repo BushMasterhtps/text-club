@@ -6,6 +6,9 @@ import bcrypt from 'bcryptjs';
 export async function GET() {
   try {
     const users = await prisma.user.findMany({
+      where: {
+        isActive: true, // Only show active users
+      },
       select: {
         id: true,
         name: true,
@@ -71,6 +74,7 @@ export async function DELETE(req: Request) {
     const updated = await prisma.user.update({
       where: { id },
       data: { 
+        isActive: false, // Deactivate the user
         isLive: false,
         lastSeen: null 
       },

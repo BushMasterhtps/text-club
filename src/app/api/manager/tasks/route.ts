@@ -248,6 +248,7 @@ export async function GET(req: Request) {
       createdAt: r.createdAt,
       receivedAt: r.receivedAt ?? r.createdAt,
       rawStatus: r.status,
+      taskId: t?.id ?? null,
       assignedToId: t?.assignedToId ?? null,
       assignedTo: t?.assignedTo ?? null,
       taskStatus: t?.status ?? null,

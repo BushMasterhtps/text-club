@@ -14,8 +14,8 @@ const OPEN_STATUSES: $Enums.TaskStatus[] = [
 export async function GET() {
   try {
     const agents = await prisma.user.findMany({
-      // v6: use string literal for role
-      where: { role: "AGENT" },
+      // Include both AGENT and MANAGER_AGENT roles for assignment
+      where: { role: { in: ["AGENT", "MANAGER_AGENT"] } },
       select: { id: true, email: true, name: true, isLive: true, lastSeen: true },
       orderBy: { createdAt: "asc" },
     });

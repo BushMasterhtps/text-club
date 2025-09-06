@@ -110,6 +110,7 @@ export default function AgentPage() {
   const [loading, setLoading] = useState(false);
   const [startedTasks, setStartedTasks] = useState<Set<string>>(new Set());
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [forceRender, setForceRender] = useState(0);
 
@@ -498,11 +499,12 @@ export default function AgentPage() {
     }
   };
 
-  const loadStats = async (emailToUse?: string) => {
+  const loadStats = async (emailToUse?: string, dateToUse?: string) => {
     const currentEmail = emailToUse || email;
+    const currentDate = dateToUse || selectedDate;
     if (!currentEmail) return;
     try {
-      const res = await fetch(`/api/agent/stats?email=${encodeURIComponent(currentEmail)}`);
+      const res = await fetch(`/api/agent/stats?email=${encodeURIComponent(currentEmail)}&date=${encodeURIComponent(currentDate)}`);
       const data = await res.json();
       if (data.success) {
         setStats(data.stats);
@@ -700,6 +702,33 @@ export default function AgentPage() {
           </div>
         </div>
       </div>
+
+      {/* Date Picker Section */}
+      <Card className="p-4">
+        <div className="flex items-center gap-4">
+          <label className="text-sm text-white/60 dark:text-white/60 light:text-gray-600">
+            📅 View stats for:
+          </label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => {
+              setSelectedDate(e.target.value);
+              loadStats(undefined, e.target.value);
+            }}
+            className="border-none rounded-lg px-3 py-2 bg-white/10 dark:bg-white/10 light:bg-gray-100 text-white dark:text-white light:text-gray-800 text-sm ring-1 ring-white/10 dark:ring-white/10 light:ring-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <SmallButton 
+            onClick={() => {
+              const today = new Date().toISOString().split('T')[0];
+              setSelectedDate(today);
+              loadStats(undefined, today);
+            }}
+          >
+            Today
+          </SmallButton>
+        </div>
+      </Card>
 
       {/* Stats Summary */}
       {stats && (

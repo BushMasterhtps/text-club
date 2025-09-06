@@ -742,6 +742,9 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <div className="text-sm text-white/60">{total} total</div>
+        <SmallButton onClick={() => fetchPage(page)} disabled={loading}>
+          {loading ? "Loading..." : "🔄 Refresh"}
+        </SmallButton>
       </div>
 
       {/* Filters */}
@@ -1331,6 +1334,9 @@ function SpamReviewSection({
             <SmallButton onClick={onSearch} disabled={loading}>
               {loading ? "Loading…" : "Search"}
             </SmallButton>
+            <SmallButton onClick={() => fetchPage(page)} disabled={loading}>
+              {loading ? "Loading…" : "🔄 Refresh"}
+            </SmallButton>
           </div>
 
           <div className="overflow-x-auto">
@@ -1537,6 +1543,15 @@ function CompletedWorkDashboard() {
   const [dispositionFilter, setDispositionFilter] = useState<string>("all");
   const [limit, setLimit] = useState(50);
   const [offset, setOffset] = useState(0);
+  
+  // Date picker and comparison
+  const [dateMode, setDateMode] = useState<'single' | 'compare'>('single');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [compareStartDate, setCompareStartDate] = useState<string>('');
+  const [compareEndDate, setCompareEndDate] = useState<string>('');
+  const [comparisonData, setComparisonData] = useState<CompletedWorkAnalytics | null>(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
 
   async function loadCompletedWork() {
     setLoading(true);
@@ -1544,6 +1559,9 @@ function CompletedWorkDashboard() {
       const params = new URLSearchParams();
       if (agentFilter) params.set("agent", agentFilter);
       if (dispositionFilter !== "all") params.set("disposition", dispositionFilter);
+      if (startDate) params.set("startDate", startDate);
+      if (endDate) params.set("endDate", endDate);
+      params.set("includeAll", "true"); // Request all data for reporting
       params.set("limit", limit.toString());
       params.set("offset", offset.toString());
 
@@ -1565,11 +1583,43 @@ function CompletedWorkDashboard() {
     }
   }
 
+  async function loadComparisonData() {
+    if (!compareStartDate || !compareEndDate) return;
+    
+    setComparisonLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (agentFilter) params.set("agent", agentFilter);
+      if (dispositionFilter !== "all") params.set("disposition", dispositionFilter);
+      params.set("startDate", compareStartDate);
+      params.set("endDate", compareEndDate);
+      params.set("limit", limit.toString());
+      params.set("offset", offset.toString());
+
+      const response = await fetch(`/api/manager/dashboard/completed-work?${params.toString()}`, { cache: "no-store" });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.success) {
+          setComparisonData(data.analytics || null);
+        }
+      }
+    } catch (error) {
+      console.error("📊 Error loading comparison data:", error);
+    } finally {
+      setComparisonLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (open) {
       loadCompletedWork();
+      if (dateMode === 'compare' && compareStartDate && compareEndDate) {
+        loadComparisonData();
+      }
     }
-  }, [open, agentFilter, dispositionFilter, limit, offset]);
+  }, [open, agentFilter, dispositionFilter, limit, offset, startDate, endDate, dateMode, compareStartDate, compareEndDate]);
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return "—";
@@ -1587,6 +1637,188 @@ function CompletedWorkDashboard() {
       "No Response Required": "#8B5CF6", // purple
     };
     return colors[disposition as keyof typeof colors] || "#6B7280"; // gray fallback
+  };
+
+  // Date helper functions
+  const setDateRange = (range: 'today' | 'yesterday' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'lastQuarter' | 'thisYear' | 'lastYear') => {
+    const today = new Date();
+    let start: Date, end: Date;
+
+    switch (range) {
+      case 'today':
+        start = new Date(today);
+        end = new Date(today);
+        break;
+      case 'yesterday':
+        start = new Date(today);
+        start.setDate(today.getDate() - 1);
+        end = new Date(start);
+        break;
+      case 'thisWeek':
+        start = new Date(today);
+        start.setDate(today.getDate() - today.getDay());
+        end = new Date(today);
+        break;
+      case 'lastWeek':
+        start = new Date(today);
+        start.setDate(today.getDate() - today.getDay() - 7);
+        end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        break;
+      case 'thisMonth':
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end = new Date(today);
+        break;
+      case 'lastMonth':
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end = new Date(today.getFullYear(), today.getMonth(), 0);
+        break;
+      case 'thisQuarter':
+        const quarter = Math.floor(today.getMonth() / 3);
+        start = new Date(today.getFullYear(), quarter * 3, 1);
+        end = new Date(today);
+        break;
+      case 'lastQuarter':
+        const lastQuarter = Math.floor(today.getMonth() / 3) - 1;
+        const lastQuarterYear = lastQuarter < 0 ? today.getFullYear() - 1 : today.getFullYear();
+        const lastQuarterMonth = lastQuarter < 0 ? 9 : lastQuarter * 3;
+        start = new Date(lastQuarterYear, lastQuarterMonth, 1);
+        end = new Date(lastQuarterYear, lastQuarterMonth + 2, new Date(lastQuarterYear, lastQuarterMonth + 3, 0).getDate());
+        break;
+      case 'thisYear':
+        start = new Date(today.getFullYear(), 0, 1);
+        end = new Date(today);
+        break;
+      case 'lastYear':
+        start = new Date(today.getFullYear() - 1, 0, 1);
+        end = new Date(today.getFullYear() - 1, 11, 31);
+        break;
+    }
+
+    setStartDate(start.toISOString().split('T')[0]);
+    setEndDate(end.toISOString().split('T')[0]);
+  };
+
+  const setComparisonDateRange = (range: 'previousPeriod' | 'sameLastMonth' | 'sameLastQuarter' | 'sameLastYear') => {
+    if (!startDate || !endDate) return;
+    
+    const currentStart = new Date(startDate);
+    const currentEnd = new Date(endDate);
+    const periodLength = Math.ceil((currentEnd.getTime() - currentStart.getTime()) / (1000 * 60 * 60 * 24));
+    
+    let compareStart: Date, compareEnd: Date;
+
+    switch (range) {
+      case 'previousPeriod':
+        compareEnd = new Date(currentStart);
+        compareEnd.setDate(compareEnd.getDate() - 1);
+        compareStart = new Date(compareEnd);
+        compareStart.setDate(compareStart.getDate() - periodLength);
+        break;
+      case 'sameLastMonth':
+        compareStart = new Date(currentStart.getFullYear(), currentStart.getMonth() - 1, currentStart.getDate());
+        compareEnd = new Date(currentEnd.getFullYear(), currentEnd.getMonth() - 1, currentEnd.getDate());
+        break;
+      case 'sameLastQuarter':
+        const quarter = Math.floor(currentStart.getMonth() / 3);
+        const lastQuarter = quarter - 1;
+        const lastQuarterYear = lastQuarter < 0 ? currentStart.getFullYear() - 1 : currentStart.getFullYear();
+        const lastQuarterMonth = lastQuarter < 0 ? 9 : lastQuarter * 3;
+        compareStart = new Date(lastQuarterYear, lastQuarterMonth, currentStart.getDate());
+        compareEnd = new Date(lastQuarterYear, lastQuarterMonth + 2, currentEnd.getDate());
+        break;
+      case 'sameLastYear':
+        compareStart = new Date(currentStart.getFullYear() - 1, currentStart.getMonth(), currentStart.getDate());
+        compareEnd = new Date(currentEnd.getFullYear() - 1, currentEnd.getMonth(), currentEnd.getDate());
+        break;
+    }
+
+    setCompareStartDate(compareStart.toISOString().split('T')[0]);
+    setCompareEndDate(compareEnd.toISOString().split('T')[0]);
+  };
+
+  // Comparison calculation functions
+  const calculateChange = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return ((current - previous) / previous) * 100;
+  };
+
+  const getChangeColor = (change: number) => {
+    if (change > 0) return "text-green-400";
+    if (change < 0) return "text-red-400";
+    return "text-gray-400";
+  };
+
+  const getChangeIcon = (change: number) => {
+    if (change > 0) return "↗";
+    if (change < 0) return "↘";
+    return "→";
+  };
+
+  // CSV download function
+  const downloadCompletedTasksCSV = () => {
+    if (!tasks || tasks.length === 0) {
+      alert('No data available to export. Please load the dashboard first.');
+      return;
+    }
+
+    // Create CSV headers
+    const headers = [
+      'Brand',
+      'Phone',
+      'Agent Name',
+      'Agent Email',
+      'Start Time',
+      'End Time',
+      'Duration (min)',
+      'Disposition',
+      'SF Case #',
+      'Message Text'
+    ];
+
+    // Create CSV rows
+    const rows = tasks.map(task => [
+      task.brand || '',
+      task.rawMessage?.phone || '',
+      task.assignedTo?.name || '',
+      task.assignedTo?.email || '',
+      task.startTime ? new Date(task.startTime).toLocaleString() : '',
+      task.endTime ? new Date(task.endTime).toLocaleString() : '',
+      task.durationSec ? Math.round(task.durationSec / 60) : '',
+      task.disposition || '',
+      task.sfCaseNumber || '',
+      (task.text || task.rawMessage?.text || '').replace(/"/g, '""') // Escape quotes
+    ]);
+
+    // Combine headers and rows
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(field => `"${field}"`).join(','))
+      .join('\n');
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    
+    // Generate filename with date range
+    const dateRange = startDate && endDate 
+      ? `_${startDate}_to_${endDate}` 
+      : `_${new Date().toISOString().split('T')[0]}`;
+    
+    link.setAttribute('download', `completed_tasks${dateRange}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Show success message
+    alert(
+      `CSV Export Complete!\n\n` +
+      `Total Tasks: ${tasks.length}\n` +
+      `Date Range: ${startDate && endDate ? `${startDate} to ${endDate}` : 'Current period'}\n\n` +
+      `File saved as: completed_tasks${dateRange}.csv`
+    );
   };
 
   return (
@@ -1611,12 +1843,22 @@ function CompletedWorkDashboard() {
           {analytics && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="p-4">
-                <div className="text-sm text-white/60">Completed Today</div>
+                <div className="text-sm text-white/60">Completed {dateMode === 'compare' ? 'Current Period' : 'Today'}</div>
                 <div className="text-2xl font-bold mt-1">{analytics.completedToday}</div>
+                {dateMode === 'compare' && comparisonData && (
+                  <div className={`text-sm mt-1 ${getChangeColor(calculateChange(analytics.completedToday, comparisonData.completedToday))}`}>
+                    {getChangeIcon(calculateChange(analytics.completedToday, comparisonData.completedToday))} {Math.abs(calculateChange(analytics.completedToday, comparisonData.completedToday)).toFixed(1)}% vs {compareStartDate} to {compareEndDate}
+                  </div>
+                )}
               </Card>
               <Card className="p-4">
                 <div className="text-sm text-white/60">Total Completed</div>
                 <div className="text-2xl font-bold mt-1">{totalCount}</div>
+                {dateMode === 'compare' && comparisonData && (
+                  <div className={`text-sm mt-1 ${getChangeColor(calculateChange(totalCount, comparisonData.completedToday))}`}>
+                    {getChangeIcon(calculateChange(totalCount, comparisonData.completedToday))} {Math.abs(calculateChange(totalCount, comparisonData.completedToday)).toFixed(1)}% vs {compareStartDate} to {compareEndDate}
+                  </div>
+                )}
               </Card>
               <Card className="p-4">
                 <div className="text-sm text-white/60">Avg Handle Time</div>
@@ -1626,6 +1868,20 @@ function CompletedWorkDashboard() {
                     : "—"
                   }
                 </div>
+                {dateMode === 'compare' && comparisonData && comparisonData.agentAnalytics.length > 0 && (
+                  <div className={`text-sm mt-1 ${getChangeColor(calculateChange(
+                    Math.round(analytics.agentAnalytics.reduce((sum, a) => sum + a.avgDuration, 0) / analytics.agentAnalytics.length),
+                    Math.round(comparisonData.agentAnalytics.reduce((sum, a) => sum + a.avgDuration, 0) / comparisonData.agentAnalytics.length)
+                  ))}`}>
+                    {getChangeIcon(calculateChange(
+                      Math.round(analytics.agentAnalytics.reduce((sum, a) => sum + a.avgDuration, 0) / analytics.agentAnalytics.length),
+                      Math.round(comparisonData.agentAnalytics.reduce((sum, a) => sum + a.avgDuration, 0) / comparisonData.agentAnalytics.length)
+                    ))} {Math.abs(calculateChange(
+                      Math.round(analytics.agentAnalytics.reduce((sum, a) => sum + a.avgDuration, 0) / analytics.agentAnalytics.length),
+                      Math.round(comparisonData.agentAnalytics.reduce((sum, a) => sum + a.avgDuration, 0) / comparisonData.agentAnalytics.length)
+                    )).toFixed(1)}% vs {compareStartDate} to {compareEndDate}
+                  </div>
+                )}
               </Card>
             </div>
           )}
@@ -1637,15 +1893,35 @@ function CompletedWorkDashboard() {
               <Card className="p-4">
                 <div className="text-xl font-semibold mb-4">📊 Disposition Totals</div>
                 <div className="space-y-3">
-                  {analytics.dispositionAnalytics.map((dispo) => (
-                    <div key={dispo.disposition} className="flex justify-between items-center p-3 bg-white/5 rounded-lg">
-                      <div className="font-medium">{dispo.disposition}</div>
-                      <div className="text-right">
-                        <div className="font-bold">{dispo.completedCount}</div>
-                        <div className="text-sm text-white/60">{formatDuration(dispo.avgDuration)} avg</div>
+                  {analytics.dispositionAnalytics.map((dispo) => {
+                    const comparisonDispo = comparisonData?.dispositionAnalytics.find(d => d.disposition === dispo.disposition);
+                    const countChange = comparisonDispo ? calculateChange(dispo.completedCount, comparisonDispo.completedCount) : 0;
+                    const durationChange = comparisonDispo ? calculateChange(dispo.avgDuration || 0, comparisonDispo.avgDuration || 0) : 0;
+                    
+                    return (
+                      <div key={dispo.disposition} className="flex justify-between items-center p-3 bg-white/5 rounded-lg">
+                        <div className="font-medium">{dispo.disposition}</div>
+                        <div className="text-right">
+                          <div className="font-bold flex items-center gap-2">
+                            {dispo.completedCount}
+                            {dateMode === 'compare' && comparisonDispo && (
+                              <span className={`text-sm ${getChangeColor(countChange)}`}>
+                                {getChangeIcon(countChange)} {Math.abs(countChange).toFixed(1)}%
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-white/60 flex items-center gap-2">
+                            {formatDuration(dispo.avgDuration)} avg
+                            {dateMode === 'compare' && comparisonDispo && (
+                              <span className={`text-xs ${getChangeColor(durationChange)}`}>
+                                {getChangeIcon(durationChange)} {Math.abs(durationChange).toFixed(1)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </Card>
 
@@ -1676,6 +1952,108 @@ function CompletedWorkDashboard() {
               </Card>
             </div>
           )}
+
+          {/* Date Picker and Comparison */}
+          <Card className="p-4">
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-semibold">📅 Date Range & Comparison</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setDateMode('single')}
+                    className={`px-3 py-1 rounded text-sm ${
+                      dateMode === 'single' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-white/10 text-white/60 hover:bg-white/20'
+                    }`}
+                  >
+                    Single Period
+                  </button>
+                  <button
+                    onClick={() => setDateMode('compare')}
+                    className={`px-3 py-1 rounded text-sm ${
+                      dateMode === 'compare' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-white/10 text-white/60 hover:bg-white/20'
+                    }`}
+                  >
+                    Compare Periods
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Date Selection */}
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => setDateRange('today')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">Today</button>
+                <button onClick={() => setDateRange('yesterday')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">Yesterday</button>
+                <button onClick={() => setDateRange('thisWeek')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">This Week</button>
+                <button onClick={() => setDateRange('lastWeek')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">Last Week</button>
+                <button onClick={() => setDateRange('thisMonth')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">This Month</button>
+                <button onClick={() => setDateRange('lastMonth')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">Last Month</button>
+                <button onClick={() => setDateRange('thisQuarter')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">This Quarter</button>
+                <button onClick={() => setDateRange('lastQuarter')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">Last Quarter</button>
+                <button onClick={() => setDateRange('thisYear')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">This Year</button>
+                <button onClick={() => setDateRange('lastYear')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">Last Year</button>
+              </div>
+
+              {/* Custom Date Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-white/60 block mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="border-none rounded-lg px-3 py-2 bg-white/10 text-white text-sm ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-white/60 block mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="border-none rounded-lg px-3 py-2 bg-white/10 text-white text-sm ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Comparison Date Inputs */}
+              {dateMode === 'compare' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <h4 className="text-md font-medium">Comparison Period</h4>
+                    <div className="flex gap-2">
+                      <button onClick={() => setComparisonDateRange('previousPeriod')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">Previous Period</button>
+                      <button onClick={() => setComparisonDateRange('sameLastMonth')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">Same Last Month</button>
+                      <button onClick={() => setComparisonDateRange('sameLastQuarter')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">Same Last Quarter</button>
+                      <button onClick={() => setComparisonDateRange('sameLastYear')} className="px-3 py-1 bg-white/10 text-white text-sm rounded hover:bg-white/20">Same Last Year</button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm text-white/60 block mb-1">Compare Start Date</label>
+                      <input
+                        type="date"
+                        value={compareStartDate}
+                        onChange={(e) => setCompareStartDate(e.target.value)}
+                        className="border-none rounded-lg px-3 py-2 bg-white/10 text-white text-sm ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm text-white/60 block mb-1">Compare End Date</label>
+                      <input
+                        type="date"
+                        value={compareEndDate}
+                        onChange={(e) => setCompareEndDate(e.target.value)}
+                        className="border-none rounded-lg px-3 py-2 bg-white/10 text-white text-sm ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
 
           {/* Filters */}
           <div className="flex flex-wrap gap-4 items-center">
@@ -1717,18 +2095,38 @@ function CompletedWorkDashboard() {
             <Card className="p-4">
               <h3 className="text-lg font-semibold mb-4">Agent Performance</h3>
               <div className="space-y-3">
-                {analytics?.agentAnalytics.map((agent) => (
-                  <div key={agent.agent.email} className="flex justify-between items-center p-3 bg-white/5 rounded-lg">
-                    <div>
-                      <div className="font-medium">{agent.agent.name || agent.agent.email}</div>
-                      <div className="text-sm text-white/60">{agent.completedCount} completed</div>
+                {analytics?.agentAnalytics.map((agent) => {
+                  const comparisonAgent = comparisonData?.agentAnalytics.find(a => a.agent.email === agent.agent.email);
+                  const countChange = comparisonAgent ? calculateChange(agent.completedCount, comparisonAgent.completedCount) : 0;
+                  const durationChange = comparisonAgent ? calculateChange(agent.avgDuration || 0, comparisonAgent.avgDuration || 0) : 0;
+                  
+                  return (
+                    <div key={agent.agent.email} className="flex justify-between items-center p-3 bg-white/5 rounded-lg">
+                      <div>
+                        <div className="font-medium">{agent.agent.name || agent.agent.email}</div>
+                        <div className="text-sm text-white/60 flex items-center gap-2">
+                          {agent.completedCount} completed
+                          {dateMode === 'compare' && comparisonAgent && (
+                            <span className={`text-xs ${getChangeColor(countChange)}`}>
+                              {getChangeIcon(countChange)} {Math.abs(countChange).toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono flex items-center gap-2">
+                          {formatDuration(agent.avgDuration)}
+                          {dateMode === 'compare' && comparisonAgent && (
+                            <span className={`text-xs ${getChangeColor(durationChange)}`}>
+                              {getChangeIcon(durationChange)} {Math.abs(durationChange).toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm text-white/60">avg time</div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-mono">{formatDuration(agent.avgDuration)}</div>
-                      <div className="text-sm text-white/60">avg time</div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </Card>
 
@@ -1736,46 +2134,75 @@ function CompletedWorkDashboard() {
             <Card className="p-4">
               <h3 className="text-lg font-semibold mb-4">Disposition Performance</h3>
               <div className="space-y-3">
-                {analytics?.dispositionAnalytics.map((disp) => (
-                  <div key={disp.disposition} className="p-3 bg-white/5 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="font-medium">{disp.disposition}</div>
-                        <div className="text-sm text-white/60">{disp.completedCount} completed</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-mono">{formatDuration(disp.avgDuration)}</div>
-                        <div className="text-sm text-white/60">avg time</div>
-                      </div>
-                    </div>
-                    {/* Show subcategories if available */}
-                    {disp.subcategories && disp.subcategories.length > 1 && (
-                      <div className="mt-3 pt-3 border-t border-white/10">
-                        <div className="text-xs text-white/50 mb-2">Breakdown:</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {disp.subcategories.map((sub) => (
-                            <div key={sub.disposition} className="text-xs bg-white/5 p-2 rounded">
-                              <div className="font-medium">{sub.disposition}</div>
-                              <div className="text-white/60">{sub.completedCount} ({formatDuration(sub.avgDuration)})</div>
-                            </div>
-                          ))}
+                {analytics?.dispositionAnalytics.map((disp) => {
+                  const comparisonDisp = comparisonData?.dispositionAnalytics.find(d => d.disposition === disp.disposition);
+                  const countChange = comparisonDisp ? calculateChange(disp.completedCount, comparisonDisp.completedCount) : 0;
+                  const durationChange = comparisonDisp ? calculateChange(disp.avgDuration || 0, comparisonDisp.avgDuration || 0) : 0;
+                  
+                  return (
+                    <div key={disp.disposition} className="p-3 bg-white/5 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="font-medium">{disp.disposition}</div>
+                          <div className="text-sm text-white/60 flex items-center gap-2">
+                            {disp.completedCount} completed
+                            {dateMode === 'compare' && comparisonDisp && (
+                              <span className={`text-xs ${getChangeColor(countChange)}`}>
+                                {getChangeIcon(countChange)} {Math.abs(countChange).toFixed(1)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-mono flex items-center gap-2">
+                            {formatDuration(disp.avgDuration)}
+                            {dateMode === 'compare' && comparisonDisp && (
+                              <span className={`text-xs ${getChangeColor(durationChange)}`}>
+                                {getChangeIcon(durationChange)} {Math.abs(durationChange).toFixed(1)}%
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-white/60">avg time</div>
                         </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      {/* Show subcategories if available */}
+                      {disp.subcategories && disp.subcategories.length > 1 && (
+                        <div className="mt-3 pt-3 border-t border-white/10">
+                          <div className="text-xs text-white/50 mb-2">Breakdown:</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {disp.subcategories.map((sub) => (
+                              <div key={sub.disposition} className="text-xs bg-white/5 p-2 rounded">
+                                <div className="font-medium">{sub.disposition}</div>
+                                <div className="text-white/60">{sub.completedCount} ({formatDuration(sub.avgDuration)})</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </Card>
           </div>
 
           {/* Completed Tasks Table */}
           <Card className="p-4">
-            <h3 className="text-lg font-semibold mb-4">Recent Completed Tasks</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Raw Data from selected source</h3>
+              <button
+                onClick={() => downloadCompletedTasksCSV()}
+                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                📥 Download CSV
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-white/[0.04]">
                   <tr className="text-left text-white/60">
                     <th className="px-3 py-2">Brand</th>
+                    <th className="px-3 py-2">Phone</th>
                     <th className="px-3 py-2">Agent</th>
                     <th className="px-3 py-2">Start Time</th>
                     <th className="px-3 py-2">End Time</th>
@@ -1787,8 +2214,8 @@ function CompletedWorkDashboard() {
                 <tbody className="divide-y divide-white/5">
                   {tasks.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-8 text-center text-white/40">
-                        {loading ? "Loading..." : "No completed tasks found."}
+                      <td colSpan={8} className="px-3 py-8 text-center text-white/40">
+                        {loading ? "Loading..." : "No data found for selected criteria."}
                       </td>
                     </tr>
                   ) : (
@@ -1799,6 +2226,9 @@ function CompletedWorkDashboard() {
                           <div className="text-xs text-white/50 truncate max-w-48">
                             {task.text || task.rawMessage?.text || "—"}
                           </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="font-mono text-sm">{task.rawMessage?.phone || "—"}</span>
                         </td>
                         <td className="px-3 py-2">
                           <div className="font-medium">{task.assignedTo?.name || "—"}</div>
@@ -3167,39 +3597,6 @@ export default function ManagerPage() {
         <div className="space-y-8">
           <AgentProgressSection />
           
-          {/* Agents live/pause (readonly overview) */}
-      <Card className="p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <H2>🧑‍💻 Agents (Live / Pause)</H2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm rounded-xl overflow-hidden">
-            <thead className="bg-white/[0.04]">
-              <tr className="text-left text-white/60">
-                <th className="px-3 py-2">Agent</th>
-                <th className="px-3 py-2">Email</th>
-                <th className="px-3 py-2">Open</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Last seen</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {agents.map((a) => (
-                <tr key={a.id} className="text-white/90">
-                  <td className="px-3 py-2">{a.name || a.email}</td>
-                  <td className="px-3 py-2">{a.email}</td>
-                  <td className="px-3 py-2"><Badge tone="muted">{a.openCount}</Badge></td>
-                  <td className="px-3 py-2">{a.isLive ? "Live" : "Paused"}</td>
-                  <td className="px-3 py-2">{fmtDate(a.lastSeen || null)}</td>
-                </tr>
-              ))}
-              {agents.length === 0 && (
-                <tr><td className="px-3 py-3 text-white/60" colSpan={5}>{agentsLoading ? "Loading agents…" : "No agents found."}</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-          </Card>
         </div>
       )}
 

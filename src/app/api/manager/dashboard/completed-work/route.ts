@@ -6,15 +6,26 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const agentEmail = searchParams.get("agent");
     const disposition = searchParams.get("disposition");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
-
-
+    const includeAll = searchParams.get("includeAll") === "true";
 
     // Build where clause
     const where: any = {
       status: "COMPLETED"
     };
+
+    // Add date filtering if provided
+    if (startDate && endDate) {
+      const start = new Date(startDate + 'T00:00:00.000Z');
+      const end = new Date(endDate + 'T23:59:59.999Z');
+      where.endTime = {
+        gte: start,
+        lte: end
+      };
+    }
 
     if (agentEmail) {
       const agent = await prisma.user.findFirst({
@@ -77,8 +88,7 @@ export async function GET(request: NextRequest) {
           }
         },
         orderBy: { endTime: "desc" },
-        take: limit,
-        skip: offset
+        ...(includeAll ? {} : { take: limit, skip: offset })
       }),
       prisma.task.count({ where })
     ]);
@@ -114,9 +124,9 @@ export async function GET(request: NextRequest) {
           id: true
         }
       }),
-      // Total completed today
+      // Total completed in the selected date range (or today if no range specified)
       prisma.task.count({
-        where: {
+        where: startDate && endDate ? where : {
           ...where,
           endTime: {
             gte: new Date(new Date().setHours(0, 0, 0, 0)),
