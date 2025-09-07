@@ -1,32 +1,40 @@
 import { Client } from '@microsoft/microsoft-graph-client';
 import { ConfidentialClientApplication } from '@azure/msal-node';
 
-// Microsoft Graph API Configuration
-const config = {
-  auth: {
-    clientId: process.env.MICROSOFT_CLIENT_ID || '',
-    clientSecret: process.env.MICROSOFT_CLIENT_SECRET || '',
-    authority: 'https://login.microsoftonline.com/common',
-  },
-  system: {
-    loggerOptions: {
-      loggerCallback: (level: any, message: string, containsPii: any) => {
-        if (containsPii) {
-          return;
-        }
-        console.log(`[MSAL] ${level}: ${message}`);
-      },
-      piiLoggingEnabled: false,
-      logLevel: 'Info',
-    },
-  },
-};
+// Microsoft Graph API Configuration - only initialize if credentials are available
+let cca: ConfidentialClientApplication | null = null;
 
-// Initialize MSAL
-const cca = new ConfidentialClientApplication(config);
+if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) {
+  const config = {
+    auth: {
+      clientId: process.env.MICROSOFT_CLIENT_ID,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+      authority: 'https://login.microsoftonline.com/common',
+    },
+    system: {
+      loggerOptions: {
+        loggerCallback: (level: any, message: string, containsPii: any) => {
+          if (containsPii) {
+            return;
+          }
+          console.log(`[MSAL] ${level}: ${message}`);
+        },
+        piiLoggingEnabled: false,
+        logLevel: 'Info',
+      },
+    },
+  };
+
+  // Initialize MSAL
+  cca = new ConfidentialClientApplication(config);
+}
 
 // Get access token for Microsoft Graph
 export async function getAccessToken(): Promise<string> {
+  if (!cca) {
+    throw new Error('Microsoft Graph API not configured. Please set MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET environment variables.');
+  }
+
   try {
     const clientCredentialRequest = {
       scopes: ['https://graph.microsoft.com/.default'],
