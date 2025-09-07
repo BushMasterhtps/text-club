@@ -5,13 +5,43 @@ export async function GET(req: Request) {
   try {
     console.log("🔍 Assistance API: Fetching assistance requests...");
     
-    // Fetch all tasks that have assistance notes
+    // Fetch all tasks that have assistance notes and are either pending assistance or have been responded to
     const tasks = await prisma.task.findMany({
       where: {
         assistanceNotes: { not: null },
-        status: { in: ["ASSISTANCE_REQUIRED", "IN_PROGRESS"] }
+        OR: [
+          { status: "ASSISTANCE_REQUIRED" }, // Pending assistance requests
+          { 
+            status: "IN_PROGRESS", 
+            managerResponse: { not: null } // Tasks that have been responded to but not completed
+          }
+        ]
       },
-      include: {
+      select: {
+        id: true,
+        brand: true,
+        phone: true,
+        text: true,
+        taskType: true,
+        assistanceNotes: true,
+        managerResponse: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        // WOD/IVCS specific fields
+        wodIvcsSource: true,
+        documentNumber: true,
+        customerName: true,
+        amount: true,
+        webOrderDifference: true,
+        orderDate: true,
+        // Email Request specific fields
+        emailRequestFor: true,
+        details: true,
+        // Standalone Refund specific fields
+        refundAmount: true,
+        paymentMethod: true,
+        refundReason: true,
         assignedTo: {
           select: {
             name: true,
@@ -34,19 +64,47 @@ export async function GET(req: Request) {
     console.log("🔍 Assistance API: Found", tasks.length, "tasks with assistance notes");
     
     // Transform the data to match the frontend interface
-    const requests = tasks.map(task => ({
-      id: task.id,
-      brand: task.brand || task.rawMessage?.brand || "Unknown",
-      phone: task.phone || task.rawMessage?.phone || "Unknown",
-      text: task.text || task.rawMessage?.text || "Unknown",
-      agentName: task.assignedTo?.name || "Unknown",
-      agentEmail: task.assignedTo?.email || "Unknown",
-      assistanceNotes: task.assistanceNotes || "",
-      managerResponse: task.managerResponse,
-      createdAt: task.createdAt.toISOString(),
-      updatedAt: task.updatedAt.toISOString(),
-      status: task.status
-    }));
+    const requests = tasks.map(task => {
+      // Calculate order age for WOD/IVCS tasks
+      let orderAge = null;
+      if (task.taskType === "WOD_IVCS" && task.orderDate) {
+        const orderDate = new Date(task.orderDate);
+        const now = new Date();
+        const diffTime = Math.abs(now.getTime() - orderDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        orderAge = `${diffDays} day${diffDays !== 1 ? 's' : ''} old`;
+      }
+
+      return {
+        id: task.id,
+        brand: task.brand || task.rawMessage?.brand || "Unknown",
+        phone: task.phone || task.rawMessage?.phone || "Unknown",
+        text: task.text || task.rawMessage?.text || "Unknown",
+        agentName: task.assignedTo?.name || "Unknown",
+        agentEmail: task.assignedTo?.email || "Unknown",
+        assistanceNotes: task.assistanceNotes || "",
+        managerResponse: task.managerResponse,
+        createdAt: task.createdAt.toISOString(),
+        updatedAt: task.updatedAt.toISOString(),
+        status: task.status,
+        taskType: task.taskType,
+        // WOD/IVCS specific fields
+        wodIvcsSource: task.wodIvcsSource,
+        documentNumber: task.documentNumber,
+        customerName: task.customerName,
+        amount: task.amount,
+        webOrderDifference: task.webOrderDifference,
+        orderDate: task.orderDate?.toISOString(),
+        orderAge: orderAge,
+        // Email Request specific fields
+        emailRequestFor: task.emailRequestFor,
+        details: task.details,
+        // Standalone Refund specific fields
+        refundAmount: task.refundAmount,
+        paymentMethod: task.paymentMethod,
+        refundReason: task.refundReason,
+      };
+    });
 
     console.log("🔍 Assistance API: Returning", requests.length, "requests");
 

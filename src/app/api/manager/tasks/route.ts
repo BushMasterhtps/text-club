@@ -63,6 +63,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const statusKey = parseStatus(url.searchParams.get("status"));
   const q = (url.searchParams.get("q") ?? "").trim();
+  const taskType = url.searchParams.get("taskType") ?? "TEXT_CLUB"; // Filter by task type
 
   const take = Math.min(Math.max(Number(url.searchParams.get("take") ?? 50), 1), 200);
   const skip = Math.max(Number(url.searchParams.get("skip") ?? 0), 0);
@@ -88,7 +89,18 @@ export async function GET(req: Request) {
   /* ---------- build dynamic where ---------- */
   const and: Prisma.RawMessageWhereInput[] = [];
 
-  // (A) Status mapping -> RawMessage/Task relational filter
+  // (A) Task type filter
+  if (taskType !== "TEXT_CLUB") {
+    and.push({
+      tasks: {
+        some: {
+          taskType: taskType as any
+        }
+      }
+    });
+  }
+
+  // (B) Status mapping -> RawMessage/Task relational filter
   // We push these into the query so count/paging match what the UI sees.
   const statusWhere: Prisma.RawMessageWhereInput | undefined = (() => {
     switch (statusKey) {

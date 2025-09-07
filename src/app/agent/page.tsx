@@ -86,6 +86,40 @@ interface Task {
   managerResponse?: string;
   createdAt: string;
   updatedAt: string;
+  taskType?: string;
+  // WOD/IVCS specific fields
+  wodIvcsSource?: string;
+  documentNumber?: string;
+  warehouseEdgeStatus?: string;
+  amount?: number;
+  webOrderDifference?: number;
+  webOrder?: string;
+  webOrderSubtotal?: number;
+  webOrderTotal?: number;
+  nsVsWebDiscrepancy?: number;
+  customerName?: string;
+  netSuiteTotal?: number;
+  webTotal?: number;
+  webVsNsDifference?: number;
+  shippingCountry?: string;
+  shippingState?: string;
+  orderDate?: string;
+  orderAge?: string;
+  orderAgeDays?: number;
+  // Email Request specific fields
+  emailRequestFor?: string;
+  details?: string;
+  timestamp?: string;
+  customerNameNumber?: string;
+  salesOrderId?: string;
+  // Standalone Refund specific fields
+  amountToBeRefunded?: number;
+  verifiedRefund?: boolean;
+  paymentMethod?: string;
+  refundReason?: string;
+  productSku?: string;
+  quantity?: number;
+  refundAmount?: number;
 }
 
 interface AgentStats {
@@ -915,6 +949,7 @@ function TaskCard({
   onAssistance: (taskId: string, message: string) => void;
 }) {
   const [disposition, setDisposition] = useState("");
+  const [subDisposition, setSubDisposition] = useState("");
   const [assistanceMsg, setAssistanceMsg] = useState("");
   const [sfCaseNumber, setSfCaseNumber] = useState("");
 
@@ -922,8 +957,17 @@ function TaskCard({
   const handleComplete = () => {
     if (!disposition) return;
     
+    // For WOD/IVCS tasks with "Reviewed / Unable to Complete", require sub-disposition
+    if (task.taskType === "WOD_IVCS" && disposition === "Reviewed / Unable to Complete") {
+      if (!subDisposition) {
+        alert("Please select a sub-disposition for Unable to Complete.");
+        return;
+      }
+      // Combine main disposition with sub-disposition
+      onComplete(task.id, `${disposition} - ${subDisposition}`);
+    }
     // For "Answered in SF", require SF Case #
-    if (disposition === "Answered in SF") {
+    else if (disposition === "Answered in SF") {
       if (!sfCaseNumber.trim()) {
         alert("Please enter the SF Case # for Answered in SF disposition.");
         return;
@@ -937,6 +981,7 @@ function TaskCard({
     
     // Clear form fields
     setDisposition("");
+    setSubDisposition("");
     setSfCaseNumber("");
   };
 
@@ -971,14 +1016,34 @@ function TaskCard({
     return '❓';
   };
 
+  // Get task type display info
+  const getTaskTypeInfo = (taskType: string) => {
+    switch (taskType) {
+      case "WOD_IVCS":
+        return { label: "WOD/IVCS", emoji: "📊", color: "text-red-400" };
+      case "EMAIL_REQUESTS":
+        return { label: "Email Requests", emoji: "📧", color: "text-green-400" };
+      case "STANDALONE_REFUNDS":
+        return { label: "Standalone Refunds", emoji: "💰", color: "text-purple-400" };
+      case "TEXT_CLUB":
+      default:
+        return { label: "Text Club", emoji: "💬", color: "text-blue-400" };
+    }
+  };
+
+  const taskTypeInfo = getTaskTypeInfo(task.taskType || "TEXT_CLUB");
+
   return (
     <div className={`bg-white/5 rounded-lg p-4 space-y-3 border ${
       task.managerResponse 
         ? "border-green-500/50 bg-green-900/10" 
         : "border-white/10"
     }`}>
-      {/* Brand */}
+      {/* Task Type & Brand */}
       <div className="flex items-center gap-2 text-lg font-semibold">
+        <span className={taskTypeInfo.color}>{taskTypeInfo.emoji}</span>
+        <span className="text-white/70 text-sm font-normal">{taskTypeInfo.label}</span>
+        <span className="text-white/40">•</span>
         <span>{getBrandEmoji(task.brand)}</span>
         <span>{task.brand}</span>
         {task.managerResponse && (
@@ -986,25 +1051,157 @@ function TaskCard({
         )}
       </div>
 
-      {/* Phone - Blurred until started */}
-      <div className="flex items-center gap-2">
-        <span className="text-blue-400">📞</span>
-        {isTaskStarted ? (
-          <span className="font-mono">{task.phone}</span>
-        ) : (
-          <span className="text-white/40 italic">[hidden until Start]</span>
-        )}
-      </div>
+      {/* Task-specific content based on type */}
+      {task.taskType === "WOD_IVCS" ? (
+        <>
+          {/* WOD/IVCS specific data - Blurred until started */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-red-400">📋</span>
+              <span className="text-white/60">Source:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.wodIvcsSource || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-red-400">🔢</span>
+              <span className="text-white/60">Primary ID:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.documentNumber || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-red-400">👤</span>
+              <span className="text-white/60">Customer:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.customerName || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-red-400">💵</span>
+              <span className="text-white/60">Amount:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.amount ? `$${task.amount}` : "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-red-400">📊</span>
+              <span className="text-white/60">Difference:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.webOrderDifference ? `$${task.webOrderDifference}` : "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-red-400">📅</span>
+              <span className="text-white/60">Origin Date:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.orderDate ? new Date(task.orderDate).toLocaleDateString() : "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-red-400">⏰</span>
+              <span className="text-white/60">Order Age:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.orderAge || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+          </div>
+        </>
+      ) : task.taskType === "EMAIL_REQUESTS" ? (
+        <>
+          {/* Email Request specific data - Blurred until started */}
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-green-400">📧</span>
+              <span className="text-white/60">Request For:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.emailRequestFor || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-green-400 mt-1">📝</span>
+              <span className="text-white/60">Details:</span>
+              {isTaskStarted ? (
+                <span className="text-sm leading-relaxed">{task.details || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+          </div>
+        </>
+      ) : task.taskType === "STANDALONE_REFUNDS" ? (
+        <>
+          {/* Standalone Refund specific data - Blurred until started */}
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-purple-400">💰</span>
+              <span className="text-white/60">Refund Amount:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.refundAmount ? `$${task.refundAmount}` : "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-purple-400">💳</span>
+              <span className="text-white/60">Payment Method:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.paymentMethod || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-purple-400">📝</span>
+              <span className="text-white/60">Reason:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.refundReason || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Text Club specific data */}
+          {/* Phone - Blurred until started */}
+          <div className="flex items-center gap-2">
+            <span className="text-blue-400">📞</span>
+            {isTaskStarted ? (
+              <span className="font-mono">{task.phone}</span>
+            ) : (
+              <span className="text-white/40 italic">[hidden until Start]</span>
+            )}
+          </div>
 
-      {/* Text - Blurred until started */}
-      <div className="flex items-start gap-2">
-        <span className="text-green-400 mt-1">💬</span>
-        {isTaskStarted ? (
-          <span className="text-sm leading-relaxed">{task.text}</span>
-        ) : (
-          <span className="text-white/40 italic">[hidden until Start]</span>
-        )}
-      </div>
+          {/* Text - Blurred until started */}
+          <div className="flex items-start gap-2">
+            <span className="text-green-400 mt-1">💬</span>
+            {isTaskStarted ? (
+              <span className="text-sm leading-relaxed">{task.text}</span>
+            ) : (
+              <span className="text-white/40 italic">[hidden until Start]</span>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Status */}
       <div className="flex items-center gap-2">
@@ -1050,19 +1247,46 @@ function TaskCard({
               className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10"
             >
               <option value="">Select disposition...</option>
-              <option value="Answered in Attentive">✅ Answered in Attentive</option>
-              <option value="Answered in SF">📋 Answered in SF</option>
-              <option value="Previously Assisted">🔄 Previously Assisted</option>
-              <option value="No Response Required (leadership advised)">⏸️ No Response Required</option>
-              <optgroup label="Spam">
-                <option value="Spam - Negative Feedback">🚫 Negative Feedback</option>
-                <option value="Spam - Positive Feedback">👍 Positive Feedback</option>
-                <option value="Spam - Off topic">📝 Off topic</option>
-                <option value="Spam - Gibberish">🤪 Gibberish</option>
-                <option value="Spam - One word statement">💬 One word statement</option>
-                <option value="Spam - Reaction Message">😀 Reaction Message</option>
-              </optgroup>
+              {task.taskType === "WOD_IVCS" ? (
+                <>
+                  <option value="Completed - Fixed Amounts">✅ Completed - Fixed Amounts</option>
+                  <option value="Reviewed / Unable to Complete">❌ Reviewed / Unable to Complete</option>
+                </>
+              ) : (
+                <>
+                  <option value="Answered in Attentive">✅ Answered in Attentive</option>
+                  <option value="Answered in SF">📋 Answered in SF</option>
+                  <option value="Previously Assisted">🔄 Previously Assisted</option>
+                  <option value="No Response Required (leadership advised)">⏸️ No Response Required</option>
+                  <optgroup label="Spam">
+                    <option value="Spam - Negative Feedback">🚫 Negative Feedback</option>
+                    <option value="Spam - Positive Feedback">👍 Positive Feedback</option>
+                    <option value="Spam - Off topic">📝 Off topic</option>
+                    <option value="Spam - Gibberish">🤪 Gibberish</option>
+                    <option value="Spam - One word statement">💬 One word statement</option>
+                    <option value="Spam - Reaction Message">😀 Reaction Message</option>
+                  </optgroup>
+                </>
+              )}
             </select>
+
+            {/* Sub-disposition dropdown for WOD/IVCS "Unable to Complete" */}
+            {task.taskType === "WOD_IVCS" && disposition === "Reviewed / Unable to Complete" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/70">Sub-disposition:</label>
+                <select
+                  value={subDisposition}
+                  onChange={(e) => setSubDisposition(e.target.value)}
+                  className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10"
+                >
+                  <option value="">Select sub-disposition...</option>
+                  <option value="Canadian Order / Unable to Edit Sales Order">🇨🇦 Canadian Order / Unable to Edit Sales Order</option>
+                  <option value="Unable to Edit Sales Order">📝 Unable to Edit Sales Order</option>
+                  <option value="Unable to Edit Cash Sale">💰 Unable to Edit Cash Sale</option>
+                  <option value="Invalid Cash Sale / Not Able to Fix">❌ Invalid Cash Sale / Not Able to Fix</option>
+                </select>
+              </div>
+            )}
             
             {/* SF Case # field for "Answered in SF" */}
             {disposition === "Answered in SF" && (

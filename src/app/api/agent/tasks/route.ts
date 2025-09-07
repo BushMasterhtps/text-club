@@ -47,6 +47,38 @@ export async function GET(req: Request) {
         managerResponse: true,
         createdAt: true,
         updatedAt: true,
+        taskType: true,
+        // WOD/IVCS specific fields
+        wodIvcsSource: true,
+        documentNumber: true,
+        warehouseEdgeStatus: true,
+        amount: true,
+        webOrderDifference: true,
+        webOrder: true,
+        webOrderSubtotal: true,
+        webOrderTotal: true,
+        nsVsWebDiscrepancy: true,
+        customerName: true,
+        netSuiteTotal: true,
+        webTotal: true,
+        webVsNsDifference: true,
+        shippingCountry: true,
+        shippingState: true,
+        orderDate: true,
+        // Email Request specific fields
+        emailRequestFor: true,
+        details: true,
+        timestamp: true,
+        customerNameNumber: true,
+        salesOrderId: true,
+        // Standalone Refund specific fields
+        amountToBeRefunded: true,
+        verifiedRefund: true,
+        paymentMethod: true,
+        refundReason: true,
+        productSku: true,
+        quantity: true,
+        refundAmount: true,
         rawMessage: {
           select: {
             brand: true,
@@ -62,13 +94,26 @@ export async function GET(req: Request) {
     });
 
     // Transform tasks to include brand/phone/text from rawMessage if not set on task
-    const transformedTasks = tasks.map(task => ({
-      ...task,
-      brand: task.brand || task.rawMessage?.brand || "Unknown",
-      phone: task.phone || task.rawMessage?.phone || "",
-      text: task.text || task.rawMessage?.text || "",
-      rawMessage: undefined // Remove from response
-    }));
+    const transformedTasks = tasks.map(task => {
+      // Calculate order age for WOD/IVCS tasks
+      let orderAge = null;
+      let orderAgeDays = null;
+      
+      if (task.orderDate) {
+        orderAgeDays = Math.floor((Date.now() - task.orderDate.getTime()) / (1000 * 60 * 60 * 24));
+        orderAge = orderAgeDays === 0 ? "Today" : `${orderAgeDays} day${orderAgeDays === 1 ? '' : 's'} old`;
+      }
+
+      return {
+        ...task,
+        brand: task.brand || task.rawMessage?.brand || "Unknown",
+        phone: task.phone || task.rawMessage?.phone || "",
+        text: task.text || task.rawMessage?.text || "",
+        orderAge: orderAge,
+        orderAgeDays: orderAgeDays,
+        rawMessage: undefined // Remove from response
+      };
+    });
 
     // Debug: Check if any tasks have manager responses
     const tasksWithResponses = transformedTasks.filter(t => t.managerResponse);

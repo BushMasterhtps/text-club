@@ -14,9 +14,12 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@azure/msal-node": "^3.7.3",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@prisma/client": "^6.15.0",
     "bcryptjs": "^3.0.2",
     "csv-parse": "^6.1.0",
+    "isomorphic-fetch": "^3.0.0",
     "jose": "^6.1.0",
     "jsonwebtoken": "^9.0.2",
     "next": "15.5.2",

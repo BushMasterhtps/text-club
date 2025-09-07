@@ -47,6 +47,19 @@ enum SpamMode {
   REGEX
 }
 
+enum TaskType {
+  TEXT_CLUB
+  WOD_IVCS
+  EMAIL_REQUESTS
+  STANDALONE_REFUNDS
+}
+
+enum WodIvcsSource {
+  INVALID_CASH_SALE
+  ORDERS_NOT_DOWNLOADING
+  SO_VS_WEB_DIFFERENCE
+}
+
 /////////////////////////////////////
 // Core user & task models
 /////////////////////////////////////
@@ -80,6 +93,9 @@ model Task {
   text  String?
   brand String?
 
+  // 🆕 Task type to differentiate between different task categories
+  taskType TaskType @default(TEXT_CLUB)
+
   assignedToId String?
   assignedTo   User?   @relation("UserTasks", fields: [assignedToId], references: [id])
 
@@ -97,6 +113,45 @@ model Task {
   sfCaseNumber    String?
   assistanceNotes String?
   managerResponse String?
+
+  // 🆕 WOD/IVCS specific fields
+  wodIvcsSource        WodIvcsSource?
+  documentNumber       String?
+  warehouseEdgeStatus  String?
+  amount               Decimal?
+  webOrderDifference   Decimal?
+  webOrder             String?
+  webOrderSubtotal     Decimal?
+  webOrderTotal        Decimal?
+  nsVsWebDiscrepancy   Decimal?
+  customerName         String?
+  netSuiteTotal        Decimal?
+  webTotal             Decimal?
+  webVsNsDifference    Decimal?
+  shippingCountry      String?
+  shippingState        String?
+  
+  // 🆕 Order date fields for age calculation
+  purchaseDate         DateTime?  // For SO vs Web Order Difference
+
+  // 🆕 Email Requests specific fields
+  completionTime       DateTime?
+  salesforceCaseNumber String?
+  emailRequestFor      String?
+  details              String?
+
+  // 🆕 Standalone Refunds specific fields
+  timestamp            DateTime?
+  customerNameNumber   String?
+  salesOrderId         String?
+  orderDate            DateTime?
+  amountToBeRefunded   Decimal?
+  verifiedRefund       String?
+  paymentMethod        String?
+  refundReason         String?
+  productSku           String?
+  quantity             Int?
+  refundAmount         Decimal?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -280,4 +335,64 @@ model BlockedPhone {
   updatedAt   DateTime @updatedAt
 
   @@map("BlockedPhone")
+}
+
+/////////////////////////////////////
+// Import Sessions (for tracking CSV imports and duplicates)
+/////////////////////////////////////
+
+model ImportSession {
+  id          String   @id @default(cuid())
+  source      String   // NetSuite report source
+  fileName    String   // Original CSV filename
+  importedAt  DateTime @default(now())
+  importedBy  String?  // User ID who imported
+  
+  // Import results
+  totalRows   Int      @default(0)
+  imported    Int      @default(0)
+  duplicates  Int      @default(0)
+  filtered    Int      @default(0)
+  errors      Int      @default(0)
+  
+  // Store duplicate details as JSON
+  duplicateDetails Json? // Array of duplicate information
+  
+  // Relations
+  duplicateRecords ImportDuplicate[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([source])
+  @@index([importedAt])
+  @@index([importedBy])
+}
+
+model ImportDuplicate {
+  id              String   @id @default(cuid())
+  importSessionId String
+  importSession   ImportSession @relation(fields: [importSessionId], references: [id], onDelete: Cascade)
+  
+  // Duplicate task info
+  rowNumber       Int      // Row number in CSV
+  documentNumber  String?  // Document number
+  webOrder        String?  // Web order number
+  customerName    String   // Customer name
+  source          String   // Task source
+  
+  // Original task info
+  originalTaskId  String?  // ID of the original task
+  originalCreatedAt DateTime? // When original was created
+  originalCompletedAt DateTime? // When original was completed
+  originalDisposition String? // Original disposition
+  originalCompletedBy String? // Who completed the original
+  
+  ageInDays       Int      // Age difference in days
+  
+  createdAt       DateTime @default(now())
+
+  @@index([importSessionId])
+  @@index([originalTaskId])
+  @@index([source])
 }

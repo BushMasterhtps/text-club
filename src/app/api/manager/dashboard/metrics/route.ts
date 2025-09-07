@@ -8,25 +8,32 @@ export async function GET(request: NextRequest) {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
-    // Get pending tasks (READY RawMessages + PENDING Tasks)
+    // Get pending tasks (READY RawMessages + PENDING Tasks) - TEXT CLUB ONLY
     const [pendingRawMessages, pendingTasks] = await Promise.all([
       prisma.rawMessage.count({
         where: { status: "READY" }
       }),
       prisma.task.count({
-        where: { status: "PENDING" }
+        where: { 
+          status: "PENDING",
+          taskType: "TEXT_CLUB" // Only Text Club tasks
+        }
       })
     ]);
 
-    // Get spam review count
+    // Get spam review count - TEXT CLUB ONLY
     const spamReview = await prisma.task.count({
-      where: { status: "SPAM_REVIEW" }
+      where: { 
+        status: "SPAM_REVIEW",
+        taskType: "TEXT_CLUB" // Only Text Club tasks
+      }
     });
 
-    // Get completed today count
+    // Get completed today count - TEXT CLUB ONLY
     const completedToday = await prisma.task.count({
       where: {
         status: "COMPLETED",
+        taskType: "TEXT_CLUB", // Only Text Club tasks
         endTime: {
           gte: startOfToday,
           lt: endOfToday
@@ -34,19 +41,28 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get total completed count (all-time)
+    // Get total completed count (all-time) - TEXT CLUB ONLY
     const totalCompleted = await prisma.task.count({
-      where: { status: "COMPLETED" }
+      where: { 
+        status: "COMPLETED",
+        taskType: "TEXT_CLUB" // Only Text Club tasks
+      }
     });
 
-    // Get in progress count
+    // Get in progress count - TEXT CLUB ONLY
     const inProgress = await prisma.task.count({
-      where: { status: "IN_PROGRESS" }
+      where: { 
+        status: "IN_PROGRESS",
+        taskType: "TEXT_CLUB" // Only Text Club tasks
+      }
     });
 
-    // Get assistance required count
+    // Get assistance required count - TEXT CLUB ONLY
     const assistanceRequired = await prisma.task.count({
-      where: { status: "ASSISTANCE_REQUIRED" }
+      where: { 
+        status: "ASSISTANCE_REQUIRED",
+        taskType: "TEXT_CLUB" // Only Text Club tasks
+      }
     });
 
     const totalPending = pendingRawMessages + pendingTasks;

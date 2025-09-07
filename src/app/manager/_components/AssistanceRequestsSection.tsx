@@ -1,5 +1,12 @@
+"use client";
+
 import { useState, useEffect } from "react";
-import { Card, H2, Badge, SmallButton } from "../page";
+import { Card } from "@/app/_components/Card";
+import { SmallButton } from "@/app/_components/SmallButton";
+
+interface AssistanceRequestsSectionProps {
+  taskType?: "TEXT_CLUB" | "WOD_IVCS" | "EMAIL_REQUESTS" | "STANDALONE_REFUNDS";
+}
 
 interface AssistanceRequest {
   id: string;
@@ -13,237 +20,270 @@ interface AssistanceRequest {
   createdAt: string;
   updatedAt: string;
   status: string;
+  taskType?: string;
+  // WOD/IVCS specific fields
+  wodIvcsSource?: string;
+  documentNumber?: string;
+  customerName?: string;
+  amount?: number;
+  webOrderDifference?: number;
+  orderDate?: string;
+  orderAge?: string;
+  // Email Request specific fields
+  emailRequestFor?: string;
+  details?: string;
+  // Standalone Refund specific fields
+  refundAmount?: number;
+  paymentMethod?: string;
+  refundReason?: string;
 }
 
-export function AssistanceRequestsSection() {
+export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: AssistanceRequestsSectionProps) {
   const [requests, setRequests] = useState<AssistanceRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [respondingTo, setRespondingTo] = useState<string | null>(null);
-  const [responseText, setResponseText] = useState("");
+  const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [responseText, setResponseText] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    loadRequests();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(loadRequests, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  async function loadRequests() {
+  const loadRequests = async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/manager/assistance", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
+      const response = await fetch("/api/manager/assistance", { cache: "no-store" });
+      const data = await response.json();
+      
+      if (data.success) {
         setRequests(data.requests || []);
+      } else {
+        console.error("Failed to load assistance requests:", data.error);
       }
     } catch (error) {
-      console.error("Failed to load assistance requests:", error);
+      console.error("Error loading assistance requests:", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  async function handleResponse(requestId: string) {
-    if (!responseText.trim()) return;
-    
-    setBusy(`responding:${requestId}`);
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  const handleResponse = async (requestId: string) => {
+    const response = responseText[requestId]?.trim();
+    if (!response) {
+      alert("Please enter a response");
+      return;
+    }
+
+    setBusy(requestId);
     try {
       const res = await fetch(`/api/manager/tasks/${requestId}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ response: responseText.trim() }),
+        body: JSON.stringify({ response }),
       });
       
-      if (res.ok) {
-        // Update local state
+      const data = await res.json();
+      if (data.success) {
+        // Update the request in the list
         setRequests(prev => prev.map(req => 
           req.id === requestId 
-            ? { ...req, managerResponse: responseText.trim(), status: "IN_PROGRESS" }
+            ? { ...req, managerResponse: response, status: "IN_PROGRESS" }
             : req
         ));
-        setResponseText("");
-        setRespondingTo(null);
-        await loadRequests(); // Refresh to get updated data
+        // Clear the response text
+        setResponseText(prev => ({ ...prev, [requestId]: "" }));
       } else {
-        alert("Failed to send response");
+        alert(data.error || "Failed to send response");
       }
     } catch (error) {
-      console.error("Failed to send response:", error);
+      console.error("Error sending response:", error);
       alert("Failed to send response");
     } finally {
       setBusy(null);
     }
-  }
+  };
 
-  function getStatusEmoji(status: string) {
+  const getTaskTypeInfo = (task: AssistanceRequest) => {
+    if (task.taskType === "WOD_IVCS") {
+      return { label: "WOD/IVCS", emoji: "🔧", color: "text-red-400" };
+    } else if (task.taskType === "EMAIL_REQUESTS") {
+      return { label: "Email Request", emoji: "📧", color: "text-green-400" };
+    } else if (task.taskType === "STANDALONE_REFUNDS") {
+      return { label: "Standalone Refund", emoji: "💰", color: "text-purple-400" };
+    } else {
+      return { label: "Text Club", emoji: "💬", color: "text-blue-400" };
+    }
+  };
+
+  const getStatusEmoji = (status: string) => {
     switch (status) {
       case "ASSISTANCE_REQUIRED": return "🆘";
       case "IN_PROGRESS": return "▶️";
       default: return "❓";
     }
-  }
+  };
 
-  function getStatusColor(status: string) {
+  const getStatusTone = (status: string) => {
     switch (status) {
-      case "ASSISTANCE_REQUIRED": return "bg-red-600";
-      case "IN_PROGRESS": return "bg-green-600";
-      default: return "bg-gray-600";
+      case "ASSISTANCE_REQUIRED": return "danger";
+      case "IN_PROGRESS": return "success";
+      default: return "muted";
     }
-  }
-
-  if (loading) {
-    return (
-      <Card>
-        <H2>🆘 Assistance Requests</H2>
-        <div className="text-center py-8 text-neutral-400">Loading...</div>
-      </Card>
-    );
-  }
+  };
 
   const pendingRequests = requests.filter(r => r.status === "ASSISTANCE_REQUIRED");
   const respondedRequests = requests.filter(r => r.status === "IN_PROGRESS" && r.managerResponse);
 
   return (
-    <Card>
-      <H2>🆘 Assistance Requests</H2>
-      
-      {pendingRequests.length === 0 && respondedRequests.length === 0 && (
-        <div className="text-center py-8 text-neutral-400">
-          No assistance requests at this time
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold">🆘 Assistance Requests (All Task Types)</h3>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-white/60">{requests.length} total requests</span>
+          <SmallButton onClick={loadRequests} disabled={loading}>
+            {loading ? "Loading..." : "🔄 Refresh"}
+          </SmallButton>
         </div>
-      )}
+      </div>
 
-      {/* Pending Requests */}
-      {pendingRequests.length > 0 && (
-        <div className="space-y-4 mb-6">
-          <h3 className="text-lg font-semibold text-white">Pending ({pendingRequests.length})</h3>
-          {pendingRequests.map((request) => (
-            <div key={request.id} className="bg-red-900/20 border border-red-800 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge className={getStatusColor(request.status)}>
-                      {getStatusEmoji(request.status)} {request.status.replace("_", " ")}
-                    </Badge>
-                    <span className="text-sm text-neutral-400">
-                      {new Date(request.createdAt).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm text-neutral-400 mb-1">Brand</div>
-                      <div className="text-white">{request.brand}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-neutral-400 mb-1">Phone</div>
-                      <div className="text-white">{request.phone}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-sm text-neutral-400 mb-1">Message</div>
-                    <div className="text-white bg-neutral-800 p-3 rounded">{request.text}</div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-sm text-neutral-400 mb-1">Agent Request</div>
-                    <div className="text-white bg-red-800/30 p-3 rounded border border-red-700">
-                      <div className="text-sm text-red-300 mb-1">
-                        {request.agentName} ({request.agentEmail})
-                      </div>
-                      {request.assistanceNotes}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {respondingTo === request.id ? (
-                <div className="mt-4 space-y-3">
-                  <textarea
-                    value={responseText}
-                    onChange={(e) => setResponseText(e.target.value)}
-                    placeholder="Type your response to the agent..."
-                    className="w-full h-24 rounded-md bg-neutral-800 text-white placeholder-neutral-400 px-3 py-2 ring-1 ring-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <div className="flex gap-2">
-                    <SmallButton
-                      onClick={() => handleResponse(request.id)}
-                      disabled={busy === `responding:${request.id}`}
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                    >
-                      {busy === `responding:${request.id}` ? "Sending..." : "Send Response"}
-                    </SmallButton>
-                    <SmallButton
-                      onClick={() => {
-                        setRespondingTo(null);
-                        setResponseText("");
-                      }}
-                      className="bg-neutral-600 hover:bg-neutral-700"
-                    >
-                      Cancel
-                    </SmallButton>
-                  </div>
-                </div>
-              ) : (
-                <SmallButton
-                  onClick={() => setRespondingTo(request.id)}
-                  className="mt-3 bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  Respond to Agent
-                </SmallButton>
-              )}
-            </div>
-          ))}
+      {loading ? (
+        <div className="text-center py-8 text-white/60">Loading assistance requests...</div>
+      ) : requests.length === 0 ? (
+        <div className="text-center py-8 text-white/60">
+          No assistance requests at this time.
         </div>
-      )}
-
-      {/* Responded Requests */}
-      {respondedRequests.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-white">Responded ({respondedRequests.length})</h3>
-          {respondedRequests.map((request) => (
-            <div key={request.id} className="bg-green-900/20 border border-green-800 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge className={getStatusColor(request.status)}>
-                      {getStatusEmoji(request.status)} {request.status.replace("_", " ")}
-                    </Badge>
-                    <span className="text-sm text-neutral-400">
-                      {new Date(request.updatedAt).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm text-neutral-400 mb-1">Brand</div>
-                      <div className="text-white">{request.brand}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-neutral-400 mb-1">Phone</div>
-                      <div className="text-white">{request.phone}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-sm text-neutral-400 mb-1">Message</div>
-                    <div className="text-white bg-neutral-800 p-3 rounded">{request.text}</div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-sm text-neutral-400 mb-1">Agent Request</div>
-                    <div className="text-white bg-red-800/30 p-3 rounded border border-red-700">
-                      <div className="text-sm text-red-300 mb-1">
-                        {request.agentName} ({request.agentEmail})
+      ) : (
+        <div className="space-y-6">
+          {/* Pending Requests */}
+          {pendingRequests.length > 0 && (
+            <div>
+              <h4 className="text-md font-medium text-white mb-3">
+                🆘 Pending Requests ({pendingRequests.length})
+              </h4>
+              <div className="space-y-4">
+                {pendingRequests.map((request) => {
+                  const taskTypeInfo = getTaskTypeInfo(request);
+                  return (
+                    <div key={request.id} className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={taskTypeInfo.color}>{taskTypeInfo.emoji}</span>
+                            <span className="text-sm text-white/70">{taskTypeInfo.label}</span>
+                            <span className="text-white/40">•</span>
+                            <span className="font-medium">{request.brand}</span>
+                            <span className="text-white/40">•</span>
+                            <span className="text-sm text-white/60">{request.agentName}</span>
+                          </div>
+                          
+                          {/* Task-specific content */}
+                          {request.taskType === "WOD_IVCS" ? (
+                            <div className="text-sm text-white/80 space-y-1">
+                              <div><strong>Customer:</strong> {request.customerName || "N/A"}</div>
+                              <div><strong>Order:</strong> {request.documentNumber || "N/A"}</div>
+                              <div><strong>Amount:</strong> {request.amount ? `$${request.amount}` : "N/A"}</div>
+                              <div><strong>Age:</strong> {request.orderAge || "N/A"}</div>
+                            </div>
+                          ) : request.taskType === "EMAIL_REQUESTS" ? (
+                            <div className="text-sm text-white/80 space-y-1">
+                              <div><strong>Request For:</strong> {request.emailRequestFor || "N/A"}</div>
+                              <div><strong>Details:</strong> {request.details || "N/A"}</div>
+                            </div>
+                          ) : request.taskType === "STANDALONE_REFUNDS" ? (
+                            <div className="text-sm text-white/80 space-y-1">
+                              <div><strong>Refund Amount:</strong> {request.refundAmount ? `$${request.refundAmount}` : "N/A"}</div>
+                              <div><strong>Payment Method:</strong> {request.paymentMethod || "N/A"}</div>
+                              <div><strong>Reason:</strong> {request.refundReason || "N/A"}</div>
+                            </div>
+                          ) : (
+                            <div className="text-sm text-white/80 space-y-1">
+                              <div><strong>Phone:</strong> {request.phone}</div>
+                              <div><strong>Message:</strong> {request.text}</div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-2xl">{getStatusEmoji(request.status)}</div>
                       </div>
-                      {request.assistanceNotes}
+                      
+                      <div className="mb-3">
+                        <div className="text-sm text-white/60 mb-1">Agent Request</div>
+                        <div className="text-white bg-red-800/30 p-3 rounded border border-red-700">
+                          <div className="text-sm text-red-300 mb-1">
+                            {request.agentName} ({request.agentEmail})
+                          </div>
+                          {request.assistanceNotes}
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <textarea
+                          value={responseText[request.id] || ""}
+                          onChange={(e) => setResponseText(prev => ({ ...prev, [request.id]: e.target.value }))}
+                          placeholder="Enter your response..."
+                          className="flex-1 rounded-md bg-white/10 text-white placeholder-white/40 px-3 py-2 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          rows={3}
+                        />
+                        <SmallButton
+                          onClick={() => handleResponse(request.id)}
+                          disabled={busy === request.id || !responseText[request.id]?.trim()}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          {busy === request.id ? "Sending..." : "Send Response"}
+                        </SmallButton>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-sm text-neutral-400 mb-1">Your Response</div>
-                    <div className="text-white bg-green-800/30 p-3 rounded border border-green-700">
-                      {request.managerResponse}
-                    </div>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
             </div>
-          ))}
+          )}
+
+          {/* Responded Requests */}
+          {respondedRequests.length > 0 && (
+            <div>
+              <h4 className="text-md font-medium text-white mb-3">
+                ✅ Responded Requests ({respondedRequests.length})
+              </h4>
+              <div className="space-y-4">
+                {respondedRequests.map((request) => {
+                  const taskTypeInfo = getTaskTypeInfo(request);
+                  return (
+                    <div key={request.id} className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={taskTypeInfo.color}>{taskTypeInfo.emoji}</span>
+                            <span className="text-sm text-white/70">{taskTypeInfo.label}</span>
+                            <span className="text-white/40">•</span>
+                            <span className="font-medium">{request.brand}</span>
+                            <span className="text-white/40">•</span>
+                            <span className="text-sm text-white/60">{request.agentName}</span>
+                          </div>
+                        </div>
+                        <div className="text-2xl">{getStatusEmoji(request.status)}</div>
+                      </div>
+                      
+                      <div className="mb-3">
+                        <div className="text-sm text-white/60 mb-1">Agent Request</div>
+                        <div className="text-white bg-red-800/30 p-3 rounded border border-red-700">
+                          <div className="text-sm text-red-300 mb-1">
+                            {request.agentName} ({request.agentEmail})
+                          </div>
+                          {request.assistanceNotes}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="text-sm text-white/60 mb-1">Your Response</div>
+                        <div className="text-white bg-green-800/30 p-3 rounded border border-green-700">
+                          {request.managerResponse}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </Card>

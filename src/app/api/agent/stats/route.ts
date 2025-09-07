@@ -24,7 +24,9 @@ export async function GET(req: Request) {
     // Calculate date range - use provided date or default to today
     let targetDate: Date;
     if (dateParam) {
-      targetDate = new Date(dateParam + 'T00:00:00.000Z');
+      // Parse the date in local timezone, not UTC
+      const [year, month, day] = dateParam.split('-').map(Number);
+      targetDate = new Date(year, month - 1, day); // month is 0-indexed
       if (isNaN(targetDate.getTime())) {
         return NextResponse.json({ success: false, error: "Invalid date format. Use YYYY-MM-DD" }, { status: 400 });
       }
@@ -32,6 +34,7 @@ export async function GET(req: Request) {
       targetDate = new Date();
     }
     
+    // Use local timezone for date calculations
     const dateStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
     const dateEnd = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1);
     

@@ -8,6 +8,7 @@ import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
 import SessionTimer from '@/app/_components/SessionTimer';
 import BlockedPhonesSection from '@/app/_components/BlockedPhonesSection';
 import ThemeToggle from '@/app/_components/ThemeToggle';
+import DashboardSwitcher from '@/app/_components/DashboardSwitcher';
 import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
 import SpamInsights from '@/app/_components/SpamInsights';
 
@@ -2964,6 +2965,7 @@ export default function ManagerPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+  const [agentWorkloads, setAgentWorkloads] = useState<Record<string, any>>({});
 
   const [perAgent, setPerAgent] = useState<number>(50);
   const [assignLoading, setAssignLoading] = useState(false);
@@ -3051,6 +3053,24 @@ export default function ManagerPage() {
       }
     } finally { setAgentsLoading(false); }
   }
+
+  const loadAgentWorkloads = async () => {
+    try {
+      const response = await fetch('/api/manager/agents/workload');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          const workloadMap: Record<string, any> = {};
+          data.data.forEach((item: any) => {
+            workloadMap[item.agentId] = item.workload;
+          });
+          setAgentWorkloads(workloadMap);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading agent workloads:', error);
+    }
+  };
 
   const toggleSelectAll = () => setSelectedAgents(allSelected ? [] : agents.map((a) => a.email));
 
@@ -3196,6 +3216,7 @@ export default function ManagerPage() {
       setAssignMsg(`Assigned ✅  ${totals}`);
       await loadSummary();
       await loadAgents();
+      await loadAgentWorkloads();
     } catch (e) {
       setAssignMsg("Assign failed.");
     } finally {
@@ -3206,6 +3227,7 @@ export default function ManagerPage() {
   useEffect(() => { 
     loadSummary(); 
     loadAgents(); 
+    loadAgentWorkloads();
     loadAssistanceRequests();
     
     // Auto-refresh dashboard metrics and assistance requests every 30 seconds
@@ -3272,8 +3294,8 @@ export default function ManagerPage() {
               className="h-14 w-auto"
             />
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight">Manager Dashboard</h1>
-              <p className="text-sm text-white/60">Task Management & Analytics</p>
+              <h1 className="text-3xl font-semibold tracking-tight">Text Club Dashboard</h1>
+              <p className="text-sm text-white/60">Text Club Task Management & Analytics</p>
             </div>
           </div>
           
@@ -3353,6 +3375,9 @@ export default function ManagerPage() {
             </button>
           ))}
         </nav>
+        
+        {/* Dashboard Switcher */}
+        <DashboardSwitcher />
         </div>
       </header>
 
@@ -3508,23 +3533,49 @@ export default function ManagerPage() {
             {!agentsLoading && agents.length === 0 && (
               <div className="text-sm text-white/60 p-1">No agents found.</div>
             )}
-            {agents.map((a) => (
-              <label key={a.email} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="accent-sky-500"
-                  checked={selectedAgents.includes(a.email)}
-                  onChange={() =>
-                    setSelectedAgents((prev) =>
-                      prev.includes(a.email) ? prev.filter((e) => e !== a.email) : [...prev, a.email]
-                    )
-                  }
-                />
-                <span className="truncate">
-                  {a.name || a.email} — <span className="text-white/60">{a.email}</span> · Open: {a.openCount}
-                </span>
-              </label>
-            ))}
+            {agents.map((a) => {
+              const workload = agentWorkloads[a.id] || { wodIvcs: 0, textClub: 0, emailRequests: 0, standaloneRefunds: 0, total: 0 };
+              return (
+                <label key={a.email} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="accent-sky-500"
+                    checked={selectedAgents.includes(a.email)}
+                    onChange={() =>
+                      setSelectedAgents((prev) =>
+                        prev.includes(a.email) ? prev.filter((e) => e !== a.email) : [...prev, a.email]
+                      )
+                    }
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">
+                      {a.name || a.email} — <span className="text-white/60">{a.email}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-white/50 mt-1">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                        WOD/IVCS: {workload.wodIvcs}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                        Text Club: {workload.textClub}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                        Email: {workload.emailRequests}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                        Refunds: {workload.standaloneRefunds}
+                      </span>
+                      <span className="text-white/70 font-medium">
+                        Total: {workload.total}
+                      </span>
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
           </div>
         </div>
 

@@ -1,0 +1,117 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { parse } from 'csv-parse/sync';
+
+export async function POST(request: NextRequest) {
+  try {
+    const formData = await request.formData();
+    const file = formData.get('file') as File;
+
+    if (!file) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'No file provided' 
+      }, { status: 400 });
+    }
+
+    const csvText = await file.text();
+    const records = parse(csvText, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    });
+
+    console.log(`📧 Importing ${records.length} email request records`);
+
+    const results = {
+      imported: 0,
+      errors: 0,
+      totalRows: records.length,
+      errorDetails: [] as any[],
+    };
+
+    // Create import session record
+    const importSession = await prisma.importSession.create({
+      data: {
+        source: 'EMAIL_REQUESTS',
+        fileName: file.name,
+        importedBy: 'system', // TODO: Get from auth
+        totalRows: records.length,
+        imported: 0,
+        duplicates: 0,
+        filtered: 0,
+        errors: 0,
+      },
+    });
+
+    // Process each record
+    for (const [index, record] of records.entries()) {
+      try {
+        // Parse completion time
+        let completionTime: Date | null = null;
+        if (record['Completion time']) {
+          try {
+            completionTime = new Date(record['Completion time']);
+            if (isNaN(completionTime.getTime())) {
+              completionTime = null;
+            }
+          } catch {
+            completionTime = null;
+          }
+        }
+
+        // Create task data
+        const taskData = {
+          taskType: 'EMAIL_REQUESTS' as const,
+          status: 'PENDING' as const,
+          completionTime,
+          salesforceCaseNumber: record['SaleForce Case Number (please DO NOT include any other system number) I.E 1234567'] || null,
+          emailRequestFor: record['What is the email request for?'] || null,
+          details: record['Details'] || null,
+          // Map other fields as needed
+          email: record['Email'] || null,
+          text: record['Name'] || null, // Using Name field for text
+          brand: 'Email Request', // Default brand for email requests
+        };
+
+        await prisma.task.create({
+          data: taskData,
+        });
+
+        results.imported++;
+      } catch (error) {
+        console.error(`Error processing row ${index + 1}:`, error);
+        results.errors++;
+        results.errorDetails.push({
+          row: index + 1,
+          record: record,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    // Update import session with final results
+    await prisma.importSession.update({
+      where: { id: importSession.id },
+      data: {
+        imported: results.imported,
+        duplicates: 0, // No duplicates for email requests
+        filtered: 0, // No filtering for email requests
+        errors: results.errors,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Import completed: ${results.imported} imported, ${results.errors} errors`,
+      results,
+    });
+
+  } catch (error) {
+    console.error("Email requests CSV import error:", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to import CSV" },
+      { status: 500 }
+    );
+  }
+}
