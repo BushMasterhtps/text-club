@@ -7,7 +7,7 @@
     "build": "prisma generate && next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && echo 'Prisma client regenerated successfully'",
     "dev:watch": "concurrently \"npm run dev\" \"nodemon --watch prisma/schema.prisma --ext prisma --exec 'npm run prisma:regen'\"",
     "prisma:regen": "prisma generate && npx kill-port 3000 || true",
     "db:push": "prisma db push",
