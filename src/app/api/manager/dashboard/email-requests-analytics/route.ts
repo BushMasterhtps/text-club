@@ -6,30 +6,20 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    const comparePeriod = searchParams.get('comparePeriod') || 'previous';
+    const comparePeriod = searchParams.get('comparePeriod') || 'none';
 
-    if (!startDate || !endDate) {
-      return NextResponse.json({ error: 'Start date and end date are required' }, { status: 400 });
-    }
-
-    const start = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T23:59:59');
-
+    // Parse dates
+    const start = startDate ? new Date(startDate + 'T00:00:00') : new Date();
+    const end = endDate ? new Date(endDate + 'T23:59:59') : new Date();
+    
     // Calculate comparison period dates
-    let comparisonStart: Date;
-    let comparisonEnd: Date;
-    const periodLength = end.getTime() - start.getTime();
-
+    let comparisonStart = new Date(0);
+    let comparisonEnd = new Date(0);
+    
     if (comparePeriod === 'previous') {
+      const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
       comparisonEnd = new Date(start.getTime() - 1);
-      comparisonStart = new Date(comparisonEnd.getTime() - periodLength);
-    } else if (comparePeriod === 'same-last-year') {
-      comparisonStart = new Date(start.getFullYear() - 1, start.getMonth(), start.getDate());
-      comparisonEnd = new Date(end.getFullYear() - 1, end.getMonth(), end.getDate());
-    } else {
-      // No comparison
-      comparisonStart = new Date(0);
-      comparisonEnd = new Date(0);
+      comparisonStart = new Date(comparisonEnd.getTime() - (daysDiff * 24 * 60 * 60 * 1000));
     }
 
     // Get current period data
@@ -77,179 +67,121 @@ export async function GET(request: NextRequest) {
         startTime: true,
         endTime: true,
         durationSec: true,
-        createdAt: true
+        createdAt: true,
+        salesforceCaseNumber: true,
+        emailRequestFor: true,
+        details: true,
+        assignedTo: {
+          select: {
+            email: true,
+            name: true
+          }
+        }
       }
     });
 
-    // Calculate summary metrics
-    const completedTasks = currentPeriodTasks.filter(task => task.status === 'COMPLETED');
-    const unableToCompleteTasks = currentPeriodTasks.filter(task => 
-      task.disposition && task.disposition.toLowerCase().includes('unable')
-    );
-
-    const totalCompleted = completedTasks.length;
-    const unableToComplete = unableToCompleteTasks.length;
-    const totalTasks = currentPeriodTasks.length;
-    const completionRate = totalTasks > 0 ? (totalCompleted / totalTasks) * 100 : 0;
-
-    // Calculate average duration
-    const tasksWithDuration = completedTasks.filter(task => task.durationSec && task.durationSec > 0);
-    const avgDuration = tasksWithDuration.length > 0 
-      ? tasksWithDuration.reduce((sum, task) => sum + (task.durationSec || 0), 0) / tasksWithDuration.length / 60
+    // Calculate KPIs for current period
+    const currentCompleted = currentPeriodTasks.filter(task => task.status === 'COMPLETED').length;
+    const currentUnableToComplete = currentPeriodTasks.filter(task => task.status === 'UNABLE_TO_COMPLETE').length;
+    const currentTotal = currentPeriodTasks.length;
+    const currentCompletionRate = currentTotal > 0 ? (currentCompleted / currentTotal) * 100 : 0;
+    
+    // Calculate average duration for completed tasks
+    const completedTasks = currentPeriodTasks.filter(task => task.status === 'COMPLETED' && task.durationSec);
+    const avgDuration = completedTasks.length > 0 
+      ? completedTasks.reduce((sum, task) => sum + (task.durationSec || 0), 0) / completedTasks.length 
       : 0;
 
-    // Calculate comparison metrics
+    // Calculate comparison KPIs
     const comparisonCompleted = comparisonPeriodTasks.filter(task => task.status === 'COMPLETED').length;
-    const comparisonUnable = comparisonPeriodTasks.filter(task => 
-      task.disposition && task.disposition.toLowerCase().includes('unable')
-    ).length;
     const comparisonTotal = comparisonPeriodTasks.length;
     const comparisonCompletionRate = comparisonTotal > 0 ? (comparisonCompleted / comparisonTotal) * 100 : 0;
-
-    const comparisonTasksWithDuration = comparisonPeriodTasks.filter(task => 
-      task.status === 'COMPLETED' && task.durationSec && task.durationSec > 0
-    );
-    const comparisonAvgDuration = comparisonTasksWithDuration.length > 0 
-      ? comparisonTasksWithDuration.reduce((sum, task) => sum + (task.durationSec || 0), 0) / comparisonTasksWithDuration.length / 60
+    
+    const comparisonCompletedTasks = comparisonPeriodTasks.filter(task => task.status === 'COMPLETED' && task.durationSec);
+    const comparisonAvgDuration = comparisonCompletedTasks.length > 0 
+      ? comparisonCompletedTasks.reduce((sum, task) => sum + (task.durationSec || 0), 0) / comparisonCompletedTasks.length 
       : 0;
 
     // Calculate trends
-    const completedChange = totalCompleted - comparisonCompleted;
-    const completionRateChange = completionRate - comparisonCompletionRate;
-    const durationChange = avgDuration - comparisonAvgDuration;
-    const unableChange = unableToComplete - comparisonUnable;
+    const completedVsPrevious = comparisonTotal > 0 ? ((currentCompleted - comparisonCompleted) / comparisonCompleted) * 100 : 0;
+    const completionRateChange = comparisonCompletionRate > 0 ? currentCompletionRate - comparisonCompletionRate : 0;
+    const durationChange = comparisonAvgDuration > 0 ? ((avgDuration - comparisonAvgDuration) / comparisonAvgDuration) * 100 : 0;
 
-    // Generate monthly trend data
-    const trendData = generateMonthlyTrendData(currentPeriodTasks, comparisonPeriodTasks, start, end);
+    // Generate monthly trends data
+    const monthlyTrends = [];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    for (let i = 0; i < 12; i++) {
+      const monthStart = new Date(start.getFullYear(), i, 1);
+      const monthEnd = new Date(start.getFullYear(), i + 1, 0, 23, 59, 59);
+      
+      const monthTasks = currentPeriodTasks.filter(task => 
+        task.createdAt >= monthStart && task.createdAt <= monthEnd
+      );
+      
+      monthlyTrends.push({
+        month: months[i],
+        completed: monthTasks.filter(task => task.status === 'COMPLETED').length,
+        unableToComplete: monthTasks.filter(task => task.status === 'UNABLE_TO_COMPLETE').length
+      });
+    }
 
     // Generate disposition breakdown
-    const dispositionData = generateDispositionBreakdown(currentPeriodTasks);
+    const dispositionBreakdown = {
+      labels: ['Completed', 'Unable to Complete', 'Pending'],
+      data: [
+        currentCompleted,
+        currentUnableToComplete,
+        currentTotal - currentCompleted - currentUnableToComplete
+      ]
+    };
 
-    // Prepare email details for table
+    // Generate unable to complete breakdown
+    const unableToCompleteBreakdown = currentPeriodTasks
+      .filter(task => task.status === 'UNABLE_TO_COMPLETE')
+      .reduce((acc, task) => {
+        const disposition = task.disposition || 'Unknown';
+        acc[disposition] = (acc[disposition] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+    // Prepare email details for export
     const emailDetails = currentPeriodTasks.map(task => ({
-      taskId: task.id,
-      sfOrderNumber: task.salesforceCaseNumber || 'N/A',
-      email: task.assignedTo?.email || 'Unassigned',
-      disposition: task.disposition || 'Pending',
-      notes: task.details || '',
+      id: task.id,
+      status: task.status,
+      disposition: task.disposition,
+      emailRequestFor: task.emailRequestFor,
+      details: task.details,
+      salesforceCaseNumber: task.salesforceCaseNumber,
+      assignedTo: task.assignedTo?.name || 'Unassigned',
       createdAt: task.createdAt,
-      duration: task.durationSec ? Math.round(task.durationSec / 60) : null,
-      startTime: task.startTime,
-      endTime: task.endTime
+      completedAt: task.endTime,
+      duration: task.durationSec ? Math.round(task.durationSec / 60) : null // Convert to minutes
     }));
 
     const analytics = {
-      summary: {
-        totalCompleted,
-        completionRate,
-        avgDuration: Math.round(avgDuration),
-        unableToComplete,
-        completedTrend: {
-          change: completedChange,
-          percentage: comparisonCompleted > 0 ? (completedChange / comparisonCompleted) * 100 : 0
-        },
-        completionRateTrend: {
-          change: completionRateChange,
-          percentage: comparisonCompletionRate > 0 ? (completionRateChange / comparisonCompletionRate) * 100 : 0
-        },
-        durationTrend: {
-          change: durationChange,
-          percentage: comparisonAvgDuration > 0 ? (durationChange / comparisonAvgDuration) * 100 : 0
-        },
-        unableTrend: {
-          change: unableChange,
-          percentage: comparisonUnable > 0 ? (unableChange / comparisonUnable) * 100 : 0
-        }
+      kpis: {
+        totalCompleted: currentCompleted,
+        completionRate: Math.round(currentCompletionRate * 100) / 100,
+        avgDuration: Math.round(avgDuration / 60), // Convert to minutes
+        unableToComplete: currentUnableToComplete
       },
       comparison: {
-        completedChange,
-        completionRateChange,
-        durationChange
+        completedVsPrevious: Math.round(completedVsPrevious * 100) / 100,
+        completionRateChange: Math.round(completionRateChange * 100) / 100,
+        durationChange: Math.round(durationChange * 100) / 100
       },
       charts: {
-        trend: trendData,
-        dispositions: dispositionData
+        monthlyTrends,
+        dispositions: dispositionBreakdown
       },
+      unableToCompleteBreakdown,
       emailDetails
     };
 
     return NextResponse.json({ success: true, analytics });
-
   } catch (error) {
     console.error('Error fetching email requests analytics:', error);
-    return NextResponse.json({ error: 'Failed to fetch analytics data' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to fetch analytics' }, { status: 500 });
   }
-}
-
-function generateMonthlyTrendData(currentTasks: any[], comparisonTasks: any[], start: Date, end: Date) {
-  const labels: string[] = [];
-  const completed: number[] = [];
-  const unable: number[] = [];
-  const previousCompleted: number[] = [];
-  const previousUnable: number[] = [];
-
-  // Generate daily data points
-  const current = new Date(start);
-  while (current <= end) {
-    const dayStart = new Date(current);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(current);
-    dayEnd.setHours(23, 59, 59, 999);
-
-    // Current period data
-    const dayTasks = currentTasks.filter(task => 
-      task.createdAt >= dayStart && task.createdAt <= dayEnd
-    );
-    const dayCompleted = dayTasks.filter(task => task.status === 'COMPLETED').length;
-    const dayUnable = dayTasks.filter(task => 
-      task.disposition && task.disposition.toLowerCase().includes('unable')
-    ).length;
-
-    // Comparison period data (same day of week, previous period)
-    const comparisonDayStart = new Date(dayStart);
-    comparisonDayStart.setDate(comparisonDayStart.getDate() - 7); // Previous week
-    const comparisonDayEnd = new Date(dayEnd);
-    comparisonDayEnd.setDate(comparisonDayEnd.getDate() - 7);
-
-    const comparisonDayTasks = comparisonTasks.filter(task => 
-      task.createdAt >= comparisonDayStart && task.createdAt <= comparisonDayEnd
-    );
-    const comparisonDayCompleted = comparisonDayTasks.filter(task => task.status === 'COMPLETED').length;
-    const comparisonDayUnable = comparisonDayTasks.filter(task => 
-      task.disposition && task.disposition.toLowerCase().includes('unable')
-    ).length;
-
-    labels.push(current.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-    completed.push(dayCompleted);
-    unable.push(dayUnable);
-    previousCompleted.push(comparisonDayCompleted);
-    previousUnable.push(comparisonDayUnable);
-
-    current.setDate(current.getDate() + 1);
-  }
-
-  return {
-    labels,
-    completed,
-    unable,
-    previousCompleted,
-    previousUnable
-  };
-}
-
-function generateDispositionBreakdown(tasks: any[]) {
-  const dispositionCounts: { [key: string]: number } = {};
-
-  tasks.forEach(task => {
-    const disposition = task.disposition || 'Pending';
-    dispositionCounts[disposition] = (dispositionCounts[disposition] || 0) + 1;
-  });
-
-  const labels = Object.keys(dispositionCounts);
-  const data = Object.values(dispositionCounts);
-
-  return {
-    labels,
-    data
-  };
 }
