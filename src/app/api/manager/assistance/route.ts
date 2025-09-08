@@ -1,3 +1,4 @@
+// RAILWAY NUCLEAR FIX: Force complete Prisma client rebuild - $(date +%s)
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
