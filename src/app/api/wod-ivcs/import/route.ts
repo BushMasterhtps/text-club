@@ -254,7 +254,7 @@ function buildTaskData(record: any, source: string) {
         webVsNsDifference: record["Web vs NS Difference (ABS)"] ? parseFloat(record["Web vs NS Difference (ABS)"]) : null,
         shippingCountry: record["Shipping Country"] || null,
         shippingState: record["Shipping State/Province"] || null,
-        orderDate: parseDate(record["Purchase Date"]),
+        purchaseDate: parseDate(record["Purchase Date"]),
         text: `SO vs Web Difference - ${record["Customer"] || "Unknown"}`,
       };
 
