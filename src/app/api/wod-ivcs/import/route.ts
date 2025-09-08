@@ -25,6 +25,13 @@ export async function POST(request: NextRequest) {
 
     console.log(`📥 Importing ${records.length} records from ${source}`);
 
+    // Process in smaller batches to avoid timeout
+    const BATCH_SIZE = 50;
+    const batches = [];
+    for (let i = 0; i < records.length; i += BATCH_SIZE) {
+      batches.push(records.slice(i, i + BATCH_SIZE));
+    }
+
     const results = {
       imported: 0,
       duplicates: 0,
@@ -48,8 +55,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Process each record
-    for (const [index, record] of records.entries()) {
+    // Process each batch
+    for (const [batchIndex, batch] of batches.entries()) {
+      console.log(`📦 Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} records)`);
+      
+      for (const [index, record] of batch.entries()) {
+        const globalIndex = batchIndex * BATCH_SIZE + index;
       try {
         // Create a hash key for duplicate detection
         const hashKey = createHashKey(record, source);
@@ -128,15 +139,27 @@ export async function POST(request: NextRequest) {
 
         results.imported++;
       } catch (error) {
-        console.error(`Error processing row ${index + 1}:`, error);
+        console.error(`Error processing row ${globalIndex + 1}:`, error);
         results.errors++;
         results.errorDetails.push({
-          row: index + 1,
+          row: globalIndex + 1,
           record: record,
           error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
+    
+    // Update progress after each batch
+    await prisma.importSession.update({
+      where: { id: importSession.id },
+      data: {
+        imported: results.imported,
+        duplicates: results.duplicates,
+        filtered: results.filtered,
+        errors: results.errors,
+      },
+    });
+  }
 
     // Update import session with final results
     await prisma.importSession.update({
