@@ -89,14 +89,17 @@ export async function GET(req: Request) {
   /* ---------- build dynamic where ---------- */
   const and: Prisma.RawMessageWhereInput[] = [];
 
-  // (A) Task type filter - always apply task type filtering
-  and.push({
-    tasks: {
-      some: {
-        taskType: taskType as any
+  // (A) Task type filter - only apply to promoted raw messages that have tasks
+  // For READY raw messages, we don't filter by task type since they haven't been promoted yet
+  if (statusKey !== "pending") {
+    and.push({
+      tasks: {
+        some: {
+          taskType: taskType as any
+        }
       }
-    }
-  });
+    });
+  }
 
   // (B) Status mapping -> RawMessage/Task relational filter
   // We push these into the query so count/paging match what the UI sees.
@@ -106,11 +109,14 @@ export async function GET(req: Request) {
         // Either not promoted yet (READY) OR promoted with an open Task in PENDING
         return {
           OR: [
-            { status: "READY" as any },
+            { status: "READY" as any }, // Raw messages waiting to be promoted
             {
               AND: [
                 { status: "PROMOTED" as any },
-                { tasks: { some: { status: "PENDING" as any } } },
+                { tasks: { some: { 
+                  status: "PENDING" as any,
+                  taskType: taskType as any // Filter promoted tasks by task type
+                } } },
               ],
             },
           ],
