@@ -240,23 +240,22 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
     
     setBulkUnassignLoading(true);
     try {
-      const promises = selectedTasks.map(taskId => 
-        fetch(`/api/manager/tasks/${taskId}/unassign`, { method: 'POST' })
-      );
+      const response = await fetch('/api/manager/tasks/unassign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedTasks }),
+      });
+
+      const data = await response.json();
       
-      const responses = await Promise.all(promises);
-      const results = await Promise.all(responses.map(r => r.json()));
-      
-      const successCount = results.filter(r => r.success).length;
-      
-      if (successCount === selectedTasks.length) {
-        setAssignMessage(`✅ ${successCount} tasks unassigned successfully`);
+      if (data.success) {
+        setAssignMessage(`✅ ${data.tasksUnassigned || selectedTasks.length} tasks unassigned successfully`);
         setSelectedTasks([]);
         loadTasks();
         onTaskAssignmentChange?.();
         setTimeout(() => setAssignMessage(""), 3000);
       } else {
-        setAssignMessage(`⚠️ ${successCount}/${selectedTasks.length} tasks unassigned`);
+        setAssignMessage(`❌ Unassignment failed: ${data.error}`);
         setTimeout(() => setAssignMessage(""), 5000);
       }
     } catch (error) {
@@ -298,8 +297,10 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
 
   const handleUnassign = async (taskId: string) => {
     try {
-      const response = await fetch(`/api/manager/tasks/${taskId}/unassign`, {
+      const response = await fetch('/api/manager/tasks/unassign', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [taskId] }),
       });
 
       const data = await response.json();
