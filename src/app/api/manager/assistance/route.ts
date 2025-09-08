@@ -1,4 +1,4 @@
-// RAILWAY NUCLEAR FIX: Force complete Prisma client rebuild - $(date +%s)
+// RAILWAY FRESH DEPLOY: Database wiped, deploying with clean schema - $(date +%s)
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
