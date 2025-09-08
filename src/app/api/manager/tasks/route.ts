@@ -125,7 +125,10 @@ export async function GET(req: Request) {
         return {
           AND: [
             { status: "PROMOTED" as any },
-            { tasks: { some: { status: "IN_PROGRESS" as any } } },
+            { tasks: { some: { 
+              status: "IN_PROGRESS" as any,
+              taskType: taskType as any // Filter by task type
+            } } },
           ],
         };
       case "assistance_required":
