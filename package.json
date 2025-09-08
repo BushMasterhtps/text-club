@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "echo 'FORCE_REBUILD_$(date +%s)' && node scripts/force-prisma-generation.js && next build --turbopack",
+    "build": "echo 'RAILWAY_FORCE_REBUILD_$(date +%s)' && rm -rf node_modules/.prisma .next .turbo && npx prisma generate && next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate && echo 'Prisma client regenerated successfully'",
+    "postinstall": "rm -rf node_modules/.prisma && prisma generate && echo 'Prisma client regenerated successfully'",
     "dev:watch": "concurrently \"npm run dev\" \"nodemon --watch prisma/schema.prisma --ext prisma --exec 'npm run prisma:regen'\"",
     "prisma:regen": "prisma generate && npx kill-port 3000 || true",
     "db:push": "prisma db push",

@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
+// RAILWAY LOGIN FIX: Force rebuild to fix 500 error - $(date +%s)
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
