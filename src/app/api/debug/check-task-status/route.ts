@@ -1,9 +1,30 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     console.log('🔍 Checking task status in production...');
+    
+    // Check if we should fix assigned task status
+    const url = new URL(request.url);
+    const shouldFix = url.searchParams.get('fix') === 'true';
+    
+    if (shouldFix) {
+      console.log('🔧 Fixing assigned task status...');
+      
+      // Find and fix assigned PENDING tasks
+      const updateResult = await prisma.task.updateMany({
+        where: {
+          assignedToId: { not: null },
+          status: 'PENDING'
+        },
+        data: {
+          status: 'IN_PROGRESS'
+        }
+      });
+      
+      console.log(`✅ Fixed ${updateResult.count} assigned tasks from PENDING to IN_PROGRESS`);
+    }
     
     // Get all tasks with their status and assignment info
     const tasks = await prisma.task.findMany({
