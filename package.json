@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "prisma generate && next build --turbopack",
+    "build": "prisma generate && echo 'Prisma client generated successfully' && next build --turbopack",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate && echo 'Prisma client regenerated successfully'",

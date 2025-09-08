@@ -7,9 +7,7 @@ const nextConfig = {
     ignoreBuildErrors: true, // Temporarily ignore TypeScript errors
   },
   // Add Prisma generation to build process
-  experimental: {
-    serverComponentsExternalPackages: ['@prisma/client']
-  }
+  serverExternalPackages: ['@prisma/client']
 }
 
 module.exports = nextConfig
