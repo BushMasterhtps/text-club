@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
         customerName: true,
         amount: true,
         webOrderDifference: true,
-        orderDate: true
+        purchaseDate: true
       },
       orderBy: {
         endTime: 'desc'

@@ -509,9 +509,9 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
                 </th>
                 <th 
                   className="text-left py-3 px-2 cursor-pointer hover:bg-white/5"
-                  onClick={() => handleSort("orderDate")}
+                  onClick={() => handleSort("purchaseDate")}
                 >
-                  Origin Date {getSortIcon("orderDate")}
+                  Origin Date {getSortIcon("purchaseDate")}
                 </th>
                 <th 
                   className="text-left py-3 px-2 cursor-pointer hover:bg-white/5"
@@ -570,9 +570,9 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
                       {task.brand || 'N/A'}
                     </td>
                     <td className="py-3 px-2">
-                      {task.orderDate ? (
+                      {task.purchaseDate ? (
                         <span className="text-white/80 text-sm">
-                          {new Date(task.orderDate).toLocaleDateString('en-US', {
+                          {new Date(task.purchaseDate).toLocaleDateString('en-US', {
                             month: 'numeric',
                             day: 'numeric',
                             year: '2-digit'
@@ -757,10 +757,10 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
                         <span className="text-white font-mono">{selectedTaskForReview.webOrder}</span>
                       </div>
                     )}
-                    {selectedTaskForReview.orderDate && (
+                    {selectedTaskForReview.purchaseDate && (
                       <div className="flex justify-between">
                         <span className="text-white/60">Order Date:</span>
-                        <span className="text-white">{new Date(selectedTaskForReview.orderDate).toLocaleDateString()}</span>
+                        <span className="text-white">{new Date(selectedTaskForReview.purchaseDate).toLocaleDateString()}</span>
                       </div>
                     )}
                     {selectedTaskForReview.orderAge && (

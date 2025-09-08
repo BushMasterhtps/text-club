@@ -103,7 +103,7 @@ interface Task {
   webVsNsDifference?: number;
   shippingCountry?: string;
   shippingState?: string;
-  orderDate?: string;
+  purchaseDate?: string;
   orderAge?: string;
   orderAgeDays?: number;
   // Email Request specific fields
@@ -1314,7 +1314,7 @@ function TaskCard({
               <span className="text-red-400">📅</span>
               <span className="text-white/60">Origin Date:</span>
               {isTaskStarted ? (
-                <span className="font-mono">{task.orderDate ? new Date(task.orderDate).toLocaleDateString() : "N/A"}</span>
+                <span className="font-mono">{task.purchaseDate ? new Date(task.purchaseDate).toLocaleDateString() : "N/A"}</span>
               ) : (
                 <span className="text-white/40 italic">[hidden until Start]</span>
               )}

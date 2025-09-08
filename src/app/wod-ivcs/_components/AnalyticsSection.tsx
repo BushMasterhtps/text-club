@@ -46,7 +46,7 @@ interface AnalyticsData {
     customerName: string | null;
     amount: number | null;
     webOrderDifference: number | null;
-    orderDate: string | null;
+    purchaseDate: string | null;
   }>;
   dispositionBreakdown: Record<string, { count: number; totalDuration: number; avgDuration: number }>;
   agentBreakdown: Record<string, { name: string; count: number; totalDuration: number; avgDuration: number; dispositions: Record<string, number> }>;
@@ -256,7 +256,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
       task.customerName || 'N/A',
       task.amount || 'N/A',
       task.webOrderDifference || 'N/A',
-      task.orderDate ? formatDate(task.orderDate) : 'N/A'
+      task.purchaseDate ? formatDate(task.purchaseDate) : 'N/A'
     ]);
     
     const csvContent = [headers, ...rows]

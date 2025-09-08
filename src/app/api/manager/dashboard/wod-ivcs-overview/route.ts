@@ -64,8 +64,8 @@ export async function GET() {
           taskType: 'WOD_IVCS',
           status: 'PENDING',
           AND: [
-            { orderDate: { gte: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } },
-            { orderDate: { lt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) } }
+            { purchaseDate: { gte: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } },
+            { purchaseDate: { lt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) } }
           ]
         }
       }),
@@ -75,8 +75,8 @@ export async function GET() {
           taskType: 'WOD_IVCS',
           status: 'PENDING',
           AND: [
-            { orderDate: { gte: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000) } },
-            { orderDate: { lt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } }
+            { purchaseDate: { gte: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000) } },
+            { purchaseDate: { lt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } }
           ]
         }
       }),
@@ -85,7 +85,7 @@ export async function GET() {
         where: {
           taskType: 'WOD_IVCS',
           status: 'PENDING',
-          orderDate: {
+          purchaseDate: {
             lt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
           }
         }
@@ -96,13 +96,13 @@ export async function GET() {
     const detailedBreakdown = await Promise.all([
       // 1-2 days old detailed breakdown
       prisma.task.groupBy({
-        by: ['orderDate', 'wodIvcsSource'],
+        by: ['purchaseDate', 'wodIvcsSource'],
         where: {
           taskType: 'WOD_IVCS',
           status: 'PENDING',
           AND: [
-            { orderDate: { gte: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } },
-            { orderDate: { lt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) } }
+            { purchaseDate: { gte: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } },
+            { purchaseDate: { lt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) } }
           ]
         },
         _count: {
@@ -111,13 +111,13 @@ export async function GET() {
       }),
       // 3-4 days old detailed breakdown
       prisma.task.groupBy({
-        by: ['orderDate', 'wodIvcsSource'],
+        by: ['purchaseDate', 'wodIvcsSource'],
         where: {
           taskType: 'WOD_IVCS',
           status: 'PENDING',
           AND: [
-            { orderDate: { gte: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000) } },
-            { orderDate: { lt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } }
+            { purchaseDate: { gte: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000) } },
+            { purchaseDate: { lt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } }
           ]
         },
         _count: {
@@ -126,11 +126,11 @@ export async function GET() {
       }),
       // 5+ days old detailed breakdown
       prisma.task.groupBy({
-        by: ['orderDate', 'wodIvcsSource'],
+        by: ['purchaseDate', 'wodIvcsSource'],
         where: {
           taskType: 'WOD_IVCS',
           status: 'PENDING',
-          orderDate: {
+          purchaseDate: {
             lt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
           }
         },

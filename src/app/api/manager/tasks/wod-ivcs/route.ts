@@ -97,14 +97,14 @@ export async function GET(req: Request) {
     switch (ageFilter) {
       case "today":
         and.push({
-          orderDate: {
+          purchaseDate: {
             gte: new Date(now - oneDay)
           }
         });
         break;
       case "today":
         and.push({
-          orderDate: {
+          purchaseDate: {
             gte: new Date(now - oneDay)
           }
         });
@@ -112,22 +112,22 @@ export async function GET(req: Request) {
       case "1-3":
         and.push({
           AND: [
-            { orderDate: { gte: new Date(now - 3 * oneDay) } },
-            { orderDate: { lt: new Date(now - oneDay) } }
+            { purchaseDate: { gte: new Date(now - 3 * oneDay) } },
+            { purchaseDate: { lt: new Date(now - oneDay) } }
           ]
         });
         break;
       case "4-7":
         and.push({
           AND: [
-            { orderDate: { gte: new Date(now - 7 * oneDay) } },
-            { orderDate: { lt: new Date(now - 3 * oneDay) } }
+            { purchaseDate: { gte: new Date(now - 7 * oneDay) } },
+            { purchaseDate: { lt: new Date(now - 3 * oneDay) } }
           ]
         });
         break;
       case "8+":
         and.push({
-          orderDate: {
+          purchaseDate: {
             lt: new Date(now - 7 * oneDay)
           }
         });
@@ -174,7 +174,7 @@ export async function GET(req: Request) {
         return { webVsNsDifference: direction };
       case "orderAgeDays":
         // Sort by order date (newest first for age calculation)
-        return { orderDate: direction };
+        return { purchaseDate: direction };
       case "wodIvcsSource":
         return { wodIvcsSource: direction };
       case "assignedTo":
@@ -205,12 +205,12 @@ export async function GET(req: Request) {
 
   /* ---------- normalize for UI ---------- */
   const items = rows.map((task) => {
-    // Calculate order age based on the orderDate field
+    // Calculate order age based on the purchaseDate field
     let orderAge = null;
     let orderAgeDays = null;
     
-    if (task.orderDate) {
-      orderAgeDays = Math.floor((Date.now() - task.orderDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (task.purchaseDate) {
+      orderAgeDays = Math.floor((Date.now() - task.purchaseDate.getTime()) / (1000 * 60 * 60 * 24));
       orderAge = orderAgeDays === 0 ? "Today" : `${orderAgeDays} day${orderAgeDays === 1 ? '' : 's'} old`;
     }
 
@@ -246,7 +246,7 @@ export async function GET(req: Request) {
       shippingState: task.shippingState,
       
       // Order age fields
-      orderDate: task.orderDate,
+      purchaseDate: task.purchaseDate,
       orderAge: orderAge,
       orderAgeDays: orderAgeDays,
     };

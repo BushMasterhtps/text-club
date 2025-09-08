@@ -64,7 +64,7 @@ export async function GET(req: Request) {
         webVsNsDifference: true,
         shippingCountry: true,
         shippingState: true,
-        orderDate: true,
+        purchaseDate: true,
         // Email Request specific fields
         emailRequestFor: true,
         details: true,
@@ -100,8 +100,8 @@ export async function GET(req: Request) {
       let orderAge = null;
       let orderAgeDays = null;
       
-      if (task.orderDate) {
-        orderAgeDays = Math.floor((Date.now() - task.orderDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (task.purchaseDate) {
+        orderAgeDays = Math.floor((Date.now() - task.purchaseDate.getTime()) / (1000 * 60 * 60 * 24));
         orderAge = orderAgeDays === 0 ? "Today" : `${orderAgeDays} day${orderAgeDays === 1 ? '' : 's'} old`;
       }
 

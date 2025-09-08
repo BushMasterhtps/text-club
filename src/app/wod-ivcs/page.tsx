@@ -562,7 +562,7 @@ export default function WodIvcsDashboard() {
     customerName?: string;
     amount?: number;
     webOrderDifference?: number;
-    orderDate?: string;
+    purchaseDate?: string;
     orderAge?: string;
     // Email Request specific fields
     emailRequestFor?: string;
@@ -1393,7 +1393,7 @@ export default function WodIvcsDashboard() {
                                 || item.duplicateTask.wodIvcsSource === 'SO_VS_WEB_DIFFERENCE' && 'GHM | SO vs Web Order Difference (Small Differences)'
                               }</div>
                               <div><strong>Customer:</strong> {item.duplicateTask.customerName || 'N/A'}</div>
-                              <div><strong>Order Date:</strong> {item.duplicateTask.orderDate ? new Date(item.duplicateTask.orderDate).toLocaleDateString() : 'N/A'}</div>
+                              <div><strong>Order Date:</strong> {item.duplicateTask.purchaseDate ? new Date(item.duplicateTask.purchaseDate).toLocaleDateString() : 'N/A'}</div>
                               <div><strong>Imported:</strong> {new Date(item.duplicateTask.createdAt).toLocaleDateString()}</div>
                             </div>
                           </div>
@@ -1403,7 +1403,7 @@ export default function WodIvcsDashboard() {
                               <div><strong>Completed:</strong> {item.wasCompletedOn ? new Date(item.wasCompletedOn).toLocaleDateString() : 'N/A'}</div>
                               <div><strong>Disposition:</strong> {item.disposition || 'N/A'}</div>
                               <div><strong>Completed By:</strong> {item.completedBy || 'N/A'}</div>
-                              <div><strong>Age:</strong> {item.duplicateTask.orderDate ? Math.floor((Date.now() - new Date(item.duplicateTask.orderDate).getTime()) / (1000 * 60 * 60 * 24)) : 'N/A'} days</div>
+                              <div><strong>Age:</strong> {item.duplicateTask.purchaseDate ? Math.floor((Date.now() - new Date(item.duplicateTask.purchaseDate).getTime()) / (1000 * 60 * 60 * 24)) : 'N/A'} days</div>
                             </div>
                           </div>
                         </div>
@@ -1558,7 +1558,7 @@ export default function WodIvcsDashboard() {
                               {item.wodIvcsSource === 'SO_VS_WEB_DIFFERENCE' && 'GHM | SO vs Web Order Difference (Small Differences)'}
                             </div>
                             <div className="text-white/60 text-sm">
-                              {item.orderDate ? new Date(item.orderDate).toLocaleDateString('en-US', {
+                              {item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('en-US', {
                                 weekday: 'long',
                                 year: 'numeric',
                                 month: 'long',

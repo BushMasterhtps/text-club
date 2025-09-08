@@ -27,7 +27,7 @@ interface AssistanceRequest {
   customerName?: string;
   amount?: number;
   webOrderDifference?: number;
-  orderDate?: string;
+  purchaseDate?: string;
   orderAge?: string;
   // Email Request specific fields
   emailRequestFor?: string;

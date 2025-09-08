@@ -34,7 +34,7 @@ export async function GET(req: Request) {
         customerName: true,
         amount: true,
         webOrderDifference: true,
-        orderDate: true,
+        purchaseDate: true,
         // Email Request specific fields
         emailRequestFor: true,
         details: true,
@@ -67,10 +67,10 @@ export async function GET(req: Request) {
     const requests = tasks.map(task => {
       // Calculate order age for WOD/IVCS tasks
       let orderAge = null;
-      if (task.taskType === "WOD_IVCS" && task.orderDate) {
-        const orderDate = new Date(task.orderDate);
+      if (task.taskType === "WOD_IVCS" && task.purchaseDate) {
+        const purchaseDate = new Date(task.purchaseDate);
         const now = new Date();
-        const diffTime = Math.abs(now.getTime() - orderDate.getTime());
+        const diffTime = Math.abs(now.getTime() - purchaseDate.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         orderAge = `${diffDays} day${diffDays !== 1 ? 's' : ''} old`;
       }
@@ -94,7 +94,7 @@ export async function GET(req: Request) {
         customerName: task.customerName,
         amount: task.amount,
         webOrderDifference: task.webOrderDifference,
-        orderDate: task.orderDate?.toISOString(),
+        purchaseDate: task.purchaseDate?.toISOString(),
         orderAge: orderAge,
         // Email Request specific fields
         emailRequestFor: task.emailRequestFor,
