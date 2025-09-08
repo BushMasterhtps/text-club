@@ -42,6 +42,7 @@ export async function GET(req: Request) {
         refundAmount: true,
         paymentMethod: true,
         refundReason: true,
+        // NOTE: orderDate is excluded - it's only for Standalone Refunds
         assignedTo: {
           select: {
             name: true,
