@@ -89,16 +89,14 @@ export async function GET(req: Request) {
   /* ---------- build dynamic where ---------- */
   const and: Prisma.RawMessageWhereInput[] = [];
 
-  // (A) Task type filter
-  if (taskType !== "TEXT_CLUB") {
-    and.push({
-      tasks: {
-        some: {
-          taskType: taskType as any
-        }
+  // (A) Task type filter - always apply task type filtering
+  and.push({
+    tasks: {
+      some: {
+        taskType: taskType as any
       }
-    });
-  }
+    }
+  });
 
   // (B) Status mapping -> RawMessage/Task relational filter
   // We push these into the query so count/paging match what the UI sees.

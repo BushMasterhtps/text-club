@@ -36,6 +36,7 @@ export async function POST(req: Request) {
             rawMessageId: r.id, // link task back to its source raw message
             status: "PENDING",
             createdAt: r.createdAt,
+            taskType: "TEXT_CLUB", // Set task type for Text Club tasks
           },
         });
       }

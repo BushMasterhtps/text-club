@@ -114,24 +114,37 @@ export async function POST(req: Request) {
     }
 
     // Persist: set assignedToId + set to IN_PROGRESS when assigned
-    await prisma.$transaction(
-      plan.map((p: PlanEntry) =>
-        prisma.task.update({
-          where: { id: p.taskId },
-          data: { 
-            assignedToId: p.agentId, 
-            status: TaskStatus.IN_PROGRESS, // Assigned tasks = IN_PROGRESS
-            // Clear any previous task data when assigning
-            startTime: null,
-            endTime: null,
-            durationSec: null,
-            disposition: null,
-            assistanceNotes: null,
-            managerResponse: null,
-          },
-        })
-      )
-    );
+    // Use updateMany for better performance with large batches
+    const results: Record<string, string[]> = {};
+    
+    for (const agent of agentOrder) {
+      const agentTasks = plan.filter(p => p.agentId === agent.id);
+      if (agentTasks.length === 0) continue;
+      
+      const taskIds = agentTasks.map(p => p.taskId);
+      const updateResult = await prisma.task.updateMany({
+        where: { 
+          id: { in: taskIds },
+          assignedToId: null, // Only update unassigned tasks
+          status: "PENDING"   // Only update pending tasks
+        },
+        data: { 
+          assignedToId: agent.id,
+          status: TaskStatus.IN_PROGRESS, // Assigned tasks = IN_PROGRESS
+          // Clear any previous task data when assigning
+          startTime: null,
+          endTime: null,
+          durationSec: null,
+          disposition: null,
+          assistanceNotes: null,
+          managerResponse: null,
+        },
+      });
+      
+      if (updateResult.count > 0) {
+        results[agent.email] = taskIds;
+      }
+    }
 
     // Build response map: { "Name or Email": [taskId, ...], ... }
     const idToLabel = new Map<string, string>(
@@ -139,10 +152,12 @@ export async function POST(req: Request) {
     );
     const assignedMap: Record<string, string[]> = {};
 
-    for (const p of plan) {
-      const k = idToLabel.get(p.agentId) || p.agentId; // guard undefined -> string
-      if (!assignedMap[k]) assignedMap[k] = [];
-      assignedMap[k].push(p.taskId);
+    for (const [email, taskIds] of Object.entries(results)) {
+      const agent = agentOrder.find(a => a.email === email);
+      if (agent) {
+        const label = idToLabel.get(agent.id) || agent.email;
+        assignedMap[label] = taskIds;
+      }
     }
 
     return NextResponse.json({ success: true, assigned: assignedMap });

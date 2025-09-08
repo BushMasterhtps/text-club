@@ -187,6 +187,7 @@ export async function POST(req: Request) {
               assignedToId: agent.id,
               startTime: new Date(),
               createdAt: r.createdAt,
+              taskType: "TEXT_CLUB", // Set task type for Text Club tasks
             },
           });
           createdTasks.push(task);

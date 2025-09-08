@@ -30,17 +30,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'ids[] required', received: { ids } }, { status: 400 });
     }
 
-    const [del, upd] = await prisma.$transaction([
-      prisma.task.deleteMany({
-        where: { rawMessageId: { in: ids }, status: { not: 'COMPLETED' as any } },
-      }),
-      prisma.rawMessage.updateMany({
-        where: { id: { in: ids } },
-        data:  { status: 'READY' as any },
-      }),
-    ]);
+    // Unassign tasks instead of deleting them
+    const updated = await prisma.task.updateMany({
+      where: { 
+        id: { in: ids },
+        status: { not: 'COMPLETED' as any }
+      },
+      data: {
+        assignedToId: null,
+        status: 'PENDING', // Reset to pending when unassigned
+        startTime: null,
+        endTime: null,
+        durationSec: null,
+        disposition: null,
+        assistanceNotes: null,
+        managerResponse: null,
+      },
+    });
 
-    return NextResponse.json({ success: true, tasksDeleted: del.count, rawsUpdated: upd.count });
+    return NextResponse.json({ success: true, tasksUnassigned: updated.count });
   } catch (err: any) {
     console.error('POST /api/manager/tasks/unassign failed:', err);
     return NextResponse.json(
