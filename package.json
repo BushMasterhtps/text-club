@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "node scripts/force-prisma-generation.js && next build --turbopack",
+    "build": "echo 'FORCE_REBUILD_$(date +%s)' && node scripts/force-prisma-generation.js && next build --turbopack",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate && echo 'Prisma client regenerated successfully'",
