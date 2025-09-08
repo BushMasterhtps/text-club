@@ -91,35 +91,39 @@ export async function POST(req: Request) {
         });
 
         if (rawMessages.length > 0) {
-          // Promote and assign raw messages
-          const result = await prisma.$transaction(async (tx) => {
-            const createdTasks = [];
-            for (const rm of rawMessages) {
-              const task = await tx.task.create({
+          // Promote and assign raw messages - use individual operations to avoid transaction issues
+          const createdTasks = [];
+          
+          for (const rm of rawMessages) {
+            try {
+              const task = await prisma.task.create({
                 data: {
                   phone: rm.phone ?? null,
                   email: rm.email ?? null,
                   text: rm.text ?? null,
                   brand: rm.brand ?? null,
                   rawMessageId: rm.id,
-                  status: "PENDING",
+                  status: "IN_PROGRESS", // Tasks are IN_PROGRESS when assigned
                   assignedToId: agent.id,
+                  startTime: new Date(),
                   createdAt: rm.createdAt,
+                  taskType: "TEXT_CLUB", // Set task type for Text Club tasks
                 },
               });
               createdTasks.push(task);
+              
+              // Mark raw message as promoted
+              await prisma.rawMessage.update({
+                where: { id: rm.id },
+                data: { status: "PROMOTED" },
+              });
+            } catch (error) {
+              console.error(`Error creating task for raw message ${rm.id}:`, error);
+              // Continue with other tasks even if one fails
             }
+          }
 
-            // Mark raw messages as promoted
-            await tx.rawMessage.updateMany({
-              where: { id: { in: rawMessages.map(rm => rm.id) } },
-              data: { status: "PROMOTED" },
-            });
-
-            return createdTasks;
-          });
-
-          updateResult = { count: result.length };
+          updateResult = { count: createdTasks.length };
         }
       }
 
@@ -161,22 +165,22 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "Agent not found." }, { status: 400 });
       }
 
-      // Promote raw messages to tasks and assign them in one transaction
-      const result = await prisma.$transaction(async (tx) => {
-        // Load RAW rows that are still READY
-        const raws = await tx.rawMessage.findMany({
-          where: { id: { in: rawMessageIds }, status: "READY" },
-          select: { id: true, phone: true, email: true, text: true, brand: true, createdAt: true },
-        });
+      // Promote raw messages to tasks and assign them - use individual operations to avoid transaction issues
+      // Load RAW rows that are still READY
+      const raws = await prisma.rawMessage.findMany({
+        where: { id: { in: rawMessageIds }, status: "READY" },
+        select: { id: true, phone: true, email: true, text: true, brand: true, createdAt: true },
+      });
 
-        if (raws.length === 0) {
-          throw new Error("No raw messages available for promotion");
-        }
+      if (raws.length === 0) {
+        return NextResponse.json({ success: false, error: "No raw messages available for promotion" }, { status: 400 });
+      }
 
-        // Create Tasks with status IN_PROGRESS and assign to agent
-        const createdTasks = [];
-        for (const r of raws) {
-          const task = await tx.task.create({
+      // Create Tasks with status IN_PROGRESS and assign to agent
+      const createdTasks = [];
+      for (const r of raws) {
+        try {
+          const task = await prisma.task.create({
             data: {
               phone: r.phone ?? null,
               email: r.email ?? null,
@@ -191,21 +195,22 @@ export async function POST(req: Request) {
             },
           });
           createdTasks.push(task);
+          
+          // Mark raw message as PROMOTED
+          await prisma.rawMessage.update({
+            where: { id: r.id },
+            data: { status: "PROMOTED" },
+          });
+        } catch (error) {
+          console.error(`Error creating task for raw message ${r.id}:`, error);
+          // Continue with other tasks even if one fails
         }
-
-        // Mark raws as PROMOTED
-        await tx.rawMessage.updateMany({
-          where: { id: { in: raws.map((r) => r.id) } },
-          data: { status: "PROMOTED" },
-        });
-
-        return createdTasks;
-      });
+      }
 
       return NextResponse.json({ 
         success: true, 
-        assigned: { [agentId]: result.map(t => t.id) },
-        promoted: result.length
+        assigned: { [agentId]: createdTasks.map(t => t.id) },
+        promoted: createdTasks.length
       });
     }
 
