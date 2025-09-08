@@ -110,6 +110,8 @@ interface Task {
   emailRequestFor?: string;
   details?: string;
   timestamp?: string;
+  completionTime?: string;
+  salesforceCaseNumber?: string;
   customerNameNumber?: string;
   salesOrderId?: string;
   // Standalone Refund specific fields
@@ -144,7 +146,35 @@ export default function AgentPage() {
   const [loading, setLoading] = useState(false);
   const [startedTasks, setStartedTasks] = useState<Set<string>>(new Set());
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  
+  // Task filtering state
+  const [selectedTaskType, setSelectedTaskType] = useState<string>("ALL");
+  const [taskCounts, setTaskCounts] = useState<{
+    TEXT_CLUB: number;
+    WOD_IVCS: number;
+    EMAIL_REQUESTS: number;
+    STANDALONE_REFUNDS: number;
+  }>({
+    TEXT_CLUB: 0,
+    WOD_IVCS: 0,
+    EMAIL_REQUESTS: 0,
+    STANDALONE_REFUNDS: 0
+  });
+  
+  const [completionStats, setCompletionStats] = useState<{
+    today: Record<string, number>;
+    total: Record<string, number>;
+  }>({
+    today: { TEXT_CLUB: 0, WOD_IVCS: 0, EMAIL_REQUESTS: 0, STANDALONE_REFUNDS: 0 },
+    total: { TEXT_CLUB: 0, WOD_IVCS: 0, EMAIL_REQUESTS: 0, STANDALONE_REFUNDS: 0 }
+  });
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [forceRender, setForceRender] = useState(0);
 
@@ -480,6 +510,15 @@ export default function AgentPage() {
         setTasks(newTasks);
         setLastUpdate(new Date());
         
+        // Calculate task counts
+        const counts = {
+          TEXT_CLUB: newTasks.filter((t: Task) => t.taskType === "TEXT_CLUB").length,
+          WOD_IVCS: newTasks.filter((t: Task) => t.taskType === "WOD_IVCS").length,
+          EMAIL_REQUESTS: newTasks.filter((t: Task) => t.taskType === "EMAIL_REQUESTS").length,
+          STANDALONE_REFUNDS: newTasks.filter((t: Task) => t.taskType === "STANDALONE_REFUNDS").length
+        };
+        setTaskCounts(counts);
+        
         // Force complete re-render if we have manager responses
         if (tasksWithResponses.length > 0) {
           console.log("🔄 Forcing complete re-render due to manager responses");
@@ -533,6 +572,36 @@ export default function AgentPage() {
     }
   };
 
+  // Filter tasks based on selected task type
+  const filteredTasks = selectedTaskType === "ALL" 
+    ? tasks 
+    : tasks.filter(task => task.taskType === selectedTaskType);
+
+  const loadCompletionStats = async (emailToUse?: string, dateToUse?: string) => {
+    const currentEmail = emailToUse || email;
+    // Always use today's date for completion stats, not the selected date
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const currentDate = `${year}-${month}-${day}`;
+    
+    if (!currentEmail) return;
+    
+    try {
+      const response = await fetch(`/api/agent/completion-stats?email=${encodeURIComponent(currentEmail)}&date=${encodeURIComponent(currentDate)}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setCompletionStats(data.stats);
+      } else {
+        console.error("Failed to load completion stats:", data.error);
+      }
+    } catch (error) {
+      console.error("Error loading completion stats:", error);
+    }
+  };
+
   const loadStats = async (emailToUse?: string, dateToUse?: string) => {
     const currentEmail = emailToUse || email;
     const currentDate = dateToUse || selectedDate;
@@ -546,6 +615,9 @@ export default function AgentPage() {
     } catch (error) {
       console.error("Failed to load stats:", error);
     }
+    
+    // Also load completion stats
+    await loadCompletionStats(currentEmail, currentDate);
   };
 
 
@@ -687,8 +759,8 @@ export default function AgentPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img 
-              src="/golden-attentive-logo.svg" 
-              alt="Golden Attentive" 
+              src="/golden-companies-logo.jpeg" 
+              alt="Golden Companies" 
               className="h-12 w-auto"
             />
             <div className="text-sm text-white/60 dark:text-white/60 light:text-gray-600">Agent Portal</div>
@@ -754,9 +826,15 @@ export default function AgentPage() {
           />
           <SmallButton 
             onClick={() => {
-              const today = new Date().toISOString().split('T')[0];
+              const now = new Date();
+              const year = now.getFullYear();
+              const month = String(now.getMonth() + 1).padStart(2, '0');
+              const day = String(now.getDate()).padStart(2, '0');
+              const today = `${year}-${month}-${day}`;
               setSelectedDate(today);
               loadStats(undefined, today);
+              // Also refresh completion stats to show today's performance
+              loadCompletionStats();
             }}
           >
             Today
@@ -831,6 +909,114 @@ export default function AgentPage() {
         </Card>
       )}
 
+      {/* Task Picker */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <H2>Task Filter</H2>
+          <div className="text-sm text-white/60">
+            Total: {tasks.length} tasks
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSelectedTaskType("ALL")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              selectedTaskType === "ALL"
+                ? "bg-blue-500/20 text-blue-300 ring-1 ring-blue-400/50"
+                : "bg-white/5 text-white/70 hover:bg-white/10 ring-1 ring-white/10"
+            }`}
+          >
+            📋 All ({tasks.length})
+          </button>
+          <button
+            onClick={() => setSelectedTaskType("TEXT_CLUB")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              selectedTaskType === "TEXT_CLUB"
+                ? "bg-blue-500/20 text-blue-300 ring-1 ring-blue-400/50"
+                : "bg-white/5 text-white/70 hover:bg-white/10 ring-1 ring-white/10"
+            }`}
+          >
+            📱 Text Club ({taskCounts.TEXT_CLUB})
+          </button>
+          <button
+            onClick={() => setSelectedTaskType("WOD_IVCS")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              selectedTaskType === "WOD_IVCS"
+                ? "bg-red-500/20 text-red-300 ring-1 ring-red-400/50"
+                : "bg-white/5 text-white/70 hover:bg-white/10 ring-1 ring-white/10"
+            }`}
+          >
+            📦 WOD/IVCS ({taskCounts.WOD_IVCS})
+          </button>
+          <button
+            onClick={() => setSelectedTaskType("EMAIL_REQUESTS")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              selectedTaskType === "EMAIL_REQUESTS"
+                ? "bg-green-500/20 text-green-300 ring-1 ring-green-400/50"
+                : "bg-white/5 text-white/70 hover:bg-white/10 ring-1 ring-white/10"
+            }`}
+          >
+            📧 Email Requests ({taskCounts.EMAIL_REQUESTS})
+          </button>
+          <button
+            onClick={() => setSelectedTaskType("STANDALONE_REFUNDS")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              selectedTaskType === "STANDALONE_REFUNDS"
+                ? "bg-purple-500/20 text-purple-300 ring-1 ring-purple-400/50"
+                : "bg-white/5 text-white/70 hover:bg-white/10 ring-1 ring-white/10"
+            }`}
+          >
+            💰 Standalone Refunds ({taskCounts.STANDALONE_REFUNDS})
+          </button>
+        </div>
+      </Card>
+
+      {/* Completion Stats */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <H2>Your Performance</H2>
+          <div className="text-sm text-white/60">
+            Today: {(() => {
+              const now = new Date();
+              const year = now.getFullYear();
+              const month = String(now.getMonth() + 1).padStart(2, '0');
+              const day = String(now.getDate()).padStart(2, '0');
+              return `${year}-${month}-${day}`;
+            })()}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-white/5 rounded-lg p-3 text-center">
+            <div className="text-2xl mb-1">📱</div>
+            <div className="text-sm text-white/60">Text Club</div>
+            <div className="text-lg font-semibold text-blue-300">{completionStats.today.TEXT_CLUB}</div>
+            <div className="text-xs text-white/50">Today</div>
+            <div className="text-sm text-white/40 mt-1">Lifetime: {completionStats.total.TEXT_CLUB}</div>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3 text-center">
+            <div className="text-2xl mb-1">📦</div>
+            <div className="text-sm text-white/60">WOD/IVCS</div>
+            <div className="text-lg font-semibold text-red-300">{completionStats.today.WOD_IVCS}</div>
+            <div className="text-xs text-white/50">Today</div>
+            <div className="text-sm text-white/40 mt-1">Lifetime: {completionStats.total.WOD_IVCS}</div>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3 text-center">
+            <div className="text-2xl mb-1">📧</div>
+            <div className="text-sm text-white/60">Email Requests</div>
+            <div className="text-lg font-semibold text-green-300">{completionStats.today.EMAIL_REQUESTS}</div>
+            <div className="text-xs text-white/50">Today</div>
+            <div className="text-sm text-white/40 mt-1">Lifetime: {completionStats.total.EMAIL_REQUESTS}</div>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3 text-center">
+            <div className="text-2xl mb-1">💰</div>
+            <div className="text-sm text-white/60">Standalone Refunds</div>
+            <div className="text-lg font-semibold text-purple-300">{completionStats.today.STANDALONE_REFUNDS}</div>
+            <div className="text-xs text-white/50">Today</div>
+            <div className="text-sm text-white/40 mt-1">Lifetime: {completionStats.total.STANDALONE_REFUNDS}</div>
+          </div>
+        </div>
+      </Card>
+
       {/* Tasks List */}
       <Card className="p-5">
                 <div className="flex items-center justify-between mb-4">
@@ -904,7 +1090,7 @@ export default function AgentPage() {
 
             {/* Task Cards */}
             <div className="space-y-4">
-              {tasks.map((task, index) => (
+              {filteredTasks.map((task, index) => (
                 <div id={`task-${task.id}`} key={task.id}>
                   <TaskCard
                     task={task}
@@ -966,6 +1152,25 @@ function TaskCard({
       // Combine main disposition with sub-disposition
       onComplete(task.id, `${disposition} - ${subDisposition}`);
     }
+    // For Email Requests "Unable to Complete", require sub-disposition
+    else if (task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete") {
+      if (!subDisposition) {
+        alert("Please select a sub-disposition for Unable to Complete.");
+        return;
+      }
+      // Combine main disposition with sub-disposition
+      onComplete(task.id, `${disposition} - ${subDisposition}`);
+    }
+    // For Email Requests "Completed", require SF Case #
+    else if (task.taskType === "EMAIL_REQUESTS" && disposition === "Completed") {
+      if (!sfCaseNumber.trim()) {
+        alert("Please enter the SF Case # for Completed disposition.");
+        return;
+      }
+      
+      // Send both disposition and SF Case # separately
+      onComplete(task.id, disposition, sfCaseNumber.trim());
+    }
     // For "Answered in SF", require SF Case #
     else if (disposition === "Answered in SF") {
       if (!sfCaseNumber.trim()) {
@@ -1004,7 +1209,7 @@ function TaskCard({
       "ActivatedYou": "🧘‍♀️💊", 
       "UPN": "🚀🧬" 
     };
-    return map[brand] || "📦";
+    return map[brand] || "📧";
   };
 
   const getStatusEmoji = (status: string) => {
@@ -1020,14 +1225,14 @@ function TaskCard({
   const getTaskTypeInfo = (taskType: string) => {
     switch (taskType) {
       case "WOD_IVCS":
-        return { label: "WOD/IVCS", emoji: "📊", color: "text-red-400" };
+        return { label: "WOD/IVCS", emoji: "📦", color: "text-red-400" };
       case "EMAIL_REQUESTS":
         return { label: "Email Requests", emoji: "📧", color: "text-green-400" };
       case "STANDALONE_REFUNDS":
         return { label: "Standalone Refunds", emoji: "💰", color: "text-purple-400" };
       case "TEXT_CLUB":
       default:
-        return { label: "Text Club", emoji: "💬", color: "text-blue-400" };
+        return { label: "Text Club", emoji: "📱", color: "text-blue-400" };
     }
   };
 
@@ -1045,7 +1250,11 @@ function TaskCard({
         <span className="text-white/70 text-sm font-normal">{taskTypeInfo.label}</span>
         <span className="text-white/40">•</span>
         <span>{getBrandEmoji(task.brand)}</span>
-        <span>{task.brand}</span>
+        {task.taskType === "WOD_IVCS" && !isTaskStarted ? (
+          <span className="text-white/40 italic">[hidden until Start]</span>
+        ) : (
+          <span>{task.brand}</span>
+        )}
         {task.managerResponse && (
           <span className="text-green-400 text-sm font-normal">✨ Ready to Resume</span>
         )}
@@ -1124,7 +1333,25 @@ function TaskCard({
       ) : task.taskType === "EMAIL_REQUESTS" ? (
         <>
           {/* Email Request specific data - Blurred until started */}
-          <div className="space-y-2 text-sm">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-green-400">⏰</span>
+              <span className="text-white/60">Completion Time:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.completionTime ? new Date(task.completionTime).toLocaleString() : "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-green-400">🔢</span>
+              <span className="text-white/60">SF Case #:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.salesforceCaseNumber || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <span className="text-green-400">📧</span>
               <span className="text-white/60">Request For:</span>
@@ -1134,7 +1361,7 @@ function TaskCard({
                 <span className="text-white/40 italic">[hidden until Start]</span>
               )}
             </div>
-            <div className="flex items-start gap-2">
+            <div className="flex items-start gap-2 col-span-2">
               <span className="text-green-400 mt-1">📝</span>
               <span className="text-white/60">Details:</span>
               {isTaskStarted ? (
@@ -1252,6 +1479,11 @@ function TaskCard({
                   <option value="Completed - Fixed Amounts">✅ Completed - Fixed Amounts</option>
                   <option value="Reviewed / Unable to Complete">❌ Reviewed / Unable to Complete</option>
                 </>
+              ) : task.taskType === "EMAIL_REQUESTS" ? (
+                <>
+                  <option value="Completed">✅ Completed</option>
+                  <option value="Unable to Complete">❌ Unable to Complete</option>
+                </>
               ) : (
                 <>
                   <option value="Answered in Attentive">✅ Answered in Attentive</option>
@@ -1287,6 +1519,26 @@ function TaskCard({
                 </select>
               </div>
             )}
+
+            {/* Sub-disposition dropdown for Email Requests "Unable to Complete" */}
+            {task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/70">Sub-disposition:</label>
+                <select
+                  value={subDisposition}
+                  onChange={(e) => setSubDisposition(e.target.value)}
+                  className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10"
+                >
+                  <option value="">Select sub-disposition...</option>
+                  <option value="Unfeasable request / Information not available">🚫 Unfeasable request / Information not available</option>
+                  <option value="Incomplete or Missing Info">📝 Incomplete or Missing Info</option>
+                  <option value="Link/Sale Unavailable">🔗 Link/Sale Unavailable</option>
+                  <option value="No Specification on Requests">❓ No Specification on Requests</option>
+                  <option value="Requesting info on ALL Products">📦 Requesting info on ALL Products</option>
+                  <option value="Duplicate Request">🔄 Duplicate Request</option>
+                </select>
+              </div>
+            )}
             
             {/* SF Case # field for "Answered in SF" */}
             {disposition === "Answered in SF" && (
@@ -1304,9 +1556,31 @@ function TaskCard({
                 />
               </div>
             )}
+
+            {/* SF Case # field for Email Requests "Completed" */}
+            {task.taskType === "EMAIL_REQUESTS" && disposition === "Completed" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/80">
+                  SF Case # <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={sfCaseNumber}
+                  onChange={(e) => setSfCaseNumber(e.target.value)}
+                  placeholder="Enter Salesforce Case Number"
+                  className="w-full rounded-md bg-white/10 text-white placeholder-white/40 px-3 py-2 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            )}
             <PrimaryButton 
               onClick={handleComplete}
-              disabled={!disposition || (disposition === "Answered in SF" && !sfCaseNumber.trim())}
+              disabled={!disposition || 
+                (disposition === "Answered in SF" && !sfCaseNumber.trim()) ||
+                (task.taskType === "EMAIL_REQUESTS" && disposition === "Completed" && !sfCaseNumber.trim()) ||
+                (task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete" && !subDisposition) ||
+                (task.taskType === "WOD_IVCS" && disposition === "Reviewed / Unable to Complete" && !subDisposition)
+              }
               className="w-full"
             >
               Complete Task

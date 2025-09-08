@@ -12,8 +12,8 @@ export default function StandaloneRefundsPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <img 
-                src="/golden-attentive-logo.svg" 
-                alt="Golden Attentive Logo" 
+                src="/golden-companies-logo.jpeg" 
+                alt="Golden Companies" 
                 className="h-8 w-8"
               />
               <div>

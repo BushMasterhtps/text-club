@@ -16,8 +16,8 @@ export default function Home() {
         {/* Company Logo */}
         <div className="flex flex-col items-center gap-6">
           <img 
-            src="/golden-attentive-logo.svg" 
-            alt="Golden Attentive" 
+            src="/golden-companies-logo.jpeg" 
+            alt="Golden Companies" 
             className="h-20 w-auto"
           />
           <div className="text-center text-white/60 dark:text-white/60 light:text-slate-600">

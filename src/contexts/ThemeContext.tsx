@@ -24,16 +24,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const savedTheme = localStorage.getItem('theme') as Theme;
     const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     
-    if (savedTheme) {
-      setThemeState(savedTheme);
+    const initialTheme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+    setThemeState(initialTheme);
+    
+    // Apply theme immediately to prevent flash
+    const root = document.documentElement;
+    if (initialTheme === 'light') {
+      root.classList.remove('dark');
+      root.classList.add('light');
     } else {
-      setThemeState(systemPrefersDark ? 'dark' : 'light');
+      root.classList.remove('light');
+      root.classList.add('dark');
     }
     
     setMounted(true);
   }, []);
 
-  // Apply theme to document
+  // Apply theme to document when theme changes
   useEffect(() => {
     if (!mounted || typeof window === 'undefined') return;
     

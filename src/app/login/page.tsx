@@ -56,8 +56,8 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <img 
-            src="/golden-attentive-logo.svg" 
-            alt="Golden Attentive" 
+            src="/golden-companies-logo.jpeg" 
+            alt="Golden Companies" 
             className="h-20 w-auto mx-auto mb-4"
           />
           <h1 className="text-2xl font-semibold text-white">Welcome Back</h1>

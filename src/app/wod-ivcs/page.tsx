@@ -10,6 +10,26 @@ import { AssistanceRequestsSection } from "@/app/manager/_components/AssistanceR
 import { CsvImportSection } from "./_components/CsvImportSection";
 import { WodIvcsTasksSection } from "./_components/WodIvcsTasksSection";
 import { AnalyticsSection } from "./_components/AnalyticsSection";
+import UnifiedSettings from '@/app/_components/UnifiedSettings';
+
+// Utility functions
+function clamp(value: number | null | undefined): number {
+  if (value == null) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
+// Progress bar component
+function ProgressBar({ value }: { value: number }) {
+  const pct = clamp(value);
+  return (
+    <div className="w-full h-3 rounded-full bg-white/10 overflow-hidden">
+      <div
+        className="h-full bg-gradient-to-r from-emerald-400 to-sky-500"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
 
 // Types
 type Agent = {
@@ -31,6 +51,12 @@ type AgentProgress = {
   completedToday: number;
   lastActivity?: string | null;
   isLive?: boolean;
+  taskTypeBreakdown?: {
+    textClub: { assigned: number; inProgress: number; completedToday: number };
+    wodIvcs: { assigned: number; inProgress: number; completedToday: number };
+    emailRequests: { assigned: number; inProgress: number; completedToday: number };
+    standaloneRefunds: { assigned: number; inProgress: number; completedToday: number };
+  };
 };
 
 type Task = {
@@ -154,6 +180,7 @@ function AgentProgressSection() {
                 <th className="px-3 py-2 w-28">Assigned</th>
                 <th className="px-3 py-2 w-32">In Progress</th>
                 <th className="px-3 py-2 w-36">Completed Today</th>
+                <th className="px-3 py-2 w-44">Task Breakdown</th>
                 <th className="px-3 py-2 w-44">Last Activity</th>
                 <th className="px-3 py-2 w-1">Peek</th>
               </tr>
@@ -180,6 +207,26 @@ function AgentProgressSection() {
                     <span className="px-2 py-1 bg-green-500/20 text-green-300 rounded text-xs">
                       {row.completedToday}
                     </span>
+                  </td>
+                  <td className="px-3 py-3">
+                    {row.taskTypeBreakdown ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-blue-400">💬</span>
+                          <span>Text: {row.taskTypeBreakdown.textClub.assigned}</span>
+                          <span className="text-white/40">•</span>
+                          <span>WOD: {row.taskTypeBreakdown.wodIvcs.assigned}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-green-400">📧</span>
+                          <span>Email: {row.taskTypeBreakdown.emailRequests.assigned}</span>
+                          <span className="text-white/40">•</span>
+                          <span>Refund: {row.taskTypeBreakdown.standaloneRefunds.assigned}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-white/40">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-white/60 text-xs">
                     {row.lastActivity ? fmtDate(row.lastActivity) : "—"}
@@ -812,8 +859,7 @@ export default function WodIvcsDashboard() {
     { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage WOD/IVCS tasks" },
     { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.filter(r => r.status === "ASSISTANCE_REQUIRED").length },
     { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
-    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" },
-    { id: "admin", label: "⚙️ Administration", description: "Import settings and system management" }
+    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" }
   ];
 
   return (
@@ -823,8 +869,8 @@ export default function WodIvcsDashboard() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <img 
-                src="/golden-attentive-logo.svg" 
-                alt="Golden Attentive" 
+                src="/golden-companies-logo.jpeg" 
+                alt="Golden Companies" 
                 className="h-14 w-auto"
               />
               <div>
@@ -833,6 +879,19 @@ export default function WodIvcsDashboard() {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              {/* Settings Button */}
+              <button
+                onClick={() => setActiveSection("settings")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeSection === "settings"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                }`}
+                title="System Settings & Administration"
+              >
+                ⚙️ Settings
+              </button>
+              
               <div className="flex items-center gap-2 text-sm text-white/60">
                 <span>🌞</span>
                 <span>Session: 2h 0m</span>
@@ -917,7 +976,10 @@ export default function WodIvcsDashboard() {
               <Card className="p-4">
                 <div className="text-sm text-white/60">Overall Progress</div>
                 <div className="text-2xl font-bold mt-1">{overviewData.progressPercentage}% done</div>
-                <div className="text-xs text-white/40 mt-1">Pending {overviewData.pendingCount} • Completed {overviewData.totalCompletedCount}</div>
+                <div className="mt-2">
+                  <ProgressBar value={overviewData.progressPercentage} />
+                </div>
+                <div className="text-xs text-white/40 mt-2">Pending {overviewData.pendingCount} • Completed {overviewData.totalCompletedCount}</div>
               </Card>
               <Card className="p-4">
                 <div className="text-sm text-white/60">Queue Health</div>
@@ -1283,10 +1345,10 @@ export default function WodIvcsDashboard() {
           <AnalyticsSection />
         )}
 
-        {/* Administration Section */}
-        {activeSection === "admin" && (
+        {/* Settings Section */}
+        {activeSection === "settings" && (
           <div className="space-y-8">
-            <UsersAdminSection />
+            <UnifiedSettings />
           </div>
         )}
       </div>

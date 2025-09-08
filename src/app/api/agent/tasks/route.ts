@@ -69,6 +69,8 @@ export async function GET(req: Request) {
         emailRequestFor: true,
         details: true,
         timestamp: true,
+        completionTime: true,
+        salesforceCaseNumber: true,
         customerNameNumber: true,
         salesOrderId: true,
         // Standalone Refund specific fields
@@ -88,8 +90,7 @@ export async function GET(req: Request) {
         }
       },
       orderBy: [
-        { status: "asc" }, // PENDING first, then IN_PROGRESS, then ASSISTANCE_REQUIRED
-        { updatedAt: "desc" } // Most recently updated first (responses will be on top)
+        { updatedAt: "desc" } // Most recently updated first
       ]
     });
 
@@ -115,8 +116,22 @@ export async function GET(req: Request) {
       };
     });
 
+    // Custom sorting: IN_PROGRESS first (current assignments), then PENDING (new assignments), then ASSISTANCE_REQUIRED
+    const sortedTasks = transformedTasks.sort((a, b) => {
+      const statusOrder = { 'IN_PROGRESS': 1, 'PENDING': 2, 'ASSISTANCE_REQUIRED': 3 };
+      const aOrder = statusOrder[a.status as keyof typeof statusOrder] || 4;
+      const bOrder = statusOrder[b.status as keyof typeof statusOrder] || 4;
+      
+      if (aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+      
+      // If same status, sort by updatedAt desc (most recent first)
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+
     // Debug: Check if any tasks have manager responses
-    const tasksWithResponses = transformedTasks.filter(t => t.managerResponse);
+    const tasksWithResponses = sortedTasks.filter(t => t.managerResponse);
     if (tasksWithResponses.length > 0) {
       console.log("🔍 API Debug: Found tasks with manager responses:", tasksWithResponses.length);
       tasksWithResponses.forEach((task, index) => {
@@ -124,11 +139,11 @@ export async function GET(req: Request) {
       });
     } else {
       console.log("🔍 API Debug: No tasks with manager responses found");
-      console.log("🔍 API Debug: Total tasks returned:", transformedTasks.length);
-      console.log("🔍 API Debug: Sample task:", transformedTasks[0] ? {
-        id: transformedTasks[0].id,
-        status: transformedTasks[0].status,
-        hasManagerResponse: !!transformedTasks[0].managerResponse
+      console.log("🔍 API Debug: Total tasks returned:", sortedTasks.length);
+      console.log("🔍 API Debug: Sample task:", sortedTasks[0] ? {
+        id: sortedTasks[0].id,
+        status: sortedTasks[0].status,
+        hasManagerResponse: !!sortedTasks[0].managerResponse
       } : "No tasks");
     }
 
@@ -144,7 +159,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      tasks: transformedTasks 
+      tasks: sortedTasks 
     });
   } catch (err: any) {
     console.error("Error fetching agent tasks:", err);

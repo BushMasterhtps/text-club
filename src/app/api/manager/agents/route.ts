@@ -25,11 +25,32 @@ export async function GET() {
         const openCount = await prisma.task.count({
           where: { assignedToId: a.id, status: { in: OPEN_STATUSES } },
         });
+
+        // Get task type breakdowns
+        const [emailRequestCount, textClubCount, wodIvcsCount, refundCount] = await Promise.all([
+          prisma.task.count({
+            where: { assignedToId: a.id, status: { in: OPEN_STATUSES }, taskType: "EMAIL_REQUESTS" },
+          }),
+          prisma.task.count({
+            where: { assignedToId: a.id, status: { in: OPEN_STATUSES }, taskType: "TEXT_CLUB" },
+          }),
+          prisma.task.count({
+            where: { assignedToId: a.id, status: { in: OPEN_STATUSES }, taskType: "WOD_IVCS" },
+          }),
+          prisma.task.count({
+            where: { assignedToId: a.id, status: { in: OPEN_STATUSES }, taskType: "STANDALONE_REFUNDS" },
+          }),
+        ]);
+
         return {
           id: a.id,
           email: a.email,
           name: a.name ?? a.email,
           openCount,
+          emailRequestCount,
+          textClubCount,
+          wodIvcsCount,
+          refundCount,
           isLive: a.isLive ?? false,
           lastSeen: a.lastSeen ?? null,
         };

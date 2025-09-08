@@ -56,6 +56,30 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/* Prevent flash of unstyled content */
+html {
+  background: #0a0a0a; /* Default dark background */
+  transition: background-color 0.1s ease;
+}
+
+html.light {
+  background: #fafafa; /* Light background */
+}
+
+html.dark {
+  background: #0a0a0a; /* Dark background */
+}
+
+/* Ensure all main containers have proper background */
+main {
+  background: inherit;
+}
+
+/* Prevent flash during navigation */
+.bg-gradient-to-br {
+  transition: background 0.1s ease;
+}
+
 /* Light mode specific styles */
 .light {
   background: linear-gradient(to bottom right, #f8fafc, #f1f5f9);

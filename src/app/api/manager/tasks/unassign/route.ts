@@ -16,6 +16,7 @@ export async function POST(req: Request) {
 
     let ids: string[] = [
       ...coerceIds(body.ids),
+      ...coerceIds(body.taskIds),
       ...coerceIds(body.rawMessageIds),
       ...coerceIds(body.selectedIds),
       ...coerceIds(body.selected),

@@ -11,6 +11,7 @@ import ThemeToggle from '@/app/_components/ThemeToggle';
 import DashboardSwitcher from '@/app/_components/DashboardSwitcher';
 import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
 import SpamInsights from '@/app/_components/SpamInsights';
+import UnifiedSettings from '@/app/_components/UnifiedSettings';
 
 /* ========== Shared types ========== */
 type AssignResult = Record<string, string[]>;
@@ -108,6 +109,12 @@ type AgentProgress = {
   inProgress: number;
   completedToday: number;
   lastActivity?: string | null;
+  taskTypeBreakdown?: {
+    textClub: { assigned: number; inProgress: number; completedToday: number };
+    wodIvcs: { assigned: number; inProgress: number; completedToday: number };
+    emailRequests: { assigned: number; inProgress: number; completedToday: number };
+    standaloneRefunds: { assigned: number; inProgress: number; completedToday: number };
+  };
 };
 
 /* ========== Utils ========== */
@@ -2318,13 +2325,14 @@ function AgentProgressSection() {
                 <th className="px-3 py-2 w-28">Assigned</th>
                 <th className="px-3 py-2 w-32">In Progress</th>
                 <th className="px-3 py-2 w-36">Completed Today</th>
+                <th className="px-3 py-2 w-44">Task Breakdown</th>
                 <th className="px-3 py-2 w-44">Last Activity</th>
                 <th className="px-3 py-2 w-1">Peek</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {rows.length === 0 && (
-                <tr><td className="px-3 py-3 text-white/60" colSpan={6}>{loading ? "Loading…" : "No agents yet."}</td></tr>
+                <tr><td className="px-3 py-3 text-white/60" colSpan={7}>{loading ? "Loading…" : "No agents yet."}</td></tr>
               )}
               {rows.map((r) => (
                 <tr key={r.id} className="text-white/90">
@@ -2336,6 +2344,26 @@ function AgentProgressSection() {
                   <td className="px-3 py-2"><Badge tone="muted">{r.assigned}</Badge></td>
                   <td className="px-3 py-2"><Badge tone="warning">{r.inProgress}</Badge></td>
                   <td className="px-3 py-2"><Badge tone="success">{r.completedToday}</Badge></td>
+                  <td className="px-3 py-2">
+                    {r.taskTypeBreakdown ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-blue-400">💬</span>
+                          <span>Text: {r.taskTypeBreakdown.textClub.assigned}</span>
+                          <span className="text-white/40">•</span>
+                          <span>WOD: {r.taskTypeBreakdown.wodIvcs.assigned}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-green-400">📧</span>
+                          <span>Email: {r.taskTypeBreakdown.emailRequests.assigned}</span>
+                          <span className="text-white/40">•</span>
+                          <span>Refund: {r.taskTypeBreakdown.standaloneRefunds.assigned}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-white/40">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{fmtDate(r.lastActivity || null)}</td>
                   <td className="px-3 py-2"><SmallButton onClick={() => openDrawer(r)}>Open</SmallButton></td>
                 </tr>
@@ -3278,8 +3306,7 @@ export default function ManagerPage() {
     { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage tasks" },
     { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.length },
     { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
-    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" },
-    { id: "admin", label: "⚙️ Administration", description: "Users, settings, and system management" }
+    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" }
   ];
 
   return (
@@ -3289,8 +3316,8 @@ export default function ManagerPage() {
           <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
             <img 
-              src="/golden-attentive-logo.svg" 
-              alt="Golden Attentive" 
+              src="/golden-companies-logo.jpeg" 
+              alt="Golden Companies" 
               className="h-14 w-auto"
             />
             <div>
@@ -3301,6 +3328,19 @@ export default function ManagerPage() {
           
           {/* Action Buttons */}
           <div className="flex items-center gap-3">
+            {/* Settings Button */}
+            <button
+              onClick={() => setActiveSection("settings")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeSection === "settings"
+                  ? "bg-blue-600 text-white"
+                  : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+              }`}
+              title="System Settings & Administration"
+            >
+              ⚙️ Settings
+            </button>
+            
             {/* Theme Toggle */}
             <ThemeToggle />
             
@@ -3658,13 +3698,10 @@ export default function ManagerPage() {
         </div>
       )}
 
-      {/* Administration Section */}
-      {activeSection === "admin" && (
+      {/* Settings Section */}
+      {activeSection === "settings" && (
         <div className="space-y-8">
-          <UsersAdminSection />
-          <BlockedPhonesSection />
-          <RulesSection />
-          <SpamImportSection />
+          <UnifiedSettings />
         </div>
       )}
 

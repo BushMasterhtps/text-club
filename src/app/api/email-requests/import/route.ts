@@ -22,6 +22,11 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(`📧 Importing ${records.length} email request records`);
+    
+    // Debug: Log available columns from first record
+    if (records.length > 0) {
+      console.log('📋 Available columns:', Object.keys(records[0]));
+    }
 
     const results = {
       imported: 0,
@@ -60,12 +65,22 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Debug: Log SalesForce Case Number mapping
+        const sfCaseNum = record['SaleForce Case Num'] || 
+                         record['SaleForce Case Number (please DO NOT include any other system number) I.E 1234567'] || 
+                         record['SaleForce Case Number (please DO NOT include any other system number) I.E. 1234567'] || 
+                         null;
+        
+        if (index < 3) { // Log first 3 records for debugging
+          console.log(`📋 Record ${index + 1} - SF Case Number:`, sfCaseNum);
+        }
+
         // Create task data
         const taskData = {
           taskType: 'EMAIL_REQUESTS' as const,
           status: 'PENDING' as const,
           completionTime,
-          salesforceCaseNumber: record['SaleForce Case Number (please DO NOT include any other system number) I.E 1234567'] || null,
+          salesforceCaseNumber: sfCaseNum,
           emailRequestFor: record['What is the email request for?'] || null,
           details: record['Details'] || null,
           // Map other fields as needed

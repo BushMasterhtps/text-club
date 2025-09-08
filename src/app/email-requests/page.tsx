@@ -10,6 +10,28 @@ import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
 import SessionTimer from '@/app/_components/SessionTimer';
 import ThemeToggle from '@/app/_components/ThemeToggle';
+import { Badge } from "@/app/_components/Badge";
+import UnifiedSettings from '@/app/_components/UnifiedSettings';
+import EmailRequestsAnalytics from '@/app/_components/EmailRequestsAnalytics';
+
+// Utility functions
+function clamp(value: number | null | undefined): number {
+  if (value == null) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
+// Progress bar component
+function ProgressBar({ value }: { value: number }) {
+  const pct = clamp(value);
+  return (
+    <div className="w-full h-3 rounded-full bg-white/10 overflow-hidden">
+      <div
+        className="h-full bg-gradient-to-r from-emerald-400 to-sky-500"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
 
 // Types
 type Agent = {
@@ -31,6 +53,12 @@ type AgentProgress = {
   completedToday: number;
   lastActivity?: string | null;
   isLive?: boolean;
+  taskTypeBreakdown?: {
+    textClub: { assigned: number; inProgress: number; completedToday: number };
+    wodIvcs: { assigned: number; inProgress: number; completedToday: number };
+    emailRequests: { assigned: number; inProgress: number; completedToday: number };
+    standaloneRefunds: { assigned: number; inProgress: number; completedToday: number };
+  };
 };
 
 type Task = {
@@ -155,6 +183,7 @@ function AgentProgressSection() {
                 <th className="px-3 py-2 w-28">Assigned</th>
                 <th className="px-3 py-2 w-32">In Progress</th>
                 <th className="px-3 py-2 w-36">Completed Today</th>
+                <th className="px-3 py-2 w-44">Task Breakdown</th>
                 <th className="px-3 py-2 w-44">Last Activity</th>
                 <th className="px-3 py-2 w-1">Peek</th>
               </tr>
@@ -181,6 +210,26 @@ function AgentProgressSection() {
                     <span className="px-2 py-1 bg-green-500/20 text-green-300 rounded text-xs">
                       {row.completedToday}
                     </span>
+                  </td>
+                  <td className="px-3 py-3">
+                    {row.taskTypeBreakdown ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-blue-400">💬</span>
+                          <span>Text: {row.taskTypeBreakdown.textClub.assigned}</span>
+                          <span className="text-white/40">•</span>
+                          <span>WOD: {row.taskTypeBreakdown.wodIvcs.assigned}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-green-400">📧</span>
+                          <span>Email: {row.taskTypeBreakdown.emailRequests.assigned}</span>
+                          <span className="text-white/40">•</span>
+                          <span>Refund: {row.taskTypeBreakdown.standaloneRefunds.assigned}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-white/40">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-white/60 text-xs">
                     {row.lastActivity ? fmtDate(row.lastActivity) : "—"}
@@ -718,6 +767,19 @@ function AdminSection() {
 /* ========================================================================== */
 export default function EmailRequestsPage() {
   const [activeSection, setActiveSection] = useState("overview");
+  
+  // Overview data
+  const [overviewData, setOverviewData] = useState({
+    pendingCount: 0,
+    inProgressCount: 0,
+    completedTodayCount: 0,
+    totalCompletedCount: 0,
+    progressPercentage: 0,
+    totalTasks: 0,
+    requestTypeBreakdown: [] as Array<{ type: string; count: number }>,
+    lastImport: null as { date: string; imported: number; duplicates: number } | null
+  });
+  const [overviewLoading, setOverviewLoading] = useState(false);
   const [assistanceRequests, setAssistanceRequests] = useState<Array<{
     id: string;
     taskType: string;
@@ -735,6 +797,22 @@ export default function EmailRequestsPage() {
   // Auto logout hook
   useAutoLogout();
 
+  // Load overview data
+  const loadOverviewData = async () => {
+    setOverviewLoading(true);
+    try {
+      const response = await fetch('/api/manager/dashboard/email-requests-overview');
+      const data = await response.json();
+      if (data.success) {
+        setOverviewData(data.data);
+      }
+    } catch (error) {
+      console.error('Error loading overview data:', error);
+    } finally {
+      setOverviewLoading(false);
+    }
+  };
+
   // Load assistance requests
   const loadAssistanceRequests = async () => {
     try {
@@ -745,12 +823,15 @@ export default function EmailRequestsPage() {
           const emailRequests = data.requests.filter((req: any) => req.taskType === 'EMAIL_REQUESTS');
           setAssistanceRequests(emailRequests);
           
-          // Check for new requests
+          // Check for pending requests
           const pendingRequests = emailRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
-          if (pendingRequests.length > newAssistanceCount && newAssistanceCount > 0) {
+          
+          // Show notification if there are pending requests and it's either the first load or there are new requests
+          if (pendingRequests.length > 0 && (newAssistanceCount === 0 || pendingRequests.length > newAssistanceCount)) {
             setShowNotification(true);
             setTimeout(() => setShowNotification(false), 5000);
           }
+          
           setNewAssistanceCount(pendingRequests.length);
         }
       }
@@ -765,13 +846,19 @@ export default function EmailRequestsPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Load overview data when overview section is active
+  useEffect(() => {
+    if (activeSection === "overview") {
+      loadOverviewData();
+    }
+  }, [activeSection]);
+
   const navigationItems = [
     { id: "overview", label: "📊 Overview", description: "Email Requests metrics and progress" },
     { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage Email Request tasks" },
     { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.filter(r => r.status === "ASSISTANCE_REQUIRED").length },
     { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
-    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" },
-    { id: "admin", label: "⚙️ Administration", description: "Users, settings, and system management" }
+    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" }
   ];
 
   return (
@@ -781,8 +868,8 @@ export default function EmailRequestsPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <img 
-                src="/golden-attentive-logo.svg" 
-                alt="Golden Attentive" 
+                src="/golden-companies-logo.jpeg" 
+                alt="Golden Companies" 
                 className="h-14 w-auto"
               />
               <div>
@@ -793,6 +880,19 @@ export default function EmailRequestsPage() {
             
             {/* Action Buttons */}
             <div className="flex items-center gap-3">
+              {/* Settings Button */}
+              <button
+                onClick={() => setActiveSection("settings")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeSection === "settings"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                }`}
+                title="System Settings & Administration"
+              >
+                ⚙️ Settings
+              </button>
+              
               {/* Theme Toggle */}
               <ThemeToggle />
               
@@ -805,7 +905,10 @@ export default function EmailRequestsPage() {
               </SmallButton>
               
               {/* Switch to Agent */}
-              <SmallButton className="bg-green-600 hover:bg-green-700">
+              <SmallButton 
+                onClick={() => window.location.href = '/agent'}
+                className="bg-green-600 hover:bg-green-700"
+              >
                 Switch to Agent
               </SmallButton>
               
@@ -856,6 +959,21 @@ export default function EmailRequestsPage() {
             <div className="font-semibold">New Assistance Request{newAssistanceCount > 1 ? 's' : ''}!</div>
             <div className="text-sm opacity-90">{newAssistanceCount} agent{newAssistanceCount > 1 ? 's' : ''} need{newAssistanceCount === 1 ? 's' : ''} help</div>
           </div>
+          <button
+            onClick={() => {
+              setShowNotification(false);
+              setActiveSection("assistance");
+            }}
+            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm font-medium transition-colors"
+          >
+            View
+          </button>
+          <button
+            onClick={() => setShowNotification(false)}
+            className="text-white/70 hover:text-white text-lg leading-none"
+          >
+            ×
+          </button>
         </div>
       )}
 
@@ -865,10 +983,74 @@ export default function EmailRequestsPage() {
         {activeSection === "overview" && (
           <div className="space-y-8">
             <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">📊 Email Requests Overview</h3>
-              <div className="text-white/60 text-center py-8">
-                Overview metrics and progress tracking (coming soon)
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold">📊 Email Requests Overview</h3>
+                <SmallButton onClick={loadOverviewData} disabled={overviewLoading} className="bg-blue-600 hover:bg-blue-700">
+                  {overviewLoading ? "Loading..." : "Refresh"}
+                </SmallButton>
               </div>
+              
+              {/* Progress Overview */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-lg p-4 border border-blue-500/30">
+                  <div className="text-blue-400 text-sm font-medium">Progress</div>
+                  <div className="text-2xl font-bold mt-1">{overviewData.progressPercentage}% done</div>
+                  <div className="mt-2">
+                    <ProgressBar value={overviewData.progressPercentage} />
+                  </div>
+                  <div className="text-xs text-white/40 mt-2">Pending {overviewData.pendingCount} • Completed {overviewData.totalCompletedCount}</div>
+                </div>
+                
+                <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 rounded-lg p-4 border border-yellow-500/30">
+                  <div className="text-yellow-400 text-sm font-medium">Pending</div>
+                  <div className="text-2xl font-bold mt-1">{overviewData.pendingCount}</div>
+                  <div className="text-xs text-white/40 mt-1">Awaiting assignment</div>
+                </div>
+                
+                <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 rounded-lg p-4 border border-green-500/30">
+                  <div className="text-green-400 text-sm font-medium">Completed Today</div>
+                  <div className="text-2xl font-bold mt-1">{overviewData.completedTodayCount}</div>
+                  <div className="text-xs text-white/40 mt-1">Finished today</div>
+                </div>
+                
+                <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-lg p-4 border border-purple-500/30">
+                  <div className="text-purple-400 text-sm font-medium">In Progress</div>
+                  <div className="text-2xl font-bold mt-1">{overviewData.inProgressCount}</div>
+                  <div className="text-xs text-white/40 mt-1">Currently being worked on</div>
+                </div>
+              </div>
+
+              {/* Request Type Breakdown */}
+              {overviewData.requestTypeBreakdown.length > 0 && (
+                <div className="mb-8">
+                  <h4 className="text-md font-semibold mb-4">📋 Request Type Breakdown</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {overviewData.requestTypeBreakdown.map((item, index) => (
+                      <div key={index} className="bg-white/5 rounded-lg p-4 border border-white/10">
+                        <div className="text-white/80 text-sm font-medium truncate" title={item.type}>
+                          {item.type}
+                        </div>
+                        <div className="text-2xl font-bold mt-1 text-blue-400">{item.count}</div>
+                        <div className="text-xs text-white/40 mt-1">pending requests</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Last Import Info */}
+              {overviewData.lastImport && (
+                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                  <h4 className="text-md font-semibold mb-2">📥 Last Import</h4>
+                  <div className="text-sm text-white/80">
+                    <div>Date: {new Date(overviewData.lastImport.date).toLocaleString()}</div>
+                    <div>Imported: {overviewData.lastImport.imported} tasks</div>
+                    {overviewData.lastImport.duplicates > 0 && (
+                      <div className="text-yellow-400">Duplicates found: {overviewData.lastImport.duplicates}</div>
+                    )}
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
         )}
@@ -878,6 +1060,8 @@ export default function EmailRequestsPage() {
           <div className="space-y-8">
             <MicrosoftFormsSection />
             <CsvImportSection />
+            <AssignEmailRequestTasksSection />
+            <PendingEmailRequestTasksSection />
           </div>
         )}
 
@@ -898,22 +1082,739 @@ export default function EmailRequestsPage() {
         {/* Analytics Section */}
         {activeSection === "analytics" && (
           <div className="space-y-8">
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">📈 Analytics</h3>
-              <div className="text-white/60 text-center py-8">
-                Analytics and reporting for Email Request tasks (coming soon)
-              </div>
-            </Card>
+            <EmailRequestsAnalytics />
           </div>
         )}
 
-        {/* Administration Section */}
-        {activeSection === "admin" && (
+        {/* Settings Section */}
+        {activeSection === "settings" && (
           <div className="space-y-8">
-            <AdminSection />
+            <UnifiedSettings />
           </div>
         )}
       </div>
     </main>
+  );
+}
+
+/* ========================================================================== */
+/*  Assign Email Request Tasks Section                                        */
+/* ========================================================================== */
+function AssignEmailRequestTasksSection() {
+  const [agents, setAgents] = useState<any[]>([]);
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+  const [perAgentCap, setPerAgentCap] = useState(50);
+  const [loading, setLoading] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+
+  const loadAgents = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/manager/agents', { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAgents(data.agents);
+      }
+    } catch (error) {
+      console.error('Failed to load agents:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const assignTasks = async () => {
+    if (selectedAgents.length === 0) return;
+    
+    setAssigning(true);
+    try {
+      const res = await fetch('/api/manager/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentIds: selectedAgents,
+          perAgentCap,
+          taskType: 'EMAIL_REQUESTS'
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(`Successfully assigned ${data.assigned} Email Request tasks!`);
+        setSelectedAgents([]);
+        loadAgents(); // Refresh to update workload
+      } else {
+        alert(`Assignment failed: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to assign tasks:', error);
+      alert('Failed to assign tasks');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const toggleAgent = (agentId: string) => {
+    setSelectedAgents(prev => 
+      prev.includes(agentId) 
+        ? prev.filter(id => id !== agentId)
+        : [...prev, agentId]
+    );
+  };
+
+  const selectAll = () => {
+    setSelectedAgents(agents.map(agent => agent.id));
+  };
+
+  const selectNone = () => {
+    setSelectedAgents([]);
+  };
+
+  useEffect(() => {
+    loadAgents();
+  }, []);
+
+  return (
+    <Card className="p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <H2>✅ Assign Email Request Tasks</H2>
+        <SmallButton onClick={loadAgents} disabled={loading}>
+          {loading ? "Loading..." : "Refresh"}
+        </SmallButton>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Agent Selection */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-white/80">
+              Choose agents ({selectedAgents.length}/{agents.length} selected)
+            </label>
+            <div className="flex gap-2">
+              <SmallButton onClick={selectAll}>Select all</SmallButton>
+              <SmallButton onClick={selectNone}>Select none</SmallButton>
+            </div>
+          </div>
+
+                 <div className="space-y-2 max-h-60 overflow-y-auto">
+                   {agents.map((agent) => (
+                     <div key={agent.id} className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg">
+                       <input
+                         type="checkbox"
+                         checked={selectedAgents.includes(agent.id)}
+                         onChange={() => toggleAgent(agent.id)}
+                         className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                       />
+                       <div className="flex-1">
+                         <div className="font-medium text-white">{agent.name}</div>
+                         <div className="text-sm text-white/60">{agent.email}</div>
+                         <div className="text-xs text-white/50 mt-1 flex items-center gap-2">
+                           <span className="flex items-center gap-1">
+                             <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                             Email: {agent.emailRequestCount || 0}
+                           </span>
+                           <span className="flex items-center gap-1">
+                             <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                             Text Club: {agent.textClubCount || 0}
+                           </span>
+                           <span className="flex items-center gap-1">
+                             <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                             WOD/IVCS: {agent.wodIvcsCount || 0}
+                           </span>
+                           <span className="flex items-center gap-1">
+                             <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                             Refunds: {agent.refundCount || 0}
+                           </span>
+                           <span className="font-medium">
+                             Total: {(agent.emailRequestCount || 0) + (agent.textClubCount || 0) + (agent.wodIvcsCount || 0) + (agent.refundCount || 0)}
+                           </span>
+                         </div>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+        </div>
+
+        {/* Assignment Settings */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-white/80 mb-2">
+              Per-agent cap (this run)
+            </label>
+            <input
+              type="number"
+              value={perAgentCap}
+              onChange={(e) => setPerAgentCap(Math.min(200, Math.max(1, parseInt(e.target.value) || 1)))}
+              className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              min="1"
+              max="200"
+            />
+            <div className="text-xs text-white/60 mt-1">
+              Absolute hard cap is 200 per agent.
+            </div>
+          </div>
+
+          <PrimaryButton 
+            onClick={assignTasks}
+            disabled={assigning || selectedAgents.length === 0}
+            className="w-full"
+          >
+            {assigning ? "Assigning..." : "Assign Now"}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ========================================================================== */
+/*  Pending Email Request Tasks Section                                       */
+/* ========================================================================== */
+function PendingEmailRequestTasksSection() {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('PENDING');
+  const [assignedFilter, setAssignedFilter] = useState('anyone');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
+  const [assigning, setAssigning] = useState(false);
+  const [viewingTask, setViewingTask] = useState<any>(null);
+  const [agents, setAgents] = useState<any[]>([]);
+
+  const itemsPerPage = 50;
+
+  const loadAgents = async () => {
+    try {
+      const res = await fetch('/api/manager/agents', { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAgents(data.agents);
+      }
+    } catch (error) {
+      console.error('Failed to load agents:', error);
+    }
+  };
+
+  const loadTasks = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        status: statusFilter,
+        take: itemsPerPage.toString(),
+        skip: ((currentPage - 1) * itemsPerPage).toString(),
+        sortBy: 'createdAt',
+        sortOrder: 'desc'
+      });
+
+      if (assignedFilter !== 'anyone') {
+        if (assignedFilter === 'unassigned') {
+          // We'll handle this in the API
+        } else {
+          params.set('assignedTo', assignedFilter);
+        }
+      }
+
+      const res = await fetch(`/api/manager/tasks/email-requests?${params}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTasks(data.tasks);
+        setTotalCount(data.totalCount);
+      }
+    } catch (error) {
+      console.error('Failed to load tasks:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const assignTask = async (taskId: string, agentId: string) => {
+    setAssigning(true);
+    try {
+      const res = await fetch(`/api/manager/tasks/${taskId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: agentId
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        loadTasks(); // Refresh tasks
+      } else {
+        alert(`Assignment failed: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to assign task:', error);
+      alert('Failed to assign task');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const unassignTask = async (taskId: string) => {
+    setAssigning(true);
+    try {
+      const res = await fetch(`/api/manager/tasks/${taskId}/unassign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        loadTasks(); // Refresh tasks
+      } else {
+        alert(`Unassignment failed: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to unassign task:', error);
+      alert('Failed to unassign task');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const assignSelected = async (agentId: string) => {
+    if (selectedTasks.length === 0) return;
+    
+    setAssigning(true);
+    try {
+      let successCount = 0;
+      let errorCount = 0;
+      
+      // Assign each selected task individually (like unassignSelected)
+      for (const taskId of selectedTasks) {
+        try {
+          const res = await fetch(`/api/manager/tasks/${taskId}/assign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: agentId
+            })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            successCount++;
+          } else {
+            errorCount++;
+            console.error(`Failed to assign task ${taskId}:`, data.error);
+          }
+        } catch (error) {
+          errorCount++;
+          console.error(`Error assigning task ${taskId}:`, error);
+        }
+      }
+      
+      if (successCount === selectedTasks.length) {
+        alert(`Successfully assigned ${successCount} tasks!`);
+      } else if (successCount > 0) {
+        alert(`⚠️ ${successCount}/${selectedTasks.length} tasks assigned`);
+      } else {
+        alert(`Assignment failed for all ${selectedTasks.length} tasks`);
+      }
+      
+      setSelectedTasks([]);
+      loadTasks();
+    } catch (error) {
+      console.error('Failed to assign tasks:', error);
+      alert('Failed to assign tasks');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const unassignSelected = async () => {
+    if (selectedTasks.length === 0) return;
+    
+    setAssigning(true);
+    try {
+      let successCount = 0;
+      let errorCount = 0;
+      
+      // Unassign each task individually (like WOD/IVCS)
+      for (const taskId of selectedTasks) {
+        try {
+          const res = await fetch(`/api/manager/tasks/${taskId}/unassign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            successCount++;
+          } else {
+            errorCount++;
+            console.error(`Failed to unassign task ${taskId}:`, data.error);
+          }
+        } catch (error) {
+          errorCount++;
+          console.error(`Error unassigning task ${taskId}:`, error);
+        }
+      }
+      
+      if (successCount === selectedTasks.length) {
+        alert(`Successfully unassigned ${successCount} tasks!`);
+      } else if (successCount > 0) {
+        alert(`⚠️ ${successCount}/${selectedTasks.length} tasks unassigned`);
+      } else {
+        alert(`Unassignment failed for all ${selectedTasks.length} tasks`);
+      }
+      
+      setSelectedTasks([]);
+      loadTasks();
+    } catch (error) {
+      console.error('Failed to unassign tasks:', error);
+      alert('Failed to unassign tasks');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const toggleTask = (taskId: string) => {
+    setSelectedTasks(prev => 
+      prev.includes(taskId) 
+        ? prev.filter(id => id !== taskId)
+        : [...prev, taskId]
+    );
+  };
+
+  const selectAll = () => {
+    setSelectedTasks(tasks.map(task => task.id));
+  };
+
+  const selectNone = () => {
+    setSelectedTasks([]);
+  };
+
+  useEffect(() => {
+    loadTasks();
+    loadAgents();
+  }, [statusFilter, assignedFilter, currentPage]);
+
+  const filteredTasks = tasks.filter(task => {
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      task.email?.toLowerCase().includes(searchLower) ||
+      task.text?.toLowerCase().includes(searchLower) ||
+      task.salesforceCaseNumber?.toLowerCase().includes(searchLower) ||
+      task.emailRequestFor?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  return (
+    <Card className="p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <H2>📁 Pending Email Request Tasks</H2>
+        <SmallButton onClick={loadTasks} disabled={loading}>
+          {loading ? "Loading..." : "Refresh"}
+        </SmallButton>
+      </div>
+
+      {/* Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-white/80 mb-2">Status</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="PENDING">Pending</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-white/80 mb-2">Assigned</label>
+          <select
+            value={assignedFilter}
+            onChange={(e) => setAssignedFilter(e.target.value)}
+            className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="anyone">Anyone</option>
+            <option value="unassigned">Unassigned</option>
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-white/80 mb-2">Search</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search email, name, case number..."
+              className="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <SmallButton onClick={loadTasks}>Search</SmallButton>
+          </div>
+        </div>
+      </div>
+
+      {/* Bulk Actions */}
+      {selectedTasks.length > 0 && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-white">
+              {selectedTasks.length} task{selectedTasks.length !== 1 ? 's' : ''} selected
+            </span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-white/80 text-sm">Assign selected to:</span>
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      assignSelected(e.target.value);
+                      e.target.value = '';
+                    }
+                  }}
+                  disabled={assigning}
+                  className="px-3 py-1 bg-white/10 border border-white/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  defaultValue=""
+                >
+                  <option value="">Choose agent...</option>
+                  {agents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <SmallButton onClick={selectNone}>Clear Selection</SmallButton>
+                <SmallButton onClick={unassignSelected} disabled={assigning}>
+                  Unassign Selected
+                </SmallButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tasks Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-white/10">
+              <th className="text-left py-3 px-2">
+                <input
+                  type="checkbox"
+                  checked={selectedTasks.length === tasks.length && tasks.length > 0}
+                  onChange={selectedTasks.length === tasks.length ? selectNone : selectAll}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                />
+              </th>
+              <th className="text-left py-3 px-2 text-white/80">Status</th>
+              <th className="text-left py-3 px-2 text-white/80">Email</th>
+              <th className="text-left py-3 px-2 text-white/80">Name</th>
+              <th className="text-left py-3 px-2 text-white/80">SF Case</th>
+              <th className="text-left py-3 px-2 text-white/80">Request Type</th>
+              <th className="text-left py-3 px-2 text-white/80">Assigned To</th>
+              <th className="text-left py-3 px-2 text-white/80">Created</th>
+              <th className="text-left py-3 px-2 text-white/80">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredTasks.map((task) => (
+              <tr key={task.id} className="border-b border-white/5 hover:bg-white/5">
+                <td className="py-3 px-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedTasks.includes(task.id)}
+                    onChange={() => toggleTask(task.id)}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                </td>
+                <td className="py-3 px-2">
+                  <span className={`px-2 py-1 rounded text-xs ${
+                    task.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-400' :
+                    task.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
+                    'bg-green-500/20 text-green-400'
+                  }`}>
+                    {task.status}
+                  </span>
+                </td>
+                <td className="py-3 px-2 text-white/80">{task.email || 'N/A'}</td>
+                <td className="py-3 px-2 text-white/80">{task.text || 'N/A'}</td>
+                <td className="py-3 px-2 text-white/80">{task.salesforceCaseNumber || 'N/A'}</td>
+                <td className="py-3 px-2 text-white/80">{task.emailRequestFor || 'N/A'}</td>
+                <td className="py-3 px-2 text-white/80">
+                  {task.assignedTo ? task.assignedTo.name : 'Unassigned'}
+                </td>
+                <td className="py-3 px-2 text-white/60">{fmtDate(task.createdAt)}</td>
+                <td className="py-3 px-2">
+                  <div className="flex gap-1">
+                    <SmallButton onClick={() => setViewingTask(task)}>
+                      View
+                    </SmallButton>
+                    {task.assignedTo ? (
+                      <SmallButton 
+                        onClick={() => unassignTask(task.id)}
+                        disabled={assigning}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        Unassign
+                      </SmallButton>
+                    ) : (
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            assignTask(task.id, e.target.value);
+                            e.target.value = '';
+                          }
+                        }}
+                        disabled={assigning}
+                        className="px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        defaultValue=""
+                      >
+                        <option value="">Assign to...</option>
+                        {agents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between">
+        <div className="text-white/60">
+          Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} tasks
+        </div>
+        <div className="flex gap-2">
+          <SmallButton 
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+          >
+            Previous
+          </SmallButton>
+          <span className="px-3 py-1 text-white/80">Page {currentPage}</span>
+          <SmallButton 
+            onClick={() => setCurrentPage(prev => prev + 1)}
+            disabled={currentPage * itemsPerPage >= totalCount}
+          >
+            Next
+          </SmallButton>
+        </div>
+      </div>
+
+      {/* Task Preview Modal */}
+      {viewingTask && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-neutral-800 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">
+                Email Request Task Details
+              </h3>
+              <SmallButton onClick={() => setViewingTask(null)}>
+                Close
+              </SmallButton>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[60vh] space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-white/80">Status</label>
+                  <div className="text-white">
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      viewingTask.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-400' :
+                      viewingTask.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-green-500/20 text-green-400'
+                    }`}>
+                      {viewingTask.status}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-white/80">Assigned To</label>
+                  <div className="text-white">
+                    {viewingTask.assignedTo ? viewingTask.assignedTo.name : 'Unassigned'}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-white/80">Email</label>
+                  <div className="text-white">{viewingTask.email || 'N/A'}</div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-white/80">Name</label>
+                  <div className="text-white">{viewingTask.text || 'N/A'}</div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-white/80">SalesForce Case</label>
+                  <div className="text-white">{viewingTask.salesforceCaseNumber || 'N/A'}</div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-white/80">Request Type</label>
+                  <div className="text-white">{viewingTask.emailRequestFor || 'N/A'}</div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-white/80">Completion Time</label>
+                  <div className="text-white">
+                    {viewingTask.completionTime ? fmtDate(viewingTask.completionTime) : 'N/A'}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-white/80">Created</label>
+                  <div className="text-white">{fmtDate(viewingTask.createdAt)}</div>
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-white/80">Details</label>
+                <div className="mt-1 p-3 bg-white/5 rounded-lg text-white whitespace-pre-wrap">
+                  {viewingTask.details || 'No details provided'}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                {viewingTask.assignedTo ? (
+                  <SmallButton 
+                    onClick={() => {
+                      unassignTask(viewingTask.id);
+                      setViewingTask(null);
+                    }}
+                    disabled={assigning}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    Unassign Task
+                  </SmallButton>
+                ) : (
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        assignTask(viewingTask.id, e.target.value);
+                        setViewingTask(null);
+                        e.target.value = '';
+                      }
+                    }}
+                    disabled={assigning}
+                    className="px-3 py-2 bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    defaultValue=""
+                  >
+                    <option value="">Assign to...</option>
+                    {agents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

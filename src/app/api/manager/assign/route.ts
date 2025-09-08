@@ -10,8 +10,11 @@ import { PrismaClient, TaskStatus } from "@prisma/client";
 const prisma = new PrismaClient();
 
 type PostBody = {
-  agents: string[];     // array of agent emails selected in the UI
-  perAgent?: number;    // cap per agent for this run
+  agents?: string[];     // array of agent emails selected in the UI (legacy)
+  agentIds?: string[];   // array of agent IDs selected in the UI (new)
+  perAgent?: number;     // cap per agent for this run
+  perAgentCap?: number;  // cap per agent for this run (new)
+  taskType?: string;     // filter by task type (new)
 };
 
 type AgentLite = { id: string; email: string; name: string | null };
@@ -23,20 +26,33 @@ const labelFor = (a: AgentLite): string => a.name?.trim() || a.email;
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as PostBody | null;
-    const emails = Array.from(
-      new Set((body?.agents ?? []).map((e) => e.trim()).filter(Boolean))
-    );
+    
+    // Handle both legacy (emails) and new (agentIds) formats
+    let agentIds: string[] = [];
+    if (body?.agentIds && Array.isArray(body.agentIds)) {
+      agentIds = body.agentIds;
+    } else if (body?.agents && Array.isArray(body.agents)) {
+      // Legacy: resolve emails to IDs
+      const emails = Array.from(
+        new Set((body.agents).map((e) => e.trim()).filter(Boolean))
+      );
+      const agents = await prisma.user.findMany({
+        where: { email: { in: emails } },
+        select: { id: true },
+      });
+      agentIds = agents.map(a => a.id);
+    }
 
     // Per-agent cap sanity (hard-cap 200 per your UI copy)
-    const perAgent = Math.max(1, Math.min(Number(body?.perAgent ?? 0) || 0, 200));
+    const perAgent = Math.max(1, Math.min(Number(body?.perAgentCap ?? body?.perAgent ?? 0) || 0, 200));
 
-    if (emails.length === 0 || perAgent <= 0) {
+    if (agentIds.length === 0 || perAgent <= 0) {
       return NextResponse.json({ success: true, assigned: {} as Record<string, string[]> });
     }
 
-    // Resolve agents by email (id + name/email for label)
+    // Resolve agents by ID (id + name/email for label)
     const agents = await prisma.user.findMany({
-      where: { email: { in: emails } },
+      where: { id: { in: agentIds } },
       select: { id: true, email: true, name: true },
     });
 
@@ -53,11 +69,18 @@ export async function POST(req: Request) {
 
     // Pull candidate tasks: only PENDING, unassigned, oldest first
     const totalNeed = agentOrder.length * perAgent;
+    const whereClause: any = {
+      status: TaskStatus.PENDING,
+      assignedToId: null,
+    };
+    
+    // Filter by task type if specified
+    if (body?.taskType) {
+      whereClause.taskType = body.taskType;
+    }
+    
     const candidates = await prisma.task.findMany({
-      where: {
-        status: TaskStatus.PENDING,
-        assignedToId: null,
-      },
+      where: whereClause,
       orderBy: [{ createdAt: "asc" }],
       take: totalNeed,
       select: { id: true },
@@ -96,12 +119,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, assigned: {} as Record<string, string[]> });
     }
 
-    // Persist: set assignedToId + move to IN_PROGRESS
+    // Persist: set assignedToId + set to IN_PROGRESS when assigned
     await prisma.$transaction(
       plan.map((p: PlanEntry) =>
         prisma.task.update({
           where: { id: p.taskId },
-          data: { assignedToId: p.agentId, status: TaskStatus.IN_PROGRESS },
+          data: { 
+            assignedToId: p.agentId, 
+            status: TaskStatus.IN_PROGRESS,
+            // Clear any previous task data when assigning
+            startTime: null,
+            endTime: null,
+            durationSec: null,
+            disposition: null,
+            assistanceNotes: null,
+            managerResponse: null,
+          },
         })
       )
     );
