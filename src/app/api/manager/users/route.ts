@@ -64,11 +64,32 @@ export async function POST(req: Request) {
 // DELETE: remove access (set isLive to false, clear lastSeen)
 export async function DELETE(req: Request) {
   try {
+    // Try to get ID from query parameters first, then from request body
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
+    let id = searchParams.get('id');
+    
+    // If not in query params, try request body
+    if (!id) {
+      try {
+        const body = await req.json().catch(() => ({}));
+        id = body?.id;
+      } catch (e) {
+        // Ignore JSON parse errors
+      }
+    }
     
     if (!id) {
       return NextResponse.json({ success: false, error: "User ID required" }, { status: 400 });
+    }
+
+    // Check if user exists first
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, email: true, isActive: true }
+    });
+
+    if (!existingUser) {
+      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
     const updated = await prisma.user.update({
@@ -87,6 +108,7 @@ export async function DELETE(req: Request) {
       user: updated 
     });
   } catch (err: any) {
+    console.error("Remove access error:", err);
     return NextResponse.json({ 
       success: false, 
       error: err?.message || "Failed to remove access" 
