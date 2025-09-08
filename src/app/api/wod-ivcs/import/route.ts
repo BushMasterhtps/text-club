@@ -173,10 +173,20 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    console.log(`✅ Import completed: ${results.imported} imported, ${results.duplicates} duplicates, ${results.errors} errors`);
+
     return NextResponse.json({
       success: true,
       message: `Import completed: ${results.imported} imported, ${results.duplicates} duplicates, ${results.errors} errors`,
-      results,
+      results: {
+        imported: results.imported,
+        duplicates: results.duplicates,
+        filtered: results.filtered,
+        errors: results.errors,
+        totalRows: records.length,
+      },
+      duplicateDetails: results.duplicateDetails.slice(0, 5), // Limit for faster response
+      errorDetails: results.errorDetails.slice(0, 5), // Limit for faster response
     });
 
   } catch (error) {
