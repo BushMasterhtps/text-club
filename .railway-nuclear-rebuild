@@ -1,0 +1,4 @@
+RAILWAY NUCLEAR REBUILD: Force complete rebuild to fix Prisma client cache issues
+Timestamp: $(date +%s)
+Issue: Railway using old Prisma client (6.15.0) with mismatched schema
+Solution: Force complete rebuild with fresh Prisma client and schema sync
