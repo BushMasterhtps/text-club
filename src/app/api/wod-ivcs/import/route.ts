@@ -215,7 +215,7 @@ function buildTaskData(record: any, source: string) {
         amount: record["Amount"] ? parseFloat(record["Amount"]) : null,
         webOrderDifference: record["Web total Difference"] ? parseFloat(record["Web total Difference"]) : null,
         customerName: record["Name"] || null, // Add customerName for consistency
-        orderDate: parseDate(record["Date"]),
+        purchaseDate: parseDate(record["Date"]),
         text: `Invalid Cash Sale - ${record["Name"] || "Unknown"}`,
       };
 
@@ -237,7 +237,7 @@ function buildTaskData(record: any, source: string) {
         webOrderDifference: discrepancy, // Map NS vs Web Discrepancy to webOrderDifference for display
         nsVsWebDiscrepancy: discrepancy,
         customerName: record["Name"] || null,
-        orderDate: parseDate(record["Date"]),
+        purchaseDate: parseDate(record["Date"]),
         text: `Order Not Downloading - ${record["Name"] || "Unknown"}`,
       };
 
