@@ -575,6 +575,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   const [items, setItems] = useState<
     Array<{
       id: string;
+      taskId?: string | null;
       brand: string | null;
       text: string | null;
       createdAt: string;
@@ -660,7 +661,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
       for (const r of items) next[r.id] = true;
       return next;
     });
-  const checkedIds = items.filter((r) => selected[r.id]).map((r) => r.id);
+  const checkedIds = items.filter((r) => selected[r.id]).map((r) => r.taskId || r.id);
 
   async function bulkAssign(agentId: string) {
     if (checkedIds.length === 0) return;
@@ -920,8 +921,19 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
                       <SmallButton onClick={() => rowSpam(r.id)}>Spam Review</SmallButton>
                       <SmallButton
                         onClick={async () => {
-                          setSelected((m) => ({ ...m, [r.id]: true }));
-                          await bulkUnassign();
+                          const taskId = r.taskId || r.id;
+                          const res = await fetch("/api/manager/tasks/unassign", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ ids: [taskId] }),
+                          });
+                          const data = await res.json().catch(() => null);
+                          if (!res.ok || !data?.success) { 
+                            alert(data?.error || "Unassign failed"); 
+                            return; 
+                          }
+                          await fetchPage(page);
+                          try { await onTasksMutated?.(); } catch {}
                         }}
                       >
                         Unassign
