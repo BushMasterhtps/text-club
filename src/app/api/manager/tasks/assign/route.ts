@@ -312,7 +312,7 @@ export async function POST(req: Request) {
           },
           data: { 
             assignedToId: agent.id,
-            status: "PENDING", // Keep as PENDING so agent can click Start
+            status: "IN_PROGRESS", // Assigned tasks = IN_PROGRESS
             // Don't set startTime yet - agent will set it when they click Start
           },
         });

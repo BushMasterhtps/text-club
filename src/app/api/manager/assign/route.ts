@@ -113,14 +113,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, assigned: {} as Record<string, string[]> });
     }
 
-    // Persist: set assignedToId + set to PENDING when assigned (agent will set to IN_PROGRESS when they start)
+    // Persist: set assignedToId + set to IN_PROGRESS when assigned
     await prisma.$transaction(
       plan.map((p: PlanEntry) =>
         prisma.task.update({
           where: { id: p.taskId },
           data: { 
             assignedToId: p.agentId, 
-            status: TaskStatus.PENDING, // Keep as PENDING so agent can click Start
+            status: TaskStatus.IN_PROGRESS, // Assigned tasks = IN_PROGRESS
             // Clear any previous task data when assigning
             startTime: null,
             endTime: null,
