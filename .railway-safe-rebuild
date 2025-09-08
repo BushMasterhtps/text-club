@@ -1,0 +1,4 @@
+RAILWAY SAFE REBUILD: Remove db push to avoid connection limits
+Timestamp: $(date +%s)
+Issue: db push causes "too many clients" error during build
+Solution: Generate fresh Prisma client without db push
