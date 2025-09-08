@@ -1,13 +1,7 @@
 // src/app/api/manager/assign/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, TaskStatus } from "@prisma/client";
-
-/**
- * Create a Prisma client locally (no "@/lib/db" alias needed).
- * For simplicity we instantiate per request; if you prefer a global
- * cached client, you can switch to the globalThis pattern later.
- */
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import { TaskStatus } from "@prisma/client";
 
 type PostBody = {
   agents?: string[];     // array of agent emails selected in the UI (legacy)
@@ -119,14 +113,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, assigned: {} as Record<string, string[]> });
     }
 
-    // Persist: set assignedToId + set to IN_PROGRESS when assigned
+    // Persist: set assignedToId + set to PENDING when assigned (agent will set to IN_PROGRESS when they start)
     await prisma.$transaction(
       plan.map((p: PlanEntry) =>
         prisma.task.update({
           where: { id: p.taskId },
           data: { 
             assignedToId: p.agentId, 
-            status: TaskStatus.IN_PROGRESS,
+            status: TaskStatus.PENDING, // Keep as PENDING so agent can click Start
             // Clear any previous task data when assigning
             startTime: null,
             endTime: null,

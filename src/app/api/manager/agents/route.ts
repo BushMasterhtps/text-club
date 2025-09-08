@@ -1,8 +1,7 @@
 // src/app/api/manager/agents/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, type $Enums } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import type { $Enums } from "@prisma/client";
 
 // Which statuses count as "open"
 const OPEN_STATUSES: $Enums.TaskStatus[] = [

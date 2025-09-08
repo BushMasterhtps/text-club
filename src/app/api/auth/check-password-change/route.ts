@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getAuthFromHeaders } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    // Get user from JWT token in headers (set by middleware)
-    const userId = request.headers.get('x-user-id');
-    if (!userId) {
+    // Get user from JWT token in headers
+    const authResult = getAuthFromHeaders(request);
+    
+    if (!authResult.success) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -14,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     // Get user from database
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: authResult.userId },
       select: {
         mustChangePassword: true
       }

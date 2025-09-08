@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getAuthFromHeaders } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -23,9 +24,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user from JWT token in headers (set by middleware)
-    const userId = request.headers.get('x-user-id');
-    if (!userId) {
+    // Get user from JWT token in headers
+    const authResult = getAuthFromHeaders(request);
+    
+    if (!authResult.success) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     // Get user from database
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: authResult.userId },
       select: {
         id: true,
         password: true,
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     // Update user password and mark as changed
     await prisma.user.update({
-      where: { id: userId },
+      where: { id: authResult.userId },
       data: {
         password: hashedNewPassword,
         mustChangePassword: false
