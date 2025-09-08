@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    const totalPending = pendingRawMessages + pendingTasks;
+    const totalPending = pendingTasks; // Only count actual pending tasks, not raw messages
     const totalAll = totalPending + spamReview + totalCompleted + inProgress + assistanceRequired;
     const pctDone = totalAll > 0 ? Math.round((totalCompleted / totalAll) * 100) : 0;
 
@@ -73,6 +73,7 @@ export async function GET(request: NextRequest) {
       success: true,
       metrics: {
         pending: totalPending,
+        pendingRawMessages, // Include raw message count separately
         spamReview,
         completedToday,
         totalCompleted,
