@@ -53,8 +53,7 @@ export async function GET(req: Request) {
 
     // Calculate stats
     const assigned = tasks.filter(t => 
-      ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"].includes(t.status) &&
-      t.createdAt >= dateStart && t.createdAt < dateEnd
+      ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"].includes(t.status)
     ).length;
     
     const completed = tasks.filter(t => {
