@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
         source: 'EMAIL_REQUESTS',
         fileName: file.name,
         importedBy: 'system', // TODO: Get from auth
+        taskType: 'EMAIL_REQUESTS', // Set task type for filtering
         totalRows: records.length,
         imported: 0,
         duplicates: 0,

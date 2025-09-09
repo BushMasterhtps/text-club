@@ -347,6 +347,7 @@ model ImportSession {
   fileName    String   // Original CSV filename
   importedAt  DateTime @default(now())
   importedBy  String?  // User ID who imported
+  taskType    String?  // Task type for filtering (WOD_IVCS, EMAIL_REQUESTS, etc.)
   
   // Import results
   totalRows   Int      @default(0)

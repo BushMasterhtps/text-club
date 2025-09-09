@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
         source: source,
         fileName: file.name,
         importedBy: 'system', // TODO: Get from auth
+        taskType: 'WOD_IVCS', // Set task type for filtering
         totalRows: records.length,
         imported: 0,
         duplicates: 0,
