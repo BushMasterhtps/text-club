@@ -102,6 +102,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
+      version: "2.0", // Force cache invalidation
       archivedCount: rows.length,
       affectedIds: rows.map((r) => r.id),
     });

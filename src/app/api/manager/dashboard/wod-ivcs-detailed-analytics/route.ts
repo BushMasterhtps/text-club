@@ -48,7 +48,8 @@ export async function GET(request: Request) {
     });
 
     // Get import sessions in the date range
-    // CACHE BUST: Force new deployment to clear Netlify cache
+    // CACHE BUST: Force new deployment to clear Netlify cache - v2
+    // Timestamp: ${new Date().toISOString()}
     const importSessionData = await prisma.importSession.findMany({
       where: {
         importedAt: {
@@ -202,6 +203,7 @@ export async function GET(request: Request) {
 
     const response = NextResponse.json({
       success: true,
+      version: "2.0", // Force cache invalidation
       data: {
         dateRange: {
           start: start.toISOString(),

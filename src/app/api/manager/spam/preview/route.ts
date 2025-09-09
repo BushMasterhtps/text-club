@@ -102,6 +102,7 @@ export async function GET() {
 
   return NextResponse.json({
     success: true,
+    version: "2.0", // Force cache invalidation
     totalPending: raws.length,
     rules: rules.map((r) => r.pattern),
     matchedCount,
