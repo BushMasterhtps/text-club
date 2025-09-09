@@ -87,8 +87,8 @@ export async function POST(req: Request) {
       });
     });
 
-    // Execute upserts in batches (SQLite param-friendly)
-    const BATCH = 500;
+    // Execute upserts in smaller batches to prevent timeouts
+    const BATCH = 50; // Reduced from 500 to prevent timeouts
     for (const group of chunk(upserts, BATCH)) {
       await prisma.$transaction(group);
     }

@@ -71,6 +71,10 @@ export function CsvImportSection({ onImportComplete }: CsvImportSectionProps = {
         body: formData,
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       const data = await response.json();
 
       if (data.success) {

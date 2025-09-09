@@ -1096,8 +1096,18 @@ function SpamPreviewCaptureSection() {
   async function doPreview() {
     try {
       setPreviewLoading(true);
-      const data = await fetch("/api/manager/spam/preview", { cache: "no-store" }).then((r) => r.json());
+      const response = await fetch("/api/manager/spam/preview", { cache: "no-store" });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
       setPreview(data);
+    } catch (error) {
+      console.error("Preview error:", error);
+      setPreview(null);
+      alert(`Preview failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setPreviewLoading(false);
     }
