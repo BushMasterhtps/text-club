@@ -43,7 +43,7 @@ export async function GET() {
     where: { status: { in: [RawStatus.READY, RawStatus.PROMOTED] } },
     select: { id: true, brand: true, text: true },
     orderBy: { createdAt: "desc" },
-    take: 1000, // Reduced from 5000 to prevent timeouts
+    take: 500, // Further reduced to prevent timeouts
   });
 
   let matchedCount = 0;

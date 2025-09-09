@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     console.log(`📥 Importing ${records.length} records from ${source}`);
 
     // Process in smaller batches to avoid timeout
-    const BATCH_SIZE = 50;
+    const BATCH_SIZE = 25;
     const batches = [];
     for (let i = 0; i < records.length; i += BATCH_SIZE) {
       batches.push(records.slice(i, i + BATCH_SIZE));
@@ -175,6 +175,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Import completed: ${results.imported} imported, ${results.duplicates} duplicates, ${results.errors} errors`);
 
+    // Return a simplified response to prevent timeouts
     return NextResponse.json({
       success: true,
       message: `Import completed: ${results.imported} imported, ${results.duplicates} duplicates, ${results.errors} errors`,
@@ -184,9 +185,8 @@ export async function POST(request: NextRequest) {
         filtered: results.filtered,
         errors: results.errors,
         totalRows: records.length,
-      },
-      duplicateDetails: results.duplicateDetails.slice(0, 5), // Limit for faster response
-      errorDetails: results.errorDetails.slice(0, 5), // Limit for faster response
+      }
+      // Removed duplicateDetails and errorDetails to prevent timeout
     });
 
   } catch (error) {

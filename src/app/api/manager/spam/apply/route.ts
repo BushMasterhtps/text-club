@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     });
 
     // Execute upserts in smaller batches to prevent timeouts
-    const BATCH = 50; // Reduced from 500 to prevent timeouts
+    const BATCH = 25; // Further reduced to prevent timeouts
     for (const group of chunk(upserts, BATCH)) {
       await prisma.$transaction(group);
     }
