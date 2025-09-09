@@ -34,6 +34,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
  * Returns: { success: true, archivedCount, affectedIds: string[] }
  */
 export async function POST(req: Request) {
+  // CACHE BUST: Force new deployment to clear Netlify cache
   try {
     const body = await req.json().catch(() => ({}));
     const ids = Array.isArray(body?.ids) ? (body.ids as string[]) : undefined;

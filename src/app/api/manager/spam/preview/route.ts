@@ -31,6 +31,7 @@ function ruleMatchesText(
 }
 
 export async function GET() {
+  // CACHE BUST: Force new deployment to clear Netlify cache
   // 1) load enabled rules
   const rules = await prisma.spamRule.findMany({
     where: { enabled: true },
