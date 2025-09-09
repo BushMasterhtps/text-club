@@ -159,24 +159,80 @@ export async function GET(request: NextRequest) {
       duration: task.durationSec ? Math.round(task.durationSec / 60) : null // Convert to minutes
     }));
 
+    // Generate trend data for charts
+    const trendData = {
+      labels: monthlyTrends.map(t => t.month),
+      completed: monthlyTrends.map(t => t.completed),
+      unable: monthlyTrends.map(t => t.unableToComplete),
+      previousCompleted: [], // Will be populated if comparison period has data
+      previousUnable: [] // Will be populated if comparison period has data
+    };
+
+    // Generate previous period trend data if comparison period is valid
+    if (comparePeriod === 'previous' && comparisonStart.getTime() > 0) {
+      const previousMonthlyTrends = [];
+      for (let i = 0; i < 12; i++) {
+        const monthStart = new Date(comparisonStart.getFullYear(), i, 1);
+        const monthEnd = new Date(comparisonStart.getFullYear(), i + 1, 0, 23, 59, 59);
+        
+        const monthTasks = comparisonPeriodTasks.filter(task => 
+          task.createdAt >= monthStart && task.createdAt <= monthEnd
+        );
+        
+        previousMonthlyTrends.push({
+          month: months[i],
+          completed: monthTasks.filter(task => task.status === 'COMPLETED').length,
+          unableToComplete: monthTasks.filter(task => task.status === 'UNABLE_TO_COMPLETE').length
+        });
+      }
+      
+      trendData.previousCompleted = previousMonthlyTrends.map(t => t.completed);
+      trendData.previousUnable = previousMonthlyTrends.map(t => t.unableToComplete);
+    }
+
     const analytics = {
-      kpis: {
+      summary: {
         totalCompleted: currentCompleted,
         completionRate: Math.round(currentCompletionRate * 100) / 100,
         avgDuration: Math.round(avgDuration / 60), // Convert to minutes
-        unableToComplete: currentUnableToComplete
+        unableToComplete: currentUnableToComplete,
+        completedTrend: { 
+          change: currentCompleted - comparisonCompleted, 
+          percentage: completedVsPrevious 
+        },
+        completionRateTrend: { 
+          change: currentCompletionRate - comparisonCompletionRate, 
+          percentage: completionRateChange 
+        },
+        durationTrend: { 
+          change: avgDuration - comparisonAvgDuration, 
+          percentage: durationChange 
+        },
+        unableTrend: { 
+          change: currentUnableToComplete - (comparisonPeriodTasks.filter(task => task.status === 'UNABLE_TO_COMPLETE').length), 
+          percentage: 0 // Calculate if needed
+        }
       },
       comparison: {
-        completedVsPrevious: Math.round(completedVsPrevious * 100) / 100,
+        completedChange: Math.round(completedVsPrevious * 100) / 100,
         completionRateChange: Math.round(completionRateChange * 100) / 100,
         durationChange: Math.round(durationChange * 100) / 100
       },
       charts: {
-        monthlyTrends,
+        trend: trendData,
         dispositions: dispositionBreakdown
       },
-      unableToCompleteBreakdown,
-      emailDetails
+      emailDetails: emailDetails.map(task => ({
+        taskId: task.id,
+        sfOrderNumber: task.salesforceCaseNumber || '',
+        email: task.assignedTo || '',
+        disposition: task.disposition || '',
+        notes: task.details || '',
+        createdAt: task.createdAt.toISOString(),
+        duration: task.duration,
+        startTime: null, // Not available in current data
+        endTime: task.completedAt?.toISOString() || null
+      }))
     };
 
     return NextResponse.json({ success: true, analytics });

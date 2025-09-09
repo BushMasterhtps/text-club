@@ -97,7 +97,7 @@ export default function EmailRequestsAnalytics() {
       );
       const data = await response.json();
 
-      if (data.success) {
+      if (data.success && data.analytics) {
         setAnalytics(data.analytics);
       } else {
         setError(data.error || 'Failed to load analytics');
@@ -379,40 +379,40 @@ export default function EmailRequestsAnalytics() {
           {/* Summary Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-lg p-6 text-center">
-              <div className="text-3xl font-bold mb-2">{analytics.summary.totalCompleted}</div>
+              <div className="text-3xl font-bold mb-2">{analytics.summary?.totalCompleted || 0}</div>
               <div className="text-sm opacity-90 mb-1">Total Completed</div>
-              {formatTrend(analytics.summary.completedTrend)}
+              {analytics.summary?.completedTrend ? formatTrend(analytics.summary.completedTrend) : <span className="text-gray-400 text-sm">→ 0%</span>}
             </div>
             <div className="bg-gradient-to-br from-green-600 to-green-700 text-white rounded-lg p-6 text-center">
-              <div className="text-3xl font-bold mb-2">{analytics.summary.completionRate.toFixed(1)}%</div>
+              <div className="text-3xl font-bold mb-2">{(analytics.summary?.completionRate || 0).toFixed(1)}%</div>
               <div className="text-sm opacity-90 mb-1">Completion Rate</div>
-              {formatTrend(analytics.summary.completionRateTrend)}
+              {analytics.summary?.completionRateTrend ? formatTrend(analytics.summary.completionRateTrend) : <span className="text-gray-400 text-sm">→ 0%</span>}
             </div>
             <div className="bg-gradient-to-br from-yellow-600 to-yellow-700 text-white rounded-lg p-6 text-center">
-              <div className="text-3xl font-bold mb-2">{analytics.summary.avgDuration}</div>
+              <div className="text-3xl font-bold mb-2">{analytics.summary?.avgDuration || 0}</div>
               <div className="text-sm opacity-90 mb-1">Avg Duration (min)</div>
-              {formatTrend(analytics.summary.durationTrend)}
+              {analytics.summary?.durationTrend ? formatTrend(analytics.summary.durationTrend) : <span className="text-gray-400 text-sm">→ 0%</span>}
             </div>
             <div className="bg-gradient-to-br from-red-600 to-red-700 text-white rounded-lg p-6 text-center">
-              <div className="text-3xl font-bold mb-2">{analytics.summary.unableToComplete}</div>
+              <div className="text-3xl font-bold mb-2">{analytics.summary?.unableToComplete || 0}</div>
               <div className="text-sm opacity-90 mb-1">Unable to Complete</div>
-              {formatTrend(analytics.summary.unableTrend)}
+              {analytics.summary?.unableTrend ? formatTrend(analytics.summary.unableTrend) : <span className="text-gray-400 text-sm">→ 0%</span>}
             </div>
           </div>
 
           {/* Comparison Cards */}
-          {(analytics.comparison.completedChange !== 0 || analytics.comparison.completionRateChange !== 0 || analytics.comparison.durationChange !== 0) && (
+          {analytics.comparison && (analytics.comparison.completedChange !== 0 || analytics.comparison.completionRateChange !== 0 || analytics.comparison.durationChange !== 0) && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg p-4 text-center border border-gray-600">
-                <div className="text-xl font-bold mb-1">{formatComparison(analytics.comparison.completedChange)}</div>
+                <div className="text-xl font-bold mb-1">{formatComparison(analytics.comparison.completedChange || 0)}</div>
                 <div className="text-xs text-gray-300">Completed vs Previous</div>
               </div>
               <div className="bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg p-4 text-center border border-gray-600">
-                <div className="text-xl font-bold mb-1">{formatComparison(analytics.comparison.completionRateChange, true)}</div>
+                <div className="text-xl font-bold mb-1">{formatComparison(analytics.comparison.completionRateChange || 0, true)}</div>
                 <div className="text-xs text-gray-300">Completion Rate Change</div>
               </div>
               <div className="bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg p-4 text-center border border-gray-600">
-                <div className="text-xl font-bold mb-1">{formatComparison(analytics.comparison.durationChange)}</div>
+                <div className="text-xl font-bold mb-1">{formatComparison(analytics.comparison.durationChange || 0)}</div>
                 <div className="text-xs text-gray-300">Duration Change (min)</div>
               </div>
             </div>
@@ -424,11 +424,11 @@ export default function EmailRequestsAnalytics() {
               <h3 className="text-lg font-semibold mb-4 text-white">Monthly Trend</h3>
               <Line
                 data={{
-                  labels: analytics.charts.trend.labels,
+                  labels: analytics.charts?.trend?.labels || [],
                   datasets: [
                     {
                       label: 'Completed',
-                      data: analytics.charts.trend.completed,
+                      data: analytics.charts?.trend?.completed || [],
                       borderColor: 'rgba(34, 197, 94, 1)',
                       backgroundColor: 'rgba(34, 197, 94, 0.1)',
                       tension: 0.4,
@@ -436,13 +436,13 @@ export default function EmailRequestsAnalytics() {
                     },
                     {
                       label: 'Unable to Complete',
-                      data: analytics.charts.trend.unable,
+                      data: analytics.charts?.trend?.unable || [],
                       borderColor: 'rgba(239, 68, 68, 1)',
                       backgroundColor: 'rgba(239, 68, 68, 0.1)',
                       tension: 0.4,
                       borderWidth: 3
                     },
-                    ...(analytics.charts.trend.previousCompleted.length > 0 ? [
+                    ...(analytics.charts?.trend?.previousCompleted?.length > 0 ? [
                       {
                         label: 'Previous Period - Completed',
                         data: analytics.charts.trend.previousCompleted,
@@ -478,9 +478,9 @@ export default function EmailRequestsAnalytics() {
               <h3 className="text-lg font-semibold mb-4 text-white">Disposition Breakdown</h3>
               <Doughnut
                 data={{
-                  labels: analytics.charts.dispositions.labels,
+                  labels: analytics.charts?.dispositions?.labels || [],
                   datasets: [{
-                    data: analytics.charts.dispositions.data,
+                    data: analytics.charts?.dispositions?.data || [],
                     backgroundColor: [
                       'rgba(34, 197, 94, 0.8)',
                       'rgba(239, 68, 68, 0.8)',
@@ -508,15 +508,15 @@ export default function EmailRequestsAnalytics() {
           <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
             <h3 className="text-lg font-semibold mb-4 text-white">Unable to Complete Breakdown</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {analytics.charts.dispositions.labels
-                .map((label, index) => ({ label, count: analytics.charts.dispositions.data[index] }))
-                .filter(item => item.label.toLowerCase().includes('unable'))
-                .map((disposition, index) => (
+              {analytics.charts?.dispositions?.labels
+                ?.map((label, index) => ({ label, count: analytics.charts.dispositions.data[index] }))
+                ?.filter(item => item.label.toLowerCase().includes('unable'))
+                ?.map((disposition, index) => (
                   <div key={index} className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
                     <div className="text-sm text-red-400 font-medium mb-1">{disposition.label}</div>
                     <div className="text-2xl font-bold text-red-300">{disposition.count}</div>
                   </div>
-                ))}
+                )) || []}
             </div>
           </div>
 
@@ -576,7 +576,7 @@ export default function EmailRequestsAnalytics() {
             {/* Results Count */}
             <div className="mb-4">
               <p className="text-sm text-gray-300">
-                Showing {getFilteredEmailDetails().length} of {analytics.emailDetails.length} records
+                Showing {getFilteredEmailDetails().length} of {analytics.emailDetails?.length || 0} records
               </p>
             </div>
             <div className="overflow-x-auto">
