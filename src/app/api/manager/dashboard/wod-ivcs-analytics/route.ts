@@ -48,6 +48,8 @@ export async function GET(request: NextRequest) {
         durationSec: true,
         disposition: true,
         assignedToId: true,
+        documentNumber: true,
+        webOrder: true,
         assignedTo: {
           select: {
             name: true,
@@ -73,12 +75,21 @@ export async function GET(request: NextRequest) {
       where: whereClause
     });
 
-    // Calculate analytics
-    const totalCompleted = completedWork.length;
-    const avgDuration = completedWork.reduce((sum, task) => sum + (task.durationSec || 0), 0) / totalCompleted || 0;
+    // Calculate analytics - use totalCount for accurate total, not paginated results
+    const totalCompleted = totalCount; // Use the actual total count, not paginated results
+    const avgDuration = completedWork.reduce((sum, task) => sum + (task.durationSec || 0), 0) / completedWork.length || 0;
 
-    // Group by disposition
-    const dispositionBreakdown = completedWork.reduce((acc, task) => {
+    // Get ALL completed tasks for accurate disposition breakdown (not just paginated results)
+    const allCompletedTasks = await prisma.task.findMany({
+      where: whereClause,
+      select: {
+        disposition: true,
+        durationSec: true
+      }
+    });
+
+    // Group by disposition using ALL completed tasks
+    const dispositionBreakdown = allCompletedTasks.reduce((acc, task) => {
       const disposition = task.disposition || 'Unknown';
       if (!acc[disposition]) {
         acc[disposition] = {
@@ -93,8 +104,24 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {} as Record<string, { count: number; totalDuration: number; avgDuration: number }>);
 
-    // Group by agent
-    const agentBreakdown = completedWork.reduce((acc, task) => {
+    // Get ALL completed tasks for accurate agent breakdown (not just paginated results)
+    const allCompletedTasksWithAgents = await prisma.task.findMany({
+      where: whereClause,
+      select: {
+        assignedToId: true,
+        disposition: true,
+        durationSec: true,
+        assignedTo: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    // Group by agent using ALL completed tasks
+    const agentBreakdown = allCompletedTasksWithAgents.reduce((acc, task) => {
       const agentId = task.assignedToId || 'unassigned';
       const agentName = task.assignedTo?.name || 'Unassigned';
       if (!acc[agentId]) {
@@ -116,8 +143,18 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {} as Record<string, { name: string; count: number; totalDuration: number; avgDuration: number; dispositions: Record<string, number> }>);
 
-    // Group by date for trends
-    const dailyTrends = completedWork.reduce((acc, task) => {
+    // Get ALL completed tasks for accurate daily trends (not just paginated results)
+    const allCompletedTasksForTrends = await prisma.task.findMany({
+      where: whereClause,
+      select: {
+        endTime: true,
+        disposition: true,
+        durationSec: true
+      }
+    });
+
+    // Group by date for trends using ALL completed tasks
+    const dailyTrends = allCompletedTasksForTrends.reduce((acc, task) => {
       if (!task.endTime) return acc;
       const date = task.endTime.toISOString().split('T')[0];
       if (!acc[date]) {

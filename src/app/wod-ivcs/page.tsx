@@ -903,7 +903,15 @@ export default function WodIvcsDashboard() {
               >
                 Switch to Agent
               </SmallButton>
-              <SmallButton className="bg-red-600 hover:bg-red-700 text-white">
+              <SmallButton 
+                onClick={() => {
+                  localStorage.removeItem('agentEmail');
+                  localStorage.removeItem('currentRole');
+                  // Redirect to login page
+                  window.location.href = '/login';
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
                 Logout
               </SmallButton>
             </div>

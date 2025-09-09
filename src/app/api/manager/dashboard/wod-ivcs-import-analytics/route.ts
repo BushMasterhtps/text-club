@@ -3,10 +3,16 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(request: Request) {
   try {
-    // Get all WOD_IVCS tasks ordered by creation time (newest first)
+    // Only get WOD_IVCS tasks from today onwards (filter out old pre-live sessions)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+    
     const allTasks = await prisma.task.findMany({
       where: {
         taskType: 'WOD_IVCS',
+        createdAt: {
+          gte: today, // Only tasks created today or later
+        },
       },
       include: {
         assignedTo: {

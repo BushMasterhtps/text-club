@@ -1471,7 +1471,10 @@ function TaskCard({
             <select
               value={disposition}
               onChange={(e) => setDisposition(e.target.value)}
-              className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10"
+              className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{
+                colorScheme: 'dark'
+              }}
             >
               <option value="">Select disposition...</option>
               {task.taskType === "WOD_IVCS" ? (
@@ -1509,7 +1512,10 @@ function TaskCard({
                 <select
                   value={subDisposition}
                   onChange={(e) => setSubDisposition(e.target.value)}
-                  className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10"
+                  className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{
+                    colorScheme: 'dark'
+                  }}
                 >
                   <option value="">Select sub-disposition...</option>
                   <option value="Canadian Order / Unable to Edit Sales Order">🇨🇦 Canadian Order / Unable to Edit Sales Order</option>

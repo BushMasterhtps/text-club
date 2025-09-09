@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* Dark mode select options visibility */
+select option {
+  background-color: #1f2937 !important;
+  color: #ffffff !important;
+}
+
+/* Ensure select dropdowns are visible in dark mode */
+select:focus option {
+  background-color: #374151 !important;
+  color: #ffffff !important;
+}
+
 /* Light theme variables - enhanced for professional appearance */
 :root {
   --background: #fafafa;

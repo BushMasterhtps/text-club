@@ -38,12 +38,12 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
   });
 
-  // 2) pull "pending" raws (READY or PROMOTED)
+  // 2) pull "pending" raws (READY or PROMOTED) - limit for performance
   const raws = await prisma.rawMessage.findMany({
     where: { status: { in: [RawStatus.READY, RawStatus.PROMOTED] } },
     select: { id: true, brand: true, text: true },
     orderBy: { createdAt: "desc" },
-    take: 5000, // preview cap; adjust as you like
+    take: 1000, // Reduced from 5000 to prevent timeouts
   });
 
   let matchedCount = 0;
@@ -69,9 +69,9 @@ export async function GET() {
       }
     }
     
-    // Check learning system
-    try {
-      if (rm.text) {
+    // Check learning system (only if no simple rule matches for efficiency)
+    if (hits.length === 0 && rm.text) {
+      try {
         const learningResult = await getImprovedSpamScore(rm.text, rm.brand || undefined);
         learningScore = learningResult.score;
         learningReasons = learningResult.reasons;
@@ -80,9 +80,9 @@ export async function GET() {
         if (learningScore >= 70) {
           learningMatchedCount++;
         }
+      } catch (error) {
+        console.error('Error getting learning score:', error);
       }
-    } catch (error) {
-      console.error('Error getting learning score:', error);
     }
     
     // Count as matched if either simple rules OR learning system catches it

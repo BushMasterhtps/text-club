@@ -43,6 +43,7 @@ interface AnalyticsData {
     } | null;
     wodIvcsSource: string | null;
     documentNumber: string | null;
+    webOrder: string | null;
     customerName: string | null;
     amount: number | null;
     webOrderDifference: number | null;
@@ -239,6 +240,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
       'Agent',
       'Source',
       'Document Number',
+      'Web Order',
       'Customer',
       'Amount',
       'Difference',
@@ -253,6 +255,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
       task.assignedTo?.name || 'Unassigned',
       task.wodIvcsSource || 'Unknown',
       task.documentNumber || 'N/A',
+      task.webOrder || 'N/A',
       task.customerName || 'N/A',
       task.amount || 'N/A',
       task.webOrderDifference || 'N/A',
@@ -268,6 +271,50 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
     const a = document.createElement('a');
     a.href = url;
     a.download = `wod-ivcs-analytics-${startDate}-to-${endDate}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const exportDuplicateAnalysisToCSV = () => {
+    if (!detailedAnalytics?.duplicateAnalysis?.duplicateDetails) return;
+    
+    const headers = [
+      'Duplicate Order',
+      'Customer',
+      'Source',
+      'Original Import Date',
+      'Status',
+      'Completed By',
+      'Completed On',
+      'Disposition',
+      'Age (Days)'
+    ];
+    
+    const rows = detailedAnalytics.duplicateAnalysis.duplicateDetails.map((detail: any) => [
+      detail.duplicateTask.documentNumber || detail.duplicateTask.webOrder,
+      detail.duplicateTask.customerName || 'Unknown',
+      detail.duplicateTask.source === 'SO_VS_WEB_DIFFERENCE' ? 'SO vs Web Difference' :
+      detail.duplicateTask.source === 'ORDERS_NOT_DOWNLOADING' ? 'Orders Not Downloading' :
+      detail.duplicateTask.source === 'INVALID_CASH_SALE' ? 'Invalid Cash Sale' : detail.duplicateTask.source,
+      new Date(detail.originalTask.createdAt).toLocaleDateString(),
+      detail.wasImported ? 'Imported' : 'Filtered Out',
+      detail.originalTask.completedBy || 'N/A',
+      detail.originalTask.completedOn ? new Date(detail.originalTask.completedOn).toLocaleDateString() : 'N/A',
+      detail.originalTask.disposition || 'N/A',
+      detail.ageInDays
+    ]);
+    
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `wod-ivcs-duplicate-analysis-${startDate}-to-${endDate}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -707,7 +754,12 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
 
                   {/* Duplicate Details Table */}
                   <div className="bg-white/5 rounded-lg p-4">
-                    <h5 className="font-medium text-white mb-3">📋 Duplicate Details</h5>
+                    <div className="flex justify-between items-center mb-3">
+                      <h5 className="font-medium text-white">📋 Duplicate Details</h5>
+                      <PrimaryButton onClick={exportDuplicateAnalysisToCSV}>
+                        📊 Export CSV
+                      </PrimaryButton>
+                    </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
@@ -786,7 +838,12 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
 
           {/* Completed Work Table */}
           <div className="bg-white/5 rounded-lg p-4">
-            <h3 className="text-lg font-semibold mb-4">📋 Recent Completed Work</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">📋 Recent Completed Work</h3>
+              <PrimaryButton onClick={exportToCSV}>
+                📊 Export CSV
+              </PrimaryButton>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -794,6 +851,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
                     <th className="text-left py-2">Date</th>
                     <th className="text-left py-2">Agent</th>
                     <th className="text-left py-2">Source</th>
+                    <th className="text-left py-2">Order ID</th>
                     <th className="text-left py-2">Customer</th>
                     <th className="text-left py-2">Disposition</th>
                     <th className="text-left py-2">Duration</th>
@@ -805,6 +863,11 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
                       <td className="py-2">{formatDate(task.endTime)}</td>
                       <td className="py-2">{task.assignedTo?.name || 'Unassigned'}</td>
                       <td className="py-2">{task.wodIvcsSource || 'Unknown'}</td>
+                      <td className="py-2">
+                        <div className="font-mono text-xs">
+                          {task.documentNumber || task.webOrder || 'N/A'}
+                        </div>
+                      </td>
                       <td className="py-2">{task.customerName || 'N/A'}</td>
                       <td className="py-2">{task.disposition || 'Unknown'}</td>
                       <td className="py-2">{formatDuration(task.durationSec)}</td>

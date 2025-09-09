@@ -22,9 +22,18 @@ export async function GET() {
   try {
     const rules = await prisma.spamRule.findMany({
       orderBy: { createdAt: "desc" },
-      select: { id: true, pattern: true, patternNorm: true, enabled: true, createdAt: true },
+      select: { id: true, pattern: true, patternNorm: true, enabled: true, createdAt: true, brand: true },
     });
-    return NextResponse.json({ success: true, rules });
+    // Transform data to match frontend expectations
+    const transformedRules = rules.map(rule => ({
+      id: rule.id,
+      phrase: rule.pattern, // Map pattern to phrase for frontend
+      brand: rule.brand,
+      createdAt: rule.createdAt.toISOString(),
+      enabled: rule.enabled
+    }));
+    
+    return NextResponse.json({ success: true, rules: transformedRules });
   } catch (err) {
     console.error("spam GET error:", err);
     return NextResponse.json({ success: false, error: "Failed to load rules" }, { status: 500 });
@@ -32,12 +41,14 @@ export async function GET() {
 }
 
 /** POST /api/spam — create one rule
- * body: { pattern: string, enabled?: boolean }
+ * body: { pattern: string, phrase: string, brand?: string, enabled?: boolean }
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({} as any));
-    const pattern = String(body?.pattern ?? "").trim();
+    // Support both 'phrase' and 'pattern' for frontend compatibility
+    const pattern = String(body?.pattern ?? body?.phrase ?? "").trim();
+    const brand = body?.brand ? String(body.brand).trim() : null;
     const enabled = typeof body?.enabled === "boolean" ? body.enabled : true;
 
     if (!pattern) {
@@ -47,8 +58,8 @@ export async function POST(req: Request) {
     const patternNorm = normText(pattern);
 
     const rule = await prisma.spamRule.create({
-      data: { pattern, patternNorm, enabled },
-      select: { id: true, pattern: true, patternNorm: true, enabled: true, createdAt: true },
+      data: { pattern, patternNorm, brand, enabled },
+      select: { id: true, pattern: true, patternNorm: true, brand: true, enabled: true, createdAt: true },
     });
 
     return NextResponse.json({ success: true, rule });

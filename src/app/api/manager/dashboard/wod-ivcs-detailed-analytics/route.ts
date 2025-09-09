@@ -18,6 +18,35 @@ export async function GET(request: Request) {
     const start = new Date(startDate + 'T00:00:00.000Z');
     const end = new Date(endDate + 'T23:59:59.999Z');
 
+    // Get all completed tasks to cross-reference with duplicates
+    const completedTasks = await prisma.task.findMany({
+      where: {
+        taskType: 'WOD_IVCS',
+        status: 'COMPLETED'
+      },
+      select: {
+        id: true,
+        documentNumber: true,
+        webOrder: true,
+        customerName: true,
+        disposition: true,
+        endTime: true,
+        createdAt: true,
+        assignedTo: {
+          select: { name: true, email: true }
+        }
+      }
+    });
+
+    // Create a lookup map for completed tasks
+    const completedTaskMap = new Map();
+    completedTasks.forEach(task => {
+      const key1 = task.documentNumber;
+      const key2 = task.webOrder;
+      if (key1) completedTaskMap.set(key1, task);
+      if (key2) completedTaskMap.set(key2, task);
+    });
+
     // Get import sessions in the date range
     const importSessionData = await prisma.importSession.findMany({
       where: {
@@ -25,6 +54,7 @@ export async function GET(request: Request) {
           gte: start,
           lte: end,
         },
+        // Note: ImportSession doesn't have taskType field, so we'll filter by source instead
       },
       include: {
         duplicateRecords: true,
@@ -84,7 +114,7 @@ export async function GET(request: Request) {
         duplicateDetails: []
       };
 
-      // Process duplicate records
+      // Process duplicate records (simplified - detailed processing done later)
       session.duplicateRecords.forEach(duplicate => {
         if (!sources[duplicate.source]) {
           sources[duplicate.source] = {
@@ -100,34 +130,6 @@ export async function GET(request: Request) {
         if (duplicate.originalCompletedAt) {
           sources[duplicate.source].previouslyCompleted += 1;
         }
-
-        sources[duplicate.source].duplicateDetails.push({
-          duplicateTask: {
-            id: duplicate.id,
-            documentNumber: duplicate.documentNumber,
-            webOrder: duplicate.webOrder,
-            customerName: duplicate.customerName,
-            source: duplicate.source,
-            createdAt: session.importedAt,
-            status: 'DUPLICATE'
-          },
-          originalTask: {
-            id: duplicate.originalTaskId,
-            documentNumber: duplicate.documentNumber,
-            webOrder: duplicate.webOrder,
-            customerName: duplicate.customerName,
-            source: duplicate.source,
-            completedOn: duplicate.originalCompletedAt,
-            disposition: duplicate.originalDisposition,
-            completedBy: duplicate.originalCompletedBy,
-            completedByEmail: duplicate.originalCompletedBy,
-            createdAt: duplicate.originalCreatedAt,
-            status: duplicate.originalCompletedAt ? 'COMPLETED' : 'PENDING'
-          },
-          key: `${duplicate.source}-${duplicate.documentNumber || duplicate.webOrder}`,
-          ageInDays: duplicate.ageInDays,
-          wasImported: false // Duplicates are not imported
-        });
       });
 
       return {
@@ -144,33 +146,45 @@ export async function GET(request: Request) {
 
     // Analyze all duplicates from import sessions
     const allDuplicates = importSessionData.flatMap(session => 
-      session.duplicateRecords.map(duplicate => ({
-        duplicateTask: {
-          id: duplicate.id,
-          documentNumber: duplicate.documentNumber,
-          webOrder: duplicate.webOrder,
-          customerName: duplicate.customerName,
-          source: duplicate.source,
-          createdAt: session.importedAt,
-          status: 'DUPLICATE'
-        },
-        originalTask: {
-          id: duplicate.originalTaskId,
-          documentNumber: duplicate.documentNumber,
-          webOrder: duplicate.webOrder,
-          customerName: duplicate.customerName,
-          source: duplicate.source,
-          completedOn: duplicate.originalCompletedAt,
-          disposition: duplicate.originalDisposition,
-          completedBy: duplicate.originalCompletedBy,
-          completedByEmail: duplicate.originalCompletedBy,
-          createdAt: duplicate.originalCreatedAt,
-          status: duplicate.originalCompletedAt ? 'COMPLETED' : 'PENDING'
-        },
-        key: `${duplicate.source}-${duplicate.documentNumber || duplicate.webOrder}`,
-        ageInDays: duplicate.ageInDays,
-        wasImported: false
-      }))
+      session.duplicateRecords.map(duplicate => {
+        // Try to find the completed task that matches this duplicate
+        const completedTask = completedTaskMap.get(duplicate.documentNumber) || 
+                             completedTaskMap.get(duplicate.webOrder);
+
+        // Calculate age in days properly - use the completed task's creation date if available
+        const referenceDate = completedTask?.createdAt || duplicate.originalCreatedAt;
+        const ageInDays = referenceDate 
+          ? Math.floor((new Date().getTime() - new Date(referenceDate).getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+
+        return {
+          duplicateTask: {
+            id: duplicate.id,
+            documentNumber: duplicate.documentNumber,
+            webOrder: duplicate.webOrder,
+            customerName: completedTask?.customerName || duplicate.customerName || 'Unknown',
+            source: duplicate.source,
+            createdAt: session.importedAt,
+            status: 'DUPLICATE'
+          },
+          originalTask: {
+            id: completedTask?.id || duplicate.originalTaskId,
+            documentNumber: duplicate.documentNumber,
+            webOrder: duplicate.webOrder,
+            customerName: completedTask?.customerName || duplicate.customerName || 'Unknown',
+            source: duplicate.source,
+            completedOn: completedTask?.endTime || duplicate.originalCompletedAt,
+            disposition: completedTask?.disposition || duplicate.originalDisposition,
+            completedBy: completedTask?.assignedTo?.name || duplicate.originalCompletedBy || 'Unknown',
+            completedByEmail: completedTask?.assignedTo?.email || duplicate.originalCompletedBy || 'Unknown',
+            createdAt: completedTask?.createdAt || duplicate.originalCreatedAt,
+            status: (completedTask?.endTime || duplicate.originalCompletedAt) ? 'COMPLETED' : 'PENDING'
+          },
+          key: `${duplicate.source}-${duplicate.documentNumber || duplicate.webOrder}`,
+          ageInDays: ageInDays,
+          wasImported: false
+        };
+      })
     );
 
     const duplicateAnalysis = {

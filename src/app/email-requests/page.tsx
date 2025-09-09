@@ -913,7 +913,15 @@ export default function EmailRequestsPage() {
               </SmallButton>
               
               {/* Logout */}
-              <SmallButton className="bg-red-600 hover:bg-red-700">
+              <SmallButton 
+                onClick={() => {
+                  localStorage.removeItem('agentEmail');
+                  localStorage.removeItem('currentRole');
+                  // Redirect to login page
+                  window.location.href = '/login';
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
                 Logout
               </SmallButton>
             </div>
