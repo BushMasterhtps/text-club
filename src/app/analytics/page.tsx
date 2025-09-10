@@ -22,7 +22,7 @@ function H3({ children }: { children: React.ReactNode }) {
     <h3 className="text-base font-semibold text-white/90 tracking-tight">{children}</h3>
   );
 }
-import { ThemeToggle } from '@/app/_components/ThemeToggle';
+import ThemeToggle from '@/app/_components/ThemeToggle';
 import { 
   BarChart, 
   Bar, 
