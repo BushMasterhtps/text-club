@@ -3337,7 +3337,8 @@ export default function ManagerPage() {
     { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage tasks" },
     { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.length },
     { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
-    { id: "analytics", label: "📈 Team Analytics", description: "Team-wide performance and task insights", external: true, href: "/analytics" }
+    { id: "analytics", label: "📈 Analytics", description: "Text Club specific analytics and insights" },
+    { id: "team-analytics", label: "📊 Team Analytics", description: "Team-wide performance and task insights", external: true, href: "/analytics" }
   ];
 
   return (

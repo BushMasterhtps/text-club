@@ -328,7 +328,7 @@ export default function AnalyticsPage() {
                 <SmallButton 
                   onClick={() => {
                     if (customStartDate && customEndDate) {
-                      setDateRange({ start: customStartDate, end: customEndDate });
+                      loadOverviewData();
                     }
                   }}
                   disabled={!customStartDate || !customEndDate}
