@@ -44,9 +44,12 @@ export async function GET(request: NextRequest) {
           standaloneRefundsInProgress,
           standaloneRefundsCompletedToday
         ] = await Promise.all([
-          // Total assigned tasks (PENDING + IN_PROGRESS + ASSISTANCE_REQUIRED + COMPLETED)
+          // Total assigned tasks (only open tasks: PENDING + IN_PROGRESS + ASSISTANCE_REQUIRED)
           prisma.task.count({
-            where: { assignedToId: agent.id }
+            where: { 
+              assignedToId: agent.id,
+              status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
+            }
           }),
           // Currently in progress
           prisma.task.count({
@@ -72,9 +75,13 @@ export async function GET(request: NextRequest) {
             orderBy: { updatedAt: "desc" },
             select: { updatedAt: true }
           }),
-          // Text Club breakdown
+          // Text Club breakdown (only open tasks)
           prisma.task.count({
-            where: { assignedToId: agent.id, taskType: "TEXT_CLUB" }
+            where: { 
+              assignedToId: agent.id, 
+              taskType: "TEXT_CLUB",
+              status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
+            }
           }),
           prisma.task.count({
             where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "TEXT_CLUB" }
@@ -98,9 +105,13 @@ export async function GET(request: NextRequest) {
               ]
             }
           }),
-          // WOD/IVCS breakdown
+          // WOD/IVCS breakdown (only open tasks)
           prisma.task.count({
-            where: { assignedToId: agent.id, taskType: "WOD_IVCS" }
+            where: { 
+              assignedToId: agent.id, 
+              taskType: "WOD_IVCS",
+              status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
+            }
           }),
           prisma.task.count({
             where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "WOD_IVCS" }
@@ -124,9 +135,13 @@ export async function GET(request: NextRequest) {
               ]
             }
           }),
-          // Email Requests breakdown
+          // Email Requests breakdown (only open tasks)
           prisma.task.count({
-            where: { assignedToId: agent.id, taskType: "EMAIL_REQUESTS" }
+            where: { 
+              assignedToId: agent.id, 
+              taskType: "EMAIL_REQUESTS",
+              status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
+            }
           }),
           prisma.task.count({
             where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "EMAIL_REQUESTS" }
@@ -150,9 +165,13 @@ export async function GET(request: NextRequest) {
               ]
             }
           }),
-          // Standalone Refunds breakdown
+          // Standalone Refunds breakdown (only open tasks)
           prisma.task.count({
-            where: { assignedToId: agent.id, taskType: "STANDALONE_REFUNDS" }
+            where: { 
+              assignedToId: agent.id, 
+              taskType: "STANDALONE_REFUNDS",
+              status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
+            }
           }),
           prisma.task.count({
             where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "STANDALONE_REFUNDS" }
