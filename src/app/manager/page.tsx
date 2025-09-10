@@ -12,6 +12,7 @@ import DashboardSwitcher from '@/app/_components/DashboardSwitcher';
 import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
 import SpamInsights from '@/app/_components/SpamInsights';
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
+import TextClubAnalytics from '@/app/_components/TextClubAnalytics';
 
 /* ========== Shared types ========== */
 type AssignResult = Record<string, string[]>;
@@ -3336,7 +3337,7 @@ export default function ManagerPage() {
     { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage tasks" },
     { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.length },
     { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
-    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" }
+    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights", external: true, href: "/analytics" }
   ];
 
   return (
@@ -3425,25 +3426,47 @@ export default function ManagerPage() {
           
           {/* Navigation */}
           <nav className="mt-4 flex flex-wrap gap-2">
-          {navigationItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveSection(item.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors relative ${
-                activeSection === item.id
-                  ? "bg-blue-600 text-white"
-                  : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-              }`}
-              title={item.description}
-            >
-              {item.label}
-              {item.badge && item.badge > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          ))}
+          {navigationItems.map((item) => {
+            if (item.external && item.href) {
+              return (
+                <a
+                  key={item.id}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 rounded-lg text-sm font-medium transition-colors relative bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                  title={item.description}
+                >
+                  {item.label}
+                  {item.badge && item.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
+                      {item.badge}
+                    </span>
+                  )}
+                </a>
+              );
+            }
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveSection(item.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors relative ${
+                  activeSection === item.id
+                    ? "bg-blue-600 text-white"
+                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                }`}
+                title={item.description}
+              >
+                {item.label}
+                {item.badge && item.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
         
         {/* Dashboard Switcher */}
@@ -3724,7 +3747,7 @@ export default function ManagerPage() {
       {/* Analytics Section */}
       {activeSection === "analytics" && (
         <div className="space-y-8">
-          <CompletedWorkDashboard />
+          <TextClubAnalytics />
         </div>
       )}
 
