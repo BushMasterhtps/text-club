@@ -105,6 +105,34 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // Get pending tasks by task type
+    const [textClubPending, wodIvcsPending, emailRequestsPending, standaloneRefundsPending] = await Promise.all([
+      prisma.task.count({
+        where: {
+          status: "PENDING",
+          taskType: "TEXT_CLUB"
+        }
+      }),
+      prisma.task.count({
+        where: {
+          status: "PENDING",
+          taskType: "WOD_IVCS"
+        }
+      }),
+      prisma.task.count({
+        where: {
+          status: "PENDING",
+          taskType: "EMAIL_REQUESTS"
+        }
+      }),
+      prisma.task.count({
+        where: {
+          status: "PENDING",
+          taskType: "STANDALONE_REFUNDS"
+        }
+      })
+    ]);
+
     // Get pending tasks
     const pendingTasks = await prisma.task.count({
       where: {
@@ -119,7 +147,13 @@ export async function GET(request: NextRequest) {
       activeAgents,
       tasksInProgress,
       pendingTasks,
-      totalInProgress
+      totalInProgress,
+      pendingByTaskType: {
+        textClub: textClubPending,
+        wodIvcs: wodIvcsPending,
+        emailRequests: emailRequestsPending,
+        standaloneRefunds: standaloneRefundsPending
+      }
     };
 
     return NextResponse.json({

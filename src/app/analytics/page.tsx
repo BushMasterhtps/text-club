@@ -49,6 +49,12 @@ interface OverviewStats {
   tasksInProgress: number;
   pendingTasks: number;
   totalInProgress: number;
+  pendingByTaskType: {
+    textClub: number;
+    wodIvcs: number;
+    emailRequests: number;
+    standaloneRefunds: number;
+  };
 }
 
 interface TaskTypeStats {
@@ -453,6 +459,39 @@ export default function AnalyticsPage() {
             </Card>
           </div>
         )}
+
+        {/* Pending Work in Queues */}
+        <div className="bg-gray-800/50 rounded-lg border border-white/10 p-6">
+          <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+            📋 Pending Work in Queues
+          </h3>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/20">
+              <div className="text-blue-300 text-sm font-medium">Text Club</div>
+              <div className="text-2xl font-bold text-white mt-1">
+                {overviewStats.pendingByTaskType?.textClub || 0}
+              </div>
+            </div>
+            <div className="bg-purple-500/10 rounded-lg p-4 border border-purple-500/20">
+              <div className="text-purple-300 text-sm font-medium">WOD/IVCS</div>
+              <div className="text-2xl font-bold text-white mt-1">
+                {overviewStats.pendingByTaskType?.wodIvcs || 0}
+              </div>
+            </div>
+            <div className="bg-green-500/10 rounded-lg p-4 border border-green-500/20">
+              <div className="text-green-300 text-sm font-medium">Email Requests</div>
+              <div className="text-2xl font-bold text-white mt-1">
+                {overviewStats.pendingByTaskType?.emailRequests || 0}
+              </div>
+            </div>
+            <div className="bg-orange-500/10 rounded-lg p-4 border border-orange-500/20">
+              <div className="text-orange-300 text-sm font-medium">Standalone Refunds</div>
+              <div className="text-2xl font-bold text-white mt-1">
+                {overviewStats.pendingByTaskType?.standaloneRefunds || 0}
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Task Type Breakdown */}
         {taskTypeStats && (
