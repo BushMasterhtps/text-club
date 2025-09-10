@@ -78,14 +78,15 @@ export default function SpamInsights({ brand, onClose }: SpamInsightsProps) {
   const learnFromArchive = async () => {
     setLearningFromArchive(true);
     try {
-      // For large datasets, use background processing
-      const response = await fetch('/api/spam/learn-from-archive', {
+      // Use background processing for large datasets
+      const response = await fetch('/api/spam/learn-from-archive-background', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           brand,
-          batchSize: 25,
-          maxBatches: 20
+          batchSize: 10,
+          maxBatches: 5,
+          type: 'both'
         })
       });
       const data = await response.json();
@@ -284,7 +285,7 @@ export default function SpamInsights({ brand, onClose }: SpamInsightsProps) {
                   disabled={learningFromArchive}
                   className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg text-blue-400 transition-colors disabled:opacity-50"
                 >
-                  {learningFromArchive ? 'Learning...' : '🧠 Learn from Archive'}
+                  {learningFromArchive ? 'Processing in batches...' : '🧠 Learn from Archive'}
                 </button>
                 <button
                   onClick={clearLearningData}
