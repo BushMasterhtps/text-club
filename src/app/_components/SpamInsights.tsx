@@ -78,10 +78,15 @@ export default function SpamInsights({ brand, onClose }: SpamInsightsProps) {
   const learnFromArchive = async () => {
     setLearningFromArchive(true);
     try {
+      // For large datasets, use background processing
       const response = await fetch('/api/spam/learn-from-archive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brand })
+        body: JSON.stringify({ 
+          brand,
+          batchSize: 25,
+          maxBatches: 20
+        })
       });
       const data = await response.json();
       
@@ -93,7 +98,8 @@ export default function SpamInsights({ brand, onClose }: SpamInsightsProps) {
         alert(`Learning failed: ${data.error}`);
       }
     } catch (error) {
-      alert('Failed to learn from archive');
+      console.error('Learn from archive error:', error);
+      alert('Failed to learn from archive - this may be due to timeout. Try again or contact support.');
     } finally {
       setLearningFromArchive(false);
     }

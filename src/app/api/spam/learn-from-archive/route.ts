@@ -1,88 +1,140 @@
-// Learn from archived spam data
+// Learn from archived spam data - Batch processing version
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { analyzeSpamPatterns, learnFromSpamDecision } from "@/lib/spam-detection";
 
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 export async function POST(req: Request) {
+  const startTime = Date.now();
+  
   try {
-    const { brand } = await req.json();
+    const { brand, batchSize = 50, maxBatches = 20 } = await req.json();
     
-    // Get all archived spam data
-    const archivedSpam = await prisma.spamArchive.findMany({
-      where: brand ? { brand } : {},
-      select: {
-        text: true,
-        brand: true,
-        firstSeen: true,
-        hitCount: true
-      },
-      orderBy: { hitCount: 'desc' },
-      take: 5000 // Increased limit to process more archive data
-    });
+    console.log(`🧠 Starting spam learning with batch size: ${batchSize}, max batches: ${maxBatches}`);
+    
+    let totalSpamLearned = 0;
+    let totalLegitimateLearned = 0;
+    let totalErrors = 0;
+    let processedBatches = 0;
 
-    console.log(`📊 Found ${archivedSpam.length} archived spam entries to learn from`);
+    // Process archived spam in batches
+    console.log('📊 Processing archived spam data...');
+    let spamOffset = 0;
+    const spamBatchSize = Math.min(batchSize, 25); // Smaller batches for spam processing
+    
+    for (let batch = 0; batch < maxBatches; batch++) {
+      const archivedSpam = await prisma.spamArchive.findMany({
+        where: brand ? { brand } : {},
+        select: {
+          text: true,
+          brand: true,
+          firstSeen: true,
+          hitCount: true
+        },
+        orderBy: { hitCount: 'desc' },
+        take: spamBatchSize,
+        skip: spamOffset
+      });
 
-    let learnedCount = 0;
-    let errorCount = 0;
+      if (archivedSpam.length === 0) break;
 
-    // Learn from each archived spam entry
-    for (const spam of archivedSpam) {
-      try {
-        if (spam.text && spam.text.length > 0) {
-          // Analyze the spam text
-          const analysis = analyzeSpamPatterns(spam.text);
-          
-          // Learn that this is spam (isSpam = true)
-          await learnFromSpamDecision(spam.text, true, spam.brand || undefined);
-          learnedCount++;
+      console.log(`📊 Processing spam batch ${batch + 1}: ${archivedSpam.length} entries`);
+
+      let batchLearned = 0;
+      let batchErrors = 0;
+
+      for (const spam of archivedSpam) {
+        try {
+          if (spam.text && spam.text.length > 0) {
+            // Learn that this is spam (isSpam = true)
+            await learnFromSpamDecision(spam.text, true, spam.brand || undefined);
+            batchLearned++;
+          }
+        } catch (error) {
+          console.error('Error learning from spam entry:', error);
+          batchErrors++;
         }
-      } catch (error) {
-        console.error('Error learning from spam entry:', error);
-        errorCount++;
       }
+
+      totalSpamLearned += batchLearned;
+      totalErrors += batchErrors;
+      processedBatches++;
+      spamOffset += spamBatchSize;
+
+      // Small delay between batches to prevent overwhelming the system
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    // Also learn from legitimate messages (non-spam tasks)
-    const legitimateTasks = await prisma.task.findMany({
-      where: {
-        status: 'COMPLETED',
-        disposition: { not: 'SPAM' },
-        text: { not: null }
-      },
-      select: {
-        text: true,
-        brand: true,
-        createdAt: true
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 2000 // Increased limit to process more legitimate tasks
-    });
+    // Process legitimate tasks in batches
+    console.log('📊 Processing legitimate task data...');
+    let legitimateOffset = 0;
+    const legitimateBatchSize = Math.min(batchSize, 25);
+    
+    for (let batch = 0; batch < maxBatches; batch++) {
+      const legitimateTasks = await prisma.task.findMany({
+        where: {
+          status: 'COMPLETED',
+          disposition: { not: 'SPAM' },
+          text: { not: null }
+        },
+        select: {
+          text: true,
+          brand: true,
+          createdAt: true
+        },
+        orderBy: { createdAt: 'desc' },
+        take: legitimateBatchSize,
+        skip: legitimateOffset
+      });
 
-    console.log(`📊 Found ${legitimateTasks.length} legitimate tasks to learn from`);
+      if (legitimateTasks.length === 0) break;
 
-    let legitimateLearnedCount = 0;
+      console.log(`📊 Processing legitimate batch ${batch + 1}: ${legitimateTasks.length} entries`);
 
-    for (const task of legitimateTasks) {
-      try {
-        if (task.text && task.text.length > 0) {
-          // Learn that this is legitimate (isSpam = false)
-          await learnFromSpamDecision(task.text, false, task.brand || undefined);
-          legitimateLearnedCount++;
+      let batchLearned = 0;
+      let batchErrors = 0;
+
+      for (const task of legitimateTasks) {
+        try {
+          if (task.text && task.text.length > 0) {
+            // Learn that this is legitimate (isSpam = false)
+            await learnFromSpamDecision(task.text, false, task.brand || undefined);
+            batchLearned++;
+          }
+        } catch (error) {
+          console.error('Error learning from legitimate task:', error);
+          batchErrors++;
         }
-      } catch (error) {
-        console.error('Error learning from legitimate task:', error);
-        errorCount++;
       }
+
+      totalLegitimateLearned += batchLearned;
+      totalErrors += batchErrors;
+      processedBatches++;
+      legitimateOffset += legitimateBatchSize;
+
+      // Small delay between batches
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
+
+    const processingTime = Date.now() - startTime;
+    console.log(`🧠 Spam learning completed in ${processingTime}ms`);
 
     return NextResponse.json({
       success: true,
+      version: "2.0", // Force cache invalidation
       results: {
-        spamLearned: learnedCount,
-        legitimateLearned: legitimateLearnedCount,
-        totalLearned: learnedCount + legitimateLearnedCount,
-        errors: errorCount,
-        message: `Successfully learned from ${learnedCount + legitimateLearnedCount} messages (${learnedCount} spam, ${legitimateLearnedCount} legitimate)`
+        spamLearned: totalSpamLearned,
+        legitimateLearned: totalLegitimateLearned,
+        totalLearned: totalSpamLearned + totalLegitimateLearned,
+        errors: totalErrors,
+        batchesProcessed: processedBatches,
+        processingTimeMs: processingTime,
+        message: `Successfully learned from ${totalSpamLearned + totalLegitimateLearned} messages (${totalSpamLearned} spam, ${totalLegitimateLearned} legitimate) in ${processedBatches} batches`
       }
     });
   } catch (error) {
