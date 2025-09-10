@@ -8,9 +8,27 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const comparePeriod = searchParams.get('comparePeriod') || 'none';
 
-    // Parse dates
-    const start = startDate ? new Date(startDate + 'T00:00:00') : new Date();
-    const end = endDate ? new Date(endDate + 'T23:59:59') : new Date();
+    // Parse dates with proper timezone handling
+    let start: Date;
+    let end: Date;
+    
+    if (startDate && endDate) {
+      // Parse dates as local timezone
+      const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+      const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+      
+      start = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
+      end = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
+    } else {
+      // Use today in local timezone
+      const today = new Date();
+      start = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+      end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    }
+    
+    // Convert to UTC for database queries
+    const utcStart = new Date(start.getTime() - start.getTimezoneOffset() * 60000);
+    const utcEnd = new Date(end.getTime() - end.getTimezoneOffset() * 60000);
     
     // Calculate comparison period dates
     let comparisonStart = new Date(0);
@@ -21,14 +39,18 @@ export async function GET(request: NextRequest) {
       comparisonEnd = new Date(start.getTime() - 1);
       comparisonStart = new Date(comparisonEnd.getTime() - (daysDiff * 24 * 60 * 60 * 1000));
     }
+    
+    // Convert comparison dates to UTC
+    const utcComparisonStart = new Date(comparisonStart.getTime() - comparisonStart.getTimezoneOffset() * 60000);
+    const utcComparisonEnd = new Date(comparisonEnd.getTime() - comparisonEnd.getTimezoneOffset() * 60000);
 
     // Get current period data
     const currentPeriodTasks = await prisma.task.findMany({
       where: {
         taskType: 'EMAIL_REQUESTS',
         createdAt: {
-          gte: start,
-          lte: end
+          gte: utcStart,
+          lte: utcEnd
         }
       },
       select: {
@@ -56,8 +78,8 @@ export async function GET(request: NextRequest) {
       where: {
         taskType: 'EMAIL_REQUESTS',
         createdAt: {
-          gte: comparisonStart,
-          lte: comparisonEnd
+          gte: utcComparisonStart,
+          lte: utcComparisonEnd
         }
       },
       select: {
@@ -81,8 +103,16 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate KPIs for current period
-    const currentCompleted = currentPeriodTasks.filter(task => task.status === 'COMPLETED').length;
-    const currentUnableToComplete = currentPeriodTasks.filter(task => task.status === 'UNABLE_TO_COMPLETE').length;
+    const currentCompleted = currentPeriodTasks.filter(task => 
+      task.status === 'COMPLETED' && 
+      task.disposition && 
+      !task.disposition.toLowerCase().includes('unable to complete')
+    ).length;
+    const currentUnableToComplete = currentPeriodTasks.filter(task => 
+      task.status === 'COMPLETED' && 
+      task.disposition && 
+      task.disposition.toLowerCase().includes('unable to complete')
+    ).length;
     const currentTotal = currentPeriodTasks.length;
     const currentCompletionRate = currentTotal > 0 ? (currentCompleted / currentTotal) * 100 : 0;
     
@@ -93,7 +123,11 @@ export async function GET(request: NextRequest) {
       : 0;
 
     // Calculate comparison KPIs
-    const comparisonCompleted = comparisonPeriodTasks.filter(task => task.status === 'COMPLETED').length;
+    const comparisonCompleted = comparisonPeriodTasks.filter(task => 
+      task.status === 'COMPLETED' && 
+      task.disposition && 
+      !task.disposition.toLowerCase().includes('unable to complete')
+    ).length;
     const comparisonTotal = comparisonPeriodTasks.length;
     const comparisonCompletionRate = comparisonTotal > 0 ? (comparisonCompleted / comparisonTotal) * 100 : 0;
     
@@ -121,8 +155,16 @@ export async function GET(request: NextRequest) {
       
       monthlyTrends.push({
         month: months[i],
-        completed: monthTasks.filter(task => task.status === 'COMPLETED').length,
-        unableToComplete: monthTasks.filter(task => task.status === 'UNABLE_TO_COMPLETE').length
+        completed: monthTasks.filter(task => 
+          task.status === 'COMPLETED' && 
+          task.disposition && 
+          !task.disposition.toLowerCase().includes('unable to complete')
+        ).length,
+        unableToComplete: monthTasks.filter(task => 
+          task.status === 'COMPLETED' && 
+          task.disposition && 
+          task.disposition.toLowerCase().includes('unable to complete')
+        ).length
       });
     }
 
@@ -138,7 +180,11 @@ export async function GET(request: NextRequest) {
 
     // Generate unable to complete breakdown
     const unableToCompleteBreakdown = currentPeriodTasks
-      .filter(task => task.status === 'UNABLE_TO_COMPLETE')
+      .filter(task => 
+        task.status === 'COMPLETED' && 
+        task.disposition && 
+        task.disposition.toLowerCase().includes('unable to complete')
+      )
       .reduce((acc, task) => {
         const disposition = task.disposition || 'Unknown';
         acc[disposition] = (acc[disposition] || 0) + 1;
@@ -181,8 +227,16 @@ export async function GET(request: NextRequest) {
         
         previousMonthlyTrends.push({
           month: months[i],
-          completed: monthTasks.filter(task => task.status === 'COMPLETED').length,
-          unableToComplete: monthTasks.filter(task => task.status === 'UNABLE_TO_COMPLETE').length
+          completed: monthTasks.filter(task => 
+            task.status === 'COMPLETED' && 
+            task.disposition && 
+            !task.disposition.toLowerCase().includes('unable to complete')
+          ).length,
+          unableToComplete: monthTasks.filter(task => 
+            task.status === 'COMPLETED' && 
+            task.disposition && 
+            task.disposition.toLowerCase().includes('unable to complete')
+          ).length
         });
       }
       
@@ -209,7 +263,11 @@ export async function GET(request: NextRequest) {
           percentage: durationChange 
         },
         unableTrend: { 
-          change: currentUnableToComplete - (comparisonPeriodTasks.filter(task => task.status === 'UNABLE_TO_COMPLETE').length), 
+          change: currentUnableToComplete - (comparisonPeriodTasks.filter(task => 
+            task.status === 'COMPLETED' && 
+            task.disposition && 
+            task.disposition.toLowerCase().includes('unable to complete')
+          ).length), 
           percentage: 0 // Calculate if needed
         }
       },
