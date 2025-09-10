@@ -25,14 +25,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse date - handle timezone properly
-    // If no date provided, use today in local timezone
-    const targetDate = date ? new Date(date + 'T00:00:00') : new Date();
+    let startOfDay: Date;
+    let endOfDay: Date;
     
-    // Use local timezone for date calculations to match user's timezone
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    if (date) {
+      // Parse the date string as local time (not UTC)
+      const [year, month, day] = date.split('-').map(Number);
+      startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0); // month is 0-indexed
+      endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
+    } else {
+      // Use today in local timezone
+      const today = new Date();
+      startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+      endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    }
 
 
     // Get completion stats by task type for today (including sent-back tasks)

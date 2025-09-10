@@ -22,21 +22,23 @@ export async function GET(req: Request) {
     }
 
     // Calculate date range - use provided date or default to today
-    let targetDate: Date;
+    let dateStart: Date;
+    let dateEnd: Date;
+    
     if (dateParam) {
       // Parse the date in local timezone, not UTC
       const [year, month, day] = dateParam.split('-').map(Number);
-      targetDate = new Date(year, month - 1, day); // month is 0-indexed
-      if (isNaN(targetDate.getTime())) {
+      if (isNaN(year) || isNaN(month) || isNaN(day)) {
         return NextResponse.json({ success: false, error: "Invalid date format. Use YYYY-MM-DD" }, { status: 400 });
       }
+      dateStart = new Date(year, month - 1, day, 0, 0, 0, 0); // month is 0-indexed
+      dateEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
     } else {
-      targetDate = new Date();
+      // Use today in local timezone
+      const today = new Date();
+      dateStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+      dateEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
     }
-    
-    // Use local timezone for date calculations
-    const dateStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-    const dateEnd = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1);
     
     // Get all tasks for this user (including sent-back tasks that are no longer assigned)
     const tasks = await prisma.task.findMany({
@@ -104,7 +106,7 @@ export async function GET(req: Request) {
       completed,
       avgDuration,
       assistanceSent,
-      lastUpdate: targetDate.toLocaleDateString()
+      lastUpdate: dateStart.toLocaleDateString()
     };
 
     return NextResponse.json({ 
