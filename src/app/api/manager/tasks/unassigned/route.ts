@@ -6,15 +6,23 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50), 1), 200);
+    const taskType = url.searchParams.get("taskType");
     
-    console.log(`[DEBUG] GET /api/manager/tasks/unassigned called with limit=${limit}`);
+    console.log(`[DEBUG] GET /api/manager/tasks/unassigned called with limit=${limit}, taskType=${taskType}`);
+    
+    // Build where clause with optional task type filter
+    const whereClause: any = {
+      assignedToId: null,
+      status: "PENDING",
+    };
+    
+    if (taskType) {
+      whereClause.taskType = taskType;
+    }
     
     // First, try to find existing unassigned PENDING tasks
     let tasks = await prisma.task.findMany({
-      where: {
-        assignedToId: null,
-        status: "PENDING",
-      },
+      where: whereClause,
       orderBy: { createdAt: "asc" },
       take: limit,
       select: { id: true },

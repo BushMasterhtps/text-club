@@ -3208,7 +3208,8 @@ export default function ManagerPage() {
       console.log(`[DEBUG] Fetching unassigned items with limit=${limit}`);
       
       // Use the new endpoint that returns both Task IDs and RawMessage IDs
-      const res = await fetch(`/api/manager/tasks/unassigned?limit=${limit}`, { 
+      // Default to TEXT_CLUB since this is the Text Club dashboard
+      const res = await fetch(`/api/manager/tasks/unassigned?limit=${limit}&taskType=TEXT_CLUB`, { 
         method: "GET",
         cache: "no-store" 
       });

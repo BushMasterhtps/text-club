@@ -1140,7 +1140,7 @@ function TaskCard({
     if (!disposition) return;
     
     // For WOD/IVCS tasks, require sub-disposition for both main dispositions
-    if (task.taskType === "WOD_IVCS" && (disposition === "Completed - Fixed Amounts" || disposition === "Unable to Complete")) {
+    if (task.taskType === "WOD_IVCS" && (disposition === "Completed" || disposition === "Unable to Complete")) {
       if (!subDisposition) {
         alert("Please select a sub-disposition.");
         return;
@@ -1475,7 +1475,7 @@ function TaskCard({
               <option value="">Select disposition...</option>
               {task.taskType === "WOD_IVCS" ? (
                 <>
-                  <option value="Completed - Fixed Amounts">✅ Completed - Fixed Amounts</option>
+                  <option value="Completed">✅ Completed</option>
                   <option value="Unable to Complete">❌ Unable to Complete</option>
                 </>
               ) : task.taskType === "EMAIL_REQUESTS" ? (
@@ -1501,8 +1501,8 @@ function TaskCard({
               )}
             </select>
 
-            {/* Sub-disposition dropdown for WOD/IVCS "Completed - Fixed Amounts" */}
-            {task.taskType === "WOD_IVCS" && disposition === "Completed - Fixed Amounts" && (
+            {/* Sub-disposition dropdown for WOD/IVCS "Completed" */}
+            {task.taskType === "WOD_IVCS" && disposition === "Completed" && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/70">Sub-disposition:</label>
                 <select
@@ -1514,6 +1514,7 @@ function TaskCard({
                   }}
                 >
                   <option value="">Select sub-disposition...</option>
+                  <option value="Fixed Amounts">✅ Fixed Amounts</option>
                   <option value="Unable to fix amounts (everything is matching)">✅ Unable to fix amounts (everything is matching)</option>
                   <option value="Added PayPal Payment info">💳 Added PayPal Payment info</option>
                   <option value="Cannot edit CS">📝 Cannot edit CS</option>
@@ -1603,7 +1604,7 @@ function TaskCard({
                 (disposition === "Answered in SF" && !sfCaseNumber.trim()) ||
                 (task.taskType === "EMAIL_REQUESTS" && disposition === "Completed" && !sfCaseNumber.trim()) ||
                 (task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete" && !subDisposition) ||
-                (task.taskType === "WOD_IVCS" && (disposition === "Completed - Fixed Amounts" || disposition === "Unable to Complete") && !subDisposition)
+                (task.taskType === "WOD_IVCS" && (disposition === "Completed" || disposition === "Unable to Complete") && !subDisposition)
               }
               className="w-full"
             >
