@@ -93,6 +93,18 @@ interface Task {
   status: string;
   createdAt: string;
   updatedAt: string;
+  startTime?: string;
+  endTime?: string;
+  durationSec?: number;
+  disposition?: string;
+  assistanceNotes?: string;
+  managerResponse?: string;
+  assignedToId?: string;
+  assignedTo?: {
+    id: string;
+    name: string;
+    email: string;
+  };
 }
 
 interface DailyTrend {
@@ -130,13 +142,15 @@ export default function AnalyticsPage() {
     setAgentTasks([]);
 
     try {
-      const response = await fetch(`/api/manager/tasks?agentId=${agent.id}&status=in_progress&take=50&skip=0`, {
+      const response = await fetch(`/api/agent/tasks?email=${encodeURIComponent(agent.email)}`, {
         cache: 'no-store'
       });
       const data = await response.json();
       
       if (data.success && data.tasks) {
-        setAgentTasks(data.tasks);
+        // Filter to only show IN_PROGRESS tasks
+        const inProgressTasks = data.tasks.filter((task: any) => task.status === 'IN_PROGRESS');
+        setAgentTasks(inProgressTasks);
       } else {
         console.error('Failed to fetch agent tasks:', data.error);
         setAgentTasks([]);
@@ -673,6 +687,11 @@ export default function AnalyticsPage() {
                               <span className="px-2 py-1 bg-orange-500/20 text-orange-300 text-xs rounded">
                                 {task.status}
                               </span>
+                              {task.disposition && (
+                                <span className="px-2 py-1 bg-green-500/20 text-green-300 text-xs rounded">
+                                  {task.disposition}
+                                </span>
+                              )}
                             </div>
                             {task.brand && (
                               <div className="text-white/80 text-sm mb-1">
@@ -685,8 +704,18 @@ export default function AnalyticsPage() {
                               </div>
                             )}
                             {task.text && (
-                              <div className="text-white/70 text-sm">
+                              <div className="text-white/70 text-sm mb-2">
                                 <strong>Text:</strong> {task.text.length > 100 ? `${task.text.substring(0, 100)}...` : task.text}
+                              </div>
+                            )}
+                            {task.startTime && (
+                              <div className="text-white/60 text-xs">
+                                <strong>Started:</strong> {new Date(task.startTime).toLocaleString()}
+                              </div>
+                            )}
+                            {task.durationSec && (
+                              <div className="text-white/60 text-xs">
+                                <strong>Duration:</strong> {Math.round(task.durationSec / 60)}m {task.durationSec % 60}s
                               </div>
                             )}
                           </div>
