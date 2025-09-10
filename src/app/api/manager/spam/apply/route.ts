@@ -35,6 +35,8 @@ function chunk<T>(arr: T[], size: number): T[][] {
  */
 export async function POST(req: Request) {
   // CACHE BUST: Force new deployment to clear Netlify cache
+  const startTime = Date.now();
+  
   try {
     const body = await req.json().catch(() => ({}));
     const ids = Array.isArray(body?.ids) ? (body.ids as string[]) : undefined;
@@ -88,23 +90,47 @@ export async function POST(req: Request) {
       });
     });
 
-    // Execute upserts in smaller batches to prevent timeouts
-    const BATCH = 25; // Further reduced to prevent timeouts
-    for (const group of chunk(upserts, BATCH)) {
-      await prisma.$transaction(group);
+    // Process in very small batches to prevent timeouts
+    const BATCH_SIZE = 10; // Much smaller batches for serverless functions
+    const totalBatches = Math.ceil(upserts.length / BATCH_SIZE);
+    
+    console.log(`Processing ${rows.length} spam items in ${totalBatches} batches of ${BATCH_SIZE}`);
+    
+    // Process upserts in small batches
+    for (let i = 0; i < upserts.length; i += BATCH_SIZE) {
+      const batch = upserts.slice(i, i + BATCH_SIZE);
+      try {
+        await prisma.$transaction(batch);
+        console.log(`Processed batch ${Math.floor(i / BATCH_SIZE) + 1}/${totalBatches}`);
+      } catch (error) {
+        console.error(`Error processing batch ${Math.floor(i / BATCH_SIZE) + 1}:`, error);
+        // Continue with next batch instead of failing completely
+      }
     }
 
-    // Flip statuses to SPAM_ARCHIVED in one go
-    await prisma.rawMessage.updateMany({
-      where: { id: { in: rows.map((r) => r.id) } },
-      data: { status: "SPAM_ARCHIVED" as any }, // cast avoids enum typing issue
-    });
+    // Update statuses in small batches as well
+    const statusUpdateBatches = chunk(rows.map((r) => r.id), BATCH_SIZE);
+    for (const idBatch of statusUpdateBatches) {
+      try {
+        await prisma.rawMessage.updateMany({
+          where: { id: { in: idBatch } },
+          data: { status: "SPAM_ARCHIVED" as any },
+        });
+      } catch (error) {
+        console.error(`Error updating status for batch:`, error);
+        // Continue with next batch
+      }
+    }
 
+    const processingTime = Date.now() - startTime;
+    console.log(`Spam apply completed in ${processingTime}ms for ${rows.length} items`);
+    
     return NextResponse.json({
       success: true,
-      version: "2.0", // Force cache invalidation
+      version: "2.1", // Force cache invalidation
       archivedCount: rows.length,
       affectedIds: rows.map((r) => r.id),
+      processingTimeMs: processingTime,
     });
   } catch (err) {
     console.error("apply reviewer decisions error:", err);

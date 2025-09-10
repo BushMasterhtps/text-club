@@ -1322,6 +1322,17 @@ function SpamReviewSection({
 
   async function applyAllFiltered() {
     if (!confirm("Archive all spam that matches the current filter?")) return;
+    
+    // For large batches (>100), use background processing
+    if (total > 100) {
+      if (!confirm(`This will process ${total} spam items in batches. This may take several minutes. Continue?`)) return;
+      await processSpamInBackground();
+    } else {
+      await processSpamDirectly();
+    }
+  }
+
+  async function processSpamDirectly() {
     try {
       setApplyLoading(true);
       const res = await fetch("/api/manager/spam/apply", {
@@ -1330,12 +1341,70 @@ function SpamReviewSection({
         body: JSON.stringify({ archiveAll: true, q: q.trim() || undefined }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.success) { alert(data?.error || "Failed to apply reviewer decisions"); return; }
+      if (!res.ok || !data?.success) { 
+        alert(data?.error || "Failed to apply reviewer decisions"); 
+        return; 
+      }
       const archivedCount = Number(data.archivedCount || 0);
       onChangedCounts?.(0, -archivedCount);
       resetPaging();
       await fetchPage(1);
-    } finally { setApplyLoading(false); }
+    } finally { 
+      setApplyLoading(false); 
+    }
+  }
+
+  async function processSpamInBackground() {
+    try {
+      setApplyLoading(true);
+      let totalProcessed = 0;
+      let hasMore = true;
+      let batchCount = 0;
+      const maxBatches = 20; // Safety limit
+
+      while (hasMore && batchCount < maxBatches) {
+        batchCount++;
+        console.log(`Processing batch ${batchCount}...`);
+        
+        const res = await fetch("/api/manager/spam/apply-background", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            batchSize: 5, 
+            maxBatches: 1, // Process one batch at a time
+            q: q.trim() || undefined 
+          }),
+        });
+        
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) {
+          alert(`Error processing batch ${batchCount}: ${data?.error || "Unknown error"}`);
+          break;
+        }
+        
+        totalProcessed += data.processedCount || 0;
+        hasMore = data.hasMore || false;
+        
+        // Update UI after each batch
+        onChangedCounts?.(0, -(data.processedCount || 0));
+        await fetchPage(1);
+        
+        // Small delay between batches to prevent overwhelming the server
+        if (hasMore) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      if (totalProcessed > 0) {
+        alert(`Successfully processed ${totalProcessed} spam items in ${batchCount} batches.`);
+      }
+      
+    } catch (error) {
+      console.error("Background spam processing error:", error);
+      alert("Error processing spam items. Please try again.");
+    } finally { 
+      setApplyLoading(false); 
+    }
   }
 
   return (
@@ -1346,7 +1415,7 @@ function SpamReviewSection({
           <div className="text-sm text-white/60">{open ? `${total} total` : ""}</div>
           {open && (
             <SmallButton onClick={applyAllFiltered} disabled={applyLoading || loading || total === 0} title="Archive all matches">
-              {applyLoading ? "Applying…" : "Apply reviewer decisions"}
+              {applyLoading ? (total > 100 ? "Processing in batches…" : "Applying…") : "Apply reviewer decisions"}
             </SmallButton>
           )}
           <SmallButton onClick={() => setOpen((s) => !s)}>{open ? "Hide" : "Show"}</SmallButton>
