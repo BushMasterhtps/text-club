@@ -39,6 +39,10 @@ export async function GET(req: Request) {
       dateStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
       dateEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
     }
+
+    // Convert to UTC for database queries to avoid timezone issues
+    const utcDateStart = new Date(dateStart.getTime() - dateStart.getTimezoneOffset() * 60000);
+    const utcDateEnd = new Date(dateEnd.getTime() - dateEnd.getTimezoneOffset() * 60000);
     
     // Get all tasks for this user (including sent-back tasks that are no longer assigned)
     const tasks = await prisma.task.findMany({
@@ -73,7 +77,7 @@ export async function GET(req: Request) {
       const endTime = new Date(t.endTime);
       const isCompleted = t.status === "COMPLETED";
       const isSentBack = t.status === "PENDING" && t.sentBackBy; // Sent back tasks still count as work
-      return (isCompleted || isSentBack) && endTime >= dateStart && endTime < dateEnd;
+      return (isCompleted || isSentBack) && endTime >= utcDateStart && endTime < utcDateEnd;
     }).length;
     
     const assistanceSent = tasks.filter(t => 
@@ -90,7 +94,7 @@ export async function GET(req: Request) {
         const end = new Date(task.endTime);
         if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
           // Only include tasks completed on the selected date
-          if (end >= dateStart && end < dateEnd) {
+          if (end >= utcDateStart && end < utcDateEnd) {
             const mins = Math.round((end.getTime() - start.getTime()) / 60000);
             totalDuration += mins;
             durationCount++;

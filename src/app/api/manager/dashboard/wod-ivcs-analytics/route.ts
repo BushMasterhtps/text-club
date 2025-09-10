@@ -22,6 +22,11 @@ export async function GET(request: NextRequest) {
       const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
       const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
       
+      if (isNaN(startYear) || isNaN(startMonth) || isNaN(startDay) || 
+          isNaN(endYear) || isNaN(endMonth) || isNaN(endDay)) {
+        return NextResponse.json({ success: false, error: "Invalid date format. Use YYYY-MM-DD" }, { status: 400 });
+      }
+      
       dateStart = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
       dateEnd = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
     } else {
@@ -30,6 +35,10 @@ export async function GET(request: NextRequest) {
       dateStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
       dateEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
     }
+
+    // Convert to UTC for database queries to avoid timezone issues
+    const utcDateStart = new Date(dateStart.getTime() - dateStart.getTimezoneOffset() * 60000);
+    const utcDateEnd = new Date(dateEnd.getTime() - dateEnd.getTimezoneOffset() * 60000);
 
     // Build where clause for WOD/IVCS tasks
     const where: any = {
@@ -43,8 +52,8 @@ export async function GET(request: NextRequest) {
         }
       ],
       endTime: {
-        gte: dateStart,
-        lte: dateEnd
+        gte: utcDateStart,
+        lte: utcDateEnd
       }
     };
 
@@ -239,12 +248,16 @@ export async function GET(request: NextRequest) {
       const compareDateStart = new Date(compareStartYear, compareStartMonth - 1, compareStartDay, 0, 0, 0, 0);
       const compareDateEnd = new Date(compareEndYear, compareEndMonth - 1, compareEndDay, 23, 59, 59, 999);
       
+      // Convert to UTC for database queries
+      const utcCompareDateStart = new Date(compareDateStart.getTime() - compareDateStart.getTimezoneOffset() * 60000);
+      const utcCompareDateEnd = new Date(compareDateEnd.getTime() - compareDateEnd.getTimezoneOffset() * 60000);
+      
       const compareCount = await prisma.task.count({
         where: {
           ...where,
           endTime: {
-            gte: compareDateStart,
-            lte: compareDateEnd
+            gte: utcCompareDateStart,
+            lte: utcCompareDateEnd
           }
         }
       });
@@ -253,8 +266,8 @@ export async function GET(request: NextRequest) {
         where: {
           ...where,
           endTime: {
-            gte: compareDateStart,
-            lte: compareDateEnd
+            gte: utcCompareDateStart,
+            lte: utcCompareDateEnd
           },
           durationSec: { not: null }
         },

@@ -31,6 +31,9 @@ export async function GET(request: NextRequest) {
     if (date) {
       // Parse the date string as local time (not UTC)
       const [year, month, day] = date.split('-').map(Number);
+      if (isNaN(year) || isNaN(month) || isNaN(day)) {
+        return NextResponse.json({ success: false, error: "Invalid date format. Use YYYY-MM-DD" }, { status: 400 });
+      }
       startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0); // month is 0-indexed
       endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
     } else {
@@ -39,6 +42,10 @@ export async function GET(request: NextRequest) {
       startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
       endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
     }
+
+    // Convert to UTC for database queries to avoid timezone issues
+    const utcStartOfDay = new Date(startOfDay.getTime() - startOfDay.getTimezoneOffset() * 60000);
+    const utcEndOfDay = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000);
 
 
     // Get completion stats by task type for today (including sent-back tasks)
@@ -50,16 +57,16 @@ export async function GET(request: NextRequest) {
             assignedToId: user.id,
             status: 'COMPLETED',
             endTime: {
-              gte: startOfDay,
-              lte: endOfDay
+              gte: utcStartOfDay,
+              lte: utcEndOfDay
             }
           },
           {
             sentBackBy: user.id,
             status: 'PENDING',
             endTime: {
-              gte: startOfDay,
-              lte: endOfDay
+              gte: utcStartOfDay,
+              lte: utcEndOfDay
             }
           }
         ]
@@ -116,7 +123,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       stats,
-      date: targetDate.toISOString().split('T')[0]
+      date: date || new Date().toISOString().split('T')[0]
     });
 
   } catch (error: any) {
