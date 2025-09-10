@@ -35,6 +35,21 @@ export async function POST(req: Request) {
     // Process spam data if requested
     if (type === 'spam' || type === 'both') {
       console.log('📊 Processing archived spam data...');
+      
+      // First check if we have any spam archive data
+      const spamArchiveCount = await prisma.spamArchive.count({
+        where: brand ? { brand } : {}
+      });
+      
+      if (spamArchiveCount === 0) {
+        console.log('⚠️ No spam archive data found. Spam learning requires archived spam messages to learn from.');
+        return NextResponse.json({
+          success: false,
+          error: "No spam archive data found. Spam learning requires archived spam messages to learn from.",
+          suggestion: "Use the 'Apply Reviewer Decisions' button to archive some spam messages first, then try learning again."
+        });
+      }
+      
       let spamOffset = 0;
       
       for (let batch = 0; batch < maxBatches; batch++) {
@@ -83,6 +98,23 @@ export async function POST(req: Request) {
     // Process legitimate data if requested
     if (type === 'legitimate' || type === 'both') {
       console.log('📊 Processing legitimate task data...');
+      
+      // First check if we have any TEXT_CLUB tasks
+      const textClubCount = await prisma.task.count({
+        where: {
+          taskType: 'TEXT_CLUB'
+        }
+      });
+      
+      if (textClubCount === 0) {
+        console.log('⚠️ No TEXT_CLUB tasks found in database. Spam learning requires TEXT_CLUB tasks to learn from.');
+        return NextResponse.json({
+          success: false,
+          error: "No TEXT_CLUB tasks found. Spam learning requires TEXT_CLUB tasks to learn from legitimate messages.",
+          suggestion: "Import some TEXT_CLUB tasks first, then try learning again."
+        });
+      }
+      
       let legitimateOffset = 0;
       
       for (let batch = 0; batch < maxBatches; batch++) {
@@ -96,7 +128,8 @@ export async function POST(req: Request) {
           select: {
             text: true,
             brand: true,
-            createdAt: true
+            createdAt: true,
+            taskType: true // Add taskType to verify we're not learning from wrong tasks
           },
           orderBy: { createdAt: 'desc' },
           take: batchSize,

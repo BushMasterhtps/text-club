@@ -96,7 +96,9 @@ export default function SpamInsights({ brand, onClose }: SpamInsightsProps) {
         // Refresh insights
         fetchInsights();
       } else {
-        alert(`Learning failed: ${data.error}`);
+        const errorMsg = data.error || 'Unknown error occurred';
+        const suggestion = data.suggestion ? `\n\nSuggestion: ${data.suggestion}` : '';
+        alert(`Learning failed: ${errorMsg}${suggestion}`);
       }
     } catch (error) {
       console.error('Learn from archive error:', error);
