@@ -235,7 +235,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate summary stats
-    const totalCompleted = completedTasks.length;
+    const totalCompleted = totalCount; // Use totalCount from database, not limited completedTasks.length
     const totalDuration = completedTasks.reduce((sum, task) => sum + (task.durationSec || 0), 0);
     const avgDuration = totalCompleted > 0 ? totalDuration / totalCompleted : 0;
 

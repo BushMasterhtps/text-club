@@ -1725,8 +1725,16 @@ function CompletedWorkDashboard() {
         break;
     }
 
-    setStartDate(start.toISOString().split('T')[0]);
-    setEndDate(end.toISOString().split('T')[0]);
+    // Format dates as YYYY-MM-DD without timezone conversion
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    setStartDate(formatDate(start));
+    setEndDate(formatDate(end));
   };
 
   const setComparisonDateRange = (range: 'previousPeriod' | 'sameLastMonth' | 'sameLastQuarter' | 'sameLastYear') => {
