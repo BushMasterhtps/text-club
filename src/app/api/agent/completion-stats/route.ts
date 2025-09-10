@@ -32,28 +32,48 @@ export async function GET(request: NextRequest) {
     endOfDay.setHours(23, 59, 59, 999);
 
 
-    // Get completion stats by task type for today
+    // Get completion stats by task type for today (including sent-back tasks)
     const completionStats = await prisma.task.groupBy({
       by: ['taskType'],
       where: {
-        assignedToId: user.id,
-        status: 'COMPLETED',
-        endTime: {
-          gte: startOfDay,
-          lte: endOfDay
-        }
+        OR: [
+          {
+            assignedToId: user.id,
+            status: 'COMPLETED',
+            endTime: {
+              gte: startOfDay,
+              lte: endOfDay
+            }
+          },
+          {
+            sentBackBy: user.id,
+            status: 'PENDING',
+            endTime: {
+              gte: startOfDay,
+              lte: endOfDay
+            }
+          }
+        ]
       },
       _count: {
         id: true
       }
     });
 
-    // Get total completion stats (lifetime)
+    // Get total completion stats (lifetime) including sent-back tasks
     const totalStats = await prisma.task.groupBy({
       by: ['taskType'],
       where: {
-        assignedToId: user.id,
-        status: 'COMPLETED'
+        OR: [
+          {
+            assignedToId: user.id,
+            status: 'COMPLETED'
+          },
+          {
+            sentBackBy: user.id,
+            status: 'PENDING'
+          }
+        ]
       },
       _count: {
         id: true

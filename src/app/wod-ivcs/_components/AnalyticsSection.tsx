@@ -452,8 +452,8 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
               className="w-full px-3 py-2 bg-white/10 text-white rounded border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Dispositions</option>
-              <option value="Completed – Fixed Amounts">Completed – Fixed Amounts</option>
-              <option value="Reviewed / Unable to Complete">Reviewed / Unable to Complete</option>
+              <option value="Completed - Fixed Amounts">Completed - Fixed Amounts</option>
+              <option value="Unable to Complete">Unable to Complete</option>
             </select>
           </div>
         </div>

@@ -79,12 +79,23 @@ export async function GET(request: NextRequest) {
           prisma.task.count({
             where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "TEXT_CLUB" }
           }),
+          // Text Club completed today (including sent-back tasks)
           prisma.task.count({
             where: {
-              assignedToId: agent.id,
-              status: "COMPLETED",
-              taskType: "TEXT_CLUB",
-              endTime: { gte: startOfToday, lt: endOfToday }
+              OR: [
+                {
+                  assignedToId: agent.id,
+                  status: "COMPLETED",
+                  taskType: "TEXT_CLUB",
+                  endTime: { gte: startOfToday, lt: endOfToday }
+                },
+                {
+                  sentBackBy: agent.id,
+                  status: "PENDING",
+                  taskType: "TEXT_CLUB",
+                  endTime: { gte: startOfToday, lt: endOfToday }
+                }
+              ]
             }
           }),
           // WOD/IVCS breakdown
@@ -94,12 +105,23 @@ export async function GET(request: NextRequest) {
           prisma.task.count({
             where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "WOD_IVCS" }
           }),
+          // WOD/IVCS completed today (including sent-back tasks)
           prisma.task.count({
             where: {
-              assignedToId: agent.id,
-              status: "COMPLETED",
-              taskType: "WOD_IVCS",
-              endTime: { gte: startOfToday, lt: endOfToday }
+              OR: [
+                {
+                  assignedToId: agent.id,
+                  status: "COMPLETED",
+                  taskType: "WOD_IVCS",
+                  endTime: { gte: startOfToday, lt: endOfToday }
+                },
+                {
+                  sentBackBy: agent.id,
+                  status: "PENDING",
+                  taskType: "WOD_IVCS",
+                  endTime: { gte: startOfToday, lt: endOfToday }
+                }
+              ]
             }
           }),
           // Email Requests breakdown
@@ -109,12 +131,23 @@ export async function GET(request: NextRequest) {
           prisma.task.count({
             where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "EMAIL_REQUESTS" }
           }),
+          // Email Requests completed today (including sent-back tasks)
           prisma.task.count({
             where: {
-              assignedToId: agent.id,
-              status: "COMPLETED",
-              taskType: "EMAIL_REQUESTS",
-              endTime: { gte: startOfToday, lt: endOfToday }
+              OR: [
+                {
+                  assignedToId: agent.id,
+                  status: "COMPLETED",
+                  taskType: "EMAIL_REQUESTS",
+                  endTime: { gte: startOfToday, lt: endOfToday }
+                },
+                {
+                  sentBackBy: agent.id,
+                  status: "PENDING",
+                  taskType: "EMAIL_REQUESTS",
+                  endTime: { gte: startOfToday, lt: endOfToday }
+                }
+              ]
             }
           }),
           // Standalone Refunds breakdown
@@ -124,12 +157,23 @@ export async function GET(request: NextRequest) {
           prisma.task.count({
             where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "STANDALONE_REFUNDS" }
           }),
+          // Standalone Refunds completed today (including sent-back tasks)
           prisma.task.count({
             where: {
-              assignedToId: agent.id,
-              status: "COMPLETED",
-              taskType: "STANDALONE_REFUNDS",
-              endTime: { gte: startOfToday, lt: endOfToday }
+              OR: [
+                {
+                  assignedToId: agent.id,
+                  status: "COMPLETED",
+                  taskType: "STANDALONE_REFUNDS",
+                  endTime: { gte: startOfToday, lt: endOfToday }
+                },
+                {
+                  sentBackBy: agent.id,
+                  status: "PENDING",
+                  taskType: "STANDALONE_REFUNDS",
+                  endTime: { gte: startOfToday, lt: endOfToday }
+                }
+              ]
             }
           })
         ]);

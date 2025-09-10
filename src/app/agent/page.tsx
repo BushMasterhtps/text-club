@@ -1143,10 +1143,10 @@ function TaskCard({
   const handleComplete = () => {
     if (!disposition) return;
     
-    // For WOD/IVCS tasks with "Reviewed / Unable to Complete", require sub-disposition
-    if (task.taskType === "WOD_IVCS" && disposition === "Reviewed / Unable to Complete") {
+    // For WOD/IVCS tasks, require sub-disposition for both main dispositions
+    if (task.taskType === "WOD_IVCS" && (disposition === "Completed - Fixed Amounts" || disposition === "Unable to Complete")) {
       if (!subDisposition) {
-        alert("Please select a sub-disposition for Unable to Complete.");
+        alert("Please select a sub-disposition.");
         return;
       }
       // Combine main disposition with sub-disposition
@@ -1480,7 +1480,7 @@ function TaskCard({
               {task.taskType === "WOD_IVCS" ? (
                 <>
                   <option value="Completed - Fixed Amounts">✅ Completed - Fixed Amounts</option>
-                  <option value="Reviewed / Unable to Complete">❌ Reviewed / Unable to Complete</option>
+                  <option value="Unable to Complete">❌ Unable to Complete</option>
                 </>
               ) : task.taskType === "EMAIL_REQUESTS" ? (
                 <>
@@ -1505,8 +1505,8 @@ function TaskCard({
               )}
             </select>
 
-            {/* Sub-disposition dropdown for WOD/IVCS "Unable to Complete" */}
-            {task.taskType === "WOD_IVCS" && disposition === "Reviewed / Unable to Complete" && (
+            {/* Sub-disposition dropdown for WOD/IVCS "Completed - Fixed Amounts" */}
+            {task.taskType === "WOD_IVCS" && disposition === "Completed - Fixed Amounts" && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/70">Sub-disposition:</label>
                 <select
@@ -1518,10 +1518,32 @@ function TaskCard({
                   }}
                 >
                   <option value="">Select sub-disposition...</option>
-                  <option value="Canadian Order / Unable to Edit Sales Order">🇨🇦 Canadian Order / Unable to Edit Sales Order</option>
-                  <option value="Unable to Edit Sales Order">📝 Unable to Edit Sales Order</option>
-                  <option value="Unable to Edit Cash Sale">💰 Unable to Edit Cash Sale</option>
-                  <option value="Invalid Cash Sale / Not Able to Fix">❌ Invalid Cash Sale / Not Able to Fix</option>
+                  <option value="Unable to fix amounts (everything is matching)">✅ Unable to fix amounts (everything is matching)</option>
+                  <option value="Added PayPal Payment info">💳 Added PayPal Payment info</option>
+                  <option value="Cannot edit CS">📝 Cannot edit CS</option>
+                  <option value="Completed SO only - CS line location error">🔧 Completed SO only - CS line location error</option>
+                </select>
+              </div>
+            )}
+
+            {/* Sub-disposition dropdown for WOD/IVCS "Unable to Complete" */}
+            {task.taskType === "WOD_IVCS" && disposition === "Unable to Complete" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/70">Sub-disposition:</label>
+                <select
+                  value={subDisposition}
+                  onChange={(e) => setSubDisposition(e.target.value)}
+                  className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{
+                    colorScheme: 'dark'
+                  }}
+                >
+                  <option value="">Select sub-disposition...</option>
+                  <option value="Not Completed - Canada Lock">🇨🇦 Not Completed - Canada Lock</option>
+                  <option value="Not Completed - Meta">📱 Not Completed - Meta</option>
+                  <option value="Not Completed - No edit button">🔄 Not Completed - No edit button</option>
+                  <option value="Not Completed - Locked (CS was able to be edited)">🔒 Not Completed - Locked (CS was able to be edited)</option>
+                  <option value="Not Completed - Reship">📦 Not Completed - Reship</option>
                 </select>
               </div>
             )}
@@ -1585,7 +1607,7 @@ function TaskCard({
                 (disposition === "Answered in SF" && !sfCaseNumber.trim()) ||
                 (task.taskType === "EMAIL_REQUESTS" && disposition === "Completed" && !sfCaseNumber.trim()) ||
                 (task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete" && !subDisposition) ||
-                (task.taskType === "WOD_IVCS" && disposition === "Reviewed / Unable to Complete" && !subDisposition)
+                (task.taskType === "WOD_IVCS" && (disposition === "Completed - Fixed Amounts" || disposition === "Unable to Complete") && !subDisposition)
               }
               className="w-full"
             >

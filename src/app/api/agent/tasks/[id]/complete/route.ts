@@ -68,23 +68,36 @@ export async function POST(
       durationSec = seconds;
     }
 
+    // Check if this is a "send back" disposition for WOD/IVCS
+    const isSendBack = disposition.includes("Not Completed - No edit button");
+    
     // Update task status, end time, duration, and disposition
     const updatedTask = await prisma.task.update({
       where: { id },
       data: {
-        status: "COMPLETED",
+        status: isSendBack ? "PENDING" : "COMPLETED", // Send back to pending queue
         endTime: new Date(),
         durationSec,
         disposition,
         sfCaseNumber: sfCaseNumber || null,
-        updatedAt: new Date()
+        assignedToId: isSendBack ? null : task.assignedToId, // Unassign if sending back
+        updatedAt: new Date(),
+        // Add send-back tracking fields
+        ...(isSendBack && {
+          sentBackBy: user.id,
+          sentBackAt: new Date(),
+          sentBackDisposition: disposition
+        })
       },
       select: {
         id: true,
         status: true,
         endTime: true,
         durationSec: true,
-        disposition: true
+        disposition: true,
+        sentBackBy: true,
+        sentBackAt: true,
+        sentBackDisposition: true
       }
     });
 

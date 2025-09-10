@@ -90,6 +90,9 @@ export function PendingTasksSection({ taskType = "TEXT_CLUB" }: PendingTasksSect
                 <th className="px-3 py-2">Brand</th>
                 <th className="px-3 py-2">Details</th>
                 <th className="px-3 py-2">Assigned</th>
+                {taskType === "WOD_IVCS" && (
+                  <th className="px-3 py-2">Send-back Info</th>
+                )}
                 <th className="px-3 py-2">Created</th>
                 <th className="px-3 py-2">Actions</th>
               </tr>
@@ -131,6 +134,21 @@ export function PendingTasksSection({ taskType = "TEXT_CLUB" }: PendingTasksSect
                       </select>
                     )}
                   </td>
+                  {taskType === "WOD_IVCS" && (
+                    <td className="px-3 py-2">
+                      {task.sentBackByUser ? (
+                        <div className="text-xs">
+                          <div className="text-orange-300">🔄 Sent back by {task.sentBackByUser.name || task.sentBackByUser.email}</div>
+                          <div className="text-white/60 mt-1">{task.sentBackDisposition}</div>
+                          <div className="text-white/40 text-xs">
+                            {task.sentBackAt ? new Date(task.sentBackAt).toLocaleString() : 'Unknown time'}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-white/40">New task</div>
+                      )}
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-xs text-white/60">
                     {new Date(task.createdAt).toLocaleDateString()}
                   </td>

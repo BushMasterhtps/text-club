@@ -80,6 +80,7 @@ model User {
   maxOpen  Int       @default(200)
 
   tasks      Task[]              @relation("UserTasks")
+  sentBackTasks Task[]           @relation("SentBackTasks")
   assistance AssistanceRequest[]
   histories  TaskHistory[]       @relation("UserHistory")
 
@@ -113,6 +114,12 @@ model Task {
   sfCaseNumber    String?
   assistanceNotes String?
   managerResponse String?
+
+  // 🔄 Send-back tracking for WOD/IVCS tasks
+  sentBackBy          String?
+  sentBackAt          DateTime?
+  sentBackDisposition String?
+  sentBackByUser      User?   @relation("SentBackTasks", fields: [sentBackBy], references: [id])
 
   // 🆕 WOD/IVCS specific fields
   wodIvcsSource        WodIvcsSource?

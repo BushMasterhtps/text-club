@@ -23,6 +23,11 @@ interface WodIvcsTask {
   createdAt: string;
   orderAge: string | null;
   orderAgeDays: number | null;
+  // Send-back fields
+  sentBackBy: string | null;
+  sentBackAt: string | null;
+  sentBackDisposition: string | null;
+  sentBackByUser: { id: string; name: string; email: string } | null;
 }
 
 interface WodIvcsTasksSectionProps {
@@ -532,6 +537,7 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
                 >
                   Created {getSortIcon("createdAt")}
                 </th>
+                <th className="text-left py-3 px-2">Send-back Info</th>
                 <th className="text-left py-3 px-2">Actions</th>
               </tr>
             </thead>
@@ -607,6 +613,19 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
                     </td>
                     <td className="py-3 px-2 text-white/60">
                       {new Date(task.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-2">
+                      {task.sentBackByUser ? (
+                        <div className="text-xs text-orange-300">
+                          <div className="font-medium">Sent back by {task.sentBackByUser.name}</div>
+                          <div className="text-orange-200/80">{task.sentBackDisposition}</div>
+                          <div className="text-orange-200/60">
+                            {task.sentBackAt ? new Date(task.sentBackAt).toLocaleString() : 'N/A'}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-white/40 text-xs">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-2">
                       <div className="flex gap-1">

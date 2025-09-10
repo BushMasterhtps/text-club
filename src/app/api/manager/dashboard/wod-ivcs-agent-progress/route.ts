@@ -94,12 +94,23 @@ export async function GET(request: NextRequest) {
           prisma.task.count({
             where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "WOD_IVCS" }
           }),
+          // WOD/IVCS completed today (including sent-back tasks)
           prisma.task.count({
             where: {
-              assignedToId: agent.id,
-              status: "COMPLETED",
-              taskType: "WOD_IVCS",
-              endTime: { gte: startOfToday, lt: endOfToday }
+              OR: [
+                {
+                  assignedToId: agent.id,
+                  status: "COMPLETED",
+                  taskType: "WOD_IVCS",
+                  endTime: { gte: startOfToday, lt: endOfToday }
+                },
+                {
+                  sentBackBy: agent.id,
+                  status: "PENDING",
+                  taskType: "WOD_IVCS",
+                  endTime: { gte: startOfToday, lt: endOfToday }
+                }
+              ]
             }
           }),
           // Email Requests breakdown

@@ -38,16 +38,23 @@ export async function GET(req: Request) {
     const dateStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
     const dateEnd = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1);
     
-    // Get all tasks for this user
+    // Get all tasks for this user (including sent-back tasks that are no longer assigned)
     const tasks = await prisma.task.findMany({
-      where: { assignedToId: user.id },
+      where: { 
+        OR: [
+          { assignedToId: user.id },
+          { sentBackBy: user.id } // Include tasks sent back by this user
+        ]
+      },
       select: {
         status: true,
         startTime: true,
         endTime: true,
         durationSec: true,
         assistanceNotes: true,
-        createdAt: true
+        createdAt: true,
+        sentBackBy: true,
+        sentBackAt: true
       }
     });
 
@@ -57,9 +64,14 @@ export async function GET(req: Request) {
     ).length;
     
     const completed = tasks.filter(t => {
-      if (t.status !== "COMPLETED" || !t.endTime) return false;
+      // Count as completed if:
+      // 1. Status is COMPLETED (normal completion)
+      // 2. Status is PENDING but has sentBackBy (sent back tasks that still count as work done)
+      if (!t.endTime) return false;
       const endTime = new Date(t.endTime);
-      return endTime >= dateStart && endTime < dateEnd;
+      const isCompleted = t.status === "COMPLETED";
+      const isSentBack = t.status === "PENDING" && t.sentBackBy; // Sent back tasks still count as work
+      return (isCompleted || isSentBack) && endTime >= dateStart && endTime < dateEnd;
     }).length;
     
     const assistanceSent = tasks.filter(t => 

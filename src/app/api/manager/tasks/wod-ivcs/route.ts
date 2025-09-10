@@ -199,6 +199,7 @@ export async function GET(req: Request) {
       take,
       include: {
         assignedTo: { select: { id: true, name: true, email: true } },
+        sentBackByUser: { select: { id: true, name: true, email: true } },
       },
     }),
   ]);
@@ -249,6 +250,12 @@ export async function GET(req: Request) {
       purchaseDate: task.purchaseDate,
       orderAge: orderAge,
       orderAgeDays: orderAgeDays,
+      
+      // Send-back tracking fields
+      sentBackBy: task.sentBackBy,
+      sentBackAt: task.sentBackAt,
+      sentBackDisposition: task.sentBackDisposition,
+      sentBackByUser: task.sentBackByUser,
     };
   });
 
