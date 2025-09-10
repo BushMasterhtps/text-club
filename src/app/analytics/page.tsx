@@ -48,6 +48,7 @@ interface OverviewStats {
   activeAgents: number;
   tasksInProgress: number;
   pendingTasks: number;
+  totalInProgress: number;
 }
 
 interface TaskTypeStats {
@@ -83,6 +84,17 @@ interface AgentStatus {
   lastSeen: string;
 }
 
+interface Task {
+  id: string;
+  taskType: string;
+  brand?: string;
+  phone?: string;
+  text?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface DailyTrend {
   date: string;
   textClub: number;
@@ -103,6 +115,39 @@ export default function AnalyticsPage() {
   const [comparisonData, setComparisonData] = useState<any>(null);
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  
+  // Peek In Progress functionality
+  const [peekModalOpen, setPeekModalOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<AgentStatus | null>(null);
+  const [agentTasks, setAgentTasks] = useState<Task[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+
+  // Peek at agent's in-progress tasks
+  const peekAgentTasks = async (agent: AgentStatus) => {
+    setSelectedAgent(agent);
+    setPeekModalOpen(true);
+    setLoadingTasks(true);
+    setAgentTasks([]);
+
+    try {
+      const response = await fetch(`/api/manager/tasks?agentId=${agent.id}&status=in_progress&take=50&skip=0`, {
+        cache: 'no-store'
+      });
+      const data = await response.json();
+      
+      if (data.success && data.tasks) {
+        setAgentTasks(data.tasks);
+      } else {
+        console.error('Failed to fetch agent tasks:', data.error);
+        setAgentTasks([]);
+      }
+    } catch (error) {
+      console.error('Error fetching agent tasks:', error);
+      setAgentTasks([]);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
 
   // Date range helper
   const getDateRange = (range: string) => {
@@ -376,7 +421,17 @@ export default function AnalyticsPage() {
             <Card className="p-6 bg-gradient-to-br from-orange-500/20 to-orange-600/20 border-orange-500/30">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-orange-200 text-sm font-medium">Active Agents</p>
+                  <p className="text-orange-200 text-sm font-medium">Total In Progress</p>
+                  <p className="text-3xl font-bold text-white mt-1">{overviewStats.totalInProgress}</p>
+                </div>
+                <div className="text-4xl">🔄</div>
+              </div>
+            </Card>
+
+            <Card className="p-6 bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 border-cyan-500/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-cyan-200 text-sm font-medium">Active Agents</p>
                   <p className="text-3xl font-bold text-white mt-1">{overviewStats.activeAgents}</p>
                 </div>
                 <div className="text-4xl">👥</div>
@@ -483,6 +538,14 @@ export default function AnalyticsPage() {
                     Last seen: {new Date(agent.lastSeen).toLocaleString()}
                   </p>
                 </div>
+                <div className="mt-3">
+                  <SmallButton
+                    onClick={() => peekAgentTasks(agent)}
+                    className="w-full text-xs"
+                  >
+                    👁️ Peek In Progress
+                  </SmallButton>
+                </div>
               </div>
             ))}
           </div>
@@ -561,6 +624,85 @@ export default function AnalyticsPage() {
             </SmallButton>
           </div>
         </Card>
+
+        {/* Peek In Progress Modal */}
+        {peekModalOpen && selectedAgent && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-900 rounded-lg border border-white/20 max-w-4xl w-full max-h-[80vh] overflow-hidden">
+              <div className="p-6 border-b border-white/10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <H2 className="text-white">👁️ Peek In Progress - {selectedAgent.name}</H2>
+                    <p className="text-white/60 text-sm mt-1">{selectedAgent.email}</p>
+                  </div>
+                  <SmallButton
+                    onClick={() => setPeekModalOpen(false)}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    ✕ Close
+                  </SmallButton>
+                </div>
+              </div>
+              
+              <div className="p-6 overflow-y-auto max-h-[60vh]">
+                {loadingTasks ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-white/60">Loading tasks...</div>
+                  </div>
+                ) : agentTasks.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="text-4xl mb-4">📭</div>
+                    <div className="text-white/60">No in-progress tasks found</div>
+                    <div className="text-white/40 text-sm mt-2">
+                      This agent currently has no tasks in progress
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-white/80 text-sm mb-4">
+                      Found {agentTasks.length} in-progress task{agentTasks.length !== 1 ? 's' : ''}
+                    </div>
+                    {agentTasks.map((task) => (
+                      <div key={task.id} className="p-4 bg-white/5 rounded-lg border border-white/10">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded">
+                                {task.taskType}
+                              </span>
+                              <span className="px-2 py-1 bg-orange-500/20 text-orange-300 text-xs rounded">
+                                {task.status}
+                              </span>
+                            </div>
+                            {task.brand && (
+                              <div className="text-white/80 text-sm mb-1">
+                                <strong>Brand:</strong> {task.brand}
+                              </div>
+                            )}
+                            {task.phone && (
+                              <div className="text-white/80 text-sm mb-1">
+                                <strong>Phone:</strong> {task.phone}
+                              </div>
+                            )}
+                            {task.text && (
+                              <div className="text-white/70 text-sm">
+                                <strong>Text:</strong> {task.text.length > 100 ? `${task.text.substring(0, 100)}...` : task.text}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-white/50 text-xs ml-4">
+                            <div>Created: {new Date(task.createdAt).toLocaleString()}</div>
+                            <div>Updated: {new Date(task.updatedAt).toLocaleString()}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );

@@ -98,6 +98,13 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // Get total in progress (IN_PROGRESS + PENDING + ASSISTANCE_REQUIRED)
+    const totalInProgress = await prisma.task.count({
+      where: {
+        status: { in: ["IN_PROGRESS", "PENDING", "ASSISTANCE_REQUIRED"] }
+      }
+    });
+
     // Get pending tasks
     const pendingTasks = await prisma.task.count({
       where: {
@@ -111,7 +118,8 @@ export async function GET(request: NextRequest) {
       avgHandleTime: Math.round(avgHandleTimeResult._avg.durationSec || 0),
       activeAgents,
       tasksInProgress,
-      pendingTasks
+      pendingTasks,
+      totalInProgress
     };
 
     return NextResponse.json({
