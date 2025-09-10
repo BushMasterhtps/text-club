@@ -289,18 +289,22 @@ export async function learnFromSpamDecision(
   source?: string
 ): Promise<void> {
   try {
-    // Check if we already have this exact text and decision
+    // Check if we already have this exact text and decision within the last 24 hours
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    
     const existing = await prisma.spamLearning.findFirst({
       where: {
         text: text.substring(0, 1000),
         brand: brand || null,
-        isSpam
+        isSpam,
+        createdAt: { gte: oneDayAgo }
       }
     });
 
-    // Skip if we already learned from this exact text
+    // Skip if we already learned from this exact text recently
     if (existing) {
-      console.log(`Skipping duplicate learning entry for text: ${text.substring(0, 50)}...`);
+      console.log(`Skipping recent duplicate learning entry for text: ${text.substring(0, 50)}...`);
       return;
     }
 

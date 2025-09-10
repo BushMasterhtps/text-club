@@ -90,7 +90,8 @@ export async function POST(req: Request) {
           where: {
             status: 'COMPLETED',
             disposition: { not: 'SPAM' },
-            text: { not: null }
+            text: { not: null },
+            taskType: 'TEXT_CLUB' // Only use TEXT_CLUB tasks for spam learning
           },
           select: {
             text: true,
