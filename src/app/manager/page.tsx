@@ -3337,7 +3337,7 @@ export default function ManagerPage() {
     { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage tasks" },
     { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.length },
     { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
-    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights", external: true, href: "/analytics" }
+    { id: "analytics", label: "📈 Team Analytics", description: "Team-wide performance and task insights", external: true, href: "/analytics" }
   ];
 
   return (
@@ -3747,7 +3747,7 @@ export default function ManagerPage() {
       {/* Analytics Section */}
       {activeSection === "analytics" && (
         <div className="space-y-8">
-          <TextClubAnalytics />
+          <CompletedWorkDashboard />
         </div>
       )}
 

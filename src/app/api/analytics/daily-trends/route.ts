@@ -32,10 +32,15 @@ export async function GET(request: NextRequest) {
     const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'STANDALONE_REFUNDS'];
     const dailyTrends: any = {};
 
-    // Initialize all dates in range
+    // Initialize all dates in range using local dates
     const currentDate = new Date(dateStart);
     while (currentDate <= dateEnd) {
-      const dateKey = currentDate.toISOString().split('T')[0];
+      // Use local date components to avoid timezone conversion
+      const year = currentDate.getFullYear();
+      const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+      const day = String(currentDate.getDate()).padStart(2, '0');
+      const dateKey = `${year}-${month}-${day}`;
+      
       dailyTrends[dateKey] = {
         date: dateKey,
         textClub: 0,
@@ -69,16 +74,26 @@ export async function GET(request: NextRequest) {
         }
       });
 
-      // Group by date
+      // Group by date - use local date to avoid timezone issues
       tasks.forEach(task => {
         if (task.endTime) {
           const taskDate = new Date(task.endTime);
-          const dateKey = taskDate.toISOString().split('T')[0];
+          // Use local date components to avoid timezone conversion
+          const year = taskDate.getFullYear();
+          const month = String(taskDate.getMonth() + 1).padStart(2, '0');
+          const day = String(taskDate.getDate()).padStart(2, '0');
+          const dateKey = `${year}-${month}-${day}`;
           
           if (dailyTrends[dateKey]) {
-            const key = taskType.toLowerCase().replace(/_/g, '');
-            dailyTrends[dateKey][key]++;
-            dailyTrends[dateKey].total++;
+            const key = taskType === 'WOD_IVCS' ? 'wodIvcs' : 
+                       taskType === 'TEXT_CLUB' ? 'textClub' :
+                       taskType === 'EMAIL_REQUESTS' ? 'emailRequests' :
+                       taskType === 'STANDALONE_REFUNDS' ? 'standaloneRefunds' :
+                       taskType.toLowerCase().replace(/_/g, '');
+            if (dailyTrends[dateKey].hasOwnProperty(key)) {
+              dailyTrends[dateKey][key]++;
+              dailyTrends[dateKey].total++;
+            }
           }
         }
       });

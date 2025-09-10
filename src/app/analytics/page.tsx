@@ -98,9 +98,11 @@ export default function AnalyticsPage() {
   const [agentStatus, setAgentStatus] = useState<AgentStatus[]>([]);
   const [dailyTrends, setDailyTrends] = useState<DailyTrend[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDateRange, setSelectedDateRange] = useState<'today' | 'week' | 'month' | 'quarter' | 'year'>('today');
+  const [selectedDateRange, setSelectedDateRange] = useState<'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom'>('today');
   const [compareMode, setCompareMode] = useState(false);
   const [comparisonData, setComparisonData] = useState<any>(null);
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // Date range helper
   const getDateRange = (range: string) => {
@@ -128,6 +130,17 @@ export default function AnalyticsPage() {
         break;
       case 'year':
         start = new Date(today.getFullYear(), 0, 1);
+        end = new Date(today);
+        break;
+      case 'custom':
+        if (customStartDate && customEndDate) {
+          return {
+            start: customStartDate,
+            end: customEndDate
+          };
+        }
+        // Fallback to today if custom dates not set
+        start = new Date(today);
         end = new Date(today);
         break;
       default:
@@ -241,7 +254,7 @@ export default function AnalyticsPage() {
       <div className="flex justify-between items-center p-6 border-b border-white/10">
         <div>
           <H1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-            📊 Analytics Dashboard
+            📊 Team Analytics
           </H1>
           <p className="text-white/60 mt-2">
             Real-time insights into your team's performance and task completion
@@ -265,20 +278,65 @@ export default function AnalyticsPage() {
               />
             </div>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {['today', 'week', 'month', 'quarter', 'year'].map((range) => (
+          <div className="space-y-4">
+            <div className="flex gap-2 flex-wrap">
+              {['today', 'week', 'month', 'quarter', 'year'].map((range) => (
+                <button
+                  key={range}
+                  onClick={() => setSelectedDateRange(range as any)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    selectedDateRange === range
+                      ? 'bg-blue-600 text-white shadow-lg'
+                      : 'bg-white/10 text-white/70 hover:bg-white/20'
+                  }`}
+                >
+                  {range.charAt(0).toUpperCase() + range.slice(1)}
+                </button>
+              ))}
               <button
-                key={range}
-                onClick={() => setSelectedDateRange(range as any)}
+                onClick={() => setSelectedDateRange('custom')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  selectedDateRange === range
+                  selectedDateRange === 'custom'
                     ? 'bg-blue-600 text-white shadow-lg'
                     : 'bg-white/10 text-white/70 hover:bg-white/20'
                 }`}
               >
-                {range.charAt(0).toUpperCase() + range.slice(1)}
+                Custom Range
               </button>
-            ))}
+            </div>
+            
+            {selectedDateRange === 'custom' && (
+              <div className="flex gap-4 items-center">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-white/60">From:</label>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-white/10 text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-white/60">To:</label>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-white/10 text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <SmallButton 
+                  onClick={() => {
+                    if (customStartDate && customEndDate) {
+                      setDateRange({ start: customStartDate, end: customEndDate });
+                    }
+                  }}
+                  disabled={!customStartDate || !customEndDate}
+                >
+                  Apply
+                </SmallButton>
+              </div>
+            )}
           </div>
         </Card>
 
