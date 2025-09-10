@@ -669,7 +669,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
     const res = await fetch("/api/manager/tasks/assign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: checkedIds, agentId }),
+      body: JSON.stringify({ ids: checkedIds, agentId, taskType: "TEXT_CLUB" }),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.success) { alert(data?.error || "Assign failed"); return; }
@@ -728,7 +728,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
     const res = await fetch("/api/manager/tasks/assign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: [taskId], agentId }),
+      body: JSON.stringify({ ids: [taskId], agentId, taskType: "TEXT_CLUB" }),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.success) { alert(data?.error || "Assign failed"); return; }
@@ -3242,7 +3242,7 @@ export default function ManagerPage() {
     const res = await fetch("/api/manager/tasks/assign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids, agentId }),
+      body: JSON.stringify({ ids, agentId, taskType: "TEXT_CLUB" }),
     });
     return res.json().catch(() => ({ success: false, error: "Assign failed" }));
   }
@@ -3253,7 +3253,7 @@ export default function ManagerPage() {
     const res = await fetch("/api/manager/tasks/assign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rawMessageIds, agentId }),
+      body: JSON.stringify({ rawMessageIds, agentId, taskType: "TEXT_CLUB" }),
     });
     return res.json().catch(() => ({ success: false, error: "Assign failed" }));
   }
