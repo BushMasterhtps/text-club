@@ -22,9 +22,9 @@ export async function GET(request: NextRequest) {
     const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
     const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
-    // Convert to UTC for database queries
-    const utcStartOfToday = new Date(startOfToday.getTime() - startOfToday.getTimezoneOffset() * 60000);
-    const utcEndOfToday = new Date(endOfToday.getTime() - endOfToday.getTimezoneOffset() * 60000);
+    // Use local dates directly - no UTC conversion needed
+    const utcStartOfToday = startOfToday;
+    const utcEndOfToday = endOfToday;
 
     // Get tasks completed today for each agent
     const agentStats = await Promise.all(
