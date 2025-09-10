@@ -25,11 +25,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse date - handle timezone properly
+    // If no date provided, use today in local timezone
     const targetDate = date ? new Date(date + 'T00:00:00') : new Date();
+    
+    // Convert to UTC for database queries to avoid timezone issues
     const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
     const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
 
     // Get completion stats by task type for today (including sent-back tasks)

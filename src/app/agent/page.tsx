@@ -579,12 +579,8 @@ export default function AgentPage() {
 
   const loadCompletionStats = async (emailToUse?: string, dateToUse?: string) => {
     const currentEmail = emailToUse || email;
-    // Always use today's date for completion stats, not the selected date
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const currentDate = `${year}-${month}-${day}`;
+    // Use the selected date, not always today's date
+    const currentDate = dateToUse || selectedDate;
     
     if (!currentEmail) return;
     
@@ -834,7 +830,7 @@ export default function AgentPage() {
               setSelectedDate(today);
               loadStats(undefined, today);
               // Also refresh completion stats to show today's performance
-              loadCompletionStats();
+              loadCompletionStats(undefined, today);
             }}
           >
             Today
@@ -976,13 +972,13 @@ export default function AgentPage() {
         <div className="flex items-center justify-between mb-3">
           <H2>Your Performance</H2>
           <div className="text-sm text-white/60">
-            Today: {(() => {
+            {selectedDate === (() => {
               const now = new Date();
               const year = now.getFullYear();
               const month = String(now.getMonth() + 1).padStart(2, '0');
               const day = String(now.getDate()).padStart(2, '0');
               return `${year}-${month}-${day}`;
-            })()}
+            })() ? 'Today' : selectedDate}
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

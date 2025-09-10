@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import ThemeToggle from './_components/ThemeToggle';
@@ -7,6 +5,7 @@ import ThemeToggle from './_components/ThemeToggle';
 export default function Home() {
   return (
     <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
+
       {/* Theme Toggle - Top Right */}
       <div className="absolute top-6 right-6">
         <ThemeToggle />
@@ -47,6 +46,7 @@ export default function Home() {
         </div>
       </main>
       <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center text-white/40 dark:text-white/40 light:text-slate-500 text-sm">
+
         <div className="flex items-center gap-2">
           <span>© 2024 Golden Customer Care</span>
         </div>

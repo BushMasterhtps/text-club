@@ -1,0 +1,11 @@
+customerName,documentNumber,amount,purchaseDate,phone,email
+John Smith,ORD-001,150.00,2025-01-15,555-0123,john@example.com
+Jane Doe,ORD-002,275.50,2025-01-15,555-0124,jane@example.com
+Bob Johnson,ORD-003,89.99,2025-01-16,555-0125,bob@example.com
+Alice Brown,ORD-004,320.75,2025-01-16,555-0126,alice@example.com
+Charlie Wilson,ORD-005,45.00,2025-01-17,555-0127,charlie@example.com
+Diana Davis,ORD-006,199.99,2025-01-17,555-0128,diana@example.com
+Eve Miller,ORD-007,125.25,2025-01-18,555-0129,eve@example.com
+Frank Garcia,ORD-008,78.50,2025-01-18,555-0130,frank@example.com
+Grace Lee,ORD-009,210.00,2025-01-19,555-0131,grace@example.com
+Henry Taylor,ORD-010,95.75,2025-01-19,555-0132,henry@example.com
