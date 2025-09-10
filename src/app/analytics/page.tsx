@@ -315,6 +315,13 @@ export default function AnalyticsPage() {
     loadTeamPerformanceData();
   }, [selectedDateRange]);
 
+  // Also reload team performance data when custom dates change
+  useEffect(() => {
+    if (selectedDateRange === 'custom') {
+      loadTeamPerformanceData();
+    }
+  }, [customStartDate, customEndDate]);
+
   // Format duration helper
   const formatDuration = (seconds: number) => {
     if (!seconds) return "0m";
@@ -873,7 +880,14 @@ export default function AnalyticsPage() {
                   return acc;
                 }, {} as Record<string, { agentName: string; agentEmail: string; tasks: TeamPerformanceData[] }>);
 
-                return Object.entries(groupedByAgent).map(([agentId, agentData]) => (
+                // Sort agents by total completed tasks (highest to lowest)
+                const sortedAgents = Object.entries(groupedByAgent).sort(([, agentA], [, agentB]) => {
+                  const totalA = agentA.tasks.reduce((sum, task) => sum + task.completedCount, 0);
+                  const totalB = agentB.tasks.reduce((sum, task) => sum + task.completedCount, 0);
+                  return totalB - totalA;
+                });
+
+                return sortedAgents.map(([agentId, agentData]) => (
                   <div key={agentId} className="bg-gray-800/50 rounded-lg p-4 border border-white/10">
                     <div className="flex items-center justify-between mb-4">
                       <div>
