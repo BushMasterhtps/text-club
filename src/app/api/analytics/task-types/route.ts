@@ -24,9 +24,9 @@ export async function GET(request: NextRequest) {
       dateEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
     }
 
-    // Convert to UTC for database queries
-    const utcDateStart = new Date(dateStart.getTime() - dateStart.getTimezoneOffset() * 60000);
-    const utcDateEnd = new Date(dateEnd.getTime() - dateEnd.getTimezoneOffset() * 60000);
+    // Use local dates directly - no UTC conversion needed
+    const utcDateStart = dateStart;
+    const utcDateEnd = dateEnd;
 
     // Get stats for each task type
     const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'STANDALONE_REFUNDS'];
