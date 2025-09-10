@@ -87,6 +87,7 @@ interface AgentStatus {
   isOnline: boolean;
   currentTask: string | null;
   tasksCompletedToday: number;
+  tasksInProgress: number;
   lastSeen: string;
 }
 
@@ -581,6 +582,9 @@ export default function AnalyticsPage() {
                 <div className="space-y-1">
                   <p className="text-sm text-white/80">
                     Completed Today: <span className="font-semibold text-green-400">{agent.tasksCompletedToday}</span>
+                  </p>
+                  <p className="text-sm text-white/80">
+                    In Progress: <span className="font-semibold text-orange-400">{agent.tasksInProgress}</span>
                   </p>
                   {agent.currentTask && (
                     <p className="text-sm text-white/80">

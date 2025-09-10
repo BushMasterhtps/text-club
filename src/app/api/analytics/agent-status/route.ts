@@ -57,6 +57,14 @@ export async function GET(request: NextRequest) {
           }
         });
 
+        // Get count of tasks currently in progress
+        const tasksInProgress = await prisma.task.count({
+          where: {
+            assignedToId: agent.id,
+            status: "IN_PROGRESS"
+          }
+        });
+
         // Check if agent is online (last seen within 5 minutes)
         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
         const isOnline = agent.lastSeen && agent.lastSeen > fiveMinutesAgo;
@@ -68,6 +76,7 @@ export async function GET(request: NextRequest) {
           isOnline: !!isOnline,
           currentTask: currentTask ? currentTask.taskType : null,
           tasksCompletedToday,
+          tasksInProgress,
           lastSeen: agent.lastSeen?.toISOString() || new Date().toISOString()
         };
       })
