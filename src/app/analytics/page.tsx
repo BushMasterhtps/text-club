@@ -114,6 +114,16 @@ interface Task {
   };
 }
 
+interface TeamPerformanceData {
+  agentId: string;
+  agentName: string;
+  agentEmail: string;
+  taskType: string;
+  completedCount: number;
+  avgHandleTime: number;
+  totalDuration: number;
+}
+
 interface DailyTrend {
   date: string;
   textClub: number;
@@ -140,6 +150,12 @@ export default function AnalyticsPage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentStatus | null>(null);
   const [agentTasks, setAgentTasks] = useState<Task[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  
+  // Team Performance state
+  const [teamPerformanceData, setTeamPerformanceData] = useState<TeamPerformanceData[]>([]);
+  const [loadingTeamPerformance, setLoadingTeamPerformance] = useState(false);
+  const [selectedAgentFilter, setSelectedAgentFilter] = useState<string>('all');
+  const [selectedTaskFilter, setSelectedTaskFilter] = useState<string>('all');
 
   // Peek at agent's in-progress tasks
   const peekAgentTasks = async (agent: AgentStatus) => {
@@ -276,8 +292,27 @@ export default function AnalyticsPage() {
     }
   };
 
+  // Load team performance data
+  const loadTeamPerformanceData = async () => {
+    setLoadingTeamPerformance(true);
+    try {
+      const dateRange = getDateRange(selectedDateRange);
+      const response = await fetch(`/api/analytics/team-performance?startDate=${dateRange.start}&endDate=${dateRange.end}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setTeamPerformanceData(data.data);
+      }
+    } catch (error) {
+      console.error('Error loading team performance data:', error);
+    } finally {
+      setLoadingTeamPerformance(false);
+    }
+  };
+
   useEffect(() => {
     loadOverviewData();
+    loadTeamPerformanceData();
   }, [selectedDateRange]);
 
   // Format duration helper
@@ -775,6 +810,117 @@ export default function AnalyticsPage() {
             </div>
           </div>
         )}
+
+        {/* Team Performance Metrics */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <H3>👥 Team Performance Metrics</H3>
+            <div className="flex items-center gap-4">
+              <select
+                value={selectedAgentFilter}
+                onChange={(e) => setSelectedAgentFilter(e.target.value)}
+                className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
+              >
+                <option value="all">All Agents</option>
+                {agentStatus.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedTaskFilter}
+                onChange={(e) => setSelectedTaskFilter(e.target.value)}
+                className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
+              >
+                <option value="all">All Tasks</option>
+                <option value="TEXT_CLUB">Text Club</option>
+                <option value="WOD_IVCS">WOD/IVCS</option>
+                <option value="EMAIL_REQUESTS">Email Requests</option>
+                <option value="STANDALONE_REFUNDS">Standalone Refunds</option>
+              </select>
+            </div>
+          </div>
+
+          {loadingTeamPerformance ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-white/60">Loading team performance data...</div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {(() => {
+                // Filter data based on selected filters
+                let filteredData = teamPerformanceData;
+                
+                if (selectedAgentFilter !== 'all') {
+                  filteredData = filteredData.filter(item => item.agentId === selectedAgentFilter);
+                }
+                
+                if (selectedTaskFilter !== 'all') {
+                  filteredData = filteredData.filter(item => item.taskType === selectedTaskFilter);
+                }
+
+                // Group by agent
+                const groupedByAgent = filteredData.reduce((acc, item) => {
+                  if (!acc[item.agentId]) {
+                    acc[item.agentId] = {
+                      agentName: item.agentName,
+                      agentEmail: item.agentEmail,
+                      tasks: []
+                    };
+                  }
+                  acc[item.agentId].tasks.push(item);
+                  return acc;
+                }, {} as Record<string, { agentName: string; agentEmail: string; tasks: TeamPerformanceData[] }>);
+
+                return Object.entries(groupedByAgent).map(([agentId, agentData]) => (
+                  <div key={agentId} className="bg-gray-800/50 rounded-lg p-4 border border-white/10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="text-lg font-semibold text-white">{agentData.agentName}</h4>
+                        <p className="text-sm text-white/60">{agentData.agentEmail}</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-green-400">
+                          {agentData.tasks.reduce((sum, task) => sum + task.completedCount, 0)}
+                        </div>
+                        <div className="text-sm text-white/60">Total Completed</div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {agentData.tasks.map((task) => (
+                        <div key={`${agentId}-${task.taskType}`} className="bg-gray-700/50 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-white">
+                              {task.taskType.replace('_', ' ')}
+                            </span>
+                            <span className="text-lg font-bold text-blue-400">
+                              {task.completedCount}
+                            </span>
+                          </div>
+                          <div className="text-xs text-white/60">
+                            Avg: {formatDuration(task.avgHandleTime)}
+                          </div>
+                          <div className="text-xs text-white/60">
+                            Total: {formatDuration(task.totalDuration)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
+              
+              {teamPerformanceData.length === 0 && !loadingTeamPerformance && (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-4">📊</div>
+                  <div className="text-white/60">No performance data available for the selected period</div>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
       </div>
     </main>
   );
