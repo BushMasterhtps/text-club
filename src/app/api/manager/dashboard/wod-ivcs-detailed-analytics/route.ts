@@ -32,20 +32,20 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { createdAt: "desc" },
       include: {
-        importDetails: true
+        duplicateRecords: true
       }
     });
 
     // Process import sessions
     const processedSessions = importSessions.map(session => {
       const sources: Record<string, any> = {};
-      let totalTasks = 0;
-      let totalDuplicates = 0;
-      let totalPreviouslyCompleted = 0;
+      let totalTasks = session.imported || 0;
+      let totalDuplicates = session.duplicates || 0;
+      let totalPreviouslyCompleted = session.filtered || 0;
 
-      // Group by source
-      for (const detail of session.importDetails) {
-        const source = detail.source || 'UNKNOWN';
+      // Group duplicates by source
+      for (const duplicate of session.duplicateRecords) {
+        const source = duplicate.source || 'UNKNOWN';
         if (!sources[source]) {
           sources[source] = {
             total: 0,
@@ -55,18 +55,37 @@ export async function GET(request: NextRequest) {
           };
         }
 
-        sources[source].total += detail.totalImported || 0;
-        sources[source].duplicates += detail.duplicatesFound || 0;
-        sources[source].previouslyCompleted += detail.previouslyCompleted || 0;
+        sources[source].duplicates += 1;
+        sources[source].duplicateDetails.push({
+          duplicateTask: {
+            documentNumber: duplicate.documentNumber,
+            webOrder: duplicate.webOrder,
+            customerName: duplicate.customerName,
+            source: duplicate.source
+          },
+          originalTask: {
+            completedBy: duplicate.originalCompletedBy,
+            completedOn: duplicate.originalCompletedAt,
+            disposition: duplicate.originalDisposition,
+            createdAt: duplicate.originalCreatedAt
+          },
+          ageInDays: duplicate.ageInDays,
+          wasImported: false
+        });
+      }
 
-        totalTasks += detail.totalImported || 0;
-        totalDuplicates += detail.duplicatesFound || 0;
-        totalPreviouslyCompleted += detail.previouslyCompleted || 0;
-
-        // Add duplicate details if available
-        if (detail.duplicateDetails && Array.isArray(detail.duplicateDetails)) {
-          sources[source].duplicateDetails.push(...detail.duplicateDetails);
-        }
+      // Add a general source entry for the session
+      const sessionSource = session.source || 'UNKNOWN';
+      if (!sources[sessionSource]) {
+        sources[sessionSource] = {
+          total: totalTasks,
+          duplicates: totalDuplicates,
+          previouslyCompleted: totalPreviouslyCompleted,
+          duplicateDetails: []
+        };
+      } else {
+        sources[sessionSource].total = totalTasks;
+        sources[sessionSource].previouslyCompleted = totalPreviouslyCompleted;
       }
 
       return {
