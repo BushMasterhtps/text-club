@@ -1,9 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card } from '@/app/_components/ui/card';
-import { H2, H3 } from '@/app/_components/ui/typography';
-import { SmallButton } from '@/app/_components/ui/button';
+import { Card } from '@/app/_components/Card';
+import { SmallButton } from '@/app/_components/SmallButton';
+
+// Typography components
+function H2({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-lg font-semibold text-white/90 tracking-tight">{children}</h2>
+  );
+}
+
+function H3({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="text-base font-semibold text-white/90 tracking-tight">{children}</h3>
+  );
+}
 import { 
   BarChart, 
   Bar, 
