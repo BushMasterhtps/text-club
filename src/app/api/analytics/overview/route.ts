@@ -105,26 +105,40 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get pending tasks by task type
+    // Get pending tasks by task type (both Task table and RawMessage table)
     const [textClubPending, wodIvcsPending, emailRequestsPending, standaloneRefundsPending] = await Promise.all([
-      prisma.task.count({
-        where: {
-          status: "PENDING",
-          taskType: "TEXT_CLUB"
-        }
-      }),
+      // Text Club: Count both Task PENDING and RawMessage READY
+      Promise.all([
+        prisma.task.count({
+          where: {
+            status: "PENDING",
+            taskType: "TEXT_CLUB"
+          }
+        }),
+        prisma.rawMessage.count({
+          where: {
+            status: "READY"
+          }
+        })
+      ]).then(([taskPending, rawMessageReady]) => taskPending + rawMessageReady),
+      
+      // WOD/IVCS: Only count Task PENDING (no RawMessage equivalent)
       prisma.task.count({
         where: {
           status: "PENDING",
           taskType: "WOD_IVCS"
         }
       }),
+      
+      // Email Requests: Only count Task PENDING (no RawMessage equivalent)
       prisma.task.count({
         where: {
           status: "PENDING",
           taskType: "EMAIL_REQUESTS"
         }
       }),
+      
+      // Standalone Refunds: Only count Task PENDING (no RawMessage equivalent)
       prisma.task.count({
         where: {
           status: "PENDING",
@@ -133,12 +147,20 @@ export async function GET(request: NextRequest) {
       })
     ]);
 
-    // Get pending tasks
-    const pendingTasks = await prisma.task.count({
-      where: {
-        status: "PENDING"
-      }
-    });
+    // Get pending tasks (both Task PENDING and RawMessage READY)
+    const [taskPending, rawMessageReady] = await Promise.all([
+      prisma.task.count({
+        where: {
+          status: "PENDING"
+        }
+      }),
+      prisma.rawMessage.count({
+        where: {
+          status: "READY"
+        }
+      })
+    ]);
+    const pendingTasks = taskPending + rawMessageReady;
 
     const data = {
       totalCompletedToday: completedTasks,
