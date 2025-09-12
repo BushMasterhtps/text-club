@@ -229,52 +229,41 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const exportToCSV = () => {
-    if (!analyticsData) return;
+  const exportToCSV = async () => {
+    if (!startDate || !endDate) return;
     
-    const headers = [
-      'Task ID',
-      'Completed Date',
-      'Duration',
-      'Disposition',
-      'Agent',
-      'Source',
-      'Document Number',
-      'Web Order',
-      'Customer',
-      'Amount',
-      'Difference',
-      'Order Date'
-    ];
-    
-    const rows = analyticsData.completedWork.map(task => [
-      task.id,
-      formatDate(task.endTime),
-      formatDuration(task.durationSec),
-      task.disposition || 'Unknown',
-      task.assignedTo?.name || 'Unassigned',
-      task.wodIvcsSource || 'Unknown',
-      task.documentNumber || 'N/A',
-      task.webOrder || 'N/A',
-      task.customerName || 'N/A',
-      task.amount || 'N/A',
-      task.webOrderDifference || 'N/A',
-      task.purchaseDate ? formatDate(task.purchaseDate) : 'N/A'
-    ]);
-    
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
-      .join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `wod-ivcs-analytics-${startDate}-to-${endDate}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    try {
+      const params = new URLSearchParams({
+        startDate,
+        endDate,
+        agentFilter,
+        dispositionFilter
+      });
+
+      const response = await fetch(`/api/manager/dashboard/wod-ivcs-analytics/export?${params}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to export data');
+      }
+
+      // Get the CSV content
+      const csvContent = await response.text();
+      
+      // Create and download the file
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wod-ivcs-analytics-${startDate}-to-${endDate}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export error:', error);
+      setError(`Failed to export CSV: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const exportDuplicateAnalysisToCSV = () => {
