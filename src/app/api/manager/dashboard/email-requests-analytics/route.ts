@@ -178,6 +178,19 @@ export async function GET(request: NextRequest) {
       ]
     };
 
+    // Generate detailed unable to complete breakdown
+    const detailedUnableBreakdown = currentPeriodTasks
+      .filter(task => 
+        task.status === 'COMPLETED' && 
+        task.disposition && 
+        task.disposition.toLowerCase().includes('unable to complete')
+      )
+      .reduce((acc, task) => {
+        const disposition = task.disposition || 'Unknown';
+        acc[disposition] = (acc[disposition] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
     // Generate unable to complete breakdown
     const unableToCompleteBreakdown = currentPeriodTasks
       .filter(task => 
@@ -280,10 +293,12 @@ export async function GET(request: NextRequest) {
         trend: trendData,
         dispositions: dispositionBreakdown
       },
+      detailedUnableBreakdown: detailedUnableBreakdown,
       emailDetails: emailDetails.map(task => ({
         taskId: task.id,
         sfOrderNumber: task.salesforceCaseNumber || '',
         email: task.assignedTo || '',
+        agentName: task.assignedTo || '',
         disposition: task.disposition || '',
         notes: task.details || '',
         createdAt: task.createdAt.toISOString(),

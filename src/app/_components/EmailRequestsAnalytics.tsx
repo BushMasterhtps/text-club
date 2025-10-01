@@ -35,10 +35,12 @@ interface AnalyticsData {
       data: number[];
     };
   };
+  detailedUnableBreakdown: Record<string, number>;
   emailDetails: Array<{
     taskId: string;
     sfOrderNumber: string;
     email: string;
+    agentName: string;
     disposition: string;
     notes: string;
     createdAt: string;
@@ -176,6 +178,7 @@ export default function EmailRequestsAnalytics() {
 
     const headers = [
       'SF Order #',
+      'Agent Name',
       'Agent Email',
       'Disposition',
       'Notes',
@@ -188,6 +191,7 @@ export default function EmailRequestsAnalytics() {
 
     const csvRows = filteredDetails.map(task => [
       task.sfOrderNumber || '',
+      task.agentName || '',
       task.email || '',
       task.disposition || '',
       task.notes || '',
@@ -200,14 +204,14 @@ export default function EmailRequestsAnalytics() {
 
     // Sort by disposition (Unable to Complete first) and then by date
     csvRows.sort((a, b) => {
-      const dispositionA = (a[2] || '').toLowerCase();
-      const dispositionB = (b[2] || '').toLowerCase();
+      const dispositionA = (a[3] || '').toLowerCase();
+      const dispositionB = (b[3] || '').toLowerCase();
       
       if (dispositionA.includes('unable') && !dispositionB.includes('unable')) return -1;
       if (!dispositionA.includes('unable') && dispositionB.includes('unable')) return 1;
       
-      const dateA = new Date(a[4] || 0);
-      const dateB = new Date(b[4] || 0);
+      const dateA = new Date(a[5] || 0);
+      const dateB = new Date(b[5] || 0);
       return dateB.getTime() - dateA.getTime();
     });
 
@@ -504,19 +508,23 @@ export default function EmailRequestsAnalytics() {
             </div>
           </div>
 
-          {/* Unable to Complete Breakdown */}
+          {/* Detailed Unable to Complete Breakdown */}
           <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
-            <h3 className="text-lg font-semibold mb-4 text-white">Unable to Complete Breakdown</h3>
+            <h3 className="text-lg font-semibold mb-4 text-white">Unable to Complete - Detailed Breakdown</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {analytics.charts?.dispositions?.labels
-                ?.map((label, index) => ({ label, count: analytics.charts.dispositions.data[index] }))
-                ?.filter(item => item.label.toLowerCase().includes('unable'))
-                ?.map((disposition, index) => (
+              {analytics.detailedUnableBreakdown && Object.entries(analytics.detailedUnableBreakdown)
+                .sort(([,a], [,b]) => b - a) // Sort by count descending
+                .map(([reason, count], index) => (
                   <div key={index} className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
-                    <div className="text-sm text-red-400 font-medium mb-1">{disposition.label}</div>
-                    <div className="text-2xl font-bold text-red-300">{disposition.count}</div>
+                    <div className="text-sm text-red-400 font-medium mb-1 break-words">{reason}</div>
+                    <div className="text-2xl font-bold text-red-300">{count}</div>
                   </div>
-                )) || []}
+                ))}
+              {(!analytics.detailedUnableBreakdown || Object.keys(analytics.detailedUnableBreakdown).length === 0) && (
+                <div className="col-span-full text-center text-gray-400 py-8">
+                  No "Unable to Complete" tasks found for the selected period
+                </div>
+              )}
             </div>
           </div>
 
@@ -584,7 +592,7 @@ export default function EmailRequestsAnalytics() {
                 <thead className="bg-gray-700">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">SF Order #</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Agent Email</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Agent Name</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Disposition</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Notes</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Created</th>
@@ -594,7 +602,7 @@ export default function EmailRequestsAnalytics() {
                   {getFilteredEmailDetails().map((task, index) => (
                     <tr key={index}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">{task.sfOrderNumber}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">{task.email}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">{task.agentName}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           task.disposition.toLowerCase().includes('unable')
