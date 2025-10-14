@@ -52,6 +52,7 @@ enum TaskType {
   WOD_IVCS
   EMAIL_REQUESTS
   STANDALONE_REFUNDS
+  HOLDS
 }
 
 enum WodIvcsSource {
