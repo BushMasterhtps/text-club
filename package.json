@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "echo 'RAILWAY_SAFE_REBUILD_$(date +%s)' && rm -rf node_modules/.prisma && npx prisma generate && next build --turbopack",
+    "build": "npx prisma migrate deploy && npx prisma generate && next build --turbopack",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "rm -rf node_modules/.prisma && prisma generate && echo 'Prisma client regenerated successfully'",
