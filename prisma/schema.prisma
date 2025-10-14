@@ -52,6 +52,7 @@ enum TaskType {
   WOD_IVCS
   EMAIL_REQUESTS
   STANDALONE_REFUNDS
+  HOLDS
 }
 
 enum WodIvcsSource {
@@ -159,6 +160,14 @@ model Task {
   productSku           String?
   quantity             Int?
   refundAmount         Decimal?
+
+  // 🆕 Holds specific fields
+  holdsOrderDate       DateTime?  // From CSV column B - for 5-day calculation
+  holdsPriority        Int?       // From CSV column E (4-5)
+  holdsDaysInSystem    Int?       // From CSV column F (calculated field)
+  holdsStatus          String?    // Assembly line status: "Agent Research", "Customer Contact", etc.
+  holdsCustomerEmail   String?    // From CSV column D
+  holdsOrderNumber     String?    // From CSV column C
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
