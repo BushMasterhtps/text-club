@@ -37,6 +37,14 @@ const dashboards: DashboardInfo[] = [
     available: true // Now available!
   },
   {
+    id: 'holds',
+    name: 'Holds',
+    path: '/holds',
+    emoji: '🚧',
+    description: 'Holds Assembly Line Management & Analytics',
+    available: true // Available but in development
+  },
+  {
     id: 'standalone-refunds',
     name: 'Standalone Refunds',
     path: '/standalone-refunds',
