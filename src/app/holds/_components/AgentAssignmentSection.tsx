@@ -46,9 +46,9 @@ export default function AgentAssignmentSection() {
       
       console.log('Agents API response:', agentsData);
       
-      if (agentsData.success && agentsData.data && Array.isArray(agentsData.data)) {
+      if (agentsData.success && agentsData.agents && Array.isArray(agentsData.agents)) {
         // Filter agents with proper role names - match existing system
-        const availableAgents = agentsData.data.filter((agent: any) => 
+        const availableAgents = agentsData.agents.filter((agent: any) => 
           agent.role === 'AGENT' || agent.role === 'MANAGER_AGENT' || agent.role === 'Manager + Agent'
         );
         setAgents(availableAgents);
