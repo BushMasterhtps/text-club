@@ -41,24 +41,37 @@ export default function AgentAssignmentSection() {
   const fetchData = async () => {
     try {
       // Fetch agents
+      console.log('Fetching agents...');
       const agentsResponse = await fetch('/api/manager/agents');
       const agentsData = await agentsResponse.json();
       
-      if (agentsData.success) {
+      console.log('Agents API response:', agentsData);
+      
+      if (agentsData.success && agentsData.data && Array.isArray(agentsData.data)) {
         // Filter agents with proper role names
         const availableAgents = agentsData.data.filter((agent: any) => 
           agent.role === 'AGENT' || agent.role === 'MANAGER_AGENT' || agent.role === 'Manager + Agent'
         );
         setAgents(availableAgents);
         console.log('Available agents for holds assignment:', availableAgents);
+      } else {
+        console.error('Invalid agents response:', agentsData);
+        setAgents([]);
       }
 
       // Fetch unassigned holds tasks
+      console.log('Fetching holds tasks...');
       const tasksResponse = await fetch('/api/holds/assign');
       const tasksData = await tasksResponse.json();
       
-      if (tasksData.success) {
+      console.log('Tasks API response:', tasksData);
+      
+      if (tasksData.success && tasksData.data && tasksData.data.tasks && Array.isArray(tasksData.data.tasks)) {
         setTasks(tasksData.data.tasks.filter((task: Task) => !task.assignedTo));
+        console.log('Unassigned holds tasks:', tasksData.data.tasks.filter((task: Task) => !task.assignedTo));
+      } else {
+        console.error('Invalid tasks response:', tasksData);
+        setTasks([]);
       }
     } catch (error) {
       console.error('Error fetching data:', error);

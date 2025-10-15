@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
           await prisma.task.update({
             where: { id: existingTask.id },
             data: {
+              taskType: 'HOLDS', // Ensure taskType is set
               holdsOrderDate: orderDate,
               holdsPriority: priority,
               holdsDaysInSystem: daysInSystem,
@@ -113,6 +114,7 @@ export async function POST(request: NextRequest) {
             },
           });
           results.updated++;
+          console.log(`Updated existing holds task: ${orderNumber}`);
         } else {
           // Create new task
           const taskData = {
@@ -132,6 +134,7 @@ export async function POST(request: NextRequest) {
             data: taskData,
           });
           results.imported++;
+          console.log(`Created new holds task: ${orderNumber}`);
         }
       } catch (error) {
         console.error(`Error processing row ${index + 1}:`, error);

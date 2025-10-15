@@ -36,11 +36,18 @@ export default function AssemblyLineQueues() {
 
   const fetchQueueStats = async () => {
     try {
+      console.log('Fetching queue stats...');
       const response = await fetch('/api/holds/queues');
       const data = await response.json();
       
-      if (data.success) {
+      console.log('Queue stats API response:', data);
+      
+      if (data.success && data.data && data.data.queues) {
         setQueueStats(data.data.queues);
+        console.log('Queue stats loaded:', data.data.queues);
+      } else {
+        console.error('Invalid queue stats response:', data);
+        setQueueStats({});
       }
     } catch (error) {
       console.error('Error fetching queue stats:', error);
