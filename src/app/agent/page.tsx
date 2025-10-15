@@ -160,11 +160,13 @@ export default function AgentPage() {
     TEXT_CLUB: number;
     WOD_IVCS: number;
     EMAIL_REQUESTS: number;
+    HOLDS: number;
     STANDALONE_REFUNDS: number;
   }>({
     TEXT_CLUB: 0,
     WOD_IVCS: 0,
     EMAIL_REQUESTS: 0,
+    HOLDS: 0,
     STANDALONE_REFUNDS: 0
   });
   
@@ -172,8 +174,8 @@ export default function AgentPage() {
     today: Record<string, number>;
     total: Record<string, number>;
   }>({
-    today: { TEXT_CLUB: 0, WOD_IVCS: 0, EMAIL_REQUESTS: 0, STANDALONE_REFUNDS: 0 },
-    total: { TEXT_CLUB: 0, WOD_IVCS: 0, EMAIL_REQUESTS: 0, STANDALONE_REFUNDS: 0 }
+    today: { TEXT_CLUB: 0, WOD_IVCS: 0, EMAIL_REQUESTS: 0, HOLDS: 0, STANDALONE_REFUNDS: 0 },
+    total: { TEXT_CLUB: 0, WOD_IVCS: 0, EMAIL_REQUESTS: 0, HOLDS: 0, STANDALONE_REFUNDS: 0 }
   });
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [forceRender, setForceRender] = useState(0);
@@ -515,6 +517,7 @@ export default function AgentPage() {
           TEXT_CLUB: newTasks.filter((t: Task) => t.taskType === "TEXT_CLUB").length,
           WOD_IVCS: newTasks.filter((t: Task) => t.taskType === "WOD_IVCS").length,
           EMAIL_REQUESTS: newTasks.filter((t: Task) => t.taskType === "EMAIL_REQUESTS").length,
+          HOLDS: newTasks.filter((t: Task) => t.taskType === "HOLDS").length,
           STANDALONE_REFUNDS: newTasks.filter((t: Task) => t.taskType === "STANDALONE_REFUNDS").length
         };
         setTaskCounts(counts);
@@ -955,6 +958,16 @@ export default function AgentPage() {
             📧 Email Requests ({taskCounts.EMAIL_REQUESTS})
           </button>
           <button
+            onClick={() => setSelectedTaskType("HOLDS")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              selectedTaskType === "HOLDS"
+                ? "bg-orange-500/20 text-orange-300 ring-1 ring-orange-400/50"
+                : "bg-white/5 text-white/70 hover:bg-white/10 ring-1 ring-white/10"
+            }`}
+          >
+            🚧 Holds ({taskCounts.HOLDS})
+          </button>
+          <button
             onClick={() => setSelectedTaskType("STANDALONE_REFUNDS")}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               selectedTaskType === "STANDALONE_REFUNDS"
@@ -1002,6 +1015,13 @@ export default function AgentPage() {
             <div className="text-lg font-semibold text-green-300">{completionStats.today.EMAIL_REQUESTS}</div>
             <div className="text-xs text-white/50">Today</div>
             <div className="text-sm text-white/40 mt-1">Lifetime: {completionStats.total.EMAIL_REQUESTS}</div>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3 text-center">
+            <div className="text-2xl mb-1">🚧</div>
+            <div className="text-sm text-white/60">Holds</div>
+            <div className="text-lg font-semibold text-orange-300">{completionStats.today.HOLDS}</div>
+            <div className="text-xs text-white/50">Today</div>
+            <div className="text-sm text-white/40 mt-1">Lifetime: {completionStats.total.HOLDS}</div>
           </div>
           <div className="bg-white/5 rounded-lg p-3 text-center">
             <div className="text-2xl mb-1">💰</div>

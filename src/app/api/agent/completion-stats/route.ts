@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
 
 
     // Format the response
-    const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'STANDALONE_REFUNDS'];
+    const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'HOLDS', 'STANDALONE_REFUNDS'];
     const stats = {
       today: {} as Record<string, number>,
       total: {} as Record<string, number>

@@ -54,19 +54,23 @@ export async function POST(request: NextRequest) {
     // Process each record
     for (const [index, record] of records.entries()) {
       try {
-        // Parse order date (Column B)
-        const orderDate = parseDate(record['Order Date'] || record['B'] || record['order_date']);
+        // Parse order date (Column A)
+        const orderDate = parseDate(record['Order Date'] || record['A'] || record['order_date']);
         
-        // Parse priority (Column E - values 4-5)
-        const priority = parseInt(record['Priority'] || record['E'] || record['priority'] || '4');
+        // Parse order number (Column B)
+        const orderNumber = record['Order Number'] || record['B'] || record['order_number'] || null;
         
-        // Parse days in system (Column F - calculated field)
-        const daysInSystem = parseInt(record['Days in System'] || record['F'] || record['days_in_system'] || '0');
+        // Parse customer email (Column C)
+        const customerEmail = record['Customer Email'] || record['C'] || record['customer_email'] || null;
         
-        // Get customer data
-        const customerName = record['Customer Name'] || record['C'] || record['customer_name'] || 'Unknown';
-        const orderNumber = record['Order Number'] || record['D'] || record['order_number'] || null;
-        const customerEmail = record['Customer Email'] || record['D'] || record['customer_email'] || null;
+        // Parse priority (Column D - values 4-5)
+        const priority = parseInt(record['Priority'] || record['D'] || record['priority'] || '4');
+        
+        // Parse days in system (Column E - calculated field)
+        const daysInSystem = parseInt(record['Days in System'] || record['E'] || record['days_in_system'] || '0');
+        
+        // Generate customer name from email if not provided
+        const customerName = customerEmail ? customerEmail.split('@')[0] : `Customer-${orderNumber || 'Unknown'}`;
 
         // Check for existing task by order number
         let existingTask = null;

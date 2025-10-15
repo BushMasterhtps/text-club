@@ -45,9 +45,12 @@ export default function AgentAssignmentSection() {
       const agentsData = await agentsResponse.json();
       
       if (agentsData.success) {
-        setAgents(agentsData.data.filter((agent: any) => 
-          agent.role === 'AGENT' || agent.role === 'MANAGER_AGENT'
-        ));
+        // Filter agents with proper role names
+        const availableAgents = agentsData.data.filter((agent: any) => 
+          agent.role === 'AGENT' || agent.role === 'MANAGER_AGENT' || agent.role === 'Manager + Agent'
+        );
+        setAgents(availableAgents);
+        console.log('Available agents for holds assignment:', availableAgents);
       }
 
       // Fetch unassigned holds tasks
