@@ -116,9 +116,15 @@ export async function GET(req: Request) {
     });
   } catch (error: any) {
     console.error("Failed to fetch assistance requests:", error);
+    console.error("Error details:", {
+      message: error?.message || 'Unknown error',
+      stack: error?.stack,
+      name: error?.name
+    });
     return NextResponse.json({
       success: false,
-      error: error?.message || "Failed to fetch assistance requests"
+      error: error?.message || "Failed to fetch assistance requests",
+      details: error?.message || 'Unknown error'
     }, { status: 500 });
   }
 }

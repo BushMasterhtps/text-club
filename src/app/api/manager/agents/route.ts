@@ -59,8 +59,17 @@ export async function GET() {
     return NextResponse.json({ success: true, agents: withCounts });
   } catch (err) {
     console.error("agents GET error:", err);
+    console.error("Error details:", {
+      message: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined,
+      name: err instanceof Error ? err.name : undefined
+    });
     return NextResponse.json(
-      { success: false, error: "Failed to load agents" },
+      { 
+        success: false, 
+        error: "Failed to load agents",
+        details: err instanceof Error ? err.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
