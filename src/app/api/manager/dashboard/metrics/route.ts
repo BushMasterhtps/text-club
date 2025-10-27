@@ -8,32 +8,33 @@ export async function GET(request: NextRequest) {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
-    // Get pending tasks (READY RawMessages + PENDING Tasks) - TEXT CLUB ONLY
-    const [pendingRawMessages, pendingTasks] = await Promise.all([
+    // Optimize: Use a single groupBy query for all task counts instead of multiple count queries
+    const [pendingRawMessages, taskStatusGroups] = await Promise.all([
       prisma.rawMessage.count({
         where: { status: "READY" }
       }),
-      prisma.task.count({
-        where: { 
-          status: "PENDING",
+      prisma.task.groupBy({
+        by: ['status'],
+        where: {
           taskType: "TEXT_CLUB" // Only Text Club tasks
+        },
+        _count: {
+          id: true
         }
       })
     ]);
 
-    // Get spam review count - TEXT CLUB ONLY
-    const spamReview = await prisma.task.count({
-      where: { 
-        status: "SPAM_REVIEW",
-        taskType: "TEXT_CLUB" // Only Text Club tasks
-      }
-    });
+    // Build a map for fast status lookup
+    const statusCountMap = new Map<string, number>();
+    for (const group of taskStatusGroups) {
+      statusCountMap.set(group.status, group._count.id);
+    }
 
-    // Get completed today count - TEXT CLUB ONLY
+    // Get completed today count separately (needs date filtering)
     const completedToday = await prisma.task.count({
       where: {
         status: "COMPLETED",
-        taskType: "TEXT_CLUB", // Only Text Club tasks
+        taskType: "TEXT_CLUB",
         endTime: {
           gte: startOfToday,
           lt: endOfToday
@@ -41,31 +42,14 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get total completed count (all-time) - TEXT CLUB ONLY
-    const totalCompleted = await prisma.task.count({
-      where: { 
-        status: "COMPLETED",
-        taskType: "TEXT_CLUB" // Only Text Club tasks
-      }
-    });
+    // Extract counts from the map
+    const pendingTasks = statusCountMap.get('PENDING') ?? 0;
+    const spamReview = statusCountMap.get('SPAM_REVIEW') ?? 0;
+    const totalCompleted = statusCountMap.get('COMPLETED') ?? 0;
+    const inProgress = statusCountMap.get('IN_PROGRESS') ?? 0;
+    const assistanceRequired = statusCountMap.get('ASSISTANCE_REQUIRED') ?? 0;
 
-    // Get in progress count - TEXT CLUB ONLY
-    const inProgress = await prisma.task.count({
-      where: { 
-        status: "IN_PROGRESS",
-        taskType: "TEXT_CLUB" // Only Text Club tasks
-      }
-    });
-
-    // Get assistance required count - TEXT CLUB ONLY
-    const assistanceRequired = await prisma.task.count({
-      where: { 
-        status: "ASSISTANCE_REQUIRED",
-        taskType: "TEXT_CLUB" // Only Text Club tasks
-      }
-    });
-
-    const totalPending = pendingRawMessages + pendingTasks; // Count both raw messages and pending tasks
+    const totalPending = pendingRawMessages + pendingTasks;
     const totalAll = totalPending + spamReview + totalCompleted + inProgress + assistanceRequired;
     const pctDone = totalAll > 0 ? Math.round((totalCompleted / totalAll) * 100) : 0;
 
@@ -73,7 +57,7 @@ export async function GET(request: NextRequest) {
       success: true,
       metrics: {
         pending: totalPending,
-        pendingRawMessages, // Include raw message count separately
+        pendingRawMessages,
         spamReview,
         completedToday,
         totalCompleted,

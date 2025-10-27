@@ -12,49 +12,64 @@ const OPEN_STATUSES: $Enums.TaskStatus[] = [
 
 export async function GET() {
   try {
-    const agents = await prisma.user.findMany({
-      // Include both AGENT and MANAGER_AGENT roles for assignment
-      where: { role: { in: ["AGENT", "MANAGER_AGENT"] } },
-      select: { id: true, email: true, name: true, isLive: true, lastSeen: true },
-      orderBy: { createdAt: "asc" },
-    });
-
-    const withCounts = await Promise.all(
-      agents.map(async (a) => {
-        const openCount = await prisma.task.count({
-          where: { assignedToId: a.id, status: { in: OPEN_STATUSES } },
-        });
-
-        // Get task type breakdowns
-        const [emailRequestCount, textClubCount, wodIvcsCount, refundCount] = await Promise.all([
-          prisma.task.count({
-            where: { assignedToId: a.id, status: { in: OPEN_STATUSES }, taskType: "EMAIL_REQUESTS" },
-          }),
-          prisma.task.count({
-            where: { assignedToId: a.id, status: { in: OPEN_STATUSES }, taskType: "TEXT_CLUB" },
-          }),
-          prisma.task.count({
-            where: { assignedToId: a.id, status: { in: OPEN_STATUSES }, taskType: "WOD_IVCS" },
-          }),
-          prisma.task.count({
-            where: { assignedToId: a.id, status: { in: OPEN_STATUSES }, taskType: "STANDALONE_REFUNDS" },
-          }),
-        ]);
-
-        return {
-          id: a.id,
-          email: a.email,
-          name: a.name ?? a.email,
-          openCount,
-          emailRequestCount,
-          textClubCount,
-          wodIvcsCount,
-          refundCount,
-          isLive: a.isLive ?? false,
-          lastSeen: a.lastSeen ?? null,
-        };
+    // Fetch agents and their task counts in parallel using optimized queries
+    const [agents, taskCountsByAgent] = await Promise.all([
+      prisma.user.findMany({
+        // Include both AGENT and MANAGER_AGENT roles for assignment
+        where: { role: { in: ["AGENT", "MANAGER_AGENT"] } },
+        select: { id: true, email: true, name: true, isLive: true, lastSeen: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      // Single query to get all task counts grouped by agent and task type
+      prisma.task.groupBy({
+        by: ['assignedToId', 'taskType'],
+        where: {
+          assignedToId: { not: null },
+          status: { in: OPEN_STATUSES }
+        },
+        _count: {
+          id: true
+        }
       })
-    );
+    ]);
+
+    // Build a map of agent task counts for fast lookup
+    const taskCountMap = new Map<string, Map<string, number>>();
+    
+    for (const group of taskCountsByAgent) {
+      if (!group.assignedToId) continue;
+      
+      if (!taskCountMap.has(group.assignedToId)) {
+        taskCountMap.set(group.assignedToId, new Map());
+      }
+      
+      const agentMap = taskCountMap.get(group.assignedToId)!;
+      agentMap.set(group.taskType, group._count.id);
+    }
+
+    // Map agents with their counts (no additional database queries)
+    const withCounts = agents.map((a) => {
+      const agentCounts = taskCountMap.get(a.id);
+      
+      const emailRequestCount = agentCounts?.get('EMAIL_REQUESTS') ?? 0;
+      const textClubCount = agentCounts?.get('TEXT_CLUB') ?? 0;
+      const wodIvcsCount = agentCounts?.get('WOD_IVCS') ?? 0;
+      const refundCount = agentCounts?.get('STANDALONE_REFUNDS') ?? 0;
+      const openCount = emailRequestCount + textClubCount + wodIvcsCount + refundCount;
+
+      return {
+        id: a.id,
+        email: a.email,
+        name: a.name ?? a.email,
+        openCount,
+        emailRequestCount,
+        textClubCount,
+        wodIvcsCount,
+        refundCount,
+        isLive: a.isLive ?? false,
+        lastSeen: a.lastSeen ?? null,
+      };
+    });
 
     return NextResponse.json({ success: true, agents: withCounts });
   } catch (err) {

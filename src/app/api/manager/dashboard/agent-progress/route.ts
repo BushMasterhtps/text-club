@@ -8,229 +8,167 @@ export async function GET(request: NextRequest) {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
-    // Get all agents (including Manager + Agent users)
-    const agents = await prisma.user.findMany({
-      where: {
-        role: { in: ["AGENT", "MANAGER_AGENT"] }
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        isLive: true,
-        lastSeen: true
-      }
-    });
-
-    // Get progress data for each agent with task type breakdowns
-    const agentProgress = await Promise.all(
-      agents.map(async (agent) => {
-        const [
-          assigned, 
-          inProgress, 
-          completedToday, 
-          lastActivity,
-          // Task type breakdowns
-          textClubAssigned,
-          textClubInProgress,
-          textClubCompletedToday,
-          wodIvcsAssigned,
-          wodIvcsInProgress,
-          wodIvcsCompletedToday,
-          emailRequestsAssigned,
-          emailRequestsInProgress,
-          emailRequestsCompletedToday,
-          standaloneRefundsAssigned,
-          standaloneRefundsInProgress,
-          standaloneRefundsCompletedToday
-        ] = await Promise.all([
-          // Total assigned tasks (only open tasks: PENDING + IN_PROGRESS + ASSISTANCE_REQUIRED)
-          prisma.task.count({
-            where: { 
-              assignedToId: agent.id,
-              status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
-            }
-          }),
-          // Currently in progress
-          prisma.task.count({
-            where: { 
-              assignedToId: agent.id,
-              status: "IN_PROGRESS"
-            }
-          }),
-          // Completed today
-          prisma.task.count({
-            where: {
-              assignedToId: agent.id,
-              status: "COMPLETED",
-              endTime: {
-                gte: startOfToday,
-                lt: endOfToday
-              }
-            }
-          }),
-          // Last activity (most recent task update)
-          prisma.task.findFirst({
-            where: { assignedToId: agent.id },
-            orderBy: { updatedAt: "desc" },
-            select: { updatedAt: true }
-          }),
-          // Text Club breakdown (only open tasks)
-          prisma.task.count({
-            where: { 
-              assignedToId: agent.id, 
-              taskType: "TEXT_CLUB",
-              status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
-            }
-          }),
-          prisma.task.count({
-            where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "TEXT_CLUB" }
-          }),
-          // Text Club completed today (including sent-back tasks)
-          prisma.task.count({
-            where: {
-              OR: [
-                {
-                  assignedToId: agent.id,
-                  status: "COMPLETED",
-                  taskType: "TEXT_CLUB",
-                  endTime: { gte: startOfToday, lt: endOfToday }
-                },
-                {
-                  sentBackBy: agent.id,
-                  status: "PENDING",
-                  taskType: "TEXT_CLUB",
-                  endTime: { gte: startOfToday, lt: endOfToday }
-                }
-              ]
-            }
-          }),
-          // WOD/IVCS breakdown (only open tasks)
-          prisma.task.count({
-            where: { 
-              assignedToId: agent.id, 
-              taskType: "WOD_IVCS",
-              status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
-            }
-          }),
-          prisma.task.count({
-            where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "WOD_IVCS" }
-          }),
-          // WOD/IVCS completed today (including sent-back tasks)
-          prisma.task.count({
-            where: {
-              OR: [
-                {
-                  assignedToId: agent.id,
-                  status: "COMPLETED",
-                  taskType: "WOD_IVCS",
-                  endTime: { gte: startOfToday, lt: endOfToday }
-                },
-                {
-                  sentBackBy: agent.id,
-                  status: "PENDING",
-                  taskType: "WOD_IVCS",
-                  endTime: { gte: startOfToday, lt: endOfToday }
-                }
-              ]
-            }
-          }),
-          // Email Requests breakdown (only open tasks)
-          prisma.task.count({
-            where: { 
-              assignedToId: agent.id, 
-              taskType: "EMAIL_REQUESTS",
-              status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
-            }
-          }),
-          prisma.task.count({
-            where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "EMAIL_REQUESTS" }
-          }),
-          // Email Requests completed today (including sent-back tasks)
-          prisma.task.count({
-            where: {
-              OR: [
-                {
-                  assignedToId: agent.id,
-                  status: "COMPLETED",
-                  taskType: "EMAIL_REQUESTS",
-                  endTime: { gte: startOfToday, lt: endOfToday }
-                },
-                {
-                  sentBackBy: agent.id,
-                  status: "PENDING",
-                  taskType: "EMAIL_REQUESTS",
-                  endTime: { gte: startOfToday, lt: endOfToday }
-                }
-              ]
-            }
-          }),
-          // Standalone Refunds breakdown (only open tasks)
-          prisma.task.count({
-            where: { 
-              assignedToId: agent.id, 
-              taskType: "STANDALONE_REFUNDS",
-              status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
-            }
-          }),
-          prisma.task.count({
-            where: { assignedToId: agent.id, status: "IN_PROGRESS", taskType: "STANDALONE_REFUNDS" }
-          }),
-          // Standalone Refunds completed today (including sent-back tasks)
-          prisma.task.count({
-            where: {
-              OR: [
-                {
-                  assignedToId: agent.id,
-                  status: "COMPLETED",
-                  taskType: "STANDALONE_REFUNDS",
-                  endTime: { gte: startOfToday, lt: endOfToday }
-                },
-                {
-                  sentBackBy: agent.id,
-                  status: "PENDING",
-                  taskType: "STANDALONE_REFUNDS",
-                  endTime: { gte: startOfToday, lt: endOfToday }
-                }
-              ]
-            }
-          })
-        ]);
-
-        return {
-          id: agent.id,
-          name: agent.name || "Unknown",
-          email: agent.email,
-          assigned,
-          inProgress,
-          completedToday,
-          lastActivity: lastActivity?.updatedAt || null,
-          isLive: agent.isLive,
-          taskTypeBreakdown: {
-            textClub: {
-              assigned: textClubAssigned,
-              inProgress: textClubInProgress,
-              completedToday: textClubCompletedToday
-            },
-            wodIvcs: {
-              assigned: wodIvcsAssigned,
-              inProgress: wodIvcsInProgress,
-              completedToday: wodIvcsCompletedToday
-            },
-            emailRequests: {
-              assigned: emailRequestsAssigned,
-              inProgress: emailRequestsInProgress,
-              completedToday: emailRequestsCompletedToday
-            },
-            standaloneRefunds: {
-              assigned: standaloneRefundsAssigned,
-              inProgress: standaloneRefundsInProgress,
-              completedToday: standaloneRefundsCompletedToday
-            }
-          }
-        };
+    // OPTIMIZED: Get all agents and their task data in parallel with minimal queries
+    const [agents, openTaskGroups, inProgressGroups, completedTodayGroups, sentBackTodayGroups, lastActivities] = await Promise.all([
+      // Get all agents
+      prisma.user.findMany({
+        where: { role: { in: ["AGENT", "MANAGER_AGENT"] } },
+        select: { id: true, name: true, email: true, isLive: true, lastSeen: true }
+      }),
+      // Group open tasks by agent + task type (1 query instead of N×4)
+      prisma.task.groupBy({
+        by: ['assignedToId', 'taskType'],
+        where: {
+          assignedToId: { not: null },
+          status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
+        },
+        _count: { id: true }
+      }),
+      // Group in-progress tasks by agent + task type (1 query instead of N×4)
+      prisma.task.groupBy({
+        by: ['assignedToId', 'taskType'],
+        where: {
+          assignedToId: { not: null },
+          status: "IN_PROGRESS"
+        },
+        _count: { id: true }
+      }),
+      // Group completed today by agent + task type (1 query instead of N×4)
+      prisma.task.groupBy({
+        by: ['assignedToId', 'taskType'],
+        where: {
+          assignedToId: { not: null },
+          status: "COMPLETED",
+          endTime: { gte: startOfToday, lt: endOfToday }
+        },
+        _count: { id: true }
+      }),
+      // Group sent-back tasks completed today by agent + task type
+      prisma.task.groupBy({
+        by: ['sentBackBy', 'taskType'],
+        where: {
+          sentBackBy: { not: null },
+          status: "PENDING",
+          endTime: { gte: startOfToday, lt: endOfToday }
+        },
+        _count: { id: true }
+      }),
+      // Get last activity for each agent (still needs individual queries due to findFirst)
+      prisma.task.findMany({
+        where: { assignedToId: { not: null } },
+        orderBy: { updatedAt: "desc" },
+        distinct: ['assignedToId'],
+        select: { assignedToId: true, updatedAt: true }
       })
-    );
+    ]);
+
+    // Build lookup maps for O(1) access
+    const openTaskMap = new Map<string, Map<string, number>>();
+    for (const g of openTaskGroups) {
+      if (!g.assignedToId) continue;
+      if (!openTaskMap.has(g.assignedToId)) {
+        openTaskMap.set(g.assignedToId, new Map());
+      }
+      openTaskMap.get(g.assignedToId)!.set(g.taskType, g._count.id);
+    }
+
+    const inProgressMap = new Map<string, Map<string, number>>();
+    for (const g of inProgressGroups) {
+      if (!g.assignedToId) continue;
+      if (!inProgressMap.has(g.assignedToId)) {
+        inProgressMap.set(g.assignedToId, new Map());
+      }
+      inProgressMap.get(g.assignedToId)!.set(g.taskType, g._count.id);
+    }
+
+    const completedTodayMap = new Map<string, Map<string, number>>();
+    for (const g of completedTodayGroups) {
+      if (!g.assignedToId) continue;
+      if (!completedTodayMap.has(g.assignedToId)) {
+        completedTodayMap.set(g.assignedToId, new Map());
+      }
+      completedTodayMap.get(g.assignedToId)!.set(g.taskType, g._count.id);
+    }
+
+    const sentBackMap = new Map<string, Map<string, number>>();
+    for (const g of sentBackTodayGroups) {
+      if (!g.sentBackBy) continue;
+      if (!sentBackMap.has(g.sentBackBy)) {
+        sentBackMap.set(g.sentBackBy, new Map());
+      }
+      sentBackMap.get(g.sentBackBy)!.set(g.taskType, g._count.id);
+    }
+
+    const lastActivityMap = new Map<string, Date>();
+    for (const activity of lastActivities) {
+      if (activity.assignedToId) {
+        lastActivityMap.set(activity.assignedToId, activity.updatedAt);
+      }
+    }
+
+    // Build agent progress data (no additional database queries)
+    const agentProgress = agents.map((agent) => {
+      const openTasks = openTaskMap.get(agent.id);
+      const inProgressTasks = inProgressMap.get(agent.id);
+      const completedTasks = completedTodayMap.get(agent.id);
+      const sentBackTasks = sentBackMap.get(agent.id);
+
+      // Get counts by task type (open/assigned)
+      const textClubAssigned = openTasks?.get('TEXT_CLUB') ?? 0;
+      const wodIvcsAssigned = openTasks?.get('WOD_IVCS') ?? 0;
+      const emailRequestsAssigned = openTasks?.get('EMAIL_REQUESTS') ?? 0;
+      const standaloneRefundsAssigned = openTasks?.get('STANDALONE_REFUNDS') ?? 0;
+
+      // Get in-progress counts
+      const textClubInProgress = inProgressTasks?.get('TEXT_CLUB') ?? 0;
+      const wodIvcsInProgress = inProgressTasks?.get('WOD_IVCS') ?? 0;
+      const emailRequestsInProgress = inProgressTasks?.get('EMAIL_REQUESTS') ?? 0;
+      const standaloneRefundsInProgress = inProgressTasks?.get('STANDALONE_REFUNDS') ?? 0;
+
+      // Get completed today counts (including sent-back tasks)
+      const textClubCompletedToday = (completedTasks?.get('TEXT_CLUB') ?? 0) + (sentBackTasks?.get('TEXT_CLUB') ?? 0);
+      const wodIvcsCompletedToday = (completedTasks?.get('WOD_IVCS') ?? 0) + (sentBackTasks?.get('WOD_IVCS') ?? 0);
+      const emailRequestsCompletedToday = (completedTasks?.get('EMAIL_REQUESTS') ?? 0) + (sentBackTasks?.get('EMAIL_REQUESTS') ?? 0);
+      const standaloneRefundsCompletedToday = (completedTasks?.get('STANDALONE_REFUNDS') ?? 0) + (sentBackTasks?.get('STANDALONE_REFUNDS') ?? 0);
+
+      // Calculate totals
+      const assigned = textClubAssigned + wodIvcsAssigned + emailRequestsAssigned + standaloneRefundsAssigned;
+      const inProgress = textClubInProgress + wodIvcsInProgress + emailRequestsInProgress + standaloneRefundsInProgress;
+      const completedToday = textClubCompletedToday + wodIvcsCompletedToday + emailRequestsCompletedToday + standaloneRefundsCompletedToday;
+
+      return {
+        id: agent.id,
+        name: agent.name || "Unknown",
+        email: agent.email,
+        assigned,
+        inProgress,
+        completedToday,
+        lastActivity: lastActivityMap.get(agent.id) || null,
+        isLive: agent.isLive,
+        taskTypeBreakdown: {
+          textClub: {
+            assigned: textClubAssigned,
+            inProgress: textClubInProgress,
+            completedToday: textClubCompletedToday
+          },
+          wodIvcs: {
+            assigned: wodIvcsAssigned,
+            inProgress: wodIvcsInProgress,
+            completedToday: wodIvcsCompletedToday
+          },
+          emailRequests: {
+            assigned: emailRequestsAssigned,
+            inProgress: emailRequestsInProgress,
+            completedToday: emailRequestsCompletedToday
+          },
+          standaloneRefunds: {
+            assigned: standaloneRefundsAssigned,
+            inProgress: standaloneRefundsInProgress,
+            completedToday: standaloneRefundsCompletedToday
+          }
+        }
+      };
+    });
 
     // Sort by completed today (descending), then by assigned (descending)
     agentProgress.sort((a, b) => {
