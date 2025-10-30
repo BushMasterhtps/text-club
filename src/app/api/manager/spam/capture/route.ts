@@ -48,11 +48,9 @@ export async function POST() {
     select: { id: true, pattern: true, patternNorm: true, mode: true, brand: true },
   });
 
-  // 2) Only scan messages from the last 7 days to avoid re-processing old completed messages
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-  // 3) stream through pending raws in chunks
+  // 2) stream through pending raws in chunks
+  // Only scan READY (not yet processed) and PROMOTED (converted to tasks) messages
+  // Completed/actioned messages would have different statuses, so no date filter needed
   const CHUNK = 250;
   let offset = 0;
   let updatedCount = 0;
@@ -60,8 +58,7 @@ export async function POST() {
   while (true) {
     const batch = await prisma.rawMessage.findMany({
       where: { 
-        status: { in: [RawStatus.READY, RawStatus.PROMOTED] },
-        createdAt: { gte: sevenDaysAgo } // Only recent messages
+        status: { in: [RawStatus.READY, RawStatus.PROMOTED] }
       },
       select: { id: true, brand: true, text: true },
       orderBy: { createdAt: "desc" },

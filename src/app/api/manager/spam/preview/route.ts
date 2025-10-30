@@ -54,14 +54,11 @@ export async function GET() {
   });
 
   // 2) pull "pending" raws (READY or PROMOTED) - limit for performance
-  // Only scan messages from the last 7 days to avoid re-processing old completed messages
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  
+  // Only scan READY (not yet processed) and PROMOTED (converted to tasks) messages
+  // Completed/actioned messages would have different statuses, so no date filter needed
   const raws = await prisma.rawMessage.findMany({
     where: { 
-      status: { in: [RawStatus.READY, RawStatus.PROMOTED] },
-      createdAt: { gte: sevenDaysAgo } // Only recent messages
+      status: { in: [RawStatus.READY, RawStatus.PROMOTED] }
     },
     select: { id: true, brand: true, text: true },
     orderBy: { createdAt: "desc" },
