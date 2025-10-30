@@ -1263,6 +1263,8 @@ function TaskCard({
         return { label: "Email Requests", emoji: "📧", color: "text-green-400" };
       case "STANDALONE_REFUNDS":
         return { label: "Standalone Refunds", emoji: "💰", color: "text-purple-400" };
+      case "HOLDS":
+        return { label: "Holds", emoji: "📄", color: "text-yellow-300" };
       case "TEXT_CLUB":
       default:
         return { label: "Text Club", emoji: "📱", color: "text-blue-400" };
@@ -1435,6 +1437,37 @@ function TaskCard({
               ) : (
                 <span className="text-white/40 italic">[hidden until Start]</span>
               )}
+            </div>
+          </div>
+        </>
+      ) : task.taskType === "HOLDS" ? (
+        <>
+          {/* Holds specific data */}
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-300">📅</span>
+              <span className="text-white/60">Order Date:</span>
+              <span className="font-mono">{task.holdsOrderDate ? new Date(task.holdsOrderDate as any).toLocaleString() : "N/A"}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-300">#</span>
+              <span className="text-white/60">Order Number:</span>
+              <span className="font-mono">{(task as any).holdsOrderNumber || "N/A"}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-300">✉️</span>
+              <span className="text-white/60">Customer Email:</span>
+              <span className="font-mono">{(task as any).holdsCustomerEmail || "N/A"}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-300">⭐</span>
+              <span className="text-white/60">Priority:</span>
+              <span className="font-mono">{(task as any).holdsPriority ?? "N/A"}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-300">📆</span>
+              <span className="text-white/60">Days in System:</span>
+              <span className="font-mono">{(task as any).holdsDaysInSystem ?? "N/A"}</span>
             </div>
           </div>
         </>

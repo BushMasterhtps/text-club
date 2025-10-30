@@ -161,7 +161,7 @@ export async function GET(req: Request) {
 
   if (statusWhere) and.push(statusWhere);
 
-  // (B) Assigned filter
+  // (B) Assigned filter (tie the assignee to the CURRENT STATUS selection)
   if (assignedLower !== "" && assignedLower !== "any") {
     if (assignedLower === "unassigned") {
       // Either not promoted (READY) OR has an open task with no agent yet
@@ -172,7 +172,13 @@ export async function GET(req: Request) {
             tasks: {
               some: {
                 assignedToId: null,
-                status: { not: "COMPLETED" as any },
+                ...(statusKey === "pending"
+                  ? ({ status: "PENDING" } as any)
+                  : statusKey === "in_progress"
+                  ? ({ status: "IN_PROGRESS" } as any)
+                  : statusKey === "assistance_required"
+                  ? ({ status: "ASSISTANCE_REQUIRED" } as any)
+                  : ({ status: { not: "COMPLETED" } } as any)),
               },
             },
           },
@@ -186,7 +192,13 @@ export async function GET(req: Request) {
       and.push({
         tasks: {
           some: {
-            status: { not: "COMPLETED" as any },
+            ...(statusKey === "pending"
+              ? ({ status: "PENDING" } as any)
+              : statusKey === "in_progress"
+              ? ({ status: "IN_PROGRESS" } as any)
+              : statusKey === "assistance_required"
+              ? ({ status: "ASSISTANCE_REQUIRED" } as any)
+              : ({ status: { not: "COMPLETED" } } as any)),
             assignedTo: userWhere,
           },
         },
