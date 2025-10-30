@@ -662,27 +662,49 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
       for (const r of items) next[r.id] = true;
       return next;
     });
-  const checkedIds = items.filter((r) => selected[r.id]).map((r) => r.taskId || r.id);
+  const checkedTaskIds = items
+    .filter((r) => selected[r.id] && r.taskId)
+    .map((r) => r.taskId as string);
+  const checkedRawMessageIds = items
+    .filter((r) => selected[r.id] && !r.taskId)
+    .map((r) => r.id);
 
   async function bulkAssign(agentId: string) {
-    if (checkedIds.length === 0) return;
-    const res = await fetch("/api/manager/tasks/assign", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: checkedIds, agentId, taskType: "TEXT_CLUB" }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.success) { alert(data?.error || "Assign failed"); return; }
+    if (checkedTaskIds.length === 0 && checkedRawMessageIds.length === 0) return;
+    // Assign existing tasks (by taskId)
+    if (checkedTaskIds.length > 0) {
+      const res = await fetch("/api/manager/tasks/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: checkedTaskIds, agentId, taskType: "TEXT_CLUB" }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) { alert(data?.error || "Assign failed"); return; }
+    }
+    // Promote READY raws and assign (by rawMessageId)
+    if (checkedRawMessageIds.length > 0) {
+      const res2 = await fetch("/api/manager/tasks/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawMessageIds: checkedRawMessageIds, agentId, taskType: "TEXT_CLUB" }),
+      });
+      const data2 = await res2.json().catch(() => null);
+      if (!res2.ok || !data2?.success) { alert(data2?.error || "Assign failed"); return; }
+    }
     await fetchPage(page);
     try { await onTasksMutated?.(); } catch {}
   }
 
   async function bulkUnassign() {
-    if (checkedIds.length === 0) return;
+    const ids = [
+      ...checkedTaskIds,
+      ...checkedRawMessageIds,
+    ];
+    if (ids.length === 0) return;
     const res = await fetch("/api/manager/tasks/unassign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: checkedIds }),
+      body: JSON.stringify({ ids }),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.success) { alert(data?.error || "Unassign failed"); return; }
@@ -724,11 +746,18 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
     await fetchPage(page);
   }
 
-  async function rowAssign(taskId: string, agentId: string) {
+  async function rowAssign(rowId: string, agentId: string) {
+    // Determine if this row currently has a Task (taskId) or a RawMessage
+    const row = items.find((r) => r.id === rowId);
+    const hasTask = !!row?.taskId;
+    const payload = hasTask
+      ? { ids: [row!.taskId], agentId, taskType: "TEXT_CLUB" }
+      : { rawMessageIds: [rowId], agentId, taskType: "TEXT_CLUB" };
+
     const res = await fetch("/api/manager/tasks/assign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: [taskId], agentId, taskType: "TEXT_CLUB" }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.success) { alert(data?.error || "Assign failed"); return; }
