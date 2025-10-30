@@ -1,9 +1,7 @@
 // src/app/api/manager/spam/review/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { getImprovedSpamScore } from "@/lib/spam-detection";
-
-const prisma = new PrismaClient();
 
 export async function GET(req: Request) {
   try {

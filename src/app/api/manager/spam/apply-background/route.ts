@@ -1,9 +1,7 @@
 // src/app/api/manager/spam/apply-background/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
-
-const prisma = new PrismaClient();
 
 // Stable hash (brand + normalized text) for archive dedupe
 function makeTextHash(text?: string | null, brand?: string | null) {

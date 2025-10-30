@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { PrismaClient, RawStatus } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { RawStatus } from "@prisma/client";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
 
 function makeTextHash(text?: string | null, brand?: string | null) {
   const norm = (text ?? "").trim().toLowerCase();

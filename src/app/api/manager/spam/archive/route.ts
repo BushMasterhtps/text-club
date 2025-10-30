@@ -1,8 +1,6 @@
 // src/app/api/manager/spam/archive/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 /**
  * GET /api/manager/spam/archive?take=50&offset=0&q=optional

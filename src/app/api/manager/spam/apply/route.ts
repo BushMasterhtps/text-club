@@ -1,9 +1,7 @@
 // src/app/api/manager/spam/apply/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
-
-const prisma = new PrismaClient();
 
 // NOTE: Work around stale Prisma type hints in some editors by casting to `any`.
 // Runtime is fine because Prisma generated client DOES have `spamArchive`.
