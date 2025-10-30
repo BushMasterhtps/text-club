@@ -713,18 +713,22 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   }
 
   async function bulkSpamReview() {
-    if (checkedIds.length === 0) return;
+    const ids = [
+      ...checkedTaskIds,
+      ...checkedRawMessageIds,
+    ];
+    if (ids.length === 0) return;
     const res = await fetch("/api/manager/tasks/mark-spam", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: checkedIds }),
+      body: JSON.stringify({ ids }),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.success) { alert(data?.error || "Send to Spam Review failed"); return; }
     
     // Learn from manual spam decisions and mark as manual source
     try {
-      const spamItems = items.filter(item => checkedIds.includes(item.id));
+      const spamItems = items.filter(item => ids.includes(item.id));
       for (const item of spamItems) {
         if (item.text) {
           await fetch("/api/spam/learn", {
@@ -853,8 +857,8 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
           ))}
         </select>
 
-        <SmallButton onClick={bulkUnassign} disabled={checkedIds.length === 0}>Unassign selected</SmallButton>
-        <SmallButton onClick={bulkSpamReview} disabled={checkedIds.length === 0}>Send to Spam Review</SmallButton>
+        <SmallButton onClick={bulkUnassign} disabled={(checkedTaskIds.length + checkedRawMessageIds.length) === 0}>Unassign selected</SmallButton>
+        <SmallButton onClick={bulkSpamReview} disabled={(checkedTaskIds.length + checkedRawMessageIds.length) === 0}>Send to Spam Review</SmallButton>
       </div>
 
       {/* List (iMessage style) */}
@@ -1014,17 +1018,18 @@ function PreviewSummaryBlock({ preview }: { preview: PreviewResponse | null }) {
   const summary = React.useMemo<PreviewSummary | null>(() => {
     if (!preview) return null;
 
-    const totalPending = preview.totalPending ?? 0;
-    const rulesEnabled = preview.rules?.length ?? 0;
-    const matchedCount = preview.matchedCount ?? 0;
-    const learningMatchedCount = preview.learningMatchedCount ?? 0;
+    const p: any = preview as any;
+    const totalPending = p.totalPending ?? 0;
+    const rulesEnabled = p.rules?.length ?? 0;
+    const matchedCount = p.matchedCount ?? 0;
+    const learningMatchedCount = p.learningMatchedCount ?? 0;
     const totalMatched = matchedCount; // This is the combined count from the API
     const unaffected = Math.max(0, totalPending - totalMatched);
 
     const freq = new Map<string, number>();
-    for (const m of preview.matches || []) {
-      for (const p of m.matchedPatterns || []) {
-        freq.set(p, (freq.get(p) || 0) + 1);
+    for (const m of (p.matches || [])) {
+      for (const pat of (m.matchedPatterns || [])) {
+        freq.set(pat, (freq.get(pat) || 0) + 1);
       }
     }
     const topPhrases: PreviewTopPhrase[] = Array.from(freq.entries())
@@ -1040,13 +1045,13 @@ function PreviewSummaryBlock({ preview }: { preview: PreviewResponse | null }) {
       totalMatched,
       unaffected,
       topPhrases,
-      sampleMatches: (preview.matches || []).slice(0, 100).map((m, i) => ({
+      sampleMatches: (p.matches || []).slice(0, 100).map((m: any, i: number) => ({
         id: `${m.taskId}-${i}`,
         brand: m.brand,
         text: m.text,
         matchedPatterns: m.matchedPatterns || [],
-        learningScore: m.learningScore,
-        learningReasons: m.learningReasons,
+        learningScore: (m as any).learningScore,
+        learningReasons: (m as any).learningReasons,
       })),
     };
   }, [preview]);
@@ -3555,9 +3560,9 @@ export default function ManagerPage() {
                   title={item.description}
                 >
                   {item.label}
-                  {item.badge && item.badge > 0 && (
+                  {(item as any).badge && (item as any).badge > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
-                      {item.badge}
+                      {(item as any).badge}
                     </span>
                   )}
                 </a>
