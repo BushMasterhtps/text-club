@@ -24,6 +24,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
     }
 
+    // Sort controls (default oldest to newest by createdAt)
+    const orderParam = (searchParams.get('order') || 'asc').toLowerCase();
+    const order: 'asc' | 'desc' = orderParam === 'desc' ? 'desc' : 'asc';
+
     // Get tasks assigned to this user with statuses that agents can work on
     const tasks = await prisma.task.findMany({
       where: {
@@ -90,7 +94,7 @@ export async function GET(req: Request) {
         }
       },
       orderBy: [
-        { updatedAt: "desc" } // Most recently updated first
+        { createdAt: order } // Oldest to newest by default
       ]
     });
 
@@ -117,6 +121,7 @@ export async function GET(req: Request) {
     });
 
     // Custom sorting: IN_PROGRESS first (current assignments), then PENDING (new assignments), then ASSISTANCE_REQUIRED
+    // Within the same status, preserve createdAt ordering from the DB (oldest/newest per `order`)
     const sortedTasks = transformedTasks.sort((a, b) => {
       const statusOrder = { 'IN_PROGRESS': 1, 'PENDING': 2, 'ASSISTANCE_REQUIRED': 3 };
       const aOrder = statusOrder[a.status as keyof typeof statusOrder] || 4;
@@ -126,8 +131,10 @@ export async function GET(req: Request) {
         return aOrder - bOrder;
       }
       
-      // If same status, sort by updatedAt desc (most recent first)
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      // If same status, keep createdAt ordering (asc/desc based on `order`)
+      return order === 'asc'
+        ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
     // Debug: Check if any tasks have manager responses

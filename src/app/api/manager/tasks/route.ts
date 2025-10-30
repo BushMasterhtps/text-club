@@ -242,9 +242,16 @@ export async function GET(req: Request) {
       skip,
       take,
       include: {
-        // latest open task (if any), most recent first
+        // latest task matching the selected status (falling back to any open task)
         tasks: {
-          where: { status: { not: "COMPLETED" as any } },
+          where:
+            statusKey === "pending"
+              ? ({ status: "PENDING" } as any)
+              : statusKey === "in_progress"
+              ? ({ status: "IN_PROGRESS" } as any)
+              : statusKey === "assistance_required"
+              ? ({ status: "ASSISTANCE_REQUIRED" } as any)
+              : ({ status: { not: "COMPLETED" } } as any),
           orderBy: { createdAt: "desc" },
           take: 1,
           include: {

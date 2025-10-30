@@ -179,6 +179,7 @@ export default function AgentPage() {
   });
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [forceRender, setForceRender] = useState(0);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -383,7 +384,7 @@ export default function AgentPage() {
       if (currentEmail) {
         try {
           console.log("🔄 SIMPLE About to fetch tasks...");
-          const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}`;
+          const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${sortOrder}`;
           console.log("🔄 SIMPLE Fetching from:", url);
           
           const res = await fetch(url);
@@ -477,7 +478,7 @@ export default function AgentPage() {
     console.log("📥 Loading tasks for:", currentEmail);
     setLoading(true);
     try {
-      const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}`;
+      const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${sortOrder}`;
       console.log("🌐 Fetching from:", url);
       const res = await fetch(url);
       console.log("📡 Response status:", res.status, res.statusText);
@@ -774,6 +775,12 @@ export default function AgentPage() {
             <SmallButton onClick={() => { loadTasks(); loadStats(); }}>
               🔄 Refresh
             </SmallButton>
+            <SmallButton onClick={() => { setSortOrder('asc'); loadTasks(); }} className={sortOrder === 'asc' ? 'bg-white/10' : ''}>
+              Oldest → Newest
+            </SmallButton>
+            <SmallButton onClick={() => { setSortOrder('desc'); loadTasks(); }} className={sortOrder === 'desc' ? 'bg-white/10' : ''}>
+              Newest → Oldest
+            </SmallButton>
             
             {/* Switch to Manager Button (only if user has MANAGER_AGENT role) */}
             {currentUserRole === 'MANAGER_AGENT' && (
@@ -1055,6 +1062,12 @@ export default function AgentPage() {
               >
                 🔄 Force Update
               </SmallButton>
+            <SmallButton onClick={() => { setSortOrder('asc'); loadTasks(); }} className={sortOrder === 'asc' ? 'bg-white/10' : ''}>
+              Oldest → Newest
+            </SmallButton>
+            <SmallButton onClick={() => { setSortOrder('desc'); loadTasks(); }} className={sortOrder === 'desc' ? 'bg-white/10' : ''}>
+              Newest → Oldest
+            </SmallButton>
 
             </div>
           </div>
@@ -1452,6 +1465,7 @@ function TaskCard({
         <Badge tone={task.status === "COMPLETED" ? "success" : "warning"}>
           {task.status.replace("_", " ").toUpperCase()}
         </Badge>
+        <span className="text-xs text-white/50">• Created: {new Date(task.createdAt).toLocaleString()}</span>
       </div>
 
       {/* Manager Response - Show when available */}
