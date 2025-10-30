@@ -467,7 +467,7 @@ export default function AgentPage() {
     };
   }, []);
 
-  const loadTasks = async (emailToUse?: string) => {
+  const loadTasks = async (emailToUse?: string, orderOverride?: 'asc' | 'desc') => {
     console.log("📥 loadTasks called with emailToUse:", emailToUse);
     const currentEmail = emailToUse || email;
     console.log("📥 currentEmail resolved to:", currentEmail);
@@ -478,7 +478,8 @@ export default function AgentPage() {
     console.log("📥 Loading tasks for:", currentEmail);
     setLoading(true);
     try {
-      const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${sortOrder}`;
+      const effectiveOrder = orderOverride ?? sortOrder;
+      const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${effectiveOrder}`;
       console.log("🌐 Fetching from:", url);
       const res = await fetch(url);
       console.log("📡 Response status:", res.status, res.statusText);
@@ -775,10 +776,10 @@ export default function AgentPage() {
             <SmallButton onClick={() => { loadTasks(); loadStats(); }}>
               🔄 Refresh
             </SmallButton>
-            <SmallButton onClick={() => { setSortOrder('asc'); loadTasks(); }} className={sortOrder === 'asc' ? 'bg-white/10' : ''}>
+            <SmallButton onClick={() => { setSortOrder('asc'); loadTasks(undefined, 'asc'); stopPolling(); startPolling(); }} className={sortOrder === 'asc' ? 'bg-white/10' : ''}>
               Oldest → Newest
             </SmallButton>
-            <SmallButton onClick={() => { setSortOrder('desc'); loadTasks(); }} className={sortOrder === 'desc' ? 'bg-white/10' : ''}>
+            <SmallButton onClick={() => { setSortOrder('desc'); loadTasks(undefined, 'desc'); stopPolling(); startPolling(); }} className={sortOrder === 'desc' ? 'bg-white/10' : ''}>
               Newest → Oldest
             </SmallButton>
             
@@ -1062,10 +1063,10 @@ export default function AgentPage() {
               >
                 🔄 Force Update
               </SmallButton>
-            <SmallButton onClick={() => { setSortOrder('asc'); loadTasks(); }} className={sortOrder === 'asc' ? 'bg-white/10' : ''}>
+            <SmallButton onClick={() => { setSortOrder('asc'); loadTasks(undefined, 'asc'); stopPolling(); startPolling(); }} className={sortOrder === 'asc' ? 'bg-white/10' : ''}>
               Oldest → Newest
             </SmallButton>
-            <SmallButton onClick={() => { setSortOrder('desc'); loadTasks(); }} className={sortOrder === 'desc' ? 'bg-white/10' : ''}>
+            <SmallButton onClick={() => { setSortOrder('desc'); loadTasks(undefined, 'desc'); stopPolling(); startPolling(); }} className={sortOrder === 'desc' ? 'bg-white/10' : ''}>
               Newest → Oldest
             </SmallButton>
 
