@@ -1239,6 +1239,22 @@ function SpamReviewSection({
   const onPrev = () => page > 1 && fetchPage(page - 1);
   const onNext = () => page < totalPages && fetchPage(page + 1);
   
+  // Refresh current page by clearing cache and refetching
+  async function handleRefresh() {
+    // Clear cache for current page to force fresh data
+    setCacheByPage((prev) => {
+      const newCache = { ...prev };
+      delete newCache[page];
+      return newCache;
+    });
+    setNextCursorByPage((prev) => {
+      const newCursors = { ...prev };
+      delete newCursors[page];
+      return newCursors;
+    });
+    await fetchPage(page);
+  }
+  
   const handleSort = (key: string, direction: SortDirection) => {
     setSort(direction ? { key, direction } : null);
     // Clear cache when sorting changes to force fresh data
@@ -1434,7 +1450,7 @@ function SpamReviewSection({
             <SmallButton onClick={onSearch} disabled={loading}>
               {loading ? "Loading…" : "Search"}
             </SmallButton>
-            <SmallButton onClick={() => fetchPage(page)} disabled={loading}>
+            <SmallButton onClick={handleRefresh} disabled={loading}>
               {loading ? "Loading…" : "🔄 Refresh"}
             </SmallButton>
           </div>
