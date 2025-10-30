@@ -23,11 +23,33 @@ export async function scanAndLabelSpam(
       select: { id: true, pattern: true, enabled: true },
     });
 
-  const lowerText = text.toLowerCase();
+  // Normalize text: remove special chars, lowercase, trim
+  const normalizedText = text.toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  
+  const words = normalizedText.split(/\s+/);
 
-  const matched = rules.filter(
-    (r) => !!r.pattern && lowerText.includes(r.pattern.toLowerCase())
-  );
+  // Use word-boundary matching instead of substring matching
+  const matched = rules.filter((r) => {
+    if (!r.pattern) return false;
+    const normalizedPattern = r.pattern.toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    
+    const patternWords = normalizedPattern.split(/\s+/);
+    
+    // For single-word patterns, check if it exists as a complete word
+    if (patternWords.length === 1) {
+      return words.some(word => word === normalizedPattern);
+    }
+    
+    // For multi-word patterns, check if the phrase exists with word boundaries
+    const regex = new RegExp(`\\b${normalizedPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+    return regex.test(normalizedText);
+  });
 
   for (const rule of matched) {
     await prisma.spamLabel.create({

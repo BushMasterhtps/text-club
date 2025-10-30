@@ -25,7 +25,21 @@ function ruleMatchesText(
 
   if (!p || !t) return false;
 
-  if (r.mode === SpamMode.CONTAINS) return t.includes(p);
+  if (r.mode === SpamMode.CONTAINS) {
+    // Use word boundary matching instead of simple substring
+    // This ensures "cod" matches "cod" but not "code" or "could"
+    const words = t.split(/\s+/);
+    const patternWords = p.split(/\s+/);
+    
+    // For single-word patterns, check if it exists as a complete word
+    if (patternWords.length === 1) {
+      return words.some(word => word === p);
+    }
+    
+    // For multi-word patterns, check if the phrase exists with word boundaries
+    const regex = new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+    return regex.test(t);
+  }
   if (r.mode === SpamMode.LONE) return t === p; // exactly the lone token/phrase
   return false;
 }
@@ -40,8 +54,15 @@ export async function GET() {
   });
 
   // 2) pull "pending" raws (READY or PROMOTED) - limit for performance
+  // Only scan messages from the last 7 days to avoid re-processing old completed messages
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  
   const raws = await prisma.rawMessage.findMany({
-    where: { status: { in: [RawStatus.READY, RawStatus.PROMOTED] } },
+    where: { 
+      status: { in: [RawStatus.READY, RawStatus.PROMOTED] },
+      createdAt: { gte: sevenDaysAgo } // Only recent messages
+    },
     select: { id: true, brand: true, text: true },
     orderBy: { createdAt: "desc" },
     take: 500, // Further reduced to prevent timeouts
