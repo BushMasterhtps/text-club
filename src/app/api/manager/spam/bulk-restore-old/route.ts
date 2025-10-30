@@ -55,11 +55,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Preview mode - just return what would be restored
+    // Preview mode - just return what would be archived
     if (dryRun) {
+      // Check how many completed tasks exist for these messages
+      const messageIds = oldSpamMessages.map(m => m.id);
+      const completedTasksCount = await prisma.task.count({
+        where: {
+          rawMessageId: { in: messageIds },
+          status: "COMPLETED"
+        }
+      });
+      
       return NextResponse.json({
         success: true,
-        message: `DRY RUN: Found ${oldSpamMessages.length} messages that would be restored`,
+        message: `DRY RUN: Found ${oldSpamMessages.length} messages that would be archived`,
         count: oldSpamMessages.length,
         dryRun: true,
         preview: oldSpamMessages.slice(0, 10).map(m => ({
@@ -69,31 +78,61 @@ export async function POST(req: NextRequest) {
           brand: m.brand,
           matchedPatterns: m.previewMatches
         })),
-        instruction: `To actually restore these messages, add ?dryRun=false to the URL`
+        agentMetricsInfo: {
+          completedTasksFound: completedTasksCount,
+          message: `✅ ${completedTasksCount} completed tasks will remain unchanged - agent metrics preserved`
+        },
+        instruction: `To actually archive these messages, add ?dryRun=false to the URL`
       });
     }
 
-    // Actually restore the messages
+    // Actually archive the messages (they were already completed/actioned)
     const messageIds = oldSpamMessages.map(m => m.id);
     
+    // IMPORTANT: Verify completed tasks exist and count them BEFORE archiving
+    // This ensures agents' productivity metrics are preserved
+    const completedTasksCount = await prisma.task.count({
+      where: {
+        rawMessageId: { in: messageIds },
+        status: "COMPLETED"
+      }
+    });
+    
+    // Update ONLY the RawMessage status - does NOT touch Task records
     const updateResult = await prisma.rawMessage.updateMany({
       where: {
         id: { in: messageIds }
       },
       data: {
-        status: RawStatus.READY, // Restore to READY status
+        status: RawStatus.SPAM_ARCHIVED, // Archive as confirmed spam
         previewMatches: null // Clear the matched patterns
+      }
+    });
+    
+    // Verify completed tasks still exist AFTER archiving (safety check)
+    const completedTasksAfter = await prisma.task.count({
+      where: {
+        rawMessageId: { in: messageIds },
+        status: "COMPLETED"
       }
     });
 
     return NextResponse.json({
       success: true,
-      message: `Successfully restored ${updateResult.count} messages from spam review`,
+      message: `Successfully archived ${updateResult.count} old messages (already completed/actioned)`,
       count: updateResult.count,
       dryRun: false,
       beforeDate: beforeDateStr,
-      oldestRestored: oldSpamMessages[0]?.createdAt,
-      newestRestored: oldSpamMessages[oldSpamMessages.length - 1]?.createdAt
+      oldestArchived: oldSpamMessages[0]?.createdAt,
+      newestArchived: oldSpamMessages[oldSpamMessages.length - 1]?.createdAt,
+      agentMetricsPreserved: {
+        completedTasksBefore: completedTasksCount,
+        completedTasksAfter: completedTasksAfter,
+        verified: completedTasksCount === completedTasksAfter,
+        message: completedTasksCount === completedTasksAfter 
+          ? `✅ All ${completedTasksCount} completed tasks preserved - agent metrics unaffected`
+          : `⚠️ WARNING: Task count mismatch!`
+      }
     });
 
   } catch (error) {

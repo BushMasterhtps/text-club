@@ -2,15 +2,17 @@
 
 ## Problem
 
-After the initial spam capture bug (substring matching), your spam review queue has old messages from before 10/29/2025 that shouldn't be there.
+After the initial spam capture bug (substring matching), your spam review queue has old messages from before 10/29/2025 that were **already completed by your agents**.
 
 **Manual review would be tedious** → Use the bulk cleanup utility instead!
 
 ---
 
-## Solution: Bulk Restore Utility
+## Solution: Bulk Archive Utility
 
-I've created an API endpoint that can automatically restore old messages from your spam review queue.
+I've created an API endpoint that can automatically archive old messages from your spam review queue.
+
+**Important**: These messages were already completed, so we archive them (not restore to pending) to preserve your agents' productivity metrics.
 
 ### Endpoint: `/api/manager/spam/bulk-restore-old`
 
@@ -45,7 +47,7 @@ GET https://thunderous-crisp-50ad13.netlify.app/api/manager/spam/bulk-restore-ol
 
 ---
 
-### Step 2: Preview What Would Be Restored (Dry Run)
+### Step 2: Preview What Would Be Archived (Dry Run)
 
 **POST Request** - Safe preview mode (default):
 ```
@@ -61,19 +63,23 @@ POST https://thunderous-crisp-50ad13.netlify.app/api/manager/spam/bulk-restore-o
 ```json
 {
   "success": true,
-  "message": "DRY RUN: Found 450 messages that would be restored",
+  "message": "DRY RUN: Found 450 messages that would be archived",
   "count": 450,
   "dryRun": true,
   "preview": [...], // First 10 messages
-  "instruction": "To actually restore these messages, add ?dryRun=false to the URL"
+  "agentMetricsInfo": {
+    "completedTasksFound": 380,
+    "message": "✅ 380 completed tasks will remain unchanged - agent metrics preserved"
+  },
+  "instruction": "To actually archive these messages, add ?dryRun=false to the URL"
 }
 ```
 
-**This is SAFE** - it doesn't make any changes, just shows you what would happen.
+**This is SAFE** - it doesn't make any changes, just shows you what would happen and confirms agent metrics are preserved.
 
 ---
 
-### Step 3: Actually Restore the Messages
+### Step 3: Actually Archive the Messages
 
 **POST Request** - Execute the cleanup:
 ```
@@ -84,19 +90,26 @@ POST https://thunderous-crisp-50ad13.netlify.app/api/manager/spam/bulk-restore-o
 ```json
 {
   "success": true,
-  "message": "Successfully restored 450 messages from spam review",
+  "message": "Successfully archived 450 old messages (already completed/actioned)",
   "count": 450,
   "dryRun": false,
   "beforeDate": "2025-10-29",
-  "oldestRestored": "2025-09-08T10:30:00.000Z",
-  "newestRestored": "2025-10-28T23:59:00.000Z"
+  "oldestArchived": "2025-09-08T10:30:00.000Z",
+  "newestArchived": "2025-10-28T23:59:00.000Z",
+  "agentMetricsPreserved": {
+    "completedTasksBefore": 380,
+    "completedTasksAfter": 380,
+    "verified": true,
+    "message": "✅ All 380 completed tasks preserved - agent metrics unaffected"
+  }
 }
 ```
 
-**This actually restores** the messages:
-- Changes status from `SPAM_REVIEW` back to `READY`
+**This actually archives** the messages:
+- Changes status from `SPAM_REVIEW` → `SPAM_ARCHIVED`
 - Clears the matched patterns
-- Messages return to your normal pending queue
+- **Does NOT touch Task records** - completed tasks remain intact
+- **Preserves all agent productivity metrics** - verified before and after
 
 ---
 
@@ -167,20 +180,30 @@ If you want to be more conservative:
 1. ✅ **Dry run by default** - Won't make changes unless you explicitly set `dryRun=false`
 2. ✅ **Preview mode** - Shows you exactly what will be affected before you commit
 3. ✅ **Count check** - GET endpoint lets you see the count before doing anything
-4. ✅ **Reversible** - Messages go back to `READY` status, they're not deleted
+4. ✅ **Agent metrics verification** - Counts completed tasks before/after to ensure preservation
+5. ✅ **Tasks untouched** - Only updates RawMessage status, never modifies Task records
+6. ✅ **Date-based filter** - Only affects messages older than your specified date
 
 ---
 
-## What Happens to Restored Messages?
+## 🎯 What Happens to Archived Messages?
 
-**Status change**: `SPAM_REVIEW` → `READY`  
+**Status change**: `SPAM_REVIEW` → `SPAM_ARCHIVED`  
 **Matched patterns**: Cleared  
-**Result**: Messages return to your normal pending queue
+**Task records**: **Completely untouched**  
+**Result**: Messages removed from spam review queue, completed work preserved
 
-They'll show up in your regular task queue, and:
-- ✅ Future spam captures will use the **new word-boundary matching**
-- ✅ They won't be falsely captured again
-- ✅ You can process them normally
+### ✅ Agent Productivity Metrics ARE PRESERVED
+
+**Critical guarantee**: The utility **only** updates `RawMessage` status, **never** touches `Task` records.
+
+- ✅ All completed tasks remain `COMPLETED`
+- ✅ Agent assignments intact
+- ✅ Completion timestamps preserved  
+- ✅ Duration/metrics unchanged
+- ✅ Analytics show accurate completed work
+
+**Verification**: The utility counts completed tasks before AND after archiving, ensuring they match exactly.
 
 ---
 
@@ -227,12 +250,13 @@ curl -X POST "https://thunderous-crisp-50ad13.netlify.app/api/manager/spam/bulk-
 
 ## After Cleanup
 
-Once you've restored the old messages:
+Once you've archived the old messages:
 
 1. ✅ Your spam review queue will only have recent, legitimate spam
 2. ✅ Future spam captures will use word-boundary matching (no false positives)
-3. ✅ Old messages are back in pending queue for normal processing
-4. ✅ System is clean and working correctly
+3. ✅ Old messages are archived (already completed work)
+4. ✅ **All agent productivity metrics preserved** - completed tasks untouched
+5. ✅ System is clean and working correctly
 
 ---
 
