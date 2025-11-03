@@ -34,7 +34,7 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
           <div>
             <h2 className="text-lg font-semibold text-yellow-400 tracking-tight">Performance Scorecard</h2>
             <p className="text-sm text-white/60 mt-1">
-              Agent rankings based on 100% volume (tasks completed per day worked)
+              Ranked by daily average (total tasks ÷ days worked) • Min 20 tasks to qualify
             </p>
           </div>
         </div>
@@ -73,12 +73,12 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                     <strong>Period:</strong> {new Date(scorecardData.period.start).toLocaleDateString()} - {new Date(scorecardData.period.end).toLocaleDateString()} ({scorecardData.period.days} days)
                   </div>
                   <div className="text-sm text-white/60">
-                    <strong>Scoring:</strong> 100% Volume (Speed shown for reference only)
+                    <strong>Ranking:</strong> Highest daily avg tasks/day at top
                   </div>
                 </div>
                 {scorecardData.eligibleCount !== undefined && (
                   <div className="text-xs text-white/50">
-                    {scorecardData.eligibleCount} ranked • {scorecardData.ineligibleCount} need 20+ tasks to be eligible
+                    ✓ {scorecardData.eligibleCount} ranked • {scorecardData.ineligibleCount} need 20+ tasks to be eligible
                   </div>
                 )}
               </div>
@@ -155,8 +155,8 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                             </>
                           ) : (
                             <>
-                              <div className="text-3xl font-bold text-white">{agent.overallScore}%</div>
-                              <div className="text-sm text-white/60">Volume Score</div>
+                              <div className="text-3xl font-bold text-white">{agent.overallScore}</div>
+                              <div className="text-sm text-white/60">Tasks/Day</div>
                               <div className="text-xs text-white/50 mt-1">Top {agent.percentile}%</div>
                             </>
                           )}
@@ -168,12 +168,15 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                         <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
                           <div 
                             className={`h-full transition-all ${
+                              agent.tier === 'Insufficient Data' ? 'bg-gray-500' :
                               agent.tier === 'Elite' ? 'bg-gradient-to-r from-green-500 to-emerald-400' :
                               agent.tier === 'High Performer' ? 'bg-gradient-to-r from-blue-500 to-cyan-400' :
                               agent.tier === 'On Track' ? 'bg-gradient-to-r from-yellow-500 to-amber-400' :
                               'bg-gradient-to-r from-orange-500 to-red-400'
                             }`}
-                            style={{ width: `${Math.min(agent.overallScore, 200)}%` }}
+                            style={{ 
+                              width: agent.rank === null ? '10%' : `${Math.min((agent.dailyAvg / (scorecardData?.agents?.[0]?.dailyAvg || 1)) * 100, 100)}%` 
+                            }}
                           />
                         </div>
                       </div>
@@ -181,9 +184,14 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                       {/* Quick Stats */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
                         <div>
-                          <div className="text-white/50">📊 Volume Score</div>
-                          <div className="text-white font-semibold">{agent.volumeScore}%</div>
-                          <div className="text-xs text-white/40">(100% weight)</div>
+                          <div className="text-white/50">📊 Daily Average</div>
+                          <div className="text-white font-semibold">{agent.dailyAvg} tasks/day</div>
+                          <div className="text-xs text-white/40">(ranking basis)</div>
+                        </div>
+                        <div>
+                          <div className="text-white/50">📦 Total Completed</div>
+                          <div className="text-white font-semibold">{agent.tasksCompleted} tasks</div>
+                          <div className="text-xs text-white/40">({agent.daysWorked} days worked)</div>
                         </div>
                         <div>
                           <div className="text-white/50">⏱️ Avg Handle Time</div>
@@ -193,12 +201,11 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                           <div className="text-xs text-white/40">(info only)</div>
                         </div>
                         <div>
-                          <div className="text-white/50">📅 Days Worked</div>
-                          <div className="text-white font-semibold">{agent.daysWorked} days</div>
-                        </div>
-                        <div>
-                          <div className="text-white/50">📈 Daily Avg</div>
-                          <div className="text-white font-semibold">{agent.dailyAvg} tasks/day</div>
+                          <div className="text-white/50">⏰ Total Time</div>
+                          <div className="text-white font-semibold">
+                            {Math.floor(agent.totalTimeSec / 3600)}h {Math.floor((agent.totalTimeSec % 3600) / 60)}m
+                          </div>
+                          <div className="text-xs text-white/40">(all tasks)</div>
                         </div>
                       </div>
 
@@ -236,11 +243,11 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                           </div>
                         </div>
 
-                        {/* Peak Hours */}
-                        {agentDetailData.peakHours && agentDetailData.peakHours.length > 0 && (
+                        {/* Peak Hours (single day) or Top Days (multi-day) */}
+                        {agentDetailData.isSingleDay && agentDetailData.peakHours && agentDetailData.peakHours.length > 0 && (
                           <div>
                             <h4 className="font-semibold text-white mb-3 flex items-center gap-2">
-                              ⏰ Peak Productivity Hours
+                              ⏰ Peak Productivity Hours (PST)
                             </h4>
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                               {agentDetailData.peakHours.map((peak: any, idx: number) => (
@@ -252,6 +259,25 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                                      `${peak.hour} AM`}
                                   </div>
                                   <div className="text-lg font-bold text-white">{peak.count}</div>
+                                  <div className="text-xs text-white/40">tasks</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {!agentDetailData.isSingleDay && agentDetailData.topDays && agentDetailData.topDays.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold text-white mb-3 flex items-center gap-2">
+                              📅 Top Performing Days
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                              {agentDetailData.topDays.map((day: any, idx: number) => (
+                                <div key={idx} className="bg-white/5 rounded p-2 text-center">
+                                  <div className="text-xs text-white/50">
+                                    {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  </div>
+                                  <div className="text-lg font-bold text-white">{day.count}</div>
                                   <div className="text-xs text-white/40">tasks</div>
                                 </div>
                               ))}

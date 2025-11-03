@@ -360,27 +360,9 @@ function calculateAgentScore(
   const isEligible = tasksCompleted >= MINIMUM_TASKS_FOR_RANKING;
 
   // Calculate Volume Score (100% weight - pure productivity)
-  // Compare daily avg vs target for each task type
-  let volumeScore = 0;
-  let volumeWeight = 0;
-  
-  for (const taskType of taskTypes) {
-    const typeCount = breakdown[taskType].count;
-    if (typeCount === 0) continue;
-    
-    const typeDailyAvg = typeCount / Math.max(daysWorked, 1);
-    const target = (targets as any)[taskType]?.dailyTasks || 0;
-    
-    if (target > 0) {
-      const typeScore = (typeDailyAvg / target) * 100;
-      volumeScore += typeScore * typeCount; // Weight by task count
-      volumeWeight += typeCount;
-    }
-  }
-  
-  volumeScore = volumeWeight > 0 ? volumeScore / volumeWeight : 100;
-  // Cap volume score at 200% to prevent extreme outliers
-  volumeScore = Math.min(volumeScore, 200);
+  // Use RAW daily average as the score (will be percentile-ranked later)
+  // This ensures agents with higher daily averages rank higher, period.
+  const volumeScore = Math.round(dailyAvg); // Raw daily average (not percentage)
 
   // Calculate Speed Score (informational only - NOT used in overall score)
   // Compare avg handle time vs target (lower is better, so invert)
@@ -461,23 +443,35 @@ async function calculateDetailedBreakdown(
 
   // Peak productivity hours (hour of day analysis in PST)
   const hourlyPerformance = new Map<number, number>();
+  const dailyPerformanceDetailed = new Map<string, number>();
+  
   for (const task of tasks) {
-    // Convert UTC to PST (UTC-8 or UTC-7 for PDT)
-    // Using toLocaleString with America/Los_Angeles timezone
-    const pstDateStr = task.endTime.toLocaleString('en-US', { 
-      timeZone: 'America/Los_Angeles',
-      hour12: false,
-      hour: '2-digit'
-    });
-    const hour = parseInt(pstDateStr.split(',')[1]?.trim().split(':')[0] || '0', 10);
+    // Get date in PST timezone for daily breakdown
+    const pstDate = new Date(task.endTime.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const dateKey = pstDate.toISOString().split('T')[0];
+    dailyPerformanceDetailed.set(dateKey, (dailyPerformanceDetailed.get(dateKey) || 0) + 1);
     
-    hourlyPerformance.set(hour, (hourlyPerformance.get(hour) || 0) + 1);
+    // Get hour in PST timezone for hourly breakdown
+    const pstHour = pstDate.getHours();
+    hourlyPerformance.set(pstHour, (hourlyPerformance.get(pstHour) || 0) + 1);
   }
 
-  const peakHours = Array.from(hourlyPerformance.entries())
-    .map(([hour, count]) => ({ hour, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5); // Top 5 hours
+  // Use hourly breakdown only for single-day periods, daily for multi-day
+  const isSingleDay = totalDays <= 1;
+  
+  const peakHours = isSingleDay 
+    ? Array.from(hourlyPerformance.entries())
+        .map(([hour, count]) => ({ hour, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5) // Top 5 hours
+    : []; // For multi-day, we'll use daily performance instead
+  
+  const dailyBreakdown = !isSingleDay
+    ? Array.from(dailyPerformanceDetailed.entries())
+        .map(([date, count]) => ({ date, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10) // Top 10 days
+    : [];
 
   // Handle time distribution
   const handleTimeBuckets = {
@@ -514,7 +508,9 @@ async function calculateDetailedBreakdown(
     },
     dailyPerformance: dailyTasks,
     peakHours,
-    handleTimeDistribution: distribution
+    topDays: dailyBreakdown, // Top performing days (for multi-day periods)
+    handleTimeDistribution: distribution,
+    isSingleDay
   };
 }
 
