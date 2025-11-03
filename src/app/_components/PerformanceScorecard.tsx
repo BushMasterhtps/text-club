@@ -34,7 +34,7 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
           <div>
             <h2 className="text-lg font-semibold text-yellow-400 tracking-tight">Performance Scorecard</h2>
             <p className="text-sm text-white/60 mt-1">
-              Agent rankings based on volume (60%) and speed (40%)
+              Agent rankings based on 100% volume (tasks completed per day worked)
             </p>
           </div>
         </div>
@@ -67,13 +67,20 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
           ) : scorecardData?.agents?.length > 0 ? (
             <div className="space-y-4">
               {/* Scorecard Header Info */}
-              <div className="flex items-center justify-between bg-white/5 rounded-lg p-4">
-                <div className="text-sm text-white/80">
-                  <strong>Period:</strong> {new Date(scorecardData.period.start).toLocaleDateString()} - {new Date(scorecardData.period.end).toLocaleDateString()} ({scorecardData.period.days} days)
+              <div className="bg-white/5 rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-white/80">
+                    <strong>Period:</strong> {new Date(scorecardData.period.start).toLocaleDateString()} - {new Date(scorecardData.period.end).toLocaleDateString()} ({scorecardData.period.days} days)
+                  </div>
+                  <div className="text-sm text-white/60">
+                    <strong>Scoring:</strong> 100% Volume (Speed shown for reference only)
+                  </div>
                 </div>
-                <div className="text-sm text-white/60">
-                  <strong>Scoring:</strong> 60% Volume + 40% Speed
-                </div>
+                {scorecardData.eligibleCount !== undefined && (
+                  <div className="text-xs text-white/50">
+                    {scorecardData.eligibleCount} ranked • {scorecardData.ineligibleCount} need 20+ tasks to be eligible
+                  </div>
+                )}
               </div>
 
               {/* Dynamic Targets Display */}
@@ -111,16 +118,18 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                         <div className="flex items-center gap-4 flex-1">
                           {/* Rank Badge */}
                           <div className={`flex items-center justify-center w-12 h-12 rounded-full font-bold text-lg ${
+                            agent.rank === null ? 'bg-gray-600/20 text-gray-400 border-2 border-gray-600' :
                             agent.rank === 1 ? 'bg-yellow-500/20 text-yellow-300 border-2 border-yellow-500' :
                             agent.rank === 2 ? 'bg-gray-400/20 text-gray-300 border-2 border-gray-400' :
                             agent.rank === 3 ? 'bg-orange-600/20 text-orange-300 border-2 border-orange-600' :
                             'bg-white/10 text-white/60'
                           }`}>
-                            #{agent.rank}
+                            {agent.rank === null ? '—' : `#${agent.rank}`}
                           </div>
 
                           {/* Tier Badge */}
                           <div className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                            agent.tier === 'Insufficient Data' ? 'bg-gray-600/20 text-gray-400 border border-gray-600/50' :
                             agent.tier === 'Elite' ? 'bg-green-500/20 text-green-300 border border-green-500/50' :
                             agent.tier === 'High Performer' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/50' :
                             agent.tier === 'On Track' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/50' :
@@ -138,9 +147,19 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
 
                         {/* Overall Score */}
                         <div className="text-right">
-                          <div className="text-3xl font-bold text-white">{agent.overallScore}%</div>
-                          <div className="text-sm text-white/60">Overall Score</div>
-                          <div className="text-xs text-white/50 mt-1">Top {agent.percentile}%</div>
+                          {agent.rank === null ? (
+                            <>
+                              <div className="text-xl font-bold text-gray-400">Not Ranked</div>
+                              <div className="text-xs text-white/50 mt-1">Need {agent.minimumTasks}+ tasks</div>
+                              <div className="text-xs text-white/40">({agent.tasksCompleted} completed)</div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-3xl font-bold text-white">{agent.overallScore}%</div>
+                              <div className="text-sm text-white/60">Volume Score</div>
+                              <div className="text-xs text-white/50 mt-1">Top {agent.percentile}%</div>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -162,12 +181,16 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                       {/* Quick Stats */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
                         <div>
-                          <div className="text-white/50">📊 Volume</div>
+                          <div className="text-white/50">📊 Volume Score</div>
                           <div className="text-white font-semibold">{agent.volumeScore}%</div>
+                          <div className="text-xs text-white/40">(100% weight)</div>
                         </div>
                         <div>
-                          <div className="text-white/50">⚡ Speed</div>
-                          <div className="text-white font-semibold">{agent.speedScore}%</div>
+                          <div className="text-white/50">⏱️ Avg Handle Time</div>
+                          <div className="text-white font-semibold">
+                            {Math.floor(agent.avgHandleTimeSec / 60)}m {agent.avgHandleTimeSec % 60}s
+                          </div>
+                          <div className="text-xs text-white/40">(info only)</div>
                         </div>
                         <div>
                           <div className="text-white/50">📅 Days Worked</div>

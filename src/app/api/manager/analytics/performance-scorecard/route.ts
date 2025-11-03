@@ -88,14 +88,18 @@ export async function GET(req: NextRequest) {
       })
     );
 
-    // Filter out nulls and sort by overall score descending
+    // Filter out nulls and separate eligible vs ineligible agents
     const validScores = agentScores.filter(Boolean) as AgentScorecard[];
-    validScores.sort((a, b) => b.overallScore - a.overallScore);
+    const eligibleAgents = validScores.filter(a => a.isEligible);
+    const ineligibleAgents = validScores.filter(a => !a.isEligible);
+    
+    // Sort eligible agents by overall score descending
+    eligibleAgents.sort((a, b) => b.overallScore - a.overallScore);
 
-    // Assign ranks and tiers
-    const rankedAgents = validScores.map((agent, index) => {
+    // Assign ranks and tiers to eligible agents only
+    const rankedAgents = eligibleAgents.map((agent, index) => {
       const rank = index + 1;
-      const percentile = ((validScores.length - rank) / validScores.length) * 100;
+      const percentile = ((eligibleAgents.length - rank) / eligibleAgents.length) * 100;
       
       // Assign tier based on percentile and score
       let tier: string;
@@ -124,9 +128,21 @@ export async function GET(req: NextRequest) {
       };
     });
 
+    // Add ineligible agents at the end with special tier
+    const ineligibleRanked = ineligibleAgents.map((agent) => ({
+      ...agent,
+      rank: null,
+      percentile: 0,
+      tier: "Insufficient Data",
+      tierBadge: "📊"
+    }));
+
+    // Combine: eligible agents first (ranked), then ineligible
+    const allAgents = [...rankedAgents, ...ineligibleRanked];
+
     // If specific agent requested, include detailed breakdown
     if (agentId) {
-      const agentData = rankedAgents.find(a => a.id === agentId);
+      const agentData = allAgents.find(a => a.id === agentId);
       if (agentData) {
         const detailedBreakdown = await calculateDetailedBreakdown(
           agentId,
@@ -147,7 +163,9 @@ export async function GET(req: NextRequest) {
       success: true,
       period: { start: dateStart.toISOString(), end: dateEnd.toISOString(), days: daysDiff },
       targets,
-      agents: rankedAgents
+      agents: allAgents,
+      eligibleCount: eligibleAgents.length,
+      ineligibleCount: ineligibleAgents.length
     });
 
   } catch (error) {
@@ -208,6 +226,8 @@ interface AgentScorecard {
     HOLDS: { count: number; avgSec: number; totalSec: number };
     STANDALONE_REFUNDS: { count: number; avgSec: number; totalSec: number };
   };
+  isEligible: boolean;
+  minimumTasks: number;
 }
 
 // ============================================================================
@@ -335,7 +355,11 @@ function calculateAgentScore(
     };
   }
 
-  // Calculate Volume Score (60% weight)
+  // Minimum task threshold for ranking eligibility
+  const MINIMUM_TASKS_FOR_RANKING = 20;
+  const isEligible = tasksCompleted >= MINIMUM_TASKS_FOR_RANKING;
+
+  // Calculate Volume Score (100% weight - pure productivity)
   // Compare daily avg vs target for each task type
   let volumeScore = 0;
   let volumeWeight = 0;
@@ -355,8 +379,10 @@ function calculateAgentScore(
   }
   
   volumeScore = volumeWeight > 0 ? volumeScore / volumeWeight : 100;
+  // Cap volume score at 200% to prevent extreme outliers
+  volumeScore = Math.min(volumeScore, 200);
 
-  // Calculate Speed Score (40% weight)
+  // Calculate Speed Score (informational only - NOT used in overall score)
   // Compare avg handle time vs target (lower is better, so invert)
   let speedScore = 0;
   let speedWeight = 0;
@@ -377,9 +403,11 @@ function calculateAgentScore(
   }
   
   speedScore = speedWeight > 0 ? speedScore / speedWeight : 100;
+  // Cap speed score at 150% to prevent spam-task skew
+  speedScore = Math.min(speedScore, 150);
 
-  // Overall Score: 60% Volume + 40% Speed
-  const overallScore = Math.round((volumeScore * 0.6) + (speedScore * 0.4));
+  // Overall Score: 100% Volume (Speed shown for info only)
+  const overallScore = Math.round(volumeScore);
 
   return {
     id: agent.id,
@@ -393,7 +421,9 @@ function calculateAgentScore(
     dailyAvg: Math.round(dailyAvg * 10) / 10,
     avgHandleTimeSec: Math.round(avgHandleTimeSec),
     totalTimeSec: Math.round(totalTimeSec),
-    breakdown
+    breakdown,
+    isEligible,
+    minimumTasks: MINIMUM_TASKS_FOR_RANKING
   };
 }
 
@@ -429,10 +459,18 @@ async function calculateDetailedBreakdown(
     .map(([date, count]) => ({ date, count }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // Peak productivity hours (hour of day analysis)
+  // Peak productivity hours (hour of day analysis in PST)
   const hourlyPerformance = new Map<number, number>();
   for (const task of tasks) {
-    const hour = task.endTime.getHours();
+    // Convert UTC to PST (UTC-8 or UTC-7 for PDT)
+    // Using toLocaleString with America/Los_Angeles timezone
+    const pstDateStr = task.endTime.toLocaleString('en-US', { 
+      timeZone: 'America/Los_Angeles',
+      hour12: false,
+      hour: '2-digit'
+    });
+    const hour = parseInt(pstDateStr.split(',')[1]?.trim().split(':')[0] || '0', 10);
+    
     hourlyPerformance.set(hour, (hourlyPerformance.get(hour) || 0) + 1);
   }
 
