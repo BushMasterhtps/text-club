@@ -217,21 +217,48 @@ export default function TrelloImportSection() {
         }
       }
 
-      const results = await Promise.all(
-        allEntries.map(entry =>
-          fetch('/api/manager/trello-import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(entry)
-          })
-        )
-      );
+      // Process in batches to avoid overwhelming the server
+      const BATCH_SIZE = 20; // Process 20 at a time
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (let i = 0; i < allEntries.length; i += BATCH_SIZE) {
+        const batch = allEntries.slice(i, i + BATCH_SIZE);
+        const progress = Math.min(i + BATCH_SIZE, allEntries.length);
+        
+        // Show progress
+        setMessage(`⏳ Processing ${progress}/${allEntries.length} entries...`);
+        
+        const results = await Promise.all(
+          batch.map(entry =>
+            fetch('/api/manager/trello-import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(entry)
+            }).then(r => ({ ok: r.ok, status: r.status }))
+            .catch(err => ({ ok: false, status: 0 }))
+          )
+        );
 
-      const successCount = results.filter(r => r.ok).length;
-      setMessage(`✓ Added ${successCount} entries across ${dates.length} days for ${entriesToAdd.length} agents`);
+        successCount += results.filter(r => r.ok).length;
+        failCount += results.filter(r => !r.ok).length;
+        
+        // Small delay between batches to be gentle on the server
+        if (i + BATCH_SIZE < allEntries.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      if (failCount === 0) {
+        setMessage(`✓ Successfully added ${successCount} entries across ${dates.length} days for ${entriesToAdd.length} agents`);
+      } else {
+        setMessage(`⚠️ Added ${successCount} entries, ${failCount} failed. Try again for failed entries.`);
+      }
+      
       setBulkEntries({});
       loadEntries();
     } catch (error) {
+      console.error('Bulk import error:', error);
       setMessage('✗ Failed to add bulk date range entries');
     } finally {
       setLoading(false);
