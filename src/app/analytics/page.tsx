@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/app/_components/Card';
 import { SmallButton } from '@/app/_components/SmallButton';
+import PerformanceScorecard from '@/app/_components/PerformanceScorecard';
 
 // Typography components
 function H1({ children }: { children: React.ReactNode }) {
@@ -158,11 +159,8 @@ export default function AnalyticsPage() {
   const [selectedTaskFilter, setSelectedTaskFilter] = useState<string>('all');
   
   // Performance Scorecard state
-  const [scorecardExpanded, setScorecardExpanded] = useState(false);
   const [scorecardData, setScorecardData] = useState<any>(null);
   const [loadingScorecard, setLoadingScorecard] = useState(false);
-  const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
-  const [agentDetailData, setAgentDetailData] = useState<any>(null);
 
   // Peek at agent's in-progress tasks
   const peekAgentTasks = async (agent: AgentStatus) => {
@@ -347,11 +345,12 @@ export default function AnalyticsPage() {
       const data = await response.json();
       
       if (data.success && data.agent) {
-        setAgentDetailData(data.agent);
-        setExpandedAgentId(agentId);
+        return data.agent;
       }
+      return null;
     } catch (error) {
       console.error('Error loading agent detail:', error);
+      return null;
     }
   };
 
@@ -495,18 +494,13 @@ export default function AnalyticsPage() {
           </div>
         </Card>
 
-        {/* Performance Scorecard Section - Coming Soon */}
-        <Card className="p-6 border-2 border-yellow-500/30 bg-gradient-to-br from-yellow-500/5 to-orange-500/5">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">🏆</span>
-            <div>
-              <H2 className="text-yellow-400">Performance Scorecard</H2>
-              <p className="text-sm text-white/60 mt-1">
-                Agent rankings and performance metrics (Feature in development)
-              </p>
-            </div>
-          </div>
-        </Card>
+        {/* Performance Scorecard Section */}
+        <PerformanceScorecard
+          scorecardData={scorecardData}
+          loading={loadingScorecard}
+          onRefresh={loadScorecardData}
+          onLoadAgentDetail={loadAgentDetail}
+        />
 
         {/* Overview Stats */}
         {overviewStats && (
