@@ -807,7 +807,7 @@ export default function AnalyticsPage() {
                 )}
               </>
             )}
-          </Card>
+        </Card>
 
         {/* Overview Stats */}
         {overviewStats && (
