@@ -48,7 +48,7 @@ export async function GET(req: Request) {
       success: true,
       entries: entries.map(e => ({
         id: e.id,
-        date: e.date.toISOString(),
+        date: e.date.toISOString().split('T')[0], // Return YYYY-MM-DD format only
         agentId: e.agentId,
         agentName: e.agent.name || e.agent.email,
         agentEmail: e.agent.email,
@@ -98,9 +98,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Parse date and set to start of day UTC
-    const entryDate = new Date(date);
-    entryDate.setHours(0, 0, 0, 0);
+    // Parse date in local timezone (YYYY-MM-DD format from date picker)
+    // Create date at noon UTC to avoid timezone shift issues
+    const [year, month, day] = date.split('-').map(Number);
+    const entryDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
 
     // Upsert: create or update if already exists for this agent + date
     const entry = await prisma.trelloCompletion.upsert({

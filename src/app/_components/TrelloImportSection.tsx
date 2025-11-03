@@ -42,6 +42,11 @@ export default function TrelloImportSection() {
     return yesterday.toISOString().split('T')[0];
   });
   const [batchEntries, setBatchEntries] = useState<Record<string, string>>({});
+  
+  // Bulk date range entry
+  const [bulkStartDate, setBulkStartDate] = useState('');
+  const [bulkEndDate, setBulkEndDate] = useState('');
+  const [bulkEntries, setBulkEntries] = useState<Record<string, string>>({});
 
   // Load agents
   useEffect(() => {
@@ -167,6 +172,67 @@ export default function TrelloImportSection() {
       loadEntries();
     } catch (error) {
       setMessage('✗ Failed to add batch entries');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addBulkDateRangeEntries = async () => {
+    if (!bulkStartDate || !bulkEndDate) {
+      setMessage('Please select start and end dates');
+      return;
+    }
+
+    const entriesToAdd = Object.entries(bulkEntries)
+      .filter(([_, count]) => count && parseInt(count) > 0);
+
+    if (entriesToAdd.length === 0) {
+      setMessage('Please enter at least one card count');
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      // Generate all dates in range
+      const start = new Date(bulkStartDate);
+      const end = new Date(bulkEndDate);
+      const dates: string[] = [];
+      
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        dates.push(d.toISOString().split('T')[0]);
+      }
+
+      // Create entries for each agent for each date in range
+      const allEntries = [];
+      for (const dateStr of dates) {
+        for (const [agentId, count] of entriesToAdd) {
+          allEntries.push({
+            date: dateStr,
+            agentId,
+            cardsCount: parseInt(count),
+            createdBy: localStorage.getItem('agentEmail') || 'Unknown'
+          });
+        }
+      }
+
+      const results = await Promise.all(
+        allEntries.map(entry =>
+          fetch('/api/manager/trello-import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(entry)
+          })
+        )
+      );
+
+      const successCount = results.filter(r => r.ok).length;
+      setMessage(`✓ Added ${successCount} entries across ${dates.length} days for ${entriesToAdd.length} agents`);
+      setBulkEntries({});
+      loadEntries();
+    } catch (error) {
+      setMessage('✗ Failed to add bulk date range entries');
     } finally {
       setLoading(false);
     }
@@ -302,7 +368,7 @@ export default function TrelloImportSection() {
                 {entries.map(entry => (
                   <tr key={entry.id} className="border-t border-white/10 text-white/80">
                     <td className="px-3 py-2">
-                      {new Date(entry.date).toLocaleDateString()}
+                      {entry.date}
                     </td>
                     <td className="px-3 py-2">
                       <div>{entry.agentName}</div>
@@ -333,12 +399,66 @@ export default function TrelloImportSection() {
         )}
       </div>
 
+      {/* Bulk Date Range Entry */}
+      <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+        <h4 className="font-semibold text-white mb-3">📅 Bulk Date Range Entry (Same Counts, Multiple Days)</h4>
+        <p className="text-sm text-white/60 mb-4">
+          Import the same daily card counts for each agent across a date range (e.g., entire month)
+        </p>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="text-sm text-white/60 mb-1 block">📅 Start Date</label>
+            <input
+              type="date"
+              value={bulkStartDate}
+              onChange={(e) => setBulkStartDate(e.target.value)}
+              className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-white/60 mb-1 block">📅 End Date</label>
+            <input
+              type="date"
+              value={bulkEndDate}
+              onChange={(e) => setBulkEndDate(e.target.value)}
+              className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10 focus:outline-none"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-96 overflow-y-auto mb-4">
+          {agents.map(agent => (
+            <div key={agent.id} className="bg-white/5 rounded p-2">
+              <div className="text-xs text-white/60 mb-1">{agent.name || agent.email}</div>
+              <input
+                type="number"
+                min="0"
+                value={bulkEntries[agent.id] || ''}
+                onChange={(e) => setBulkEntries(prev => ({
+                  ...prev,
+                  [agent.id]: e.target.value
+                }))}
+                placeholder="0 cards/day"
+                className="w-full rounded bg-white/10 text-white px-2 py-1 text-sm ring-1 ring-white/10 focus:outline-none"
+              />
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={addBulkDateRangeEntries}
+          disabled={loading || !bulkStartDate || !bulkEndDate || Object.keys(bulkEntries).length === 0}
+          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white text-sm font-medium"
+        >
+          {loading ? 'Importing...' : `Import for ${bulkStartDate && bulkEndDate ? `${new Date(bulkStartDate).toLocaleDateString()} - ${new Date(bulkEndDate).toLocaleDateString()}` : 'Date Range'}`}
+        </button>
+      </div>
+
       {/* Helper Info */}
       <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/20">
         <h4 className="font-semibold text-blue-300 mb-2">💡 How to Use</h4>
         <ul className="text-sm text-white/70 space-y-1">
           <li>• <strong>Single Entry:</strong> Add one agent's Trello count for one date</li>
           <li>• <strong>Batch Entry:</strong> Enter all agents' counts for one date at once (faster for daily imports)</li>
+          <li>• <strong>Bulk Date Range:</strong> Enter counts once, apply to all days in a range (e.g., entire month if daily count was consistent)</li>
           <li>• <strong>Power BI Workflow:</strong> Open your Trello Power BI report → Copy agent card counts → Enter here</li>
           <li>• <strong>Updates:</strong> Entering the same agent + date will update the existing count</li>
           <li>• <strong>Rankings:</strong> Trello cards are added to portal tasks in Performance Scorecard</li>
