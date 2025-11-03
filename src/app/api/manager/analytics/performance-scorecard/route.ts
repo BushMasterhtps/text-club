@@ -104,16 +104,38 @@ export async function GET(req: NextRequest) {
       return acc;
     }, {} as Record<string, number>);
 
+    // Also get dates where agents did Trello work (for days worked calculation)
+    const trelloDates = trelloCompletions.reduce((acc, tc) => {
+      if (!acc[tc.agentId]) {
+        acc[tc.agentId] = new Set();
+      }
+      acc[tc.agentId].add(tc.date.toISOString().split('T')[0]);
+      return acc;
+    }, {} as Record<string, Set<string>>);
+
+    // Combine portal agents with Trello-only agents
+    const allAgentIds = Array.from(new Set([
+      ...agentIds,
+      ...Object.keys(trelloByAgent)
+    ]));
+
     // Calculate scorecard for each agent
     const agentScores = await Promise.all(
-      agentIds.map(async (agentId) => {
+      allAgentIds.map(async (agentId) => {
         const agentTasks = completedTasks.filter(t => t.assignedToId === agentId);
-        const agent = agentTasks[0]?.assignedTo;
+        let agent = agentTasks[0]?.assignedTo;
+        
+        // If agent has no portal tasks, fetch from Trello completion
+        if (!agent && trelloByAgent[agentId]) {
+          const trelloEntry = trelloCompletions.find(tc => tc.agentId === agentId);
+          agent = trelloEntry?.agent;
+        }
         
         if (!agent) return null;
 
         const trelloCount = trelloByAgent[agentId] || 0;
-        return calculateAgentScore(agent, agentTasks, targets, dateStart, dateEnd, trelloCount);
+        const trelloWorkDates = trelloDates[agentId] || new Set();
+        return calculateAgentScore(agent, agentTasks, targets, dateStart, dateEnd, trelloCount, trelloWorkDates);
       })
     );
 
@@ -254,6 +276,7 @@ interface AgentScorecard {
     EMAIL_REQUESTS: { count: number; avgSec: number; totalSec: number };
     HOLDS: { count: number; avgSec: number; totalSec: number };
     STANDALONE_REFUNDS: { count: number; avgSec: number; totalSec: number };
+    TRELLO: { count: number; avgSec: number; totalSec: number };
   };
   isEligible: boolean;
   minimumTasks: number;
@@ -345,13 +368,17 @@ function calculateAgentScore(
   targets: DynamicTargets,
   dateStart: Date,
   dateEnd: Date,
-  trelloCount: number = 0
+  trelloCount: number = 0,
+  trelloWorkDates: Set<string> = new Set()
 ): AgentScorecard {
-  // Calculate days worked (days where agent completed at least one task)
-  const workedDates = new Set(
+  // Calculate days worked (days where agent completed at least one task - Portal OR Trello)
+  const portalWorkedDates = new Set(
     tasks.map(t => t.endTime.toISOString().split('T')[0])
   );
-  const daysWorked = workedDates.size;
+  
+  // Combine portal and Trello work dates
+  const allWorkedDates = new Set([...portalWorkedDates, ...trelloWorkDates]);
+  const daysWorked = allWorkedDates.size;
 
   // Total tasks completed (Portal + Trello)
   const portalTasksCompleted = tasks.length;
@@ -369,7 +396,7 @@ function calculateAgentScore(
   // Total time spent
   const totalTimeSec = tasks.reduce((sum, t) => sum + (t.durationSec || 0), 0);
 
-  // Breakdown by task type
+  // Breakdown by task type (including Trello)
   const breakdown: any = {};
   const taskTypes = ["TEXT_CLUB", "WOD_IVCS", "EMAIL_REQUESTS", "HOLDS", "STANDALONE_REFUNDS"];
   
@@ -385,6 +412,13 @@ function calculateAgentScore(
       totalSec: typeTasks.reduce((sum, t) => sum + (t.durationSec || 0), 0)
     };
   }
+  
+  // Add Trello as a separate category
+  breakdown.TRELLO = {
+    count: trelloCount,
+    avgSec: 0, // No handle time tracking for Trello
+    totalSec: 0
+  };
 
   // Minimum task threshold for ranking eligibility
   const MINIMUM_TASKS_FOR_RANKING = 20;

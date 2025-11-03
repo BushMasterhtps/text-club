@@ -288,28 +288,51 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                         )}
 
                         {/* Task Type Breakdown */}
-                        <div>
-                          <h4 className="font-semibold text-white mb-3 flex items-center gap-2">
-                            📈 Task Type Breakdown
-                          </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {Object.entries(agent.breakdown || {}).map(([taskType, data]: [string, any]) => {
-                              if (data.count === 0) return null;
-                              return (
-                                <div key={taskType} className="bg-white/5 rounded-lg p-4 border border-white/10">
-                                  <div className="text-sm font-medium text-white/90 mb-2">
-                                    {taskType.replace('_', ' ')}
-                                  </div>
-                                  <div className="space-y-1 text-xs text-white/70">
-                                    <div>Completed: <span className="font-semibold text-white">{data.count}</span> ({((data.count / agent.tasksCompleted) * 100).toFixed(0)}%)</div>
-                                    <div>Avg Time: <span className="font-semibold text-white">{Math.floor(data.avgSec / 60)}m {Math.round(data.avgSec % 60)}s</span></div>
-                                    <div>Total Time: <span className="font-semibold text-white">{Math.floor(data.totalSec / 60)} min</span></div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
+                            <div>
+                              <h4 className="font-semibold text-white mb-3 flex items-center gap-2">
+                                📈 Task Type Breakdown
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {Object.entries(agent.breakdown || {}).map(([taskType, data]: [string, any]) => {
+                                  if (data.count === 0) return null;
+                                  
+                                  // Special styling for Trello
+                                  const isTrello = taskType === 'TRELLO';
+                                  
+                                  return (
+                                    <div 
+                                      key={taskType} 
+                                      className={`rounded-lg p-4 border ${
+                                        isTrello 
+                                          ? 'bg-purple-500/10 border-purple-500/30' 
+                                          : 'bg-white/5 border-white/10'
+                                      }`}
+                                    >
+                                      <div className={`text-sm font-medium mb-2 ${
+                                        isTrello ? 'text-purple-300' : 'text-white/90'
+                                      }`}>
+                                        {isTrello ? '📊 Trello' : taskType.replace('_', ' ')}
+                                      </div>
+                                      <div className="space-y-1 text-xs text-white/70">
+                                        <div>
+                                          Completed: <span className="font-semibold text-white">{data.count}</span> 
+                                          {' '}({((data.count / agent.tasksCompleted) * 100).toFixed(0)}%)
+                                        </div>
+                                        {!isTrello && data.avgSec > 0 && (
+                                          <>
+                                            <div>Avg Time: <span className="font-semibold text-white">{Math.floor(data.avgSec / 60)}m {Math.round(data.avgSec % 60)}s</span></div>
+                                            <div>Total Time: <span className="font-semibold text-white">{Math.floor(data.totalSec / 60)} min</span></div>
+                                          </>
+                                        )}
+                                        {isTrello && (
+                                          <div className="text-purple-300/70">From Power BI imports</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
 
                         {/* Handle Time Distribution */}
                         {agentDetailData.handleTimeDistribution && (
