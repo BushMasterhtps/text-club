@@ -76,6 +76,34 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Get Trello completions for this period
+    const trelloCompletions = await prisma.trelloCompletion.findMany({
+      where: {
+        date: {
+          gte: dateStart,
+          lte: dateEnd
+        }
+      },
+      include: {
+        agent: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    // Group Trello completions by agent
+    const trelloByAgent = trelloCompletions.reduce((acc, tc) => {
+      if (!acc[tc.agentId]) {
+        acc[tc.agentId] = 0;
+      }
+      acc[tc.agentId] += tc.cardsCount;
+      return acc;
+    }, {} as Record<string, number>);
+
     // Calculate scorecard for each agent
     const agentScores = await Promise.all(
       agentIds.map(async (agentId) => {
@@ -84,7 +112,8 @@ export async function GET(req: NextRequest) {
         
         if (!agent) return null;
 
-        return calculateAgentScore(agent, agentTasks, targets, dateStart, dateEnd);
+        const trelloCount = trelloByAgent[agentId] || 0;
+        return calculateAgentScore(agent, agentTasks, targets, dateStart, dateEnd, trelloCount);
       })
     );
 
@@ -315,7 +344,8 @@ function calculateAgentScore(
   tasks: TaskData[],
   targets: DynamicTargets,
   dateStart: Date,
-  dateEnd: Date
+  dateEnd: Date,
+  trelloCount: number = 0
 ): AgentScorecard {
   // Calculate days worked (days where agent completed at least one task)
   const workedDates = new Set(
@@ -323,8 +353,9 @@ function calculateAgentScore(
   );
   const daysWorked = workedDates.size;
 
-  // Total tasks completed
-  const tasksCompleted = tasks.length;
+  // Total tasks completed (Portal + Trello)
+  const portalTasksCompleted = tasks.length;
+  const tasksCompleted = portalTasksCompleted + trelloCount;
   
   // Daily average (tasks per worked day, not calendar day)
   const dailyAvg = daysWorked > 0 ? tasksCompleted / daysWorked : 0;
@@ -400,6 +431,8 @@ function calculateAgentScore(
     speedScore: Math.round(speedScore),
     daysWorked,
     tasksCompleted,
+    portalTasksCompleted,
+    trelloCardsCompleted: trelloCount,
     dailyAvg: Math.round(dailyAvg * 10) / 10,
     avgHandleTimeSec: Math.round(avgHandleTimeSec),
     totalTimeSec: Math.round(totalTimeSec),

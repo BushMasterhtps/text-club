@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
+import TrelloImportSection from "@/app/_components/TrelloImportSection";
 // Badge component
 function Badge({
   children,
@@ -605,9 +606,18 @@ function BulkImportSection() {
   );
 }
 
+// Trello Import Section Wrapper
+function TrelloImportSectionWrapper() {
+  return (
+    <Card className="p-5">
+      <TrelloImportSection />
+    </Card>
+  );
+}
+
 // Main Unified Settings Component
 export default function UnifiedSettings() {
-  const [activeTab, setActiveTab] = useState<"users" | "blocked" | "spam" | "import">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "blocked" | "spam" | "import" | "trello">("users");
 
   return (
     <div className="space-y-6">
@@ -653,6 +663,16 @@ export default function UnifiedSettings() {
         >
           📥 Bulk Import
         </button>
+        <button
+          onClick={() => setActiveTab("trello")}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "trello"
+              ? "bg-white/10 text-white"
+              : "text-white/60 hover:text-white/80"
+          }`}
+        >
+          📊 Trello Imports
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -660,6 +680,7 @@ export default function UnifiedSettings() {
       {activeTab === "blocked" && <BlockedPhonesSection />}
       {activeTab === "spam" && <SpamRulesSection />}
       {activeTab === "import" && <BulkImportSection />}
+      {activeTab === "trello" && <TrelloImportSectionWrapper />}
     </div>
   );
 }

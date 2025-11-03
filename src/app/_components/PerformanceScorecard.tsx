@@ -191,7 +191,9 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                         <div>
                           <div className="text-white/50">📦 Total Completed</div>
                           <div className="text-white font-semibold">{agent.tasksCompleted} tasks</div>
-                          <div className="text-xs text-white/40">({agent.daysWorked} days worked)</div>
+                          <div className="text-xs text-white/40">
+                            {agent.portalTasksCompleted} portal + {agent.trelloCardsCompleted || 0} Trello
+                          </div>
                         </div>
                         <div>
                           <div className="text-white/50">⏱️ Avg Handle Time</div>

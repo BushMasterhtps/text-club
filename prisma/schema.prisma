@@ -84,6 +84,7 @@ model User {
   sentBackTasks Task[]           @relation("SentBackTasks")
   assistance AssistanceRequest[]
   histories  TaskHistory[]       @relation("UserHistory")
+  trelloCompletions TrelloCompletion[]
 
   @@index([isLive, lastSeen])
 }
@@ -412,4 +413,19 @@ model ImportDuplicate {
   @@index([importSessionId])
   @@index([originalTaskId])
   @@index([source])
+}
+
+model TrelloCompletion {
+  id          String   @id @default(cuid())
+  date        DateTime // Date these completions were for (stored as start of day UTC)
+  agentId     String
+  agent       User     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  cardsCount  Int      // Number of Trello cards completed
+  
+  createdAt   DateTime @default(now())
+  createdBy   String?  // Manager email who entered it
+  
+  @@unique([date, agentId]) // One entry per agent per day
+  @@index([date])
+  @@index([agentId])
 }
