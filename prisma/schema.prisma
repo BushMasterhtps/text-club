@@ -53,6 +53,7 @@ enum TaskType {
   EMAIL_REQUESTS
   STANDALONE_REFUNDS
   HOLDS
+  YOTPO
 }
 
 enum WodIvcsSource {
@@ -169,6 +170,18 @@ model Task {
   holdsStatus          String?    // Assembly line status: "Agent Research", "Customer Contact", etc.
   holdsCustomerEmail   String?    // From CSV column D
   holdsOrderNumber     String?    // From CSV column C
+
+  // 🆕 Yotpo specific fields (all nullable - no existing data affected)
+  yotpoDateSubmitted   DateTime?  // From CSV column A - when customer submitted review/request
+  yotpoPrOrYotpo       String?    // From CSV column B - "PRs" or "Yotpo" (display only)
+  yotpoCustomerName    String?    // From CSV column C
+  yotpoEmail           String?    // From CSV column D
+  yotpoOrderDate       DateTime?  // From CSV column E - original order date
+  yotpoProduct         String?    // From CSV column F - product name
+  yotpoIssueTopic      String?    // From CSV column G - issue category (for analytics breakdown)
+  yotpoReviewDate      DateTime?  // From CSV column H - when review was posted
+  yotpoReview          String?    // From CSV column I - full review text (can be long)
+  yotpoSfOrderLink     String?    // From CSV column J - Salesforce order URL/reference
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

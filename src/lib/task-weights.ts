@@ -70,6 +70,7 @@ const TASK_TYPE_DEFAULTS: Record<string, number> = {
   TEXT_CLUB: 2.60,           // Avg of all TEXT_CLUB dispositions
   WOD_IVCS: 2.14,            // Avg of all WOD_IVCS dispositions
   EMAIL_REQUESTS: 5.27,      // Avg of all EMAIL_REQUESTS dispositions
+  YOTPO: 7.0,                // Initial estimate (will update after ~1 week of data)
   TRELLO: 5.0,               // Fixed estimate (no disposition data)
   HOLDS: 4.0,                // Estimate (moderate complexity)
   STANDALONE_REFUNDS: 3.0,   // Estimate
@@ -191,6 +192,7 @@ export const WEIGHT_SUMMARY = {
     TEXT_CLUB: { avgWeight: 2.60, dispositions: Object.keys(TEXT_CLUB_WEIGHTS).length, tasksAnalyzed: 11129 },
     WOD_IVCS: { avgWeight: 2.14, dispositions: Object.keys(WOD_IVCS_WEIGHTS).length, tasksAnalyzed: 9963 },
     EMAIL_REQUESTS: { avgWeight: 5.27, dispositions: Object.keys(EMAIL_REQUESTS_WEIGHTS).length, tasksAnalyzed: 986 },
+    YOTPO: { avgWeight: 7.0, dispositions: 0, tasksAnalyzed: 0 }, // Initial estimate
     TRELLO: { avgWeight: 5.0, dispositions: 0, tasksAnalyzed: 0 },
   },
   highestWeight: 7.17, // EMAIL: Unable to Complete - Link/Sale Unavailable
