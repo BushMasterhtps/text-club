@@ -529,16 +529,22 @@ export default function TrelloImportSection() {
         </button>
       </div>
 
-      {/* Batch Entry Form */}
-      <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-        <h4 className="font-semibold text-white mb-3">📋 Batch Entry (All Agents, One Date)</h4>
+      {/* Batch Entry Form - PRIMARY METHOD FOR DAILY IMPORTS */}
+      <div className="bg-gradient-to-r from-green-500/10 to-blue-500/10 rounded-lg p-4 border-2 border-green-500/30">
+        <div className="flex items-center gap-2 mb-3">
+          <h4 className="font-semibold text-white text-lg">⭐ Daily Batch Entry (Recommended)</h4>
+          <span className="px-2 py-0.5 bg-green-500/20 text-green-300 text-xs rounded-full border border-green-500/30">PRIMARY METHOD</span>
+        </div>
+        <p className="text-sm text-white/70 mb-4">
+          📊 Use this daily: Check Power BI for today's counts → Enter all agents at once → Import. Takes ~60 seconds per day.
+        </p>
         <div className="mb-4">
-          <label className="text-sm text-white/60 mb-1 block">📅 Date for All Entries</label>
+          <label className="text-sm text-white/60 mb-1 block font-medium">📅 Date for All Entries</label>
           <input
             type="date"
             value={batchDate}
             onChange={(e) => setBatchDate(e.target.value)}
-            className="w-full max-w-xs rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10 focus:outline-none"
+            className="w-full max-w-xs rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10 focus:outline-none text-lg"
           />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-96 overflow-y-auto">
@@ -633,15 +639,27 @@ export default function TrelloImportSection() {
         )}
       </div>
 
-      {/* Bulk Date Range Entry */}
-      <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-        <h4 className="font-semibold text-white mb-3">📅 Bulk Date Range Entry (Same Counts, Multiple Days)</h4>
-        <p className="text-sm text-white/60 mb-2">
-          Import the same daily card counts for each agent across a date range (e.g., entire month)
-        </p>
-        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md p-2 mb-4 text-xs text-yellow-300/90">
-          ⚠️ <strong>Important:</strong> Click Import ONCE and wait for completion (can take 1-2 minutes for large ranges). Do not click multiple times!
+      {/* Bulk Date Range Entry - HIDDEN: Causes data multiplication issues */}
+      <div className="bg-red-900/20 rounded-lg p-4 border-2 border-red-500/40">
+        <h4 className="font-semibold text-red-300 mb-3">🚫 Bulk Date Range Entry (NOT FOR POWER BI TOTALS)</h4>
+        <div className="bg-red-500/20 border border-red-500/40 rounded-md p-3 mb-4 text-sm text-red-200">
+          <p className="font-bold mb-2">⚠️ DO NOT USE THIS FOR POWER BI MONTHLY TOTALS!</p>
+          <p className="text-xs">
+            This feature multiplies your count by the number of days. If you enter "1000 cards" for a 30-day range, it creates 30,000 cards (1000 per day).
+            <br/><br/>
+            <strong>Use "Daily Batch Entry" above instead.</strong>
+          </p>
         </div>
+        <details className="text-xs text-white/50">
+          <summary className="cursor-pointer hover:text-white/70 mb-2">Advanced: When would this be used?</summary>
+          <p className="mt-2 pl-4 border-l-2 border-white/20">
+            Only use this if an agent worked the exact same daily average every single day for a month. 
+            Example: Agent worked 20 days at exactly 50 cards/day = enter "50" for that date range.
+            <br/><br/>
+            For backfilling historical data where you only have monthly totals, use Daily Batch Entry with calculated daily averages instead.
+          </p>
+        </details>
+        <hr className="border-white/10 my-4" />
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className="text-sm text-white/60 mb-1 block">📅 Start Date</label>
@@ -719,16 +737,24 @@ export default function TrelloImportSection() {
 
       {/* Helper Info */}
       <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/20">
-        <h4 className="font-semibold text-blue-300 mb-2">💡 How to Use</h4>
-        <ul className="text-sm text-white/70 space-y-1">
-          <li>• <strong>Single Entry:</strong> Add one agent's Trello count for one date</li>
-          <li>• <strong>Batch Entry:</strong> Enter all agents' counts for one date at once (faster for daily imports)</li>
-          <li>• <strong>Bulk Date Range:</strong> Enter counts once, apply to all days in a range (e.g., entire month if daily count was consistent)</li>
-          <li>• <strong>Bulk Delete Range:</strong> Select date range → Click "🗑️ Bulk Delete Range" → Deletes all entries in that range (batched, with progress)</li>
-          <li>• <strong>Delete All:</strong> Nuclear option - removes ALL Trello entries (requires typing "DELETE ALL" to confirm)</li>
-          <li>• <strong>Power BI Workflow:</strong> Open your Trello Power BI report → Copy agent card counts → Enter here</li>
-          <li>• <strong>Updates:</strong> Entering the same agent + date will update the existing count</li>
-          <li>• <strong>Rankings:</strong> Trello cards are added to portal tasks in Performance Scorecard</li>
+        <h4 className="font-semibold text-blue-300 mb-2">💡 Daily Workflow (Recommended)</h4>
+        <div className="bg-blue-500/5 rounded p-3 mb-3 border border-blue-500/20">
+          <p className="text-sm text-blue-200 font-semibold mb-2">📋 End-of-Day Routine (~60 seconds):</p>
+          <ol className="text-sm text-white/70 space-y-1 pl-4">
+            <li>1. Open Power BI → Filter to today's date</li>
+            <li>2. Note each agent's card count for today</li>
+            <li>3. Go to "⭐ Daily Batch Entry" section above</li>
+            <li>4. Enter today's counts for all agents</li>
+            <li>5. Click "Import All" → Done! ✓</li>
+          </ol>
+        </div>
+        <h5 className="font-semibold text-blue-300 text-sm mb-2">Other Features:</h5>
+        <ul className="text-xs text-white/60 space-y-1">
+          <li>• <strong>Single Entry:</strong> Add/fix one agent's count for one date</li>
+          <li>• <strong>Bulk Delete Range:</strong> Clean up duplicate or wrong data for a date range</li>
+          <li>• <strong>Delete All:</strong> Nuclear reset (requires typing "DELETE ALL")</li>
+          <li>• <strong>Updates:</strong> Re-entering same agent + date will update (not duplicate)</li>
+          <li>• <strong>Rankings:</strong> Trello cards count toward Performance Scorecard daily averages</li>
         </ul>
       </div>
     </div>
