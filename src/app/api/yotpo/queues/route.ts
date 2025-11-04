@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const statusFilter = url.searchParams.get('status') || 'all';
     const assignedFilter = url.searchParams.get('assigned') || 'all';
+    const assignedToId = url.searchParams.get('assignedTo'); // Specific agent ID
     const searchQuery = url.searchParams.get('search') || '';
 
     // Build where clause
@@ -23,8 +24,11 @@ export async function GET(request: NextRequest) {
       where.status = statusFilter.toUpperCase();
     }
 
-    // Assigned filter
-    if (assignedFilter === 'unassigned') {
+    // Assigned filter (priority: specific agent > general filter)
+    if (assignedToId) {
+      // Filter by specific agent ID
+      where.assignedToId = assignedToId;
+    } else if (assignedFilter === 'unassigned') {
       where.assignedToId = null;
     } else if (assignedFilter === 'assigned') {
       where.assignedToId = { not: null };

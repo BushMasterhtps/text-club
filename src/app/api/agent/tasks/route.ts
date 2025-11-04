@@ -91,6 +91,17 @@ export async function GET(req: Request) {
         productSku: true,
         quantity: true,
         refundAmount: true,
+        // Yotpo specific fields
+        yotpoDateSubmitted: true,
+        yotpoPrOrYotpo: true,
+        yotpoCustomerName: true,
+        yotpoEmail: true,
+        yotpoOrderDate: true,
+        yotpoProduct: true,
+        yotpoIssueTopic: true,
+        yotpoReviewDate: true,
+        yotpoReview: true,
+        yotpoSfOrderLink: true,
         rawMessage: {
           select: {
             brand: true,

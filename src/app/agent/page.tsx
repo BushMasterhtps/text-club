@@ -1057,6 +1057,13 @@ export default function AgentPage() {
             <div className="text-sm text-white/40 mt-1">Lifetime: {completionStats.total.EMAIL_REQUESTS}</div>
           </div>
           <div className="bg-white/5 rounded-lg p-3 text-center">
+            <div className="text-2xl mb-1">⭐</div>
+            <div className="text-sm text-white/60">Yotpo</div>
+            <div className="text-lg font-semibold text-yellow-300">{completionStats.today.YOTPO}</div>
+            <div className="text-xs text-white/50">Today</div>
+            <div className="text-sm text-white/40 mt-1">Lifetime: {completionStats.total.YOTPO}</div>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3 text-center">
             <div className="text-2xl mb-1">🚧</div>
             <div className="text-sm text-white/60">Holds</div>
             <div className="text-lg font-semibold text-orange-300">{completionStats.today.HOLDS}</div>
@@ -1682,42 +1689,37 @@ function TaskCard({
                 </>
               ) : task.taskType === "YOTPO" ? (
                 <>
-                  <optgroup label="Reship">
-                    <option value="Reship – Item or order not received">📦 Item or order not received</option>
-                    <option value="Reship – Incorrect item received">🔄 Incorrect item received</option>
-                    <option value="Reship – Damaged or quality issue">⚠️ Damaged or quality issue</option>
-                  </optgroup>
-                  <optgroup label="Refund">
-                    <option value="Refund – Full refund issued">💵 Full refund issued</option>
-                    <option value="Refund – Partial refund issued">💰 Partial refund issued</option>
-                    <option value="Refund – Return to sender (RTS)">📮 Return to sender (RTS)</option>
-                    <option value="Refund – Out of stock">📭 Out of stock</option>
-                    <option value="Refund – Refund issued with condolences (pet passing or sensitive case)">🐾 Refund with condolences</option>
-                    <option value="Refund – Chargeback or fraud (no further action required)">🚫 Chargeback or fraud</option>
-                  </optgroup>
-                  <optgroup label="Subscription">
-                    <option value="Subscription – Cancelled">❌ Cancelled</option>
-                    <option value="Subscription – Updated (next charge date, frequency, etc.)">🔄 Updated (date/frequency)</option>
-                    <option value="Subscription – Cancelled due to PayPal limitations">💳 Cancelled (PayPal limitations)</option>
-                  </optgroup>
-                  <optgroup label="Information">
-                    <option value="Information – Tracking or delivery status provided">📍 Tracking or delivery status</option>
-                    <option value="Information – Product usage or transition tips sent">💡 Product usage/transition tips</option>
-                    <option value="Information – Shelf life or storage details sent">🗓️ Shelf life or storage details</option>
-                    <option value="Information – Store locator or sourcing information sent">🏪 Store locator/sourcing info</option>
-                    <option value="Information – Medical or veterinary guidance provided">🏥 Medical/veterinary guidance</option>
-                    <option value="Information – Unfeasible request or information not available">🚫 Unfeasible request</option>
-                  </optgroup>
-                  <optgroup label="Other">
-                    <option value="Return Authorization – Created and sent to customer">📋 Return authorization sent</option>
-                    <option value="Verification – Requested LOT number and photos from customer">📸 LOT number/photos requested</option>
-                    <option value="Duplicate Request – No new action required">🔄 Duplicate request</option>
-                    <option value="Previously Assisted – Issue already resolved or refund previously issued">✅ Previously assisted</option>
-                    <option value="Unsubscribed – Customer removed from communications">🚫 Unsubscribed</option>
-                    <option value="No Match – No valid account or order located">❓ No match found</option>
-                    <option value="Escalation – Sent Negative Feedback Macro">⚠️ Escalation (negative feedback)</option>
-                    <option value="Delivered – Order delivered after review, no further action required">✅ Delivered</option>
-                  </optgroup>
+                  <option value="" disabled className="text-white/40 text-xs">— Reship —</option>
+                  <option value="Reship – Item or order not received">📦 Item or order not received</option>
+                  <option value="Reship – Incorrect item received">🔄 Incorrect item received</option>
+                  <option value="Reship – Damaged or quality issue">⚠️ Damaged or quality issue</option>
+                  <option value="" disabled className="text-white/40 text-xs">— Refund —</option>
+                  <option value="Refund – Full refund issued">💵 Full refund issued</option>
+                  <option value="Refund – Partial refund issued">💰 Partial refund issued</option>
+                  <option value="Refund – Return to sender (RTS)">📮 Return to sender (RTS)</option>
+                  <option value="Refund – Out of stock">📭 Out of stock</option>
+                  <option value="Refund – Refund issued with condolences (pet passing or sensitive case)">🐾 Refund with condolences</option>
+                  <option value="Refund – Chargeback or fraud (no further action required)">🚫 Chargeback or fraud</option>
+                  <option value="" disabled className="text-white/40 text-xs">— Subscription —</option>
+                  <option value="Subscription – Cancelled">❌ Cancelled</option>
+                  <option value="Subscription – Updated (next charge date, frequency, etc.)">🔄 Updated (date/frequency)</option>
+                  <option value="Subscription – Cancelled due to PayPal limitations">💳 Cancelled (PayPal limitations)</option>
+                  <option value="" disabled className="text-white/40 text-xs">— Information —</option>
+                  <option value="Information – Tracking or delivery status provided">📍 Tracking or delivery status</option>
+                  <option value="Information – Product usage or transition tips sent">💡 Product usage/transition tips</option>
+                  <option value="Information – Shelf life or storage details sent">🗓️ Shelf life or storage details</option>
+                  <option value="Information – Store locator or sourcing information sent">🏪 Store locator/sourcing info</option>
+                  <option value="Information – Medical or veterinary guidance provided">🏥 Medical/veterinary guidance</option>
+                  <option value="Information – Unfeasible request or information not available">🚫 Unfeasible request</option>
+                  <option value="" disabled className="text-white/40 text-xs">— Other —</option>
+                  <option value="Return Authorization – Created and sent to customer">📋 Return authorization sent</option>
+                  <option value="Verification – Requested LOT number and photos from customer">📸 LOT number/photos requested</option>
+                  <option value="Duplicate Request – No new action required">🔄 Duplicate request</option>
+                  <option value="Previously Assisted – Issue already resolved or refund previously issued">✅ Previously assisted</option>
+                  <option value="Unsubscribed – Customer removed from communications">🚫 Unsubscribed</option>
+                  <option value="No Match – No valid account or order located">❓ No match found</option>
+                  <option value="Escalation – Sent Negative Feedback Macro">⚠️ Escalation (negative feedback)</option>
+                  <option value="Delivered – Order delivered after review, no further action required">✅ Delivered</option>
                 </>
               ) : (
                 <>

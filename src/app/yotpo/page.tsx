@@ -197,7 +197,17 @@ function PendingTasksSection() {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.append('status', statusFilter);
-      if (assignedFilter !== 'all') params.append('assigned', assignedFilter);
+      
+      // Handle assigned filter - can be 'all', 'unassigned', or specific agent ID
+      if (assignedFilter !== 'all') {
+        if (assignedFilter === 'unassigned') {
+          params.append('assigned', 'unassigned');
+        } else {
+          // It's a specific agent ID
+          params.append('assignedTo', assignedFilter);
+        }
+      }
+      
       if (searchQuery) params.append('search', searchQuery);
 
       const res = await fetch(`/api/yotpo/queues?${params.toString()}`);
@@ -381,7 +391,13 @@ function PendingTasksSection() {
           >
             <option value="all">Anyone</option>
             <option value="unassigned">Unassigned</option>
-            <option value="assigned">Assigned</option>
+            <optgroup label="Filter by Agent">
+              {agents.map(agent => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
         <div>
