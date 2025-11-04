@@ -122,6 +122,17 @@ interface Task {
   productSku?: string;
   quantity?: number;
   refundAmount?: number;
+  // Yotpo specific fields
+  yotpoDateSubmitted?: string;
+  yotpoPrOrYotpo?: string;
+  yotpoCustomerName?: string;
+  yotpoEmail?: string;
+  yotpoOrderDate?: string;
+  yotpoProduct?: string;
+  yotpoIssueTopic?: string;
+  yotpoReviewDate?: string;
+  yotpoReview?: string;
+  yotpoSfOrderLink?: string;
 }
 
 interface AgentStats {
@@ -160,12 +171,14 @@ export default function AgentPage() {
     TEXT_CLUB: number;
     WOD_IVCS: number;
     EMAIL_REQUESTS: number;
+    YOTPO: number;
     HOLDS: number;
     STANDALONE_REFUNDS: number;
   }>({
     TEXT_CLUB: 0,
     WOD_IVCS: 0,
     EMAIL_REQUESTS: 0,
+    YOTPO: 0,
     HOLDS: 0,
     STANDALONE_REFUNDS: 0
   });
@@ -174,8 +187,8 @@ export default function AgentPage() {
     today: Record<string, number>;
     total: Record<string, number>;
   }>({
-    today: { TEXT_CLUB: 0, WOD_IVCS: 0, EMAIL_REQUESTS: 0, HOLDS: 0, STANDALONE_REFUNDS: 0 },
-    total: { TEXT_CLUB: 0, WOD_IVCS: 0, EMAIL_REQUESTS: 0, HOLDS: 0, STANDALONE_REFUNDS: 0 }
+    today: { TEXT_CLUB: 0, WOD_IVCS: 0, EMAIL_REQUESTS: 0, YOTPO: 0, HOLDS: 0, STANDALONE_REFUNDS: 0 },
+    total: { TEXT_CLUB: 0, WOD_IVCS: 0, EMAIL_REQUESTS: 0, YOTPO: 0, HOLDS: 0, STANDALONE_REFUNDS: 0 }
   });
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [forceRender, setForceRender] = useState(0);
@@ -978,6 +991,16 @@ export default function AgentPage() {
             📧 Email Requests ({taskCounts.EMAIL_REQUESTS})
           </button>
           <button
+            onClick={() => setSelectedTaskType("YOTPO")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              selectedTaskType === "YOTPO"
+                ? "bg-yellow-500/20 text-yellow-300 ring-1 ring-yellow-400/50"
+                : "bg-white/5 text-white/70 hover:bg-white/10 ring-1 ring-white/10"
+            }`}
+          >
+            ⭐ Yotpo ({taskCounts.YOTPO})
+          </button>
+          <button
             onClick={() => setSelectedTaskType("HOLDS")}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               selectedTaskType === "HOLDS"
@@ -1416,6 +1439,103 @@ function TaskCard({
             </div>
           </div>
         </>
+      ) : task.taskType === "YOTPO" ? (
+        <>
+          {/* Yotpo specific data - Columns C-J */}
+          <div className="space-y-3 text-sm">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400">👤</span>
+                <span className="text-white/60">Customer:</span>
+                {isTaskStarted ? (
+                  <span className="font-mono">{task.yotpoCustomerName || "N/A"}</span>
+                ) : (
+                  <span className="text-white/40 italic">[hidden]</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400">📧</span>
+                <span className="text-white/60">Email:</span>
+                {isTaskStarted ? (
+                  <span className="font-mono text-xs">{task.yotpoEmail || "N/A"}</span>
+                ) : (
+                  <span className="text-white/40 italic">[hidden]</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400">📅</span>
+                <span className="text-white/60">Order Date:</span>
+                {isTaskStarted ? (
+                  <span className="font-mono">{task.yotpoOrderDate ? new Date(task.yotpoOrderDate).toLocaleDateString() : "N/A"}</span>
+                ) : (
+                  <span className="text-white/40 italic">[hidden]</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400">📦</span>
+                <span className="text-white/60">Product:</span>
+                {isTaskStarted ? (
+                  <span className="font-mono">{task.yotpoProduct || "N/A"}</span>
+                ) : (
+                  <span className="text-white/40 italic">[hidden]</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400">🏷️</span>
+                <span className="text-white/60">Issue Topic:</span>
+                {isTaskStarted ? (
+                  <span className="font-mono">{task.yotpoIssueTopic || "N/A"}</span>
+                ) : (
+                  <span className="text-white/40 italic">[hidden]</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400">📅</span>
+                <span className="text-white/60">Review Date:</span>
+                {isTaskStarted ? (
+                  <span className="font-mono">{task.yotpoReviewDate ? new Date(task.yotpoReviewDate).toLocaleDateString() : "N/A"}</span>
+                ) : (
+                  <span className="text-white/40 italic">[hidden]</span>
+                )}
+              </div>
+            </div>
+            
+            {/* Review Text - Full scrollable view */}
+            <div className="flex items-start gap-2">
+              <span className="text-yellow-400 mt-1">⭐</span>
+              <span className="text-white/60 min-w-fit">Review:</span>
+              {isTaskStarted ? (
+                <div className="flex-1 max-h-40 overflow-y-auto text-sm leading-relaxed bg-white/5 rounded p-3 border border-white/10">
+                  {task.yotpoReview || "No review text provided"}
+                </div>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
+            
+            {/* SF Order Link - Clickable */}
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-400">🔗</span>
+              <span className="text-white/60">SF Order:</span>
+              {isTaskStarted ? (
+                task.yotpoSfOrderLink ? (
+                  <a 
+                    href={task.yotpoSfOrderLink} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 underline text-xs break-all"
+                  >
+                    Open in Salesforce →
+                  </a>
+                ) : (
+                  <span className="font-mono text-white/40">Not provided</span>
+                )
+              ) : (
+                <span className="text-white/40 italic">[hidden]</span>
+              )}
+            </div>
+          </div>
+        </>
       ) : task.taskType === "STANDALONE_REFUNDS" ? (
         <>
           {/* Standalone Refund specific data - Blurred until started */}
@@ -1562,6 +1682,45 @@ function TaskCard({
                 <>
                   <option value="Completed">✅ Completed</option>
                   <option value="Unable to Complete">❌ Unable to Complete</option>
+                </>
+              ) : task.taskType === "YOTPO" ? (
+                <>
+                  <optgroup label="Reship">
+                    <option value="Reship – Item or order not received">📦 Item or order not received</option>
+                    <option value="Reship – Incorrect item received">🔄 Incorrect item received</option>
+                    <option value="Reship – Damaged or quality issue">⚠️ Damaged or quality issue</option>
+                  </optgroup>
+                  <optgroup label="Refund">
+                    <option value="Refund – Full refund issued">💵 Full refund issued</option>
+                    <option value="Refund – Partial refund issued">💰 Partial refund issued</option>
+                    <option value="Refund – Return to sender (RTS)">📮 Return to sender (RTS)</option>
+                    <option value="Refund – Out of stock">📭 Out of stock</option>
+                    <option value="Refund – Refund issued with condolences (pet passing or sensitive case)">🐾 Refund with condolences</option>
+                    <option value="Refund – Chargeback or fraud (no further action required)">🚫 Chargeback or fraud</option>
+                  </optgroup>
+                  <optgroup label="Subscription">
+                    <option value="Subscription – Cancelled">❌ Cancelled</option>
+                    <option value="Subscription – Updated (next charge date, frequency, etc.)">🔄 Updated (date/frequency)</option>
+                    <option value="Subscription – Cancelled due to PayPal limitations">💳 Cancelled (PayPal limitations)</option>
+                  </optgroup>
+                  <optgroup label="Information">
+                    <option value="Information – Tracking or delivery status provided">📍 Tracking or delivery status</option>
+                    <option value="Information – Product usage or transition tips sent">💡 Product usage/transition tips</option>
+                    <option value="Information – Shelf life or storage details sent">🗓️ Shelf life or storage details</option>
+                    <option value="Information – Store locator or sourcing information sent">🏪 Store locator/sourcing info</option>
+                    <option value="Information – Medical or veterinary guidance provided">🏥 Medical/veterinary guidance</option>
+                    <option value="Information – Unfeasible request or information not available">🚫 Unfeasible request</option>
+                  </optgroup>
+                  <optgroup label="Other">
+                    <option value="Return Authorization – Created and sent to customer">📋 Return authorization sent</option>
+                    <option value="Verification – Requested LOT number and photos from customer">📸 LOT number/photos requested</option>
+                    <option value="Duplicate Request – No new action required">🔄 Duplicate request</option>
+                    <option value="Previously Assisted – Issue already resolved or refund previously issued">✅ Previously assisted</option>
+                    <option value="Unsubscribed – Customer removed from communications">🚫 Unsubscribed</option>
+                    <option value="No Match – No valid account or order located">❓ No match found</option>
+                    <option value="Escalation – Sent Negative Feedback Macro">⚠️ Escalation (negative feedback)</option>
+                    <option value="Delivered – Order delivered after review, no further action required">✅ Delivered</option>
+                  </optgroup>
                 </>
               ) : (
                 <>
