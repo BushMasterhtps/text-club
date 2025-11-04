@@ -74,47 +74,74 @@ export async function POST(request: NextRequest) {
     for (const [index, record] of records.entries()) {
       try {
         // Parse dates with 2-digit year fix
-        const parseDate = (dateStr: string | undefined): Date | null => {
+        const parseDate = (dateStr: string | undefined, fieldName: string): Date | null => {
           if (!dateStr) return null;
+          
+          const trimmed = dateStr.trim();
+          if (!trimmed) return null;
+          
           try {
-            // Handle MM/DD/YY format (2-digit year)
-            const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
-            if (match) {
-              const month = parseInt(match[1]);
-              const day = parseInt(match[2]);
-              let year = parseInt(match[3]);
+            // Try MM/DD/YY format (2-digit year) - MOST COMMON
+            const twoDigitMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+            if (twoDigitMatch) {
+              const month = parseInt(twoDigitMatch[1]);
+              const day = parseInt(twoDigitMatch[2]);
+              let year = parseInt(twoDigitMatch[3]);
               
-              // Convert 2-digit year to 4-digit (25 → 2025, 69 → 2069 or 1969?)
-              // Assume years 00-50 are 2000-2050, 51-99 are 1951-1999
+              // Convert 2-digit year to 4-digit
+              // Years 00-50 = 2000-2050, Years 51-99 = 1951-1999
               if (year <= 50) {
                 year += 2000;
               } else {
                 year += 1900;
               }
               
-              return new Date(year, month - 1, day);
+              const result = new Date(year, month - 1, day);
+              if (index < 3) {
+                console.log(`✓ ${fieldName}: "${trimmed}" → ${result.toLocaleDateString()} (year ${year})`);
+              }
+              return result;
             }
             
-            // Try standard date parsing
-            const date = new Date(dateStr);
+            // Try MM/DD/YYYY format (4-digit year)
+            const fourDigitMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (fourDigitMatch) {
+              const month = parseInt(fourDigitMatch[1]);
+              const day = parseInt(fourDigitMatch[2]);
+              const year = parseInt(fourDigitMatch[3]);
+              const result = new Date(year, month - 1, day);
+              if (index < 3) {
+                console.log(`✓ ${fieldName}: "${trimmed}" → ${result.toLocaleDateString()}`);
+              }
+              return result;
+            }
             
-            // Check if date is unreasonably old (before 2020)
+            // Fallback: Try standard parsing but fix 2-digit years
+            const date = new Date(trimmed);
             if (!isNaN(date.getTime())) {
-              if (date.getFullYear() < 2020) {
-                console.warn(`Suspicious old date: ${dateStr} → ${date.toISOString()}`);
+              // If year is before 2000, likely a 2-digit year parsing issue
+              if (date.getFullYear() < 2000) {
+                const currentYear = new Date().getFullYear();
+                const century = Math.floor(currentYear / 100) * 100; // 2000
+                const correctedYear = century + (date.getFullYear() % 100);
+                const corrected = new Date(correctedYear, date.getMonth(), date.getDate());
+                console.warn(`⚠️ ${fieldName}: "${trimmed}" parsed as ${date.getFullYear()}, corrected to ${correctedYear}`);
+                return corrected;
               }
               return date;
             }
             
+            console.warn(`❌ ${fieldName}: Could not parse "${trimmed}"`);
             return null;
-          } catch {
+          } catch (error) {
+            console.error(`❌ ${fieldName}: Parse error for "${trimmed}":`, error);
             return null;
           }
         };
 
-        const dateSubmitted = parseDate(record['Date Submitted']);
-        const orderDate = parseDate(record['Order Date']);
-        const reviewDate = parseDate(record['Review Date']);
+        const dateSubmitted = parseDate(record['Date Submitted'], 'Date Submitted');
+        const orderDate = parseDate(record['Order Date'], 'Order Date');
+        const reviewDate = parseDate(record['Review Date'], 'Review Date');
 
         const email = record['Email']?.trim() || null;
         const product = record['Product']?.trim() || null;
