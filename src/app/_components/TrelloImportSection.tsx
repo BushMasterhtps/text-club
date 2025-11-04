@@ -195,7 +195,7 @@ export default function TrelloImportSection() {
       );
 
       const successCount = results.filter(r => r.ok).length;
-      setMessage(`✓ Added ${successCount} entries for ${new Date(batchDate).toLocaleDateString()}`);
+      setMessage(`✓ Added ${successCount} entries for ${batchDate}`);
       setBatchEntries({});
       loadEntries();
     } catch (error) {
@@ -390,7 +390,7 @@ export default function TrelloImportSection() {
       ? `${dateRangeCount} entries` 
       : `~${dateCount * agents.length} entries (${dateCount} days × ${agents.length} agents)`;
 
-    if (!confirm(`⚠️ BULK DELETE: Remove all Trello entries from ${new Date(bulkStartDate).toLocaleDateString()} to ${new Date(bulkEndDate).toLocaleDateString()}?\n\nThis will delete ${countText}.\n\n🗑️ This processes in batches and cannot be undone!\n\nClick OK to proceed.`)) {
+    if (!confirm(`⚠️ BULK DELETE: Remove all Trello entries from ${bulkStartDate} to ${bulkEndDate}?\n\nThis will delete ${countText}.\n\n🗑️ This processes in batches and cannot be undone!\n\nClick OK to proceed.`)) {
       return;
     }
 
@@ -564,7 +564,7 @@ export default function TrelloImportSection() {
           disabled={loading || Object.keys(batchEntries).length === 0}
           className="mt-3 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white text-sm font-medium"
         >
-          {loading ? '⏳ Importing...' : `Import All for ${new Date(batchDate).toLocaleDateString()}`}
+          {loading ? '⏳ Importing...' : `Import All for ${batchDate}`}
         </button>
       </div>
 
@@ -702,7 +702,7 @@ export default function TrelloImportSection() {
             disabled={loading || !bulkStartDate || !bulkEndDate || Object.keys(bulkEntries).length === 0}
             className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white text-sm font-medium"
           >
-            {loading ? '⏳ Importing... (Do not refresh)' : `Import for ${bulkStartDate && bulkEndDate ? `${new Date(bulkStartDate).toLocaleDateString()} - ${new Date(bulkEndDate).toLocaleDateString()}` : 'Date Range'}`}
+            {loading ? '⏳ Importing... (Do not refresh)' : `Import for ${bulkStartDate && bulkEndDate ? `${bulkStartDate} to ${bulkEndDate}` : 'Date Range'}`}
           </button>
           {bulkStartDate && bulkEndDate && (
             <button
