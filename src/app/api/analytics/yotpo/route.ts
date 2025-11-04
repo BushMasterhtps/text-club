@@ -122,26 +122,26 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {} as Record<string, typeof agents[0]>);
 
-    // Format response data
+    // Format response data (keep durations in SECONDS like Text Club)
     const data = {
       overview: {
         totalCompleted,
         totalCompletedToday,
-        avgHandleTime: Math.round((avgHandleTimeResult._avg.durationSec || 0) / 60) // Convert to minutes
+        avgHandleTime: Math.round(avgHandleTimeResult._avg.durationSec || 0) // Keep in seconds
       },
       
       // Issue Topic breakdown (PRIMARY for Yotpo)
       issueTopicBreakdown: issueTopicBreakdown.map(item => ({
         topic: item.yotpoIssueTopic || 'Unknown',
         count: item._count.id,
-        avgDuration: Math.round((item._avg.durationSec || 0) / 60) // Minutes
+        avgDuration: Math.round(item._avg.durationSec || 0) // Keep in seconds
       })).sort((a, b) => b.count - a.count), // Sort by count descending
 
       // Disposition breakdown (secondary)
       dispositionBreakdown: dispositionBreakdown.map(item => ({
         disposition: item.disposition || 'Unknown',
         count: item._count.id,
-        avgDuration: Math.round((item._avg.durationSec || 0) / 60)
+        avgDuration: Math.round(item._avg.durationSec || 0) // Keep in seconds
       })).sort((a, b) => b.count - a.count),
 
       // Agent performance
@@ -150,7 +150,7 @@ export async function GET(request: NextRequest) {
         agentName: agentMap[item.assignedToId!]?.name || 'Unknown',
         agentEmail: agentMap[item.assignedToId!]?.email || 'Unknown',
         count: item._count.id,
-        avgDuration: Math.round((item._avg.durationSec || 0) / 60)
+        avgDuration: Math.round(item._avg.durationSec || 0) // Keep in seconds
       })).sort((a, b) => b.count - a.count)
     };
 

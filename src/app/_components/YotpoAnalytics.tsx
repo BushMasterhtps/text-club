@@ -35,6 +35,14 @@ export default function YotpoAnalytics() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // Format duration in seconds to "Xm Ys" format (matching Text Club)
+  const formatDuration = (seconds: number) => {
+    if (!seconds) return "0m 0s";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+  };
+
   useEffect(() => {
     // Initialize to current month
     const today = new Date();
@@ -170,7 +178,7 @@ export default function YotpoAnalytics() {
             </Card>
             <Card className="p-6 bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 border-yellow-500/30">
               <div className="text-yellow-400 text-sm font-medium mb-1">Avg Handle Time</div>
-              <div className="text-3xl font-bold text-white">{data.overview.avgHandleTime} min</div>
+              <div className="text-3xl font-bold text-white">{formatDuration(data.overview.avgHandleTime)}</div>
             </Card>
           </div>
 
@@ -188,7 +196,7 @@ export default function YotpoAnalytics() {
                       <div className="text-xs text-white/50">tasks</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-semibold text-yellow-400">{item.avgDuration} min</div>
+                      <div className="text-lg font-semibold text-yellow-400">{formatDuration(item.avgDuration)}</div>
                       <div className="text-xs text-white/50">avg time</div>
                     </div>
                   </div>
@@ -214,7 +222,7 @@ export default function YotpoAnalytics() {
                       <div className="text-xs font-medium text-white/80 mb-1">{item.disposition}</div>
                       <div className="text-sm text-white/60">
                         <span className="font-semibold text-white">{item.count}</span> tasks • 
-                        <span className="text-yellow-400 ml-1">{item.avgDuration} min avg</span>
+                        <span className="text-yellow-400 ml-1">{formatDuration(item.avgDuration)} avg</span>
                       </div>
                     </div>
                   </div>
@@ -237,7 +245,7 @@ export default function YotpoAnalytics() {
                   <tr className="text-left text-white/60">
                     <th className="px-4 py-2">Agent</th>
                     <th className="px-4 py-2 text-right">Completed</th>
-                    <th className="px-4 py-2 text-right">Avg Time (min)</th>
+                    <th className="px-4 py-2 text-right">Avg Time</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
@@ -251,7 +259,7 @@ export default function YotpoAnalytics() {
                         <div className="text-lg font-semibold text-white">{agent.count}</div>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="text-lg font-semibold text-yellow-400">{agent.avgDuration}</div>
+                        <div className="text-lg font-semibold text-yellow-400">{formatDuration(agent.avgDuration)}</div>
                       </td>
                     </tr>
                   ))}
