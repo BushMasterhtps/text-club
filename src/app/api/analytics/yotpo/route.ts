@@ -122,6 +122,35 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {} as Record<string, typeof agents[0]>);
 
+    // Get raw data (completed tasks with all details)
+    const rawData = await prisma.task.findMany({
+      where: {
+        ...where,
+        startTime: { not: null },
+        endTime: { not: null },
+        durationSec: { not: null }
+      },
+      select: {
+        id: true,
+        brand: true,
+        yotpoCustomerName: true,
+        yotpoEmail: true,
+        yotpoProduct: true,
+        yotpoIssueTopic: true,
+        yotpoReview: true,
+        disposition: true,
+        startTime: true,
+        endTime: true,
+        durationSec: true,
+        yotpoSfOrderLink: true,
+        assignedTo: {
+          select: { name: true, email: true }
+        }
+      },
+      orderBy: { endTime: 'desc' },
+      take: 1000 // Limit to most recent 1000
+    });
+
     // Format response data (keep durations in SECONDS like Text Club)
     const data = {
       overview: {
@@ -151,7 +180,26 @@ export async function GET(request: NextRequest) {
         agentEmail: agentMap[item.assignedToId!]?.email || 'Unknown',
         count: item._count.id,
         avgDuration: Math.round(item._avg.durationSec || 0) // Keep in seconds
-      })).sort((a, b) => b.count - a.count)
+      })).sort((a, b) => b.count - a.count),
+
+      // Raw data (for detailed table view)
+      rawData: rawData.map(task => ({
+        id: task.id,
+        brand: task.brand || 'Yotpo',
+        customerName: task.yotpoCustomerName || 'Unknown',
+        email: task.yotpoEmail || 'Unknown',
+        product: task.yotpoProduct || 'Unknown',
+        issueTopic: task.yotpoIssueTopic || 'Unknown',
+        review: task.yotpoReview ? task.yotpoReview.substring(0, 100) : '', // Truncate review
+        agent: task.assignedTo ? `${task.assignedTo.name || 'Unknown'} (${task.assignedTo.email || ''})` : 'Unknown',
+        agentName: task.assignedTo?.name || 'Unknown',
+        agentEmail: task.assignedTo?.email || 'Unknown',
+        startTime: task.startTime?.toISOString() || '',
+        endTime: task.endTime?.toISOString() || '',
+        durationSec: task.durationSec || 0,
+        disposition: task.disposition || 'Unknown',
+        sfOrderLink: task.yotpoSfOrderLink || ''
+      }))
     };
 
     return NextResponse.json({

@@ -27,6 +27,23 @@ interface YotpoAnalyticsData {
     count: number;
     avgDuration: number;
   }>;
+  rawData: Array<{
+    id: string;
+    brand: string;
+    customerName: string;
+    email: string;
+    product: string;
+    issueTopic: string;
+    review: string;
+    agent: string;
+    agentName: string;
+    agentEmail: string;
+    startTime: string;
+    endTime: string;
+    durationSec: number;
+    disposition: string;
+    sfOrderLink: string;
+  }>;
 }
 
 export default function YotpoAnalytics() {
@@ -34,6 +51,7 @@ export default function YotpoAnalytics() {
   const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [showRawData, setShowRawData] = useState(false);
 
   // Format duration in seconds to "Xm Ys" format (matching Text Club)
   const formatDuration = (seconds: number) => {
@@ -41,6 +59,39 @@ export default function YotpoAnalytics() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}m ${secs}s`;
+  };
+
+  // Download CSV function
+  const downloadCSV = () => {
+    if (!data?.rawData) return;
+
+    const headers = ['Brand', 'Customer Name', 'Email', 'Product', 'Issue Topic', 'Agent', 'Start Time', 'End Time', 'Duration', 'Disposition', 'SF Order Link'];
+    const rows = data.rawData.map(task => [
+      task.brand,
+      task.customerName,
+      task.email,
+      task.product,
+      task.issueTopic,
+      `${task.agentName} (${task.agentEmail})`,
+      new Date(task.startTime).toLocaleString(),
+      new Date(task.endTime).toLocaleString(),
+      formatDuration(task.durationSec),
+      task.disposition,
+      task.sfOrderLink
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `yotpo-analytics-${startDate}-to-${endDate}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   useEffect(() => {
@@ -273,6 +324,104 @@ export default function YotpoAnalytics() {
                 </tbody>
               </table>
             </div>
+          </Card>
+
+          {/* Raw Data from selected source */}
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">📋 Raw Data from selected source</h3>
+              <div className="flex gap-2">
+                <SmallButton onClick={downloadCSV} className="bg-orange-500 hover:bg-orange-600">
+                  📥 Download CSV
+                </SmallButton>
+                <SmallButton 
+                  onClick={() => setShowRawData(!showRawData)}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {showRawData ? 'Hide Data' : 'Show Data'}
+                </SmallButton>
+              </div>
+            </div>
+
+            {showRawData && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-white/[0.04]">
+                    <tr className="text-left text-white/60">
+                      <th className="px-3 py-2">Brand</th>
+                      <th className="px-3 py-2">Customer</th>
+                      <th className="px-3 py-2">Agent</th>
+                      <th className="px-3 py-2">Start Time</th>
+                      <th className="px-3 py-2">End Time</th>
+                      <th className="px-3 py-2">Duration</th>
+                      <th className="px-3 py-2">Disposition</th>
+                      <th className="px-3 py-2">SF Order</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {data.rawData.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-8 text-center text-white/40">
+                          No data found for selected criteria
+                        </td>
+                      </tr>
+                    ) : (
+                      data.rawData.slice(0, 100).map((task) => (
+                        <tr key={task.id} className="hover:bg-white/5">
+                          <td className="px-3 py-2">
+                            <div className="font-medium">{task.brand}</div>
+                            <div className="text-xs text-white/50 truncate max-w-48">
+                              {task.issueTopic}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="font-medium">{task.customerName}</div>
+                            <div className="text-xs text-white/50">{task.email}</div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="font-medium">{task.agentName}</div>
+                            <div className="text-xs text-white/50">{task.agentEmail}</div>
+                          </td>
+                          <td className="px-3 py-2 text-sm">
+                            {new Date(task.startTime).toLocaleString()}
+                          </td>
+                          <td className="px-3 py-2 text-sm">
+                            {new Date(task.endTime).toLocaleString()}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-sm">
+                            {formatDuration(task.durationSec)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-900/30 text-green-300 border border-green-700 text-xs">
+                              {task.disposition}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {task.sfOrderLink ? (
+                              <a 
+                                href={task.sfOrderLink} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-blue-400 hover:text-blue-300 text-xs underline"
+                              >
+                                View Order
+                              </a>
+                            ) : (
+                              <span className="text-white/40">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                {data.rawData.length > 100 && (
+                  <p className="text-center text-white/60 mt-4 text-sm">
+                    Showing first 100 of {data.rawData.length} records • Download CSV for complete data
+                  </p>
+                )}
+              </div>
+            )}
           </Card>
         </>
       ) : (
