@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card } from "./ui";
+import { Card } from "@/app/_components/Card";
 
 const H2 = ({ children }: { children: React.ReactNode }) => (
   <h2 className="text-2xl font-semibold mb-4">{children}</h2>
