@@ -188,6 +188,9 @@ function PendingTasksSection() {
   const [statusFilter, setStatusFilter] = useState('pending');
   const [assignedFilter, setAssignedFilter] = useState('unassigned');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [assignLoading, setAssignLoading] = useState(false);
 
   const loadTasks = async () => {
     setLoading(true);
@@ -212,7 +215,96 @@ function PendingTasksSection() {
 
   useEffect(() => {
     loadTasks();
+    loadAgents();
   }, [statusFilter, assignedFilter]);
+
+  const loadAgents = async () => {
+    try {
+      const res = await fetch('/api/manager/agents');
+      const data = await res.json();
+      if (data.success && data.agents) {
+        setAgents(data.agents);
+      }
+    } catch (error) {
+      console.error('Error loading agents:', error);
+    }
+  };
+
+  const toggleTask = (taskId: string) => {
+    const newSet = new Set(selectedTasks);
+    if (newSet.has(taskId)) {
+      newSet.delete(taskId);
+    } else {
+      newSet.add(taskId);
+    }
+    setSelectedTasks(newSet);
+  };
+
+  const handleBulkAssign = async (agentId: string) => {
+    if (selectedTasks.size === 0) {
+      alert('Please select at least one task');
+      return;
+    }
+
+    setAssignLoading(true);
+    try {
+      const res = await fetch('/api/yotpo/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskIds: Array.from(selectedTasks),
+          agentIds: [agentId]
+        })
+      });
+
+      const data = await res.json();
+      
+      if (data.success) {
+        alert(`✓ Assigned ${data.results.assigned} tasks successfully`);
+        setSelectedTasks(new Set());
+        loadTasks();
+      } else {
+        alert(`✗ Error: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Assignment error:', error);
+      alert('✗ Failed to assign tasks');
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  const handleUnassign = async () => {
+    if (selectedTasks.size === 0) {
+      alert('Please select at least one task');
+      return;
+    }
+
+    if (!confirm(`Unassign ${selectedTasks.size} task(s)?`)) {
+      return;
+    }
+
+    setAssignLoading(true);
+    try {
+      // Unassign by setting assignedToId to null and status to PENDING
+      const updates = Array.from(selectedTasks).map(taskId =>
+        fetch(`/api/manager/tasks/${taskId}/unassign`, {
+          method: 'POST'
+        })
+      );
+
+      await Promise.all(updates);
+      
+      alert(`✓ Unassigned ${selectedTasks.size} tasks`);
+      setSelectedTasks(new Set());
+      loadTasks();
+    } catch (error) {
+      console.error('Unassign error:', error);
+      alert('✗ Failed to unassign tasks');
+    } finally {
+      setAssignLoading(false);
+    }
+  };
 
   return (
     <Card className="p-5 space-y-4">
@@ -222,6 +314,46 @@ function PendingTasksSection() {
           {loading ? 'Refreshing...' : 'Refresh'}
         </SmallButton>
       </div>
+
+      {/* Selection and Assignment Controls */}
+      {selectedTasks.size > 0 && (
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="text-sm text-blue-300 font-medium">
+              {selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''} selected
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-white/70">Assign selected to:</label>
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleBulkAssign(e.target.value);
+                      e.target.value = ''; // Reset dropdown
+                    }
+                  }}
+                  disabled={assignLoading}
+                  className="px-3 py-1.5 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none"
+                  style={{ colorScheme: 'dark' }}
+                >
+                  <option value="">Choose agent...</option>
+                  {agents.map(agent => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <SmallButton onClick={() => setSelectedTasks(new Set())} className="bg-white/10 hover:bg-white/20">
+                Clear Selection
+              </SmallButton>
+              <SmallButton onClick={handleUnassign} disabled={assignLoading} className="bg-orange-600 hover:bg-orange-700">
+                Unassign Selected
+              </SmallButton>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -274,7 +406,14 @@ function PendingTasksSection() {
         <table className="w-full text-sm rounded-xl overflow-hidden">
           <thead className="bg-white/[0.04]">
             <tr className="text-left text-white/60">
-              <th className="px-3 py-2"><input type="checkbox" /></th>
+              <th className="px-3 py-2 w-8"><input type="checkbox" onChange={(e) => {
+                const allIds = tasks.map(t => t.id);
+                if (e.target.checked) {
+                  setSelectedTasks(new Set(allIds));
+                } else {
+                  setSelectedTasks(new Set());
+                }
+              }} /></th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Date Submitted</th>
               <th className="px-3 py-2">PR/Yotpo</th>
@@ -284,6 +423,7 @@ function PendingTasksSection() {
               <th className="px-3 py-2">Product</th>
               <th className="px-3 py-2">Issue Topic</th>
               <th className="px-3 py-2">Review Date</th>
+              <th className="px-3 py-2 min-w-64">Review</th>
               <th className="px-3 py-2">Assigned To</th>
               <th className="px-3 py-2">Actions</th>
             </tr>
@@ -291,7 +431,7 @@ function PendingTasksSection() {
           <tbody className="divide-y divide-white/5">
             {tasks.length === 0 ? (
               <tr>
-                <td colSpan={12} className="px-3 py-8 text-center text-white/50">
+                <td colSpan={13} className="px-3 py-8 text-center text-white/50">
                   {loading ? 'Loading...' : 'No Yotpo tasks found'}
                 </td>
               </tr>
@@ -299,7 +439,11 @@ function PendingTasksSection() {
               tasks.map(task => (
                 <tr key={task.id} className="hover:bg-white/[0.02]">
                   <td className="px-3 py-2">
-                    <input type="checkbox" value={task.id} />
+                    <input 
+                      type="checkbox" 
+                      checked={selectedTasks.has(task.id)}
+                      onChange={() => toggleTask(task.id)}
+                    />
                   </td>
                   <td className="px-3 py-2">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -318,6 +462,15 @@ function PendingTasksSection() {
                   <td className="px-3 py-2 text-white/80">{task.product || '—'}</td>
                   <td className="px-3 py-2 text-white/80">{task.issueTopic || '—'}</td>
                   <td className="px-3 py-2 text-white/80">{fmtDate(task.reviewDate)}</td>
+                  <td className="px-3 py-2 text-white/80">
+                    <div className="max-h-20 overflow-y-auto text-xs leading-relaxed">
+                      {task.review ? (
+                        <div className="max-w-xs break-words">{task.review}</div>
+                      ) : (
+                        <span className="text-white/40">—</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-white/80 text-xs">
                     {task.assignedTo ? task.assignedTo.name : '—'}
                   </td>
@@ -326,6 +479,23 @@ function PendingTasksSection() {
                       <SmallButton className="bg-blue-600 hover:bg-blue-700 text-xs">
                         View
                       </SmallButton>
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleBulkAssign(e.target.value);
+                            e.target.value = '';
+                          }
+                        }}
+                        className="px-2 py-1 bg-white/10 rounded text-xs text-white ring-1 ring-white/10"
+                        style={{ colorScheme: 'dark' }}
+                      >
+                        <option value="">Assign to...</option>
+                        {agents.map(agent => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </td>
                 </tr>
@@ -337,6 +507,7 @@ function PendingTasksSection() {
 
       <div className="text-sm text-white/60">
         Showing {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+        {selectedTasks.size > 0 && ` • ${selectedTasks.size} selected`}
       </div>
     </Card>
   );

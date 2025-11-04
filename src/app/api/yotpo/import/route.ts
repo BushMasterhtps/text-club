@@ -73,12 +73,40 @@ export async function POST(request: NextRequest) {
     // Process each record
     for (const [index, record] of records.entries()) {
       try {
-        // Parse dates
+        // Parse dates with 2-digit year fix
         const parseDate = (dateStr: string | undefined): Date | null => {
           if (!dateStr) return null;
           try {
+            // Handle MM/DD/YY format (2-digit year)
+            const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+            if (match) {
+              const month = parseInt(match[1]);
+              const day = parseInt(match[2]);
+              let year = parseInt(match[3]);
+              
+              // Convert 2-digit year to 4-digit (25 → 2025, 69 → 2069 or 1969?)
+              // Assume years 00-50 are 2000-2050, 51-99 are 1951-1999
+              if (year <= 50) {
+                year += 2000;
+              } else {
+                year += 1900;
+              }
+              
+              return new Date(year, month - 1, day);
+            }
+            
+            // Try standard date parsing
             const date = new Date(dateStr);
-            return isNaN(date.getTime()) ? null : date;
+            
+            // Check if date is unreasonably old (before 2020)
+            if (!isNaN(date.getTime())) {
+              if (date.getFullYear() < 2020) {
+                console.warn(`Suspicious old date: ${dateStr} → ${date.toISOString()}`);
+              }
+              return date;
+            }
+            
+            return null;
           } catch {
             return null;
           }
