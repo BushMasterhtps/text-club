@@ -297,6 +297,84 @@ export default function TrelloImportSection() {
     }
   };
 
+  const deleteAllEntries = async () => {
+    if (!confirm('🚨 DELETE ALL TRELLO ENTRIES?\n\nThis will delete EVERY Trello entry in the database (all dates, all agents).\n\n⚠️ THIS CANNOT BE UNDONE!\n\nType "DELETE ALL" in the next prompt to confirm.')) {
+      return;
+    }
+
+    const confirmText = prompt('Type "DELETE ALL" to confirm deletion of all Trello entries:');
+    if (confirmText !== 'DELETE ALL') {
+      setMessage('❌ Deletion cancelled - confirmation text did not match');
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      // Fetch ALL entries
+      const res = await fetch('/api/manager/trello-import?dateStart=2020-01-01&dateEnd=2030-12-31');
+      const data = await res.json();
+      
+      if (!data.success || !data.entries) {
+        setMessage('✗ Failed to fetch entries to delete');
+        return;
+      }
+
+      const entriesToDelete = data.entries;
+      
+      if (entriesToDelete.length === 0) {
+        setMessage('No entries found to delete');
+        return;
+      }
+
+      // Delete in batches
+      const BATCH_SIZE = 20;
+      let deleteCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < entriesToDelete.length; i += BATCH_SIZE) {
+        const batch = entriesToDelete.slice(i, i + BATCH_SIZE);
+        const progress = Math.min(i + BATCH_SIZE, entriesToDelete.length);
+        
+        setMessage(`⏳ Deleting ${progress}/${entriesToDelete.length} entries...`);
+        
+        const results = await Promise.all(
+          batch.map((entry: TrelloEntry) =>
+            fetch(`/api/manager/trello-import?id=${entry.id}`, {
+              method: 'DELETE'
+            }).then(r => ({ ok: r.ok }))
+            .catch(err => ({ ok: false }))
+          )
+        );
+
+        deleteCount += results.filter(r => r.ok).length;
+        failCount += results.filter(r => !r.ok).length;
+        
+        // Small delay between batches
+        if (i + BATCH_SIZE < entriesToDelete.length) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+
+      if (failCount === 0) {
+        setMessage(`✓ Successfully deleted ALL ${deleteCount} entries`);
+      } else {
+        setMessage(`⚠️ Deleted ${deleteCount} entries, ${failCount} failed`);
+      }
+      
+      loadEntries();
+      if (bulkStartDate && bulkEndDate) {
+        checkDateRangeCount(bulkStartDate, bulkEndDate);
+      }
+    } catch (error) {
+      console.error('Delete all error:', error);
+      setMessage('✗ Failed to delete entries');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const bulkDeleteDateRange = async () => {
     if (!bulkStartDate || !bulkEndDate) {
       setMessage('Please select start and end dates');
@@ -307,7 +385,12 @@ export default function TrelloImportSection() {
       (new Date(bulkEndDate).getTime() - new Date(bulkStartDate).getTime()) / (1000 * 60 * 60 * 24)
     ) + 1;
 
-    if (!confirm(`⚠️ Delete ALL Trello entries between ${new Date(bulkStartDate).toLocaleDateString()} and ${new Date(bulkEndDate).toLocaleDateString()}?\n\nThis will delete ~${dateCount * agents.length} entries (${dateCount} days × ${agents.length} agents).\n\nThis cannot be undone!`)) {
+    // Show the actual count from the counter if available
+    const countText = dateRangeCount !== null 
+      ? `${dateRangeCount} entries` 
+      : `~${dateCount * agents.length} entries (${dateCount} days × ${agents.length} agents)`;
+
+    if (!confirm(`⚠️ BULK DELETE: Remove all Trello entries from ${new Date(bulkStartDate).toLocaleDateString()} to ${new Date(bulkEndDate).toLocaleDateString()}?\n\nThis will delete ${countText}.\n\n🗑️ This processes in batches and cannot be undone!\n\nClick OK to proceed.`)) {
       return;
     }
 
@@ -487,7 +570,17 @@ export default function TrelloImportSection() {
 
       {/* Recent Entries Table */}
       <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-        <h4 className="font-semibold text-white mb-3">📋 Recent Entries (Last 90 Days)</h4>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-semibold text-white">📋 Recent Entries (Last 90 Days)</h4>
+          <button
+            onClick={deleteAllEntries}
+            disabled={loading || entries.length === 0}
+            className="px-3 py-1.5 bg-red-700 hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white text-xs font-medium border border-red-600"
+            title="Delete ALL Trello entries (requires confirmation)"
+          >
+            🚨 Delete All Entries
+          </button>
+        </div>
         {entries.length === 0 ? (
           <div className="text-center py-8 text-white/60">
             No Trello entries yet. Add your first entry above.
@@ -616,8 +709,9 @@ export default function TrelloImportSection() {
               onClick={bulkDeleteDateRange}
               disabled={loading}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white text-sm font-medium"
+              title={`Bulk delete all entries between ${bulkStartDate} and ${bulkEndDate}`}
             >
-              🗑️ Delete Range
+              🗑️ Bulk Delete Range {dateRangeCount !== null && dateRangeCount > 0 ? `(${dateRangeCount})` : ''}
             </button>
           )}
         </div>
@@ -630,6 +724,8 @@ export default function TrelloImportSection() {
           <li>• <strong>Single Entry:</strong> Add one agent's Trello count for one date</li>
           <li>• <strong>Batch Entry:</strong> Enter all agents' counts for one date at once (faster for daily imports)</li>
           <li>• <strong>Bulk Date Range:</strong> Enter counts once, apply to all days in a range (e.g., entire month if daily count was consistent)</li>
+          <li>• <strong>Bulk Delete Range:</strong> Select date range → Click "🗑️ Bulk Delete Range" → Deletes all entries in that range (batched, with progress)</li>
+          <li>• <strong>Delete All:</strong> Nuclear option - removes ALL Trello entries (requires typing "DELETE ALL" to confirm)</li>
           <li>• <strong>Power BI Workflow:</strong> Open your Trello Power BI report → Copy agent card counts → Enter here</li>
           <li>• <strong>Updates:</strong> Entering the same agent + date will update the existing count</li>
           <li>• <strong>Rankings:</strong> Trello cards are added to portal tasks in Performance Scorecard</li>
