@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getTaskWeight, getAllWeights, WEIGHT_SUMMARY } from "@/lib/task-weights";
 
 /**
  * Performance Scorecard API
@@ -47,6 +48,7 @@ export async function GET(req: NextRequest) {
         id: true,
         assignedToId: true,
         taskType: true,
+        disposition: true, // Added for weighted scoring
         durationSec: true,
         endTime: true,
         createdAt: true,
@@ -216,7 +218,11 @@ export async function GET(req: NextRequest) {
       targets,
       agents: allAgents,
       eligibleCount: eligibleAgents.length,
-      ineligibleCount: ineligibleAgents.length
+      ineligibleCount: ineligibleAgents.length,
+      weightIndex: {
+        summary: WEIGHT_SUMMARY,
+        dispositions: getAllWeights()
+      }
     });
 
   } catch (error) {
@@ -240,6 +246,7 @@ interface TaskData {
   id: string;
   assignedToId: string | null;
   taskType: string;
+  disposition: string | null; // Added for weighted scoring
   durationSec: number | null;
   endTime: Date;
   createdAt: Date;
@@ -268,15 +275,17 @@ interface AgentScorecard {
   daysWorked: number;
   tasksCompleted: number;
   dailyAvg: number;
+  weightedPoints: number; // NEW: Total weighted points
+  weightedDailyAvg: number; // NEW: Weighted points per day
   avgHandleTimeSec: number;
   totalTimeSec: number;
   breakdown: {
-    TEXT_CLUB: { count: number; avgSec: number; totalSec: number };
-    WOD_IVCS: { count: number; avgSec: number; totalSec: number };
-    EMAIL_REQUESTS: { count: number; avgSec: number; totalSec: number };
-    HOLDS: { count: number; avgSec: number; totalSec: number };
-    STANDALONE_REFUNDS: { count: number; avgSec: number; totalSec: number };
-    TRELLO: { count: number; avgSec: number; totalSec: number };
+    TEXT_CLUB: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
+    WOD_IVCS: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
+    EMAIL_REQUESTS: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
+    HOLDS: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
+    STANDALONE_REFUNDS: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
+    TRELLO: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
   };
   isEligible: boolean;
   minimumTasks: number;
@@ -396,29 +405,47 @@ function calculateAgentScore(
   // Total time spent
   const totalTimeSec = tasks.reduce((sum, t) => sum + (t.durationSec || 0), 0);
 
-  // Breakdown by task type (including Trello)
+  // Breakdown by task type (including Trello) WITH WEIGHTED POINTS
   const breakdown: any = {};
   const taskTypes = ["TEXT_CLUB", "WOD_IVCS", "EMAIL_REQUESTS", "HOLDS", "STANDALONE_REFUNDS"];
+  
+  let totalWeightedPoints = 0; // Track total weighted points across all tasks
   
   for (const taskType of taskTypes) {
     const typeTasks = tasks.filter(t => t.taskType === taskType);
     const typeTasksWithDuration = typeTasks.filter(t => t.durationSec);
+    
+    // Calculate weighted points for this task type
+    const weightedPoints = typeTasks.reduce((sum, t) => {
+      const weight = getTaskWeight(t.taskType, t.disposition);
+      return sum + weight;
+    }, 0);
+    
+    totalWeightedPoints += weightedPoints;
     
     breakdown[taskType] = {
       count: typeTasks.length,
       avgSec: typeTasksWithDuration.length > 0 
         ? typeTasksWithDuration.reduce((sum, t) => sum + (t.durationSec || 0), 0) / typeTasksWithDuration.length
         : 0,
-      totalSec: typeTasks.reduce((sum, t) => sum + (t.durationSec || 0), 0)
+      totalSec: typeTasks.reduce((sum, t) => sum + (t.durationSec || 0), 0),
+      weightedPoints: Math.round(weightedPoints * 100) / 100 // Round to 2 decimals
     };
   }
   
   // Add Trello as a separate category
+  const trelloWeightedPoints = trelloCount * getTaskWeight("TRELLO"); // 5.0 points each
+  totalWeightedPoints += trelloWeightedPoints;
+  
   breakdown.TRELLO = {
     count: trelloCount,
     avgSec: 0, // No handle time tracking for Trello
-    totalSec: 0
+    totalSec: 0,
+    weightedPoints: Math.round(trelloWeightedPoints * 100) / 100
   };
+  
+  // Calculate weighted daily average
+  const weightedDailyAvg = daysWorked > 0 ? totalWeightedPoints / daysWorked : 0;
 
   // Minimum task threshold for ranking eligibility
   const MINIMUM_TASKS_FOR_RANKING = 20;
@@ -468,6 +495,8 @@ function calculateAgentScore(
     portalTasksCompleted,
     trelloCardsCompleted: trelloCount,
     dailyAvg: Math.round(dailyAvg * 10) / 10,
+    weightedPoints: Math.round(totalWeightedPoints * 100) / 100, // NEW: Total weighted points
+    weightedDailyAvg: Math.round(weightedDailyAvg * 100) / 100, // NEW: Weighted points per day
     avgHandleTimeSec: Math.round(avgHandleTimeSec),
     totalTimeSec: Math.round(totalTimeSec),
     breakdown,
