@@ -535,6 +535,7 @@ export default function AgentPage() {
           TEXT_CLUB: newTasks.filter((t: Task) => t.taskType === "TEXT_CLUB").length,
           WOD_IVCS: newTasks.filter((t: Task) => t.taskType === "WOD_IVCS").length,
           EMAIL_REQUESTS: newTasks.filter((t: Task) => t.taskType === "EMAIL_REQUESTS").length,
+          YOTPO: newTasks.filter((t: Task) => t.taskType === "YOTPO").length,
           HOLDS: newTasks.filter((t: Task) => t.taskType === "HOLDS").length,
           STANDALONE_REFUNDS: newTasks.filter((t: Task) => t.taskType === "STANDALONE_REFUNDS").length
         };
