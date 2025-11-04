@@ -265,6 +265,84 @@ export default function TrelloImportSection() {
     }
   };
 
+  const bulkDeleteDateRange = async () => {
+    if (!bulkStartDate || !bulkEndDate) {
+      setMessage('Please select start and end dates');
+      return;
+    }
+
+    const dateCount = Math.ceil(
+      (new Date(bulkEndDate).getTime() - new Date(bulkStartDate).getTime()) / (1000 * 60 * 60 * 24)
+    ) + 1;
+
+    if (!confirm(`⚠️ Delete ALL Trello entries between ${new Date(bulkStartDate).toLocaleDateString()} and ${new Date(bulkEndDate).toLocaleDateString()}?\n\nThis will delete ~${dateCount * agents.length} entries (${dateCount} days × ${agents.length} agents).\n\nThis cannot be undone!`)) {
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      // Fetch all entries in the date range
+      const res = await fetch(`/api/manager/trello-import?dateStart=${bulkStartDate}&dateEnd=${bulkEndDate}`);
+      const data = await res.json();
+      
+      if (!data.success || !data.entries) {
+        setMessage('✗ Failed to fetch entries to delete');
+        return;
+      }
+
+      const entriesToDelete = data.entries;
+      
+      if (entriesToDelete.length === 0) {
+        setMessage('No entries found in this date range');
+        return;
+      }
+
+      // Delete in batches
+      const BATCH_SIZE = 20;
+      let deleteCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < entriesToDelete.length; i += BATCH_SIZE) {
+        const batch = entriesToDelete.slice(i, i + BATCH_SIZE);
+        const progress = Math.min(i + BATCH_SIZE, entriesToDelete.length);
+        
+        setMessage(`⏳ Deleting ${progress}/${entriesToDelete.length} entries...`);
+        
+        const results = await Promise.all(
+          batch.map((entry: TrelloEntry) =>
+            fetch(`/api/manager/trello-import?id=${entry.id}`, {
+              method: 'DELETE'
+            }).then(r => ({ ok: r.ok }))
+            .catch(err => ({ ok: false }))
+          )
+        );
+
+        deleteCount += results.filter(r => r.ok).length;
+        failCount += results.filter(r => !r.ok).length;
+        
+        // Small delay between batches
+        if (i + BATCH_SIZE < entriesToDelete.length) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+
+      if (failCount === 0) {
+        setMessage(`✓ Successfully deleted ${deleteCount} entries`);
+      } else {
+        setMessage(`⚠️ Deleted ${deleteCount} entries, ${failCount} failed`);
+      }
+      
+      loadEntries();
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      setMessage('✗ Failed to delete entries');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -328,7 +406,7 @@ export default function TrelloImportSection() {
           disabled={loading || !selectedDate || !selectedAgentId || !cardsCount}
           className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white text-sm font-medium"
         >
-          {loading ? 'Adding...' : '+ Add Entry'}
+          {loading ? '⏳ Adding...' : '+ Add Entry'}
         </button>
       </div>
 
@@ -367,7 +445,7 @@ export default function TrelloImportSection() {
           disabled={loading || Object.keys(batchEntries).length === 0}
           className="mt-3 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white text-sm font-medium"
         >
-          {loading ? 'Importing...' : `Import All for ${new Date(batchDate).toLocaleDateString()}`}
+          {loading ? '⏳ Importing...' : `Import All for ${new Date(batchDate).toLocaleDateString()}`}
         </button>
       </div>
 
@@ -429,9 +507,12 @@ export default function TrelloImportSection() {
       {/* Bulk Date Range Entry */}
       <div className="bg-white/5 rounded-lg p-4 border border-white/10">
         <h4 className="font-semibold text-white mb-3">📅 Bulk Date Range Entry (Same Counts, Multiple Days)</h4>
-        <p className="text-sm text-white/60 mb-4">
+        <p className="text-sm text-white/60 mb-2">
           Import the same daily card counts for each agent across a date range (e.g., entire month)
         </p>
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md p-2 mb-4 text-xs text-yellow-300/90">
+          ⚠️ <strong>Important:</strong> Click Import ONCE and wait for completion (can take 1-2 minutes for large ranges). Do not click multiple times!
+        </div>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className="text-sm text-white/60 mb-1 block">📅 Start Date</label>
@@ -470,13 +551,24 @@ export default function TrelloImportSection() {
             </div>
           ))}
         </div>
-        <button
-          onClick={addBulkDateRangeEntries}
-          disabled={loading || !bulkStartDate || !bulkEndDate || Object.keys(bulkEntries).length === 0}
-          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white text-sm font-medium"
-        >
-          {loading ? 'Importing...' : `Import for ${bulkStartDate && bulkEndDate ? `${new Date(bulkStartDate).toLocaleDateString()} - ${new Date(bulkEndDate).toLocaleDateString()}` : 'Date Range'}`}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={addBulkDateRangeEntries}
+            disabled={loading || !bulkStartDate || !bulkEndDate || Object.keys(bulkEntries).length === 0}
+            className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white text-sm font-medium"
+          >
+            {loading ? '⏳ Importing... (Do not refresh)' : `Import for ${bulkStartDate && bulkEndDate ? `${new Date(bulkStartDate).toLocaleDateString()} - ${new Date(bulkEndDate).toLocaleDateString()}` : 'Date Range'}`}
+          </button>
+          {bulkStartDate && bulkEndDate && (
+            <button
+              onClick={bulkDeleteDateRange}
+              disabled={loading}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-white text-sm font-medium"
+            >
+              🗑️ Delete Range
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Helper Info */}
