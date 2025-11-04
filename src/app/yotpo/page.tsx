@@ -9,6 +9,7 @@ import { useAutoLogout } from '@/hooks/useAutoLogout';
 import ThemeToggle from '@/app/_components/ThemeToggle';
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import YotpoAnalytics from '@/app/_components/YotpoAnalytics';
+import { AssistanceRequestsSection } from '@/app/_components/AssistanceRequestsSection';
 
 // Utility functions
 function clamp(value: number | null | undefined): number {
@@ -962,22 +963,11 @@ export default function YotpoPage() {
         {/* Assistance Requests Section */}
         {activeSection === "assistance" && (
           <div className="space-y-8">
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">🆘 Assistance Requests</h3>
-              <p className="text-white/60">Yotpo assistance requests will appear here</p>
-              {assistanceRequests.length > 0 ? (
-                <div className="mt-4 space-y-3">
-                  {assistanceRequests.map(req => (
-                    <div key={req.id} className="bg-white/5 rounded-lg p-4 border border-white/10">
-                      <div className="font-medium text-white">{req.agentName}</div>
-                      <div className="text-sm text-white/70 mt-2">{req.assistanceNotes}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-white/50">No assistance requests</div>
-              )}
-            </Card>
+            <AssistanceRequestsSection 
+              requests={assistanceRequests}
+              onRequestsChange={setAssistanceRequests}
+              title="🆘 Yotpo Assistance Requests"
+            />
           </div>
         )}
 
