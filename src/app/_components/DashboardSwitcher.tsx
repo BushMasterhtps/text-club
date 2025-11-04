@@ -37,6 +37,14 @@ const dashboards: DashboardInfo[] = [
     available: true // Now available!
   },
   {
+    id: 'yotpo',
+    name: 'Yotpo',
+    path: '/yotpo',
+    emoji: '⭐',
+    description: 'Yotpo Review & Feedback Task Management',
+    available: true // New Yotpo system!
+  },
+  {
     id: 'holds',
     name: 'Holds',
     path: '/holds',
