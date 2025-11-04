@@ -1,0 +1,170 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+/**
+ * Yotpo Analytics API
+ * Similar to Text Club analytics but with Issue Topic breakdown
+ */
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+
+    // Parse dates with proper timezone handling
+    let dateStart: Date;
+    let dateEnd: Date;
+    
+    if (startDate && endDate) {
+      const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+      const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+      
+      dateStart = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
+      dateEnd = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
+    } else {
+      // Default to today
+      const today = new Date();
+      dateStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+      dateEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    }
+
+    // Build where clause for Yotpo tasks
+    const where = {
+      taskType: "YOTPO" as const,
+      status: "COMPLETED" as const
+    };
+
+    // Get completed tasks for today
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    const utcStartOfToday = startOfToday;
+    const utcEndOfToday = endOfToday;
+
+    const todayWhere = {
+      ...where,
+      endTime: { gte: utcStartOfToday, lte: utcEndOfToday }
+    };
+
+    // Get stats
+    const [totalCompleted, totalCompletedToday, avgHandleTimeResult] = await Promise.all([
+      prisma.task.count({ where }),
+      prisma.task.count({ where: todayWhere }),
+      prisma.task.aggregate({
+        where: {
+          ...where,
+          durationSec: { not: null }
+        },
+        _avg: {
+          durationSec: true
+        }
+      })
+    ]);
+
+    // Get Issue Topic breakdown (PRIMARY breakdown for Yotpo)
+    const issueTopicBreakdown = await prisma.task.groupBy({
+      by: ["yotpoIssueTopic"],
+      where: {
+        ...where,
+        yotpoIssueTopic: { not: null },
+        durationSec: { not: null }
+      },
+      _avg: {
+        durationSec: true
+      },
+      _count: {
+        id: true
+      }
+    });
+
+    // Get disposition breakdown
+    const dispositionBreakdown = await prisma.task.groupBy({
+      by: ["disposition"],
+      where: {
+        ...where,
+        disposition: { not: null },
+        durationSec: { not: null }
+      },
+      _avg: {
+        durationSec: true
+      },
+      _count: {
+        id: true
+      }
+    });
+
+    // Get agent performance
+    const agentPerformance = await prisma.task.groupBy({
+      by: ["assignedToId"],
+      where: {
+        ...where,
+        assignedToId: { not: null },
+        durationSec: { not: null }
+      },
+      _avg: {
+        durationSec: true
+      },
+      _count: {
+        id: true
+      }
+    });
+
+    // Get agent names
+    const agentIds = agentPerformance.map(a => a.assignedToId).filter(Boolean) as string[];
+    const agents = await prisma.user.findMany({
+      where: { id: { in: agentIds } },
+      select: { id: true, name: true, email: true }
+    });
+
+    const agentMap = agents.reduce((acc, agent) => {
+      acc[agent.id] = agent;
+      return acc;
+    }, {} as Record<string, typeof agents[0]>);
+
+    // Format response data
+    const data = {
+      overview: {
+        totalCompleted,
+        totalCompletedToday,
+        avgHandleTime: Math.round((avgHandleTimeResult._avg.durationSec || 0) / 60) // Convert to minutes
+      },
+      
+      // Issue Topic breakdown (PRIMARY for Yotpo)
+      issueTopicBreakdown: issueTopicBreakdown.map(item => ({
+        topic: item.yotpoIssueTopic || 'Unknown',
+        count: item._count.id,
+        avgDuration: Math.round((item._avg.durationSec || 0) / 60) // Minutes
+      })).sort((a, b) => b.count - a.count), // Sort by count descending
+
+      // Disposition breakdown (secondary)
+      dispositionBreakdown: dispositionBreakdown.map(item => ({
+        disposition: item.disposition || 'Unknown',
+        count: item._count.id,
+        avgDuration: Math.round((item._avg.durationSec || 0) / 60)
+      })).sort((a, b) => b.count - a.count),
+
+      // Agent performance
+      agentPerformance: agentPerformance.map(item => ({
+        agentId: item.assignedToId!,
+        agentName: agentMap[item.assignedToId!]?.name || 'Unknown',
+        agentEmail: agentMap[item.assignedToId!]?.email || 'Unknown',
+        count: item._count.id,
+        avgDuration: Math.round((item._avg.durationSec || 0) / 60)
+      })).sort((a, b) => b.count - a.count)
+    };
+
+    return NextResponse.json({
+      success: true,
+      data
+    });
+
+  } catch (error) {
+    console.error('Yotpo Analytics API Error:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to load Yotpo analytics'
+    }, { status: 500 });
+  }
+}
+

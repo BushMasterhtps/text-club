@@ -654,9 +654,6 @@ export default function AgentPage() {
 
   const startTask = async (taskId: string) => {
     try {
-      // Save current scroll position to prevent jumping
-      const scrollY = window.scrollY;
-      
       const res = await fetch(`/api/agent/tasks/${taskId}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -665,17 +662,17 @@ export default function AgentPage() {
       if (res.ok) {
         // Add to local started tasks state for instant UI update
         setStartedTasks(prev => new Set(prev).add(taskId));
-        
-        // Restore scroll position after state update
-        requestAnimationFrame(() => {
-          window.scrollTo(0, scrollY);
-        });
-        
         // Update stats to reflect the change
         await loadStats();
+      } else {
+        // Log error for debugging
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Start task failed:", res.status, errorData);
+        alert(`Failed to start task: ${errorData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error("Failed to start task:", error);
+      alert("Network error - please check your connection");
     }
   };
 

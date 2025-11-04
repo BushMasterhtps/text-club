@@ -10,6 +10,7 @@ import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
 import SessionTimer from '@/app/_components/SessionTimer';
 import ThemeToggle from '@/app/_components/ThemeToggle';
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
+import YotpoAnalytics from '@/app/_components/YotpoAnalytics';
 
 // Types
 interface YotpoTask {
@@ -671,13 +672,7 @@ export default function YotpoPage() {
         )}
 
         {activeSection === 'analytics' && (
-          <Card className="p-6">
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">📊</div>
-              <h3 className="text-xl font-semibold text-white mb-2">Analytics Coming Soon</h3>
-              <p className="text-white/60">Yotpo analytics will be available after Phase 4</p>
-            </div>
-          </Card>
+          <YotpoAnalytics />
         )}
 
         {activeSection === 'settings' && (
