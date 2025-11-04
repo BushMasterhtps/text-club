@@ -261,6 +261,7 @@ interface DynamicTargets {
   TEXT_CLUB: { dailyTasks: number; handleTimeSec: number };
   WOD_IVCS: { dailyTasks: number; handleTimeSec: number };
   EMAIL_REQUESTS: { dailyTasks: number; handleTimeSec: number };
+  YOTPO: { dailyTasks: number; handleTimeSec: number };
   HOLDS: { dailyTasks: number; handleTimeSec: number };
   STANDALONE_REFUNDS: { dailyTasks: number; handleTimeSec: number };
 }
@@ -283,6 +284,7 @@ interface AgentScorecard {
     TEXT_CLUB: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
     WOD_IVCS: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
     EMAIL_REQUESTS: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
+    YOTPO: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
     HOLDS: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
     STANDALONE_REFUNDS: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
     TRELLO: { count: number; avgSec: number; totalSec: number; weightedPoints: number };
@@ -308,7 +310,7 @@ function calculateDynamicTargets(tasks: TaskData[], dateStart: Date, dateEnd: Da
     tasksByDay.get(dateKey)!.push(task);
   }
 
-  const taskTypes = ["TEXT_CLUB", "WOD_IVCS", "EMAIL_REQUESTS", "HOLDS", "STANDALONE_REFUNDS"];
+  const taskTypes = ["TEXT_CLUB", "WOD_IVCS", "EMAIL_REQUESTS", "YOTPO", "HOLDS", "STANDALONE_REFUNDS"];
   const targets: any = {};
 
   for (const taskType of taskTypes) {
@@ -407,7 +409,7 @@ function calculateAgentScore(
 
   // Breakdown by task type (including Trello) WITH WEIGHTED POINTS
   const breakdown: any = {};
-  const taskTypes = ["TEXT_CLUB", "WOD_IVCS", "EMAIL_REQUESTS", "HOLDS", "STANDALONE_REFUNDS"];
+  const taskTypes = ["TEXT_CLUB", "WOD_IVCS", "EMAIL_REQUESTS", "YOTPO", "HOLDS", "STANDALONE_REFUNDS"];
   
   let totalWeightedPoints = 0; // Track total weighted points across all tasks
   
