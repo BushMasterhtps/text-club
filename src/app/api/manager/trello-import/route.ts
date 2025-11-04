@@ -12,11 +12,11 @@ export async function GET(req: Request) {
     const dateStart = url.searchParams.get("dateStart");
     const dateEnd = url.searchParams.get("dateEnd");
     
-    // Default to last 30 days if no range specified
+    // Default to last 90 days if no range specified (increased from 30 to see older imports)
     const now = new Date();
     const defaultEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
     const defaultStart = new Date(defaultEnd);
-    defaultStart.setDate(defaultStart.getDate() - 30);
+    defaultStart.setDate(defaultStart.getDate() - 90);
     defaultStart.setHours(0, 0, 0, 0);
 
     const start = dateStart ? new Date(dateStart) : defaultStart;

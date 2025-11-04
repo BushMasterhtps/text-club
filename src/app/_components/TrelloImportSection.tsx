@@ -47,12 +47,22 @@ export default function TrelloImportSection() {
   const [bulkStartDate, setBulkStartDate] = useState('');
   const [bulkEndDate, setBulkEndDate] = useState('');
   const [bulkEntries, setBulkEntries] = useState<Record<string, string>>({});
+  const [dateRangeCount, setDateRangeCount] = useState<number | null>(null);
 
   // Load agents
   useEffect(() => {
     loadAgents();
     loadEntries();
   }, []);
+
+  // Check how many entries exist for the selected date range
+  useEffect(() => {
+    if (bulkStartDate && bulkEndDate) {
+      checkDateRangeCount(bulkStartDate, bulkEndDate);
+    } else {
+      setDateRangeCount(null);
+    }
+  }, [bulkStartDate, bulkEndDate]);
 
   const loadAgents = async () => {
     try {
@@ -63,6 +73,24 @@ export default function TrelloImportSection() {
       }
     } catch (error) {
       console.error('Error loading agents:', error);
+    }
+  };
+
+  const checkDateRangeCount = async (startDate: string, endDate: string) => {
+    if (!startDate || !endDate) {
+      setDateRangeCount(null);
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/manager/trello-import?dateStart=${startDate}&dateEnd=${endDate}`);
+      const data = await res.json();
+      if (data.success && data.entries) {
+        setDateRangeCount(data.entries.length);
+      }
+    } catch (error) {
+      console.error('Error checking date range:', error);
+      setDateRangeCount(null);
     }
   };
 
@@ -257,6 +285,10 @@ export default function TrelloImportSection() {
       
       setBulkEntries({});
       loadEntries();
+      // Refresh the count for the selected date range
+      if (bulkStartDate && bulkEndDate) {
+        checkDateRangeCount(bulkStartDate, bulkEndDate);
+      }
     } catch (error) {
       console.error('Bulk import error:', error);
       setMessage('✗ Failed to add bulk date range entries');
@@ -335,6 +367,10 @@ export default function TrelloImportSection() {
       }
       
       loadEntries();
+      // Refresh the count for the selected date range
+      if (bulkStartDate && bulkEndDate) {
+        checkDateRangeCount(bulkStartDate, bulkEndDate);
+      }
     } catch (error) {
       console.error('Bulk delete error:', error);
       setMessage('✗ Failed to delete entries');
@@ -451,7 +487,7 @@ export default function TrelloImportSection() {
 
       {/* Recent Entries Table */}
       <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-        <h4 className="font-semibold text-white mb-3">📋 Recent Entries (Last 30 Days)</h4>
+        <h4 className="font-semibold text-white mb-3">📋 Recent Entries (Last 90 Days)</h4>
         {entries.length === 0 ? (
           <div className="text-center py-8 text-white/60">
             No Trello entries yet. Add your first entry above.
@@ -533,6 +569,22 @@ export default function TrelloImportSection() {
             />
           </div>
         </div>
+        {dateRangeCount !== null && (
+          <div className={`mb-4 p-3 rounded-lg text-sm ${
+            dateRangeCount > 0 
+              ? 'bg-blue-500/10 border border-blue-500/20 text-blue-300' 
+              : 'bg-white/5 border border-white/10 text-white/60'
+          }`}>
+            {dateRangeCount > 0 ? (
+              <>
+                📊 <strong>{dateRangeCount} existing entries</strong> found for this date range.
+                {dateRangeCount > 100 && ' (This seems high - might be duplicates!)'}
+              </>
+            ) : (
+              '📭 No entries found for this date range.'
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-96 overflow-y-auto mb-4">
           {agents.map(agent => (
             <div key={agent.id} className="bg-white/5 rounded p-2">
