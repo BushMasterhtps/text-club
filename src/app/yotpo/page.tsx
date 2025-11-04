@@ -6,11 +6,28 @@ import { SmallButton } from "@/app/_components/SmallButton";
 import DashboardSwitcher from '@/app/_components/DashboardSwitcher';
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
-import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
-import SessionTimer from '@/app/_components/SessionTimer';
 import ThemeToggle from '@/app/_components/ThemeToggle';
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import YotpoAnalytics from '@/app/_components/YotpoAnalytics';
+
+// Utility functions
+function clamp(value: number | null | undefined): number {
+  if (value == null) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
+// Progress bar component
+function ProgressBar({ value }: { value: number }) {
+  const pct = clamp(value);
+  return (
+    <div className="w-full h-3 rounded-full bg-white/10 overflow-hidden">
+      <div
+        className="h-full bg-gradient-to-r from-emerald-400 to-sky-500"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
 
 // Types
 interface YotpoTask {
@@ -38,7 +55,7 @@ interface Agent {
   emailRequests: { assigned: number; inProgress: number; completedToday: number };
 }
 
-// Utility function
+// Utils
 function fmtDate(d: string | Date | null | undefined) {
   try {
     const dt = typeof d === "string" ? new Date(d) : d ?? new Date(0);
@@ -48,15 +65,9 @@ function fmtDate(d: string | Date | null | undefined) {
   }
 }
 
-function ProgressBar({ value }: { value: number }) {
-  const pct = Math.max(0, Math.min(100, value || 0));
+function H2({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full h-3 rounded-full bg-white/10 overflow-hidden">
-      <div
-        className="h-full bg-gradient-to-r from-emerald-400 to-sky-500"
-        style={{ width: `${pct}%` }}
-      />
-    </div>
+    <h2 className="text-lg font-semibold text-white/90 tracking-tight">{children}</h2>
   );
 }
 
@@ -91,7 +102,6 @@ function CsvImportSection() {
       if (data.success) {
         setMessage(`✓ Success! Imported ${data.results.imported} tasks, ${data.results.duplicates} duplicates skipped, ${data.results.errors} errors`);
         setFile(null);
-        // Reset file input
         const input = document.querySelector('input[type="file"]') as HTMLInputElement;
         if (input) input.value = '';
       } else {
@@ -108,18 +118,18 @@ function CsvImportSection() {
   return (
     <Card className="p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white/90">📥 CSV Import</h2>
+        <H2>📥 CSV Import</H2>
       </div>
 
       {message && (
         <div className={`p-3 rounded-lg text-sm ${
-          message.startsWith('✓') ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
+          message.startsWith('✓') ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
         }`}>
           {message}
         </div>
       )}
 
-      <div className="bg-white/5 rounded-lg p-4 space-y-4">
+      <div className="bg-white/5 rounded-lg p-4 space-y-4 border border-white/10">
         <div>
           <label className="block text-sm font-medium text-white/80 mb-2">
             Select CSV File
@@ -136,35 +146,32 @@ function CsvImportSection() {
               hover:file:bg-blue-700
               file:cursor-pointer"
           />
-          <p className="text-xs text-white/50 mt-2">
-            Expected columns: Date Submitted, PRs or Yotpo?, Customer Name, Email, Order Date, Product, Issue Topic, Review Date, Review, SF Order Referenced (link)
-          </p>
         </div>
 
         <button
           onClick={handleImport}
           disabled={!file || uploading}
-          className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-semibold text-sm"
+          className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-semibold text-sm transition-colors"
         >
-          {uploading ? '⏳ Importing...' : '📥 Import Yotpo Tasks'}
+          {uploading ? '⏳ Importing...' : '📥 Import Yotpo CSV'}
         </button>
       </div>
 
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
         <h4 className="text-sm font-semibold text-blue-300 mb-2">💡 CSV Format</h4>
         <div className="text-xs text-white/70 space-y-1">
-          <div>• Column A: Date Submitted (when customer submitted)</div>
-          <div>• Column B: PRs or Yotpo? (source type)</div>
-          <div>• Column C: Customer Name</div>
-          <div>• Column D: Email</div>
-          <div>• Column E: Order Date</div>
-          <div>• Column F: Product</div>
-          <div>• Column G: Issue Topic (for analytics)</div>
-          <div>• Column H: Review Date</div>
-          <div>• Column I: Review (full text)</div>
-          <div>• Column J: SF Order Referenced (link)</div>
+          <div>• <strong>Column A:</strong> Date Submitted</div>
+          <div>• <strong>Column B:</strong> PRs or Yotpo?</div>
+          <div>• <strong>Column C:</strong> Customer Name</div>
+          <div>• <strong>Column D:</strong> Email</div>
+          <div>• <strong>Column E:</strong> Order Date</div>
+          <div>• <strong>Column F:</strong> Product</div>
+          <div>• <strong>Column G:</strong> Issue Topic</div>
+          <div>• <strong>Column H:</strong> Review Date</div>
+          <div>• <strong>Column I:</strong> Review (full text)</div>
+          <div>• <strong>Column J:</strong> SF Order Referenced (link)</div>
           <div className="pt-2 text-white/60">
-            <strong>Duplicate Check:</strong> Email + Product + Review Date (duplicates will be skipped)
+            <strong>Duplicate Check:</strong> Email + Product + Review Date
           </div>
         </div>
       </div>
@@ -210,20 +217,21 @@ function PendingTasksSection() {
   return (
     <Card className="p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white/90">📁 Pending Yotpo Request Tasks</h2>
-        <SmallButton onClick={loadTasks} disabled={loading}>
+        <H2>📁 Pending Yotpo Request Tasks</H2>
+        <SmallButton onClick={loadTasks} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
           {loading ? 'Refreshing...' : 'Refresh'}
         </SmallButton>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3">
-        <div className="flex-1">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
           <label className="block text-sm text-white/60 mb-1">Status</label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full px-3 py-2 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none"
+            className="w-full px-3 py-2 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            style={{ colorScheme: 'dark' }}
           >
             <option value="all">All</option>
             <option value="pending">Pending</option>
@@ -231,19 +239,20 @@ function PendingTasksSection() {
             <option value="completed">Completed</option>
           </select>
         </div>
-        <div className="flex-1">
+        <div>
           <label className="block text-sm text-white/60 mb-1">Assigned</label>
           <select
             value={assignedFilter}
             onChange={(e) => setAssignedFilter(e.target.value)}
-            className="w-full px-3 py-2 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none"
+            className="w-full px-3 py-2 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            style={{ colorScheme: 'dark' }}
           >
             <option value="all">Anyone</option>
             <option value="unassigned">Unassigned</option>
             <option value="assigned">Assigned</option>
           </select>
         </div>
-        <div className="flex-1">
+        <div>
           <label className="block text-sm text-white/60 mb-1">Search</label>
           <div className="flex gap-2">
             <input
@@ -251,22 +260,19 @@ function PendingTasksSection() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Email, name, topic..."
-              className="flex-1 px-3 py-2 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none"
+              className="flex-1 px-3 py-2 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <button
-              onClick={loadTasks}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white text-sm font-medium"
-            >
+            <SmallButton onClick={loadTasks} className="bg-blue-600 hover:bg-blue-700">
               Search
-            </button>
+            </SmallButton>
           </div>
         </div>
       </div>
 
       {/* Tasks Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-white/5">
+        <table className="w-full text-sm rounded-xl overflow-hidden">
+          <thead className="bg-white/[0.04]">
             <tr className="text-left text-white/60">
               <th className="px-3 py-2"><input type="checkbox" /></th>
               <th className="px-3 py-2">Status</th>
@@ -282,7 +288,7 @@ function PendingTasksSection() {
               <th className="px-3 py-2">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/10">
+          <tbody className="divide-y divide-white/5">
             {tasks.length === 0 ? (
               <tr>
                 <td colSpan={12} className="px-3 py-8 text-center text-white/50">
@@ -291,7 +297,7 @@ function PendingTasksSection() {
               </tr>
             ) : (
               tasks.map(task => (
-                <tr key={task.id} className="hover:bg-white/5">
+                <tr key={task.id} className="hover:bg-white/[0.02]">
                   <td className="px-3 py-2">
                     <input type="checkbox" value={task.id} />
                   </td>
@@ -313,16 +319,13 @@ function PendingTasksSection() {
                   <td className="px-3 py-2 text-white/80">{task.issueTopic || '—'}</td>
                   <td className="px-3 py-2 text-white/80">{fmtDate(task.reviewDate)}</td>
                   <td className="px-3 py-2 text-white/80 text-xs">
-                    {task.assignedTo ? task.assignedTo.name : 'Unassigned'}
+                    {task.assignedTo ? task.assignedTo.name : '—'}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex gap-2">
-                      <button className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white">
+                      <SmallButton className="bg-blue-600 hover:bg-blue-700 text-xs">
                         View
-                      </button>
-                      <select className="px-2 py-1 bg-white/10 rounded text-xs text-white">
-                        <option>Assign to...</option>
-                      </select>
+                      </SmallButton>
                     </div>
                   </td>
                 </tr>
@@ -385,8 +388,8 @@ function AssignTasksSection() {
   return (
     <Card className="p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white/90">👥 Assign Yotpo Tasks</h2>
-        <SmallButton onClick={loadAgents}>Refresh</SmallButton>
+        <H2>✅ Assign Yotpo Tasks</H2>
+        <SmallButton onClick={loadAgents} className="bg-blue-600 hover:bg-blue-700">Refresh</SmallButton>
       </div>
 
       <div className="flex items-center justify-between">
@@ -394,23 +397,17 @@ function AssignTasksSection() {
           Choose agents ({selectedAgents.size}/{agents.length} selected)
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={handleSelectAll}
-            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white"
-          >
+          <SmallButton onClick={handleSelectAll} className="bg-blue-600 hover:bg-blue-700">
             Select all
-          </button>
-          <button
-            onClick={handleSelectNone}
-            className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs text-white"
-          >
+          </SmallButton>
+          <SmallButton onClick={handleSelectNone} className="bg-white/10 hover:bg-white/20">
             Select none
-          </button>
+          </SmallButton>
         </div>
       </div>
 
-      {/* Agent List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* Agent Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
         {agents.map(agent => (
           <div
             key={agent.id}
@@ -429,7 +426,7 @@ function AssignTasksSection() {
                 className="cursor-pointer"
               />
               <div className="flex-1">
-                <div className="font-medium text-white">{agent.name}</div>
+                <div className="font-medium text-white text-sm">{agent.name}</div>
                 <div className="text-xs text-white/50">{agent.email}</div>
               </div>
             </div>
@@ -442,7 +439,7 @@ function AssignTasksSection() {
       </div>
 
       {/* Assignment Controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 bg-white/5 rounded-lg p-4 border border-white/10">
         <div className="flex-1">
           <label className="block text-sm text-white/60 mb-1">Per-agent cap (this run)</label>
           <input
@@ -451,13 +448,13 @@ function AssignTasksSection() {
             max="200"
             value={perAgentCap}
             onChange={(e) => setPerAgentCap(parseInt(e.target.value) || 50)}
-            className="w-32 px-3 py-2 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none"
+            className="w-32 px-3 py-2 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <p className="text-xs text-white/50 mt-1">Absolute hard cap is 200 per agent</p>
         </div>
         <button
           disabled={selectedAgents.size === 0 || loading}
-          className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-semibold"
+          className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-semibold transition-colors"
         >
           {loading ? '⏳ Assigning...' : `Assign Now`}
         </button>
@@ -467,10 +464,13 @@ function AssignTasksSection() {
 }
 
 /* ========================================================================== */
-/*  Overview Section                                                          */
+/*  Main Page Component                                                       */
 /* ========================================================================== */
-function OverviewSection() {
-  const [stats, setStats] = useState({
+export default function YotpoPage() {
+  const [activeSection, setActiveSection] = useState("overview");
+  
+  // Overview data
+  const [overviewData, setOverviewData] = useState({
     pendingCount: 0,
     inProgressCount: 0,
     completedTodayCount: 0,
@@ -479,109 +479,78 @@ function OverviewSection() {
     totalTasks: 0,
     lastImport: null as { date: string; imported: number; duplicates: number; errors: number } | null
   });
-  const [loading, setLoading] = useState(false);
-
-  const loadStats = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/yotpo/overview');
-      const data = await res.json();
-      if (data.success) {
-        setStats(data.data);
-      }
-    } catch (error) {
-      console.error('Error loading overview:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-white">⭐ Yotpo Overview</h3>
-        <SmallButton onClick={loadStats} disabled={loading}>
-          {loading ? 'Loading...' : 'Refresh'}
-        </SmallButton>
-      </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-lg p-4 border border-blue-500/30">
-          <div className="text-blue-400 text-sm font-medium">Progress</div>
-          <div className="text-2xl font-bold mt-1">{stats.progressPercentage}% done</div>
-          <div className="mt-2">
-            <ProgressBar value={stats.progressPercentage} />
-          </div>
-          <div className="text-xs text-white/40 mt-2">
-            Pending {stats.pendingCount} • Completed {stats.totalCompletedCount}
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 rounded-lg p-4 border border-yellow-500/30">
-          <div className="text-yellow-400 text-sm font-medium">Pending</div>
-          <div className="text-2xl font-bold mt-1">{stats.pendingCount}</div>
-          <div className="text-xs text-white/40 mt-1">Awaiting assignment</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-lg p-4 border border-purple-500/30">
-          <div className="text-purple-400 text-sm font-medium">In Progress</div>
-          <div className="text-2xl font-bold mt-1">{stats.inProgressCount}</div>
-          <div className="text-xs text-white/40 mt-1">Being worked on</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 rounded-lg p-4 border border-green-500/30">
-          <div className="text-green-400 text-sm font-medium">Completed Today</div>
-          <div className="text-2xl font-bold mt-1">{stats.completedTodayCount}</div>
-          <div className="text-xs text-white/40 mt-1">Keep it going! 🎯</div>
-        </div>
-      </div>
-
-      {/* Last Import Info */}
-      {stats.lastImport && (
-        <div className="mt-6 bg-white/5 rounded-lg p-4 border border-white/10">
-          <h4 className="text-md font-semibold mb-2 text-white">📥 Last Import</h4>
-          <div className="text-sm text-white/80 grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <div className="text-xs text-white/50">Date</div>
-              <div>{new Date(stats.lastImport.date).toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-xs text-white/50">Imported</div>
-              <div className="text-green-400 font-semibold">{stats.lastImport.imported} tasks</div>
-            </div>
-            {stats.lastImport.duplicates > 0 && (
-              <div>
-                <div className="text-xs text-white/50">Duplicates</div>
-                <div className="text-yellow-400">{stats.lastImport.duplicates} skipped</div>
-              </div>
-            )}
-            {stats.lastImport.errors > 0 && (
-              <div>
-                <div className="text-xs text-white/50">Errors</div>
-                <div className="text-red-400">{stats.lastImport.errors} failed</div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/* ========================================================================== */
-/*  Main Page Component                                                       */
-/* ========================================================================== */
-export default function YotpoPage() {
-  const [activeSection, setActiveSection] = useState("overview");
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [assistanceRequests, setAssistanceRequests] = useState<Array<{
+    id: string;
+    taskType: string;
+    agentName: string;
+    agentEmail: string;
+    assistanceNotes: string;
+    managerResponse?: string;
+    createdAt: string;
+    updatedAt: string;
+    status: string;
+  }>>([]);
+  const [newAssistanceCount, setNewAssistanceCount] = useState(0);
+  const [showNotification, setShowNotification] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // Auto logout hook
   useAutoLogout();
+
+  // Load overview data
+  const loadOverviewData = async () => {
+    setOverviewLoading(true);
+    try {
+      const response = await fetch('/api/yotpo/overview');
+      const data = await response.json();
+      if (data.success) {
+        setOverviewData(data.data);
+      }
+    } catch (error) {
+      console.error('Error loading overview data:', error);
+    } finally {
+      setOverviewLoading(false);
+    }
+  };
+
+  // Load assistance requests
+  const loadAssistanceRequests = async () => {
+    try {
+      const response = await fetch('/api/manager/assistance', { cache: 'no-store' });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          const yotpoRequests = data.requests.filter((req: any) => req.taskType === 'YOTPO');
+          setAssistanceRequests(yotpoRequests);
+          
+          const pendingRequests = yotpoRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
+          
+          if (pendingRequests.length > 0 && (newAssistanceCount === 0 || pendingRequests.length > newAssistanceCount)) {
+            setShowNotification(true);
+            setTimeout(() => setShowNotification(false), 5000);
+          }
+          
+          setNewAssistanceCount(pendingRequests.length);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading assistance requests:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadAssistanceRequests();
+    const interval = setInterval(loadAssistanceRequests, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Load overview data when overview section is active
+  useEffect(() => {
+    if (activeSection === "overview") {
+      loadOverviewData();
+    }
+  }, [activeSection]);
 
   // Check for password change requirement
   useEffect(() => {
@@ -599,71 +568,203 @@ export default function YotpoPage() {
     checkPasswordChange();
   }, []);
 
-  return (
-    <main className="min-h-screen p-4 md:p-8">
-      <AutoLogoutWarning />
+  const navigationItems = [
+    { id: "overview", label: "📊 Overview", description: "Yotpo metrics and progress" },
+    { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage Yotpo tasks" },
+    { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.filter(r => r.status === "ASSISTANCE_REQUIRED").length },
+    { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
+    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" }
+  ];
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-3xl">
-            ⭐
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white">Yotpo Dashboard</h1>
-            <p className="text-white/60 text-sm">Yotpo Task Management & Analytics</p>
+  return (
+    <main className="mx-auto max-w-[1400px] p-6 text-white dark:text-white light:text-slate-800 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
+      <header className="sticky top-0 z-30 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 dark:from-neutral-900 dark:via-neutral-900/95 dark:to-neutral-900/80 light:from-white light:via-white/95 light:to-white/80 backdrop-blur-sm border-b border-white/10 dark:border-white/10 light:border-slate-200 shadow-lg">
+        <div className="px-6 pt-4 pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <img 
+                src="/golden-companies-logo.jpeg" 
+                alt="Golden Companies" 
+                className="h-14 w-auto"
+              />
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight">⭐ Yotpo Dashboard</h1>
+                <p className="text-sm text-white/60">Yotpo Review & Feedback Task Management</p>
+              </div>
+            </div>
+            
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3">
+              {/* Settings Button */}
+              <button
+                onClick={() => setActiveSection("settings")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeSection === "settings"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                }`}
+                title="System Settings & Administration"
+              >
+                ⚙️ Settings
+              </button>
+              
+              {/* Theme Toggle */}
+              <ThemeToggle />
+              
+              {/* Session Display */}
+              <div className="px-3 py-1.5 bg-white/10 rounded-md text-sm text-white/80">
+                Session: 2h 0m
+              </div>
+              
+              {/* Extend Session */}
+              <SmallButton className="bg-blue-600 hover:bg-blue-700">
+                Extend
+              </SmallButton>
+              
+              {/* Switch to Agent */}
+              <SmallButton 
+                onClick={() => window.location.href = '/agent'}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                Switch to Agent
+              </SmallButton>
+              
+              {/* Logout */}
+              <SmallButton 
+                onClick={() => {
+                  localStorage.removeItem('agentEmail');
+                  localStorage.removeItem('currentRole');
+                  window.location.href = '/login';
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Logout
+              </SmallButton>
+            </div>
           </div>
         </div>
-
-        {/* Header Controls */}
-        <div className="flex items-center gap-3">
-          <button className="p-2 rounded-md bg-white/10 hover:bg-white/20 text-white">
-            <span className="text-lg">⚙️</span>
-          </button>
-          <ThemeToggle />
-          <SessionTimer />
+        
+        {/* Main Navigation */}
+        <div className="px-6 pb-3">
+          <nav className="flex flex-wrap gap-2">
+            {navigationItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveSection(item.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors relative ${
+                  activeSection === item.id
+                    ? "bg-blue-600 text-white"
+                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                }`}
+              >
+                {item.label}
+                {item.badge && item.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+          
+          {/* Dashboard Switcher */}
           <DashboardSwitcher />
+        </div>
+      </header>
+
+      {/* Auto Logout Warning - Handled by useAutoLogout hook */}
+
+      {/* Notification for new assistance requests */}
+      {showNotification && newAssistanceCount > 0 && (
+        <div className="fixed top-20 right-6 z-50 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-pulse">
+          <span className="text-lg">🆘</span>
+          <div>
+            <div className="font-semibold">New Assistance Request{newAssistanceCount > 1 ? 's' : ''}!</div>
+            <div className="text-sm opacity-90">{newAssistanceCount} agent{newAssistanceCount > 1 ? 's' : ''} need{newAssistanceCount === 1 ? 's' : ''} help</div>
+          </div>
           <button
             onClick={() => {
-              fetch('/api/auth/logout', { method: 'POST' })
-                .then(() => window.location.href = '/login');
+              setShowNotification(false);
+              setActiveSection("assistance");
             }}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white text-sm font-medium"
+            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm font-medium transition-colors"
           >
-            Logout
+            View
+          </button>
+          <button
+            onClick={() => setShowNotification(false)}
+            className="text-white/70 hover:text-white text-lg leading-none"
+          >
+            ×
           </button>
         </div>
-      </div>
-
-      {/* Navigation Tabs */}
-      <div className="flex gap-2 mb-8">
-        {['overview', 'tasks', 'analytics', 'settings'].map(section => (
-          <button
-            key={section}
-            onClick={() => setActiveSection(section)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeSection === section
-                ? 'bg-blue-600 text-white'
-                : 'bg-white/10 text-white/70 hover:bg-white/20'
-            }`}
-          >
-            {section === 'overview' && '📊 Overview'}
-            {section === 'tasks' && '📋 Task Management'}
-            {section === 'analytics' && '📈 Analytics'}
-            {section === 'settings' && '⚙️ Settings'}
-          </button>
-        ))}
-      </div>
+      )}
 
       {/* Content Sections */}
-      <div className="space-y-8">
-        {activeSection === 'overview' && (
+      <div className="space-y-8 mt-8">
+        {/* Overview Section */}
+        {activeSection === "overview" && (
           <div className="space-y-8">
-            <OverviewSection />
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold">⭐ Yotpo Overview</h3>
+                <SmallButton onClick={loadOverviewData} disabled={overviewLoading} className="bg-blue-600 hover:bg-blue-700">
+                  {overviewLoading ? "Loading..." : "Refresh"}
+                </SmallButton>
+              </div>
+              
+              {/* Progress Overview */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-lg p-4 border border-blue-500/30">
+                  <div className="text-blue-400 text-sm font-medium">Progress</div>
+                  <div className="text-2xl font-bold mt-1">{overviewData.progressPercentage}% done</div>
+                  <div className="mt-2">
+                    <ProgressBar value={overviewData.progressPercentage} />
+                  </div>
+                  <div className="text-xs text-white/40 mt-2">Pending {overviewData.pendingCount} • Completed {overviewData.totalCompletedCount}</div>
+                </div>
+                
+                <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 rounded-lg p-4 border border-yellow-500/30">
+                  <div className="text-yellow-400 text-sm font-medium">Pending</div>
+                  <div className="text-2xl font-bold mt-1">{overviewData.pendingCount}</div>
+                  <div className="text-xs text-white/40 mt-1">Awaiting assignment</div>
+                </div>
+                
+                <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 rounded-lg p-4 border border-green-500/30">
+                  <div className="text-green-400 text-sm font-medium">Completed Today</div>
+                  <div className="text-2xl font-bold mt-1">{overviewData.completedTodayCount}</div>
+                  <div className="text-xs text-white/40 mt-1">Finished today</div>
+                </div>
+                
+                <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-lg p-4 border border-purple-500/30">
+                  <div className="text-purple-400 text-sm font-medium">In Progress</div>
+                  <div className="text-2xl font-bold mt-1">{overviewData.inProgressCount}</div>
+                  <div className="text-xs text-white/40 mt-1">Currently being worked on</div>
+                </div>
+              </div>
+
+              {/* Last Import Info */}
+              {overviewData.lastImport && (
+                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                  <h4 className="text-md font-semibold mb-2">📥 Last Import</h4>
+                  <div className="text-sm text-white/80">
+                    <div>Date: {new Date(overviewData.lastImport.date).toLocaleString()}</div>
+                    <div>Imported: {overviewData.lastImport.imported} tasks</div>
+                    {overviewData.lastImport.duplicates > 0 && (
+                      <div className="text-yellow-400">Duplicates found: {overviewData.lastImport.duplicates}</div>
+                    )}
+                    {overviewData.lastImport.errors > 0 && (
+                      <div className="text-red-400">Errors: {overviewData.lastImport.errors}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </Card>
           </div>
         )}
 
-        {activeSection === 'tasks' && (
+        {/* Task Management Section */}
+        {activeSection === "tasks" && (
           <div className="space-y-8">
             <CsvImportSection />
             <AssignTasksSection />
@@ -671,12 +772,51 @@ export default function YotpoPage() {
           </div>
         )}
 
-        {activeSection === 'analytics' && (
-          <YotpoAnalytics />
+        {/* Assistance Requests Section */}
+        {activeSection === "assistance" && (
+          <div className="space-y-8">
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">🆘 Assistance Requests</h3>
+              <p className="text-white/60">Yotpo assistance requests will appear here</p>
+              {assistanceRequests.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  {assistanceRequests.map(req => (
+                    <div key={req.id} className="bg-white/5 rounded-lg p-4 border border-white/10">
+                      <div className="font-medium text-white">{req.agentName}</div>
+                      <div className="text-sm text-white/70 mt-2">{req.assistanceNotes}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-white/50">No assistance requests</div>
+              )}
+            </Card>
+          </div>
         )}
 
-        {activeSection === 'settings' && (
-          <UnifiedSettings />
+        {/* Agent Management Section */}
+        {activeSection === "agents" && (
+          <Card className="p-6">
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">👥</div>
+              <h3 className="text-xl font-semibold text-white mb-2">Agent Management</h3>
+              <p className="text-white/60">Agent progress tracking for Yotpo tasks coming soon</p>
+            </div>
+          </Card>
+        )}
+
+        {/* Analytics Section */}
+        {activeSection === "analytics" && (
+          <div className="space-y-8">
+            <YotpoAnalytics />
+          </div>
+        )}
+
+        {/* Settings Section */}
+        {activeSection === "settings" && (
+          <div className="space-y-8">
+            <UnifiedSettings />
+          </div>
         )}
       </div>
 
@@ -692,4 +832,3 @@ export default function YotpoPage() {
     </main>
   );
 }
-
