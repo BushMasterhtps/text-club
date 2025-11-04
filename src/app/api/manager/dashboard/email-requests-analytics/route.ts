@@ -281,7 +281,16 @@ export async function GET(request: NextRequest) {
             task.disposition && 
             task.disposition.toLowerCase().includes('unable to complete')
           ).length), 
-          percentage: 0 // Calculate if needed
+          percentage: (() => {
+            const comparisonUnable = comparisonPeriodTasks.filter(task => 
+              task.status === 'COMPLETED' && 
+              task.disposition && 
+              task.disposition.toLowerCase().includes('unable to complete')
+            ).length;
+            return comparisonUnable > 0 
+              ? ((currentUnableToComplete - comparisonUnable) / comparisonUnable) * 100 
+              : 0;
+          })()
         }
       },
       comparison: {

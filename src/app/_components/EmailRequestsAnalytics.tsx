@@ -257,13 +257,17 @@ export default function EmailRequestsAnalytics() {
     }
   };
 
-  const formatTrend = (trend: { change: number; percentage: number }) => {
-    if (trend.change > 0) {
-      return <span className="text-green-400 text-sm">↗ +{trend.percentage.toFixed(1)}%</span>;
-    } else if (trend.change < 0) {
+  const formatTrend = (trend: { change: number; percentage: number }, inverted = false) => {
+    // For inverted metrics (like "Unable to Complete"), decrease is good (green), increase is bad (red)
+    const isPositive = inverted ? trend.change < 0 : trend.change > 0;
+    const isNegative = inverted ? trend.change > 0 : trend.change < 0;
+    
+    if (isPositive) {
+      return <span className="text-green-400 text-sm">↗ {trend.change > 0 ? '+' : ''}{trend.percentage.toFixed(1)}%</span>;
+    } else if (isNegative) {
       return <span className="text-red-400 text-sm">↘ {trend.percentage.toFixed(1)}%</span>;
     } else {
-      return <span className="text-gray-400 text-sm">→ 0%</span>;
+      return <span className="text-gray-400 text-sm">→ 0.0%</span>;
     }
   };
 
@@ -400,7 +404,7 @@ export default function EmailRequestsAnalytics() {
             <div className="bg-gradient-to-br from-red-600 to-red-700 text-white rounded-lg p-6 text-center">
               <div className="text-3xl font-bold mb-2">{analytics.summary?.unableToComplete || 0}</div>
               <div className="text-sm opacity-90 mb-1">Unable to Complete</div>
-              {analytics.summary?.unableTrend ? formatTrend(analytics.summary.unableTrend) : <span className="text-gray-400 text-sm">→ 0%</span>}
+              {analytics.summary?.unableTrend ? formatTrend(analytics.summary.unableTrend, true) : <span className="text-gray-400 text-sm">→ 0%</span>}
             </div>
           </div>
 
