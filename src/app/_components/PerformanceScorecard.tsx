@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+type RankingMode = 'sprint' | 'lifetime-points' | 'task-day' | 'hybrid';
 
 interface Props {
   scorecardData: any;
@@ -14,6 +16,53 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
   const [expanded, setExpanded] = useState(false);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const [agentDetailData, setAgentDetailData] = useState<any>(null);
+  
+  // NEW: Ranking mode tabs
+  const [rankingMode, setRankingMode] = useState<RankingMode>('sprint');
+  const [sprintData, setSprintData] = useState<any>(null);
+  const [sprintLoading, setSprintLoading] = useState(false);
+  const [sprintHistory, setSprintHistory] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Load sprint data when component mounts or mode changes
+  useEffect(() => {
+    if (expanded && (rankingMode === 'sprint' || rankingMode === 'lifetime-points' || rankingMode === 'hybrid')) {
+      loadSprintData();
+    }
+    if (expanded) {
+      loadSprintHistory();
+    }
+  }, [expanded, rankingMode]);
+
+  const loadSprintData = async () => {
+    setSprintLoading(true);
+    try {
+      const mode = rankingMode === 'lifetime-points' ? 'lifetime' : 'current';
+      const res = await fetch(`/api/manager/analytics/sprint-rankings?mode=${mode}`);
+      const data = await res.json();
+      
+      if (data.success) {
+        setSprintData(data);
+      }
+    } catch (error) {
+      console.error('Error loading sprint data:', error);
+    } finally {
+      setSprintLoading(false);
+    }
+  };
+
+  const loadSprintHistory = async () => {
+    try {
+      const res = await fetch('/api/manager/analytics/sprint-history?limit=10');
+      const data = await res.json();
+      
+      if (data.success) {
+        setSprintHistory(data.history);
+      }
+    } catch (error) {
+      console.error('Error loading sprint history:', error);
+    }
+  };
 
   const handleAgentClick = async (agentId: string) => {
     if (expandedAgentId === agentId) {
@@ -60,11 +109,283 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
 
       {expanded && (
         <div className="mt-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-white/60">Loading scorecard...</div>
+          {/* Ranking Mode Tabs */}
+          <div className="flex items-center gap-2 mb-6 bg-white/5 rounded-lg p-1">
+            <button
+              onClick={() => setRankingMode('sprint')}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                rankingMode === 'sprint'
+                  ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg'
+                  : 'bg-transparent text-white/60 hover:text-white/80 hover:bg-white/5'
+              }`}
+            >
+              🔥 Current Sprint
+            </button>
+            <button
+              onClick={() => setRankingMode('lifetime-points')}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                rankingMode === 'lifetime-points'
+                  ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg'
+                  : 'bg-transparent text-white/60 hover:text-white/80 hover:bg-white/5'
+              }`}
+            >
+              ⭐ Lifetime Points
+            </button>
+            <button
+              onClick={() => setRankingMode('task-day')}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                rankingMode === 'task-day'
+                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
+                  : 'bg-transparent text-white/60 hover:text-white/80 hover:bg-white/5'
+              }`}
+            >
+              📊 Task Volume
+            </button>
+            <button
+              onClick={() => setRankingMode('hybrid')}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                rankingMode === 'hybrid'
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                  : 'bg-transparent text-white/60 hover:text-white/80 hover:bg-white/5'
+              }`}
+            >
+              🎯 Hybrid (30/70)
+            </button>
+          </div>
+
+          {/* Last Sprint Winner Banner (if available) */}
+          {sprintHistory.length > 0 && sprintHistory[0]?.champion && !sprintHistory[0].isCurrent && (
+            <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-lg p-3 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🏆</span>
+                  <div>
+                    <div className="text-sm font-semibold text-yellow-300">
+                      Last Sprint Champion: {sprintHistory[0].champion.name}
+                    </div>
+                    <div className="text-xs text-white/60">
+                      {sprintHistory[0].period} • {sprintHistory[0].champion.ptsPerDay.toFixed(1)} pts/day
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          ) : scorecardData?.agents?.length > 0 ? (
+          )}
+
+          {(loading || sprintLoading) ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-white/60">Loading {rankingMode === 'sprint' ? 'sprint rankings' : 'scorecard'}...</div>
+            </div>
+          ) : (rankingMode === 'sprint' || rankingMode === 'lifetime-points' || rankingMode === 'hybrid') && sprintData?.rankings?.competitive ? (
+            /* SPRINT / LIFETIME / HYBRID RANKINGS */
+            <div className="space-y-4">
+              {/* Sprint Info Banner (for sprint mode only) */}
+              {rankingMode === 'sprint' && sprintData.sprint && (
+                <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/30 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-lg font-bold text-orange-300">
+                        🔥 {sprintData.sprint.period}
+                      </div>
+                      <div className="text-sm text-white/70 mt-1">
+                        Sprint #{sprintData.sprint.number} • Day {sprintData.sprint.daysElapsed} of 14
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-orange-300">
+                        {sprintData.sprint.daysRemaining}
+                      </div>
+                      <div className="text-xs text-white/60">days remaining</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 bg-white/10 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-orange-400 to-red-400"
+                      style={{ width: `${(sprintData.sprint.daysElapsed / 14) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Ranking Description */}
+              <div className="bg-white/5 rounded-lg p-4">
+                <div className="text-sm text-white/80">
+                  {rankingMode === 'sprint' && (
+                    <>
+                      <strong>Sprint Rankings:</strong> Weighted points per day worked in current 14-day sprint • Min 3 days worked to qualify
+                    </>
+                  )}
+                  {rankingMode === 'lifetime-points' && (
+                    <>
+                      <strong>Lifetime Rankings:</strong> Career weighted points per day worked • Min 20 tasks to qualify
+                    </>
+                  )}
+                  {rankingMode === 'hybrid' && (
+                    <>
+                      <strong>Hybrid Rankings:</strong> 30% Task Volume + 70% Weighted Complexity • Min 3 days worked to qualify
+                    </>
+                  )}
+                </div>
+                <div className="text-xs text-white/50 mt-2">
+                  {sprintData.rankings.competitive.length} ranked • {sprintData.rankings.unqualified?.length || 0} unqualified • {sprintData.rankings.seniors.length} seniors (tracked separately)
+                </div>
+              </div>
+
+              {/* Competitive Rankings */}
+              <div className="space-y-3">
+                {sprintData.rankings.competitive.map((agent: any) => {
+                  // Determine which rank to display based on mode
+                  const displayRank = rankingMode === 'sprint' ? agent.rankByPtsPerDay :
+                                    rankingMode === 'lifetime-points' ? agent.lifetimeRank :
+                                    rankingMode === 'hybrid' ? agent.rankByHybrid :
+                                    agent.rankByTasksPerDay;
+                  
+                  const displayScore = rankingMode === 'sprint' ? agent.weightedDailyAvg :
+                                      rankingMode === 'lifetime-points' ? agent.weightedDailyAvg :
+                                      rankingMode === 'hybrid' ? agent.hybridScore :
+                                      agent.tasksPerDay;
+
+                  const rankColor = displayRank === 1 ? 'text-yellow-300' : 
+                                   displayRank === 2 ? 'text-gray-300' :
+                                   displayRank === 3 ? 'text-orange-400' :
+                                   'text-white/70';
+
+                  return (
+                    <div key={agent.id} className="bg-gradient-to-r from-white/[0.03] to-white/[0.01] rounded-xl p-4 border border-white/10 hover:border-white/20 transition-all">
+                      <div className="flex items-center gap-4">
+                        {/* Rank Badge */}
+                        <div className={`flex items-center justify-center w-12 h-12 rounded-full font-bold text-lg ${
+                          displayRank === 1 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-yellow-900' :
+                          displayRank === 2 ? 'bg-gradient-to-br from-gray-300 to-gray-500 text-gray-900' :
+                          displayRank === 3 ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-orange-900' :
+                          'bg-white/10 text-white/70'
+                        }`}>
+                          #{displayRank}
+                        </div>
+
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-white text-lg">{agent.name}</span>
+                            {agent.isTopThree && (
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                displayRank === 1 ? 'bg-green-500/20 text-green-300 border border-green-500/50' :
+                                'bg-blue-500/20 text-blue-300 border border-blue-500/50'
+                              }`}>
+                                {agent.tier} {agent.isChampion ? '🏆' : '⭐'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-white/50">{agent.email}</div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className={`text-2xl font-bold ${rankColor}`}>
+                            {rankingMode === 'hybrid' ? displayScore.toFixed(1) : Math.round(displayScore)}
+                          </div>
+                          <div className="text-xs text-white/50">
+                            {rankingMode === 'hybrid' ? 'Score' : rankingMode === 'task-day' ? 'Tasks/Day' : 'Pts/Day'}
+                          </div>
+                          <div className="text-xs text-white/40">
+                            Top {agent.percentile}%
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick Stats */}
+                      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="bg-white/5 rounded-lg p-2">
+                          <div className="text-white/50 text-xs">📦 Total</div>
+                          <div className="text-white font-semibold">{agent.totalCompleted}</div>
+                          <div className="text-xs text-white/40">{agent.tasksCompleted} portal + {agent.trelloCompleted} Trello</div>
+                        </div>
+                        <div className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 rounded-lg p-2 border border-yellow-500/30">
+                          <div className="text-yellow-300/90 text-xs">⭐ Points</div>
+                          <div className="text-white font-bold">{agent.weightedPoints.toFixed(1)}</div>
+                          <div className="text-xs text-yellow-300/60">{agent.weightedDailyAvg.toFixed(1)} pts/day</div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-2">
+                          <div className="text-white/50 text-xs">⏱️ Avg Time</div>
+                          <div className="text-white font-semibold">{Math.floor(agent.avgHandleTimeSec / 60)}m {agent.avgHandleTimeSec % 60}s</div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-2">
+                          <div className="text-white/50 text-xs">📅 Days Worked</div>
+                          <div className="text-white font-semibold">{agent.daysWorked}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Senior Agents (Non-Competitive) */}
+              {sprintData.rankings.seniors?.length > 0 && (
+                <div className="mt-6">
+                  <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/20">
+                    <h3 className="text-sm font-semibold text-blue-300 mb-3">👔 Senior Agent Contributions (Non-Competitive)</h3>
+                    <div className="text-xs text-white/60 mb-3">
+                      These agents support the team during high-volume periods. Stats tracked for visibility, not ranked competitively.
+                    </div>
+                    <div className="space-y-2">
+                      {sprintData.rankings.seniors.map((agent: any) => (
+                        <div key={agent.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                          <div>
+                            <div className="font-medium text-white">{agent.name}</div>
+                            <div className="text-xs text-white/50">{agent.email}</div>
+                          </div>
+                          <div className="text-right text-sm">
+                            <div className="text-white/80">{agent.weightedPoints.toFixed(1)} pts • {agent.totalCompleted} tasks</div>
+                            <div className="text-xs text-white/50">{agent.daysWorked} days • {agent.weightedDailyAvg.toFixed(1)} pts/day</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sprint History (for sprint mode) */}
+              {rankingMode === 'sprint' && sprintHistory.length > 0 && (
+                <div className="mt-6">
+                  <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-white">📜 Sprint History</h3>
+                      <button
+                        onClick={() => setShowHistory(!showHistory)}
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        {showHistory ? 'Hide' : 'Show'} Past Sprints
+                      </button>
+                    </div>
+                    
+                    {showHistory && (
+                      <div className="space-y-2 mt-3">
+                        {sprintHistory.slice(0, 6).map((sprint: any) => (
+                          <div key={sprint.sprintNumber} className="flex items-center justify-between bg-white/5 rounded-lg p-3 border border-white/10">
+                            <div>
+                              <div className="text-sm font-medium text-white">
+                                {sprint.isCurrent ? '🔥 Current Sprint' : `Sprint #${sprint.sprintNumber}`}
+                              </div>
+                              <div className="text-xs text-white/50">{sprint.period}</div>
+                            </div>
+                            {sprint.champion ? (
+                              <div className="text-right">
+                                <div className="text-sm text-yellow-300 font-semibold flex items-center gap-1">
+                                  🏆 {sprint.champion.name}
+                                </div>
+                                <div className="text-xs text-white/50">{sprint.champion.ptsPerDay.toFixed(1)} pts/day</div>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-white/40">In Progress...</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (rankingMode === 'task-day' && scorecardData?.agents?.length > 0) ? (
             <div className="space-y-4">
               {/* Scorecard Header Info */}
               <div className="bg-white/5 rounded-lg p-4 space-y-2">
