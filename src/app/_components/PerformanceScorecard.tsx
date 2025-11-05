@@ -254,9 +254,44 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                     </>
                   )}
                   {rankingMode === 'hybrid' && (
-                    <>
-                      <strong>Hybrid Rankings:</strong> 30% Task Volume + 70% Weighted Complexity • Min 3 days worked to qualify
-                    </>
+                    <div className="flex items-center gap-2">
+                      <span>
+                        <strong>Hybrid Rankings:</strong> 30% Task Volume + 70% Weighted Complexity • Min 3 days worked to qualify
+                      </span>
+                      <div className="relative group">
+                        <span className="text-blue-400 cursor-help text-xs">ℹ️</span>
+                        <div className="absolute left-0 top-6 w-80 bg-gray-900 border border-blue-500/50 rounded-lg p-4 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                          <div className="text-xs text-white space-y-2">
+                            <div className="font-semibold text-blue-300 mb-2">📊 How Hybrid Score Works:</div>
+                            <div>
+                              <strong className="text-white/90">Step 1:</strong> Normalize both metrics to 0-100 scale:
+                              <div className="ml-3 mt-1 text-white/70">
+                                • Volume: (Agent's tasks/day ÷ Top performer's tasks/day) × 100
+                                <br/>
+                                • Complexity: (Agent's pts/day ÷ Top performer's pts/day) × 100
+                              </div>
+                            </div>
+                            <div>
+                              <strong className="text-white/90">Step 2:</strong> Combine with 30/70 weighting:
+                              <div className="ml-3 mt-1 text-white/70">
+                                Hybrid Score = (Volume × 0.30) + (Complexity × 0.70)
+                              </div>
+                            </div>
+                            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-2 mt-2">
+                              <strong className="text-yellow-300">Example:</strong>
+                              <div className="text-white/70 mt-1">
+                                Agent with 90% volume + 95% complexity:
+                                <br/>
+                                Score = (90 × 0.30) + (95 × 0.70) = 27 + 66.5 = <strong className="text-yellow-300">93.5</strong>
+                              </div>
+                            </div>
+                            <div className="text-white/60 text-[10px] mt-2">
+                              💡 Higher score = better balance of productivity and task difficulty
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
                 <div className="text-xs text-white/50 mt-2">
@@ -311,8 +346,8 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                           <div className="text-sm text-white/50">{agent.email}</div>
                         </div>
 
-                        <div className="text-right">
-                          <div className={`text-2xl font-bold ${rankColor}`}>
+                        <div className="text-right relative group">
+                          <div className={`text-2xl font-bold ${rankColor} cursor-help`}>
                             {rankingMode === 'hybrid' ? displayScore.toFixed(1) : Math.round(displayScore)}
                           </div>
                           <div className="text-xs text-white/50">
@@ -321,6 +356,27 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                           <div className="text-xs text-white/40">
                             Top {agent.percentile}%
                           </div>
+                          
+                          {/* Tooltip for Hybrid Score */}
+                          {rankingMode === 'hybrid' && (
+                            <div className="absolute right-0 top-0 w-64 bg-gray-900 border border-purple-500/50 rounded-lg p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                              <div className="text-xs text-white space-y-1">
+                                <div className="font-semibold text-purple-300 mb-2">🎯 {agent.name}'s Hybrid Score</div>
+                                <div className="text-white/70">
+                                  <strong>Volume:</strong> {agent.tasksPerDay.toFixed(1)} tasks/day
+                                  <br/>
+                                  <strong>Complexity:</strong> {agent.weightedDailyAvg.toFixed(1)} pts/day
+                                </div>
+                                <div className="border-t border-white/10 pt-2 mt-2">
+                                  <div className="text-white/60">
+                                    30% × Volume + 70% × Complexity
+                                    <br/>
+                                    = <strong className="text-purple-300">{displayScore.toFixed(1)} Score</strong>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -345,6 +401,90 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                           <div className="text-white font-semibold">{agent.daysWorked}</div>
                         </div>
                       </div>
+
+                      {/* Detailed Task Type Breakdown */}
+                      {agent.breakdown && Object.keys(agent.breakdown).length > 0 && (
+                        <div className="mt-4">
+                          <button
+                            onClick={() => {
+                              if (expandedAgentId === agent.id) {
+                                setExpandedAgentId(null);
+                              } else {
+                                setExpandedAgentId(agent.id);
+                              }
+                            }}
+                            className="text-xs text-blue-400 hover:text-blue-300 underline"
+                          >
+                            {expandedAgentId === agent.id ? '▲ Hide detailed breakdown' : '▼ Click to view detailed breakdown'}
+                          </button>
+
+                          {expandedAgentId === agent.id && (
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {Object.entries(agent.breakdown).map(([taskType, data]: [string, any]) => {
+                                const percentage = agent.totalCompleted > 0 
+                                  ? Math.round((data.count / agent.totalCompleted) * 100) 
+                                  : 0;
+                                
+                                const taskTypeColors: Record<string, string> = {
+                                  TEXT_CLUB: 'from-blue-500/20 to-blue-600/20 border-blue-500/30',
+                                  WOD_IVCS: 'from-red-500/20 to-red-600/20 border-red-500/30',
+                                  EMAIL_REQUESTS: 'from-green-500/20 to-green-600/20 border-green-500/30',
+                                  YOTPO: 'from-yellow-500/20 to-yellow-600/20 border-yellow-500/30',
+                                  HOLDS: 'from-orange-500/20 to-orange-600/20 border-orange-500/30',
+                                  TRELLO: 'from-purple-500/20 to-purple-600/20 border-purple-500/30',
+                                  STANDALONE_REFUNDS: 'from-pink-500/20 to-pink-600/20 border-pink-500/30'
+                                };
+
+                                const colorClass = taskTypeColors[taskType] || 'from-white/10 to-white/20 border-white/20';
+
+                                return (
+                                  <div key={taskType} className={`bg-gradient-to-br ${colorClass} rounded-lg p-3 border`}>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="font-semibold text-white text-sm">
+                                        {taskType === 'TRELLO' ? '📊 Trello' :
+                                         taskType === 'TEXT_CLUB' ? '📱 Text Club' :
+                                         taskType === 'WOD_IVCS' ? '📦 WOD/IVCS' :
+                                         taskType === 'EMAIL_REQUESTS' ? '📧 Email Requests' :
+                                         taskType === 'YOTPO' ? '⭐ Yotpo' :
+                                         taskType === 'HOLDS' ? '🚧 Holds' :
+                                         taskType.replace('_', ' ')}
+                                      </div>
+                                      <div className="text-xs text-white/60">{percentage}%</div>
+                                    </div>
+                                    <div className="space-y-1 text-xs">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-white/70">Completed:</span>
+                                        <span className="font-semibold text-white">{data.count}</span>
+                                      </div>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-white/70">Weighted:</span>
+                                        <span className="font-semibold text-yellow-300">{data.weightedPoints.toFixed(1)} pts</span>
+                                      </div>
+                                      {data.avgSec > 0 && (
+                                        <>
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-white/70">Avg Time:</span>
+                                            <span className="font-semibold text-white">{Math.floor(data.avgSec / 60)}m {data.avgSec % 60}s</span>
+                                          </div>
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-white/70">Total Time:</span>
+                                            <span className="font-semibold text-white">{Math.floor(data.totalSec / 60)} min</span>
+                                          </div>
+                                        </>
+                                      )}
+                                      {taskType === 'TRELLO' && (
+                                        <div className="text-[10px] text-purple-300/70 mt-1">
+                                          From Power BI imports • 5.0 pts each
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

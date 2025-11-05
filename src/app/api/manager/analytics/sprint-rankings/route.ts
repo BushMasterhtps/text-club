@@ -161,18 +161,42 @@ export async function GET(request: NextRequest) {
       const trelloCount = trelloCompletions.reduce((sum, t) => sum + t.cardsCount, 0);
       const trelloWorkDates = new Set(trelloCompletions.map(t => t.date.toISOString().split('T')[0]));
 
-      // Calculate weighted points
+      // Calculate weighted points and task type breakdown
       let totalWeightedPoints = 0;
       let totalHandleTimeSec = 0;
+      const breakdown: Record<string, { count: number; weightedPoints: number; avgSec: number; totalSec: number }> = {};
 
       for (const task of portalTasks) {
         const weight = getTaskWeight(task.taskType, task.disposition);
         totalWeightedPoints += weight;
         totalHandleTimeSec += task.durationSec || 0;
+
+        // Track breakdown by task type
+        if (!breakdown[task.taskType]) {
+          breakdown[task.taskType] = { count: 0, weightedPoints: 0, avgSec: 0, totalSec: 0 };
+        }
+        breakdown[task.taskType].count++;
+        breakdown[task.taskType].weightedPoints += weight;
+        breakdown[task.taskType].totalSec += task.durationSec || 0;
+      }
+
+      // Calculate averages for each task type
+      for (const taskType in breakdown) {
+        if (breakdown[taskType].count > 0) {
+          breakdown[taskType].avgSec = Math.round(breakdown[taskType].totalSec / breakdown[taskType].count);
+        }
       }
 
       // Add Trello points (5.0 pts each)
       totalWeightedPoints += trelloCount * 5.0;
+      if (trelloCount > 0) {
+        breakdown.TRELLO = {
+          count: trelloCount,
+          weightedPoints: trelloCount * 5.0,
+          avgSec: 0, // No handle time for Trello
+          totalSec: 0
+        };
+      }
 
       // Calculate days worked
       const portalWorkDates = new Set(
@@ -216,6 +240,7 @@ export async function GET(request: NextRequest) {
         percentile: 0,
         avgHandleTimeSec,
         totalTimeSec: totalHandleTimeSec,
+        breakdown, // Add task type breakdown
         isSenior,
         isChampion: false,
         isTopThree: false,
