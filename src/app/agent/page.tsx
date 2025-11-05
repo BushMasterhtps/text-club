@@ -1730,10 +1730,14 @@ function TaskCard({
                   <option value="" disabled className="text-white/40 text-xs">— Information —</option>
                   <option value="Information – Tracking or delivery status provided">📍 Tracking or delivery status</option>
                   <option value="Information – Product usage or transition tips sent">💡 Product usage/transition tips</option>
+                  <option value="Information – Product Information sent">ℹ️ Product Information sent</option>
                   <option value="Information – Shelf life or storage details sent">🗓️ Shelf life or storage details</option>
                   <option value="Information – Store locator or sourcing information sent">🏪 Store locator/sourcing info</option>
                   <option value="Information – Medical or veterinary guidance provided">🏥 Medical/veterinary guidance</option>
                   <option value="Information – Unfeasible request or information not available">🚫 Unfeasible request</option>
+                  <option value="" disabled className="text-white/40 text-xs">— AER —</option>
+                  <option value="AER – Serious AER - Refund Issued">🚨 Serious AER - Refund Issued</option>
+                  <option value="AER – None Serious AER - RA Issued">⚠️ None Serious AER - RA Issued</option>
                   <option value="" disabled className="text-white/40 text-xs">— Other —</option>
                   <option value="Return Authorization – Created and sent to customer">📋 Return authorization sent</option>
                   <option value="Verification – Requested LOT number and photos from customer">📸 LOT number/photos requested</option>
