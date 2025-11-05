@@ -10,6 +10,7 @@ import ThemeToggle from '@/app/_components/ThemeToggle';
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import YotpoAnalytics from '@/app/_components/YotpoAnalytics';
 import { AssistanceRequestsSection } from '@/app/_components/AssistanceRequestsSection';
+import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
 
 // Utility functions
 function clamp(value: number | null | undefined): number {
@@ -184,7 +185,12 @@ function CsvImportSection() {
 /*  Pending Tasks Section                                                     */
 /* ========================================================================== */
 function PendingTasksSection() {
+  const PAGE_SIZE = 50;
+
   const [tasks, setTasks] = useState<YotpoTask[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil((total || 0) / PAGE_SIZE));
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState('pending');
   const [assignedFilter, setAssignedFilter] = useState('unassigned');
@@ -192,12 +198,22 @@ function PendingTasksSection() {
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<Agent[]>([]);
   const [assignLoading, setAssignLoading] = useState(false);
+  
+  // Sorting
+  const [sort, setSort] = useState<{ key: string; direction: SortDirection } | null>(null);
+  
+  // View Modal
+  const [viewTask, setViewTask] = useState<YotpoTask | null>(null);
 
-  const loadTasks = async () => {
+  const fetchPage = async (p: number) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.append('status', statusFilter);
+      
+      // Pagination
+      params.append('take', String(PAGE_SIZE));
+      params.append('skip', String((p - 1) * PAGE_SIZE));
       
       // Handle assigned filter - can be 'all', 'unassigned', or specific agent ID
       if (assignedFilter !== 'all') {
@@ -211,11 +227,20 @@ function PendingTasksSection() {
       
       if (searchQuery) params.append('search', searchQuery);
 
+      // Sorting
+      if (sort?.key && sort.direction) {
+        params.append('sortBy', sort.key);
+        params.append('sortOrder', sort.direction);
+      }
+
       const res = await fetch(`/api/yotpo/queues?${params.toString()}`);
       const data = await res.json();
       
       if (data.success) {
         setTasks(data.tasks);
+        setTotal(data.total || data.tasks.length);
+        setPage(p);
+        setSelectedTasks(new Set()); // Clear selection on page change
       }
     } catch (error) {
       console.error('Error loading Yotpo tasks:', error);
@@ -224,10 +249,19 @@ function PendingTasksSection() {
     }
   };
 
+  const loadTasks = () => fetchPage(1);
+
   useEffect(() => {
     loadTasks();
     loadAgents();
-  }, [statusFilter, assignedFilter]);
+  }, [statusFilter, assignedFilter, sort]);
+
+  const handleSort = (key: string, direction: SortDirection) => {
+    setSort(direction ? { key, direction } : null);
+  };
+
+  const onPrev = () => page > 1 && fetchPage(page - 1);
+  const onNext = () => page < totalPages && fetchPage(page + 1);
 
   const loadAgents = async () => {
     try {
@@ -273,7 +307,7 @@ function PendingTasksSection() {
       if (data.success) {
         alert(`✓ Assigned ${data.results.assigned} tasks successfully`);
         setSelectedTasks(new Set());
-        loadTasks();
+        fetchPage(page); // Refresh current page
       } else {
         alert(`✗ Error: ${data.error}`);
       }
@@ -308,7 +342,7 @@ function PendingTasksSection() {
       
       alert(`✓ Unassigned ${selectedTasks.size} tasks`);
       setSelectedTasks(new Set());
-      loadTasks();
+      fetchPage(page); // Refresh current page
     } catch (error) {
       console.error('Unassign error:', error);
       alert('✗ Failed to unassign tasks');
@@ -320,7 +354,10 @@ function PendingTasksSection() {
   return (
     <Card className="p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <H2>📁 Pending Yotpo Request Tasks</H2>
+        <div>
+          <H2>📁 Pending Yotpo Request Tasks</H2>
+          <div className="text-xs text-white/60 mt-1">{total} total</div>
+        </div>
         <SmallButton onClick={loadTasks} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
           {loading ? 'Refreshing...' : 'Refresh'}
         </SmallButton>
@@ -431,17 +468,37 @@ function PendingTasksSection() {
                   setSelectedTasks(new Set());
                 }
               }} /></th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Date Submitted</th>
-              <th className="px-3 py-2">PR/Yotpo</th>
-              <th className="px-3 py-2">Customer Name</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Order Date</th>
-              <th className="px-3 py-2">Product</th>
-              <th className="px-3 py-2">Issue Topic</th>
-              <th className="px-3 py-2">Review Date</th>
+              <SortableHeader sortKey="status" currentSort={sort} onSort={handleSort}>
+                Status
+              </SortableHeader>
+              <SortableHeader sortKey="dateSubmitted" currentSort={sort} onSort={handleSort}>
+                Date Submitted
+              </SortableHeader>
+              <SortableHeader sortKey="prOrYotpo" currentSort={sort} onSort={handleSort}>
+                PR/Yotpo
+              </SortableHeader>
+              <SortableHeader sortKey="customerName" currentSort={sort} onSort={handleSort}>
+                Customer Name
+              </SortableHeader>
+              <SortableHeader sortKey="email" currentSort={sort} onSort={handleSort}>
+                Email
+              </SortableHeader>
+              <SortableHeader sortKey="orderDate" currentSort={sort} onSort={handleSort}>
+                Order Date
+              </SortableHeader>
+              <SortableHeader sortKey="product" currentSort={sort} onSort={handleSort}>
+                Product
+              </SortableHeader>
+              <SortableHeader sortKey="issueTopic" currentSort={sort} onSort={handleSort}>
+                Issue Topic
+              </SortableHeader>
+              <SortableHeader sortKey="reviewDate" currentSort={sort} onSort={handleSort}>
+                Review Date
+              </SortableHeader>
               <th className="px-3 py-2 min-w-64">Review</th>
-              <th className="px-3 py-2">Assigned To</th>
+              <SortableHeader sortKey="assignedTo" currentSort={sort} onSort={handleSort}>
+                Assigned To
+              </SortableHeader>
               <th className="px-3 py-2">Actions</th>
             </tr>
           </thead>
@@ -493,7 +550,10 @@ function PendingTasksSection() {
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex gap-2">
-                      <SmallButton className="bg-blue-600 hover:bg-blue-700 text-xs">
+                      <SmallButton 
+                        onClick={() => setViewTask(task)}
+                        className="bg-blue-600 hover:bg-blue-700 text-xs"
+                      >
                         View
                       </SmallButton>
                       <select
@@ -522,10 +582,144 @@ function PendingTasksSection() {
         </table>
       </div>
 
-      <div className="text-sm text-white/60">
-        Showing {tasks.length} task{tasks.length !== 1 ? 's' : ''}
-        {selectedTasks.size > 0 && ` • ${selectedTasks.size} selected`}
+      {/* Pagination */}
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-white/60">
+          Page {page} of {totalPages} · Showing {tasks.length} of {total}
+          {selectedTasks.size > 0 && ` · ${selectedTasks.size} selected`}
+        </div>
+        <div className="flex items-center gap-2">
+          <SmallButton onClick={onPrev} disabled={loading || page <= 1}>Prev</SmallButton>
+          
+          {/* Page Selection Dropdown */}
+          <select
+            value={page}
+            onChange={(e) => fetchPage(Number(e.target.value))}
+            disabled={loading || totalPages <= 1}
+            className="border-none rounded-lg px-2 py-1 bg-white/10 text-white text-xs ring-1 ring-white/10 focus:outline-none min-w-[60px]"
+            title="Jump to page"
+          >
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          
+          <SmallButton onClick={onNext} disabled={loading || page >= totalPages}>Next</SmallButton>
+        </div>
       </div>
+
+      {/* View Task Modal */}
+      {viewTask && (
+        <div 
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          onClick={() => setViewTask(null)}
+        >
+          <div 
+            className="bg-neutral-900 rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">📋 Yotpo Task Details</h3>
+              <SmallButton onClick={() => setViewTask(null)} className="bg-white/10 hover:bg-white/20">
+                ✕ Close
+              </SmallButton>
+            </div>
+
+            <div className="space-y-4">
+              {/* Status */}
+              <div>
+                <div className="text-xs text-white/50 mb-1">Status</div>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  viewTask.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-300' :
+                  viewTask.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-300' :
+                  'bg-green-500/20 text-green-300'
+                }`}>
+                  {viewTask.status}
+                </span>
+              </div>
+
+              {/* Customer Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-white/50 mb-1">Customer Name</div>
+                  <div className="text-white">{viewTask.customerName || '—'}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-white/50 mb-1">Email</div>
+                  <div className="text-white text-sm">{viewTask.email || '—'}</div>
+                </div>
+              </div>
+
+              {/* Product & Issue */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-white/50 mb-1">Product</div>
+                  <div className="text-white">{viewTask.product || '—'}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-white/50 mb-1">Issue Topic</div>
+                  <div className="text-white">{viewTask.issueTopic || '—'}</div>
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <div className="text-xs text-white/50 mb-1">Date Submitted</div>
+                  <div className="text-white text-sm">{fmtDate(viewTask.dateSubmitted)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-white/50 mb-1">Order Date</div>
+                  <div className="text-white text-sm">{fmtDate(viewTask.orderDate)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-white/50 mb-1">Review Date</div>
+                  <div className="text-white text-sm">{fmtDate(viewTask.reviewDate)}</div>
+                </div>
+              </div>
+
+              {/* Review Text */}
+              <div>
+                <div className="text-xs text-white/50 mb-1">Review</div>
+                <div className="text-white bg-white/5 rounded-lg p-3 max-h-48 overflow-y-auto border border-white/10">
+                  {viewTask.review || 'No review text provided'}
+                </div>
+              </div>
+
+              {/* SF Order Link */}
+              {viewTask.sfOrderLink && (
+                <div>
+                  <div className="text-xs text-white/50 mb-1">Salesforce Order</div>
+                  <a 
+                    href={viewTask.sfOrderLink} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 underline text-sm"
+                  >
+                    {viewTask.sfOrderLink}
+                  </a>
+                </div>
+              )}
+
+              {/* Assigned To */}
+              <div>
+                <div className="text-xs text-white/50 mb-1">Assigned To</div>
+                <div className="text-white">
+                  {viewTask.assignedTo ? `${viewTask.assignedTo.name} (${viewTask.assignedTo.email})` : 'Unassigned'}
+                </div>
+              </div>
+
+              {/* PR/Yotpo */}
+              <div>
+                <div className="text-xs text-white/50 mb-1">PR/Yotpo</div>
+                <div className="text-white">{viewTask.prOrYotpo || '—'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

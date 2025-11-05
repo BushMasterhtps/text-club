@@ -13,6 +13,14 @@ export async function GET(request: NextRequest) {
     const assignedFilter = url.searchParams.get('assigned') || 'all';
     const assignedToId = url.searchParams.get('assignedTo'); // Specific agent ID
     const searchQuery = url.searchParams.get('search') || '';
+    
+    // Pagination
+    const take = parseInt(url.searchParams.get('take') || '1000', 10);
+    const skip = parseInt(url.searchParams.get('skip') || '0', 10);
+    
+    // Sorting
+    const sortBy = url.searchParams.get('sortBy') || 'dateSubmitted';
+    const sortOrder = url.searchParams.get('sortOrder') || 'asc';
 
     // Build where clause
     const where: any = {
@@ -45,7 +53,32 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // Fetch tasks
+    // Build orderBy clause based on sortBy parameter
+    const buildOrderBy = () => {
+      const direction = sortOrder === 'desc' ? 'desc' : 'asc';
+      
+      // Map frontend sortKeys to database fields
+      const fieldMap: Record<string, any> = {
+        status: { status: direction },
+        dateSubmitted: { yotpoDateSubmitted: direction },
+        prOrYotpo: { yotpoPrOrYotpo: direction },
+        customerName: { yotpoCustomerName: direction },
+        email: { yotpoEmail: direction },
+        orderDate: { yotpoOrderDate: direction },
+        product: { yotpoProduct: direction },
+        issueTopic: { yotpoIssueTopic: direction },
+        reviewDate: { yotpoReviewDate: direction },
+        assignedTo: { assignedTo: { name: direction } },
+        createdAt: { createdAt: direction }
+      };
+
+      return fieldMap[sortBy] || { yotpoDateSubmitted: 'asc' };
+    };
+
+    // Get total count for pagination
+    const total = await prisma.task.count({ where });
+
+    // Fetch tasks with pagination and sorting
     const tasks = await prisma.task.findMany({
       where,
       include: {
@@ -57,14 +90,14 @@ export async function GET(request: NextRequest) {
           }
         }
       },
-      orderBy: [
-        { yotpoDateSubmitted: 'asc' }, // Oldest to newest by Date Submitted
-        { createdAt: 'asc' }           // Fallback to creation date
-      ]
+      orderBy: buildOrderBy(),
+      take,
+      skip
     });
 
     return NextResponse.json({
       success: true,
+      total,
       tasks: tasks.map(task => ({
         id: task.id,
         status: task.status,
