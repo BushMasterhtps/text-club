@@ -1,0 +1,374 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { 
+  getCurrentSprint, 
+  getSprintDates, 
+  formatSprintPeriod,
+  isSeniorAgent 
+} from '@/lib/sprint-utils';
+import { getTaskWeight } from '@/lib/task-weights';
+
+/**
+ * Sprint Rankings API
+ * Calculates and returns rankings for all 4 systems:
+ * 1. Task/Day (Volume)
+ * 2. Lifetime Weighted Points
+ * 3. 2-Week Sprint Points
+ * 4. Hybrid 30/70
+ */
+
+const MINIMUM_TASKS_FOR_RANKING = 20; // Lifetime minimum
+const MINIMUM_DAYS_FOR_SPRINT = 3; // Must work 3 days in sprint to qualify
+
+interface AgentScorecard {
+  id: string;
+  name: string;
+  email: string;
+  
+  // Performance
+  tasksCompleted: number;
+  trelloCompleted: number;
+  totalCompleted: number;
+  daysWorked: number;
+  
+  // Scores
+  weightedPoints: number;
+  weightedDailyAvg: number;
+  tasksPerDay: number;
+  hybridScore: number;
+  
+  // Rankings
+  rankByPtsPerDay: number;
+  rankByTasksPerDay: number;
+  rankByHybrid: number;
+  lifetimeRank: number;
+  
+  // Metadata
+  tier: string;
+  percentile: number;
+  avgHandleTimeSec: number;
+  totalTimeSec: number;
+  
+  // Flags
+  isSenior: boolean;
+  isChampion: boolean;
+  isTopThree: boolean;
+  qualified: boolean;
+}
+
+function calculateTier(percentile: number): string {
+  if (percentile >= 90) return 'Elite';
+  if (percentile >= 75) return 'High Performer';
+  if (percentile >= 50) return 'Solid Contributor';
+  if (percentile >= 25) return 'Developing';
+  return 'Needs Improvement';
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const mode = searchParams.get('mode') || 'current'; // 'current' or 'sprint-{number}'
+    const sprintNumber = mode.startsWith('sprint-') 
+      ? parseInt(mode.split('-')[1]) 
+      : getCurrentSprint().number;
+
+    const { start: sprintStart, end: sprintEnd } = getSprintDates(sprintNumber);
+    const isCurrentSprint = sprintNumber === getCurrentSprint().number;
+
+    // Get all agents (including seniors for tracking)
+    const allAgents = await prisma.user.findMany({
+      where: {
+        role: { in: ['AGENT', 'MANAGER_AGENT'] },
+        isLive: true
+      },
+      select: { id: true, name: true, email: true }
+    });
+
+    const agentScorecards: AgentScorecard[] = [];
+
+    for (const agent of allAgents) {
+      const isSenior = isSeniorAgent(agent.email);
+
+      // Get portal tasks completed in sprint (or lifetime)
+      const portalTasks = await prisma.task.findMany({
+        where: {
+          assignedToId: agent.id,
+          status: 'COMPLETED',
+          endTime: mode === 'lifetime' 
+            ? { not: null } 
+            : { gte: sprintStart, lte: sprintEnd },
+          disposition: { not: null },
+          durationSec: { not: null }
+        },
+        select: {
+          disposition: true,
+          durationSec: true,
+          endTime: true,
+          taskType: true
+        }
+      });
+
+      // Get Trello completions in sprint (or lifetime)
+      // Handle 1-day lag: Only count Trello up to yesterday
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(23, 59, 59, 999);
+
+      const trelloEndDate = isCurrentSprint && mode !== 'lifetime'
+        ? (yesterday < sprintEnd ? yesterday : sprintEnd)
+        : (mode === 'lifetime' ? yesterday : sprintEnd);
+
+      const trelloCompletions = await prisma.trelloCompletion.findMany({
+        where: {
+          agentId: agent.id,
+          date: mode === 'lifetime'
+            ? { lte: trelloEndDate }
+            : { gte: sprintStart, lte: trelloEndDate }
+        },
+        select: {
+          cardsCount: true,
+          date: true
+        }
+      });
+
+      const trelloCount = trelloCompletions.reduce((sum, t) => sum + t.cardsCount, 0);
+      const trelloWorkDates = new Set(trelloCompletions.map(t => t.date.toISOString().split('T')[0]));
+
+      // Calculate weighted points
+      let totalWeightedPoints = 0;
+      let totalHandleTimeSec = 0;
+
+      for (const task of portalTasks) {
+        const weight = getTaskWeight(task.taskType, task.disposition);
+        totalWeightedPoints += weight;
+        totalHandleTimeSec += task.durationSec || 0;
+      }
+
+      // Add Trello points (5.0 pts each)
+      totalWeightedPoints += trelloCount * 5.0;
+
+      // Calculate days worked
+      const portalWorkDates = new Set(
+        portalTasks
+          .filter(t => t.endTime)
+          .map(t => t.endTime!.toISOString().split('T')[0])
+      );
+
+      const allWorkDates = new Set([...portalWorkDates, ...trelloWorkDates]);
+      const daysWorked = allWorkDates.size;
+
+      // Calculate metrics
+      const totalCompleted = portalTasks.length + trelloCount;
+      const avgHandleTimeSec = portalTasks.length > 0 
+        ? Math.round(totalHandleTimeSec / portalTasks.length) 
+        : 0;
+
+      // Skip if no work done
+      if (totalCompleted === 0 || daysWorked === 0) continue;
+
+      const weightedDailyAvg = totalWeightedPoints / daysWorked;
+      const tasksPerDay = totalCompleted / daysWorked;
+
+      agentScorecards.push({
+        id: agent.id,
+        name: agent.name || agent.email,
+        email: agent.email,
+        tasksCompleted: portalTasks.length,
+        trelloCompleted: trelloCount,
+        totalCompleted,
+        daysWorked,
+        weightedPoints: totalWeightedPoints,
+        weightedDailyAvg,
+        tasksPerDay,
+        hybridScore: 0, // Will calculate after normalization
+        rankByPtsPerDay: 0,
+        rankByTasksPerDay: 0,
+        rankByHybrid: 0,
+        lifetimeRank: 0,
+        tier: '',
+        percentile: 0,
+        avgHandleTimeSec,
+        totalTimeSec: totalHandleTimeSec,
+        isSenior,
+        isChampion: false,
+        isTopThree: false,
+        qualified: mode === 'lifetime' 
+          ? totalCompleted >= MINIMUM_TASKS_FOR_RANKING
+          : daysWorked >= MINIMUM_DAYS_FOR_SPRINT
+      });
+    }
+
+    // Separate competitive agents from seniors
+    const competitiveAgents = agentScorecards.filter(a => !a.isSenior && a.qualified);
+    const seniorAgents = agentScorecards.filter(a => a.isSenior);
+    const unqualified = agentScorecards.filter(a => !a.isSenior && !a.qualified);
+
+    // Calculate hybrid scores (30% volume + 70% complexity)
+    // Normalize both metrics to 0-100 scale before combining
+    if (competitiveAgents.length > 0) {
+      const maxTasksPerDay = Math.max(...competitiveAgents.map(a => a.tasksPerDay));
+      const maxPtsPerDay = Math.max(...competitiveAgents.map(a => a.weightedDailyAvg));
+
+      for (const agent of competitiveAgents) {
+        const volumeScore = (agent.tasksPerDay / maxTasksPerDay) * 100;
+        const complexityScore = (agent.weightedDailyAvg / maxPtsPerDay) * 100;
+        
+        agent.hybridScore = (volumeScore * 0.30) + (complexityScore * 0.70);
+      }
+    }
+
+    // RANK BY WEIGHTED POINTS/DAY
+    competitiveAgents.sort((a, b) => b.weightedDailyAvg - a.weightedDailyAvg);
+    competitiveAgents.forEach((agent, index) => {
+      agent.rankByPtsPerDay = index + 1;
+      agent.percentile = Math.round(((competitiveAgents.length - index) / competitiveAgents.length) * 100);
+      agent.tier = calculateTier(agent.percentile);
+    });
+
+    // RANK BY TASKS/DAY  
+    const tasksSorted = [...competitiveAgents].sort((a, b) => b.tasksPerDay - a.tasksPerDay);
+    tasksSorted.forEach((agent, index) => {
+      const original = competitiveAgents.find(a => a.id === agent.id)!;
+      original.rankByTasksPerDay = index + 1;
+    });
+
+    // RANK BY HYBRID SCORE
+    const hybridSorted = [...competitiveAgents].sort((a, b) => b.hybridScore - a.hybridScore);
+    hybridSorted.forEach((agent, index) => {
+      const original = competitiveAgents.find(a => a.id === agent.id)!;
+      original.rankByHybrid = index + 1;
+    });
+
+    // LIFETIME RANKING (separate calculation if not in lifetime mode)
+    if (mode !== 'lifetime') {
+      // For sprint view, we need to recalculate lifetime rankings separately
+      // For now, use ptsPerDay rank as lifetime rank
+      // TODO: Could optimize by caching lifetime rankings
+      competitiveAgents.forEach(agent => {
+        agent.lifetimeRank = agent.rankByPtsPerDay; // Placeholder
+      });
+    } else {
+      competitiveAgents.forEach(agent => {
+        agent.lifetimeRank = agent.rankByPtsPerDay;
+      });
+    }
+
+    // Mark champions and top 3 (for sprint mode)
+    if (mode !== 'lifetime' && competitiveAgents.length > 0) {
+      const champion = competitiveAgents.find(a => a.rankByPtsPerDay === 1);
+      if (champion) {
+        champion.isChampion = true;
+        champion.isTopThree = true;
+      }
+
+      const top3 = competitiveAgents.filter(a => a.rankByPtsPerDay <= 3);
+      top3.forEach(a => a.isTopThree = true);
+    }
+
+    // If this is the current sprint AND it just ended, save to database
+    if (isCurrentSprint && new Date() > sprintEnd) {
+      // Sprint just ended - archive results
+      await saveSprintResults(sprintNumber, [...competitiveAgents, ...seniorAgents]);
+    }
+
+    return NextResponse.json({
+      success: true,
+      sprint: {
+        number: sprintNumber,
+        start: sprintStart.toISOString(),
+        end: sprintEnd.toISOString(),
+        period: formatSprintPeriod(sprintNumber),
+        isCurrent: isCurrentSprint,
+        daysElapsed: isCurrentSprint ? getCurrentSprint().daysElapsed : SPRINT_DURATION_DAYS,
+        daysRemaining: isCurrentSprint ? getCurrentSprint().daysRemaining : 0
+      },
+      rankings: {
+        competitive: competitiveAgents,
+        seniors: seniorAgents,
+        unqualified
+      }
+    });
+
+  } catch (error) {
+    console.error('Sprint Rankings API Error:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to calculate sprint rankings'
+    }, { status: 500 });
+  }
+}
+
+/**
+ * Save sprint results to database for permanent history
+ */
+async function saveSprintResults(sprintNumber: number, agents: AgentScorecard[]) {
+  try {
+    const { start, end } = getSprintDates(sprintNumber);
+
+    // Upsert results for each agent
+    for (const agent of agents) {
+      await prisma.sprintRanking.upsert({
+        where: {
+          sprintNumber_agentId: {
+            sprintNumber,
+            agentId: agent.id
+          }
+        },
+        update: {
+          // Update in case we recalculate
+          tasksCompleted: agent.tasksCompleted,
+          trelloCompleted: agent.trelloCompleted,
+          totalCompleted: agent.totalCompleted,
+          daysWorked: agent.daysWorked,
+          weightedPoints: agent.weightedPoints,
+          ptsPerDay: agent.weightedDailyAvg,
+          tasksPerDay: agent.tasksPerDay,
+          hybridScore: agent.hybridScore,
+          rankByPtsPerDay: agent.rankByPtsPerDay,
+          rankByTasksPerDay: agent.rankByTasksPerDay,
+          rankByHybrid: agent.rankByHybrid,
+          tier: agent.tier,
+          percentile: agent.percentile,
+          isChampion: agent.isChampion,
+          isTopThree: agent.isTopThree,
+          isSenior: agent.isSenior,
+          avgHandleTimeSec: agent.avgHandleTimeSec,
+          totalTimeSec: agent.totalTimeSec,
+          updatedAt: new Date()
+        },
+        create: {
+          id: `sprint-${sprintNumber}-${agent.id}`,
+          sprintNumber,
+          sprintStart: start,
+          sprintEnd: end,
+          agentId: agent.id,
+          agentName: agent.name,
+          agentEmail: agent.email,
+          tasksCompleted: agent.tasksCompleted,
+          trelloCompleted: agent.trelloCompleted,
+          totalCompleted: agent.totalCompleted,
+          daysWorked: agent.daysWorked,
+          weightedPoints: agent.weightedPoints,
+          ptsPerDay: agent.weightedDailyAvg,
+          tasksPerDay: agent.tasksPerDay,
+          hybridScore: agent.hybridScore,
+          rankByPtsPerDay: agent.rankByPtsPerDay,
+          rankByTasksPerDay: agent.rankByTasksPerDay,
+          rankByHybrid: agent.rankByHybrid,
+          tier: agent.tier,
+          percentile: agent.percentile,
+          isChampion: agent.isChampion,
+          isTopThree: agent.isTopThree,
+          isSenior: agent.isSenior,
+          avgHandleTimeSec: agent.avgHandleTimeSec,
+          totalTimeSec: agent.totalTimeSec
+        }
+      });
+    }
+
+    console.log(`✅ Saved sprint ${sprintNumber} results for ${agents.length} agents`);
+  } catch (error) {
+    console.error(`Failed to save sprint ${sprintNumber} results:`, error);
+  }
+}
+

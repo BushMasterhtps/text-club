@@ -442,3 +442,55 @@ model TrelloCompletion {
   @@index([date])
   @@index([agentId])
 }
+
+model SprintRanking {
+  id              String   @id @default(cuid())
+  
+  // Sprint identification
+  sprintNumber    Int      // Sequential sprint number (1, 2, 3...)
+  sprintStart     DateTime // Start date of sprint (00:00:00)
+  sprintEnd       DateTime // End date of sprint (23:59:59)
+  
+  // Agent info
+  agentId         String
+  agentName       String
+  agentEmail      String
+  
+  // Sprint performance
+  tasksCompleted  Int      // Portal tasks completed in sprint
+  trelloCompleted Int      // Trello cards completed in sprint
+  totalCompleted  Int      // Total = portal + trello
+  daysWorked      Int      // Days agent worked in sprint
+  
+  // Points and rankings (all 4 systems)
+  weightedPoints  Float    // Total weighted points in sprint
+  ptsPerDay       Float    // weightedPoints ÷ daysWorked
+  tasksPerDay     Float    // totalCompleted ÷ daysWorked
+  hybridScore     Float    // 30% tasksPerDay + 70% ptsPerDay (normalized)
+  
+  // Rankings (1 = best)
+  rankByPtsPerDay      Int  // Rank by weighted points/day
+  rankByTasksPerDay    Int  // Rank by tasks/day
+  rankByHybrid         Int  // Rank by hybrid score
+  
+  // Metadata
+  tier            String   // Elite, High Performer, etc.
+  percentile      Int      // 0-100 (92 = top 92%)
+  isChampion      Boolean  @default(false) // True if #1 in sprint
+  isTopThree      Boolean  @default(false) // True if top 3
+  isSenior        Boolean  @default(false) // True if senior agent (non-competitive)
+  
+  // Stats
+  avgHandleTimeSec Int     // Average handle time
+  totalTimeSec     Int     // Total time spent
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([sprintNumber, agentId]) // One record per agent per sprint
+  @@index([sprintNumber])
+  @@index([agentId])
+  @@index([sprintStart])
+  @@index([rankByPtsPerDay])
+  @@index([rankByHybrid])
+}
