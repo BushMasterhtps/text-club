@@ -67,13 +67,40 @@ function calculateTier(percentile: number): string {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const mode = searchParams.get('mode') || 'current'; // 'current' or 'sprint-{number}'
-    const sprintNumber = mode.startsWith('sprint-') 
-      ? parseInt(mode.split('-')[1]) 
-      : getCurrentSprint().number;
+    const mode = searchParams.get('mode') || 'current'; // 'current', 'lifetime', 'sprint-{number}', or 'custom'
+    
+    // Custom date range support
+    const customStart = searchParams.get('startDate');
+    const customEnd = searchParams.get('endDate');
+    
+    let sprintStart: Date;
+    let sprintEnd: Date;
+    let isCurrentSprint = false;
+    let sprintNumber = 0;
 
-    const { start: sprintStart, end: sprintEnd } = getSprintDates(sprintNumber);
-    const isCurrentSprint = sprintNumber === getCurrentSprint().number;
+    if (mode === 'custom' && customStart && customEnd) {
+      // Use custom date range
+      sprintStart = new Date(customStart + 'T00:00:00.000Z');
+      sprintEnd = new Date(customEnd + 'T23:59:59.999Z');
+      isCurrentSprint = false;
+      sprintNumber = 0; // Custom ranges don't have sprint numbers
+    } else if (mode === 'lifetime') {
+      // Lifetime mode - use all time
+      sprintStart = new Date('2020-01-01T00:00:00.000Z');
+      sprintEnd = new Date();
+      isCurrentSprint = false;
+      sprintNumber = 0;
+    } else {
+      // Sprint mode (current or specific sprint number)
+      sprintNumber = mode.startsWith('sprint-') 
+        ? parseInt(mode.split('-')[1]) 
+        : getCurrentSprint().number;
+      
+      const dates = getSprintDates(sprintNumber);
+      sprintStart = dates.start;
+      sprintEnd = dates.end;
+      isCurrentSprint = sprintNumber === getCurrentSprint().number;
+    }
 
     // Get all agents (including seniors for tracking)
     const allAgents = await prisma.user.findMany({
@@ -273,7 +300,14 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      sprint: {
+      mode: mode === 'custom' ? 'custom' : mode === 'lifetime' ? 'lifetime' : 'sprint',
+      dateRange: {
+        start: sprintStart.toISOString(),
+        end: sprintEnd.toISOString(),
+        isCustom: mode === 'custom',
+        isLifetime: mode === 'lifetime'
+      },
+      sprint: sprintNumber > 0 ? {
         number: sprintNumber,
         start: sprintStart.toISOString(),
         end: sprintEnd.toISOString(),
@@ -281,7 +315,7 @@ export async function GET(request: NextRequest) {
         isCurrent: isCurrentSprint,
         daysElapsed: isCurrentSprint ? getCurrentSprint().daysElapsed : SPRINT_DURATION_DAYS,
         daysRemaining: isCurrentSprint ? getCurrentSprint().daysRemaining : 0
-      },
+      } : null,
       rankings: {
         competitive: competitiveAgents,
         seniors: seniorAgents,

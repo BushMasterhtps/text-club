@@ -10,21 +10,22 @@ interface Props {
   loading: boolean;
   onRefresh: () => void;
   onLoadAgentDetail: (agentId: string) => Promise<any>;
+  dateRange?: { start: string; end: string }; // Custom date range from parent
 }
 
-export default function PerformanceScorecard({ scorecardData, loading, onRefresh, onLoadAgentDetail }: Props) {
+export default function PerformanceScorecard({ scorecardData, loading, onRefresh, onLoadAgentDetail, dateRange }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const [agentDetailData, setAgentDetailData] = useState<any>(null);
   
-  // NEW: Ranking mode tabs
-  const [rankingMode, setRankingMode] = useState<RankingMode>('sprint');
+  // NEW: Ranking mode tabs (default to hybrid 30/70)
+  const [rankingMode, setRankingMode] = useState<RankingMode>('hybrid');
   const [sprintData, setSprintData] = useState<any>(null);
   const [sprintLoading, setSprintLoading] = useState(false);
   const [sprintHistory, setSprintHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
-  // Load sprint data when component mounts or mode changes
+  // Load sprint data when component mounts, mode changes, or date range changes
   useEffect(() => {
     if (expanded && (rankingMode === 'sprint' || rankingMode === 'lifetime-points' || rankingMode === 'hybrid')) {
       loadSprintData();
@@ -32,13 +33,27 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
     if (expanded) {
       loadSprintHistory();
     }
-  }, [expanded, rankingMode]);
+  }, [expanded, rankingMode, dateRange?.start, dateRange?.end]);
 
   const loadSprintData = async () => {
     setSprintLoading(true);
     try {
-      const mode = rankingMode === 'lifetime-points' ? 'lifetime' : 'current';
-      const res = await fetch(`/api/manager/analytics/sprint-rankings?mode=${mode}`);
+      let url = '/api/manager/analytics/sprint-rankings';
+      
+      // Determine mode and add date range if custom
+      if (rankingMode === 'lifetime-points') {
+        url += '?mode=lifetime';
+      } else if (rankingMode === 'sprint') {
+        url += '?mode=current';
+      } else if (dateRange?.start && dateRange?.end) {
+        // Use custom date range for hybrid and task-day modes
+        url += `?mode=custom&startDate=${dateRange.start}&endDate=${dateRange.end}`;
+      } else {
+        // Fallback to current sprint if no date range
+        url += '?mode=current';
+      }
+      
+      const res = await fetch(url);
       const data = await res.json();
       
       if (data.success) {
@@ -179,31 +194,49 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
           ) : (rankingMode === 'sprint' || rankingMode === 'lifetime-points' || rankingMode === 'hybrid') && sprintData?.rankings?.competitive ? (
             /* SPRINT / LIFETIME / HYBRID RANKINGS */
             <div className="space-y-4">
-              {/* Sprint Info Banner (for sprint mode only) */}
-              {rankingMode === 'sprint' && sprintData.sprint && (
-                <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/30 rounded-lg p-4">
+              {/* Date Range Info Banner (for custom ranges or sprint) */}
+              {sprintData.dateRange && (
+                <div className={`rounded-lg p-4 ${
+                  rankingMode === 'sprint' && sprintData.sprint
+                    ? 'bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/30'
+                    : 'bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30'
+                }`}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-lg font-bold text-orange-300">
-                        🔥 {sprintData.sprint.period}
+                      <div className="text-lg font-bold text-white">
+                        {rankingMode === 'sprint' && sprintData.sprint ? (
+                          <>🔥 {sprintData.sprint.period}</>
+                        ) : (
+                          <>📅 {new Date(sprintData.dateRange.start).toLocaleDateString()} - {new Date(sprintData.dateRange.end).toLocaleDateString()}</>
+                        )}
                       </div>
                       <div className="text-sm text-white/70 mt-1">
-                        Sprint #{sprintData.sprint.number} • Day {sprintData.sprint.daysElapsed} of 14
+                        {rankingMode === 'sprint' && sprintData.sprint ? (
+                          <>Sprint #{sprintData.sprint.number} • Day {sprintData.sprint.daysElapsed} of 14</>
+                        ) : sprintData.dateRange.isLifetime ? (
+                          <>Career Rankings (All Time)</>
+                        ) : (
+                          <>Custom Period Rankings</>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-orange-300">
-                        {sprintData.sprint.daysRemaining}
+                    {rankingMode === 'sprint' && sprintData.sprint && (
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-orange-300">
+                          {sprintData.sprint.daysRemaining}
+                        </div>
+                        <div className="text-xs text-white/60">days remaining</div>
                       </div>
-                      <div className="text-xs text-white/60">days remaining</div>
+                    )}
+                  </div>
+                  {rankingMode === 'sprint' && sprintData.sprint && (
+                    <div className="mt-3 bg-white/10 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-orange-400 to-red-400"
+                        style={{ width: `${(sprintData.sprint.daysElapsed / 14) * 100}%` }}
+                      />
                     </div>
-                  </div>
-                  <div className="mt-3 bg-white/10 rounded-full h-2 overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-orange-400 to-red-400"
-                      style={{ width: `${(sprintData.sprint.daysElapsed / 14) * 100}%` }}
-                    />
-                  </div>
+                  )}
                 </div>
               )}
 

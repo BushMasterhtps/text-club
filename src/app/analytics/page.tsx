@@ -500,6 +500,9 @@ export default function AnalyticsPage() {
           loading={loadingScorecard}
           onRefresh={loadScorecardData}
           onLoadAgentDetail={loadAgentDetail}
+          dateRange={selectedDateRange === 'custom' && customStartDate && customEndDate 
+            ? { start: customStartDate, end: customEndDate }
+            : undefined}
         />
 
         {/* Overview Stats */}
