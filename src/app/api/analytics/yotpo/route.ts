@@ -143,6 +143,7 @@ export async function GET(request: NextRequest) {
         endTime: true,
         durationSec: true,
         yotpoSfOrderLink: true,
+        sfCaseNumber: true, // Add SF Case Number for analytics
         assignedTo: {
           select: { name: true, email: true }
         }
@@ -198,7 +199,8 @@ export async function GET(request: NextRequest) {
         endTime: task.endTime?.toISOString() || '',
         durationSec: task.durationSec || 0,
         disposition: task.disposition || 'Unknown',
-        sfOrderLink: task.yotpoSfOrderLink || ''
+        sfOrderLink: task.yotpoSfOrderLink || '',
+        sfCaseNumber: task.sfCaseNumber || '' // Add SF Case Number
       }))
     };
 

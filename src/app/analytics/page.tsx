@@ -898,6 +898,8 @@ export default function AnalyticsPage() {
                 <option value="TEXT_CLUB">Text Club</option>
                 <option value="WOD_IVCS">WOD/IVCS</option>
                 <option value="EMAIL_REQUESTS">Email Requests</option>
+                <option value="YOTPO">Yotpo</option>
+                <option value="HOLDS">Holds</option>
                 <option value="STANDALONE_REFUNDS">Standalone Refunds</option>
               </select>
             </div>

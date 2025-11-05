@@ -816,9 +816,32 @@ function AssignTasksSection() {
                 <div className="text-xs text-white/50">{agent.email}</div>
               </div>
             </div>
-            <div className="text-xs text-white/60 flex gap-3">
-              <span>Email: {agent.emailRequests?.assigned || 0}</span>
-              <span>Total: {agent.emailRequests?.inProgress || 0}</span>
+            <div className="text-xs text-white/60 flex flex-wrap gap-2">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                Text Club: {agent.textClubCount || 0}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-red-400"></span>
+                WOD/IVCS: {agent.wodIvcsCount || 0}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-400"></span>
+                Email: {agent.emailRequestCount || 0}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                Yotpo: {agent.yotpoCount || 0}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                Holds: {agent.holdsCount || 0}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                Refunds: {agent.refundCount || 0}
+              </span>
+              <span className="font-semibold">Total: {agent.openCount || 0}</span>
             </div>
           </div>
         ))}

@@ -43,6 +43,7 @@ interface YotpoAnalyticsData {
     durationSec: number;
     disposition: string;
     sfOrderLink: string;
+    sfCaseNumber: string;
   }>;
 }
 
@@ -65,7 +66,7 @@ export default function YotpoAnalytics() {
   const downloadCSV = () => {
     if (!data?.rawData) return;
 
-    const headers = ['Brand', 'Customer Name', 'Email', 'Product', 'Issue Topic', 'Agent', 'Start Time', 'End Time', 'Duration', 'Disposition', 'SF Order Link'];
+    const headers = ['Brand', 'Customer Name', 'Email', 'Product', 'Issue Topic', 'Agent', 'Start Time', 'End Time', 'Duration', 'Disposition', 'SF Case #', 'SF Order Link'];
     const rows = data.rawData.map(task => [
       task.brand,
       task.customerName,
@@ -77,6 +78,7 @@ export default function YotpoAnalytics() {
       new Date(task.endTime).toLocaleString(),
       formatDuration(task.durationSec),
       task.disposition,
+      task.sfCaseNumber || '—',
       task.sfOrderLink
     ]);
 
@@ -355,13 +357,14 @@ export default function YotpoAnalytics() {
                       <th className="px-3 py-2">End Time</th>
                       <th className="px-3 py-2">Duration</th>
                       <th className="px-3 py-2">Disposition</th>
+                      <th className="px-3 py-2">SF Case #</th>
                       <th className="px-3 py-2">SF Order</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {data.rawData.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-3 py-8 text-center text-white/40">
+                        <td colSpan={9} className="px-3 py-8 text-center text-white/40">
                           No data found for selected criteria
                         </td>
                       </tr>
@@ -395,6 +398,13 @@ export default function YotpoAnalytics() {
                             <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-900/30 text-green-300 border border-green-700 text-xs">
                               {task.disposition}
                             </span>
+                          </td>
+                          <td className="px-3 py-2 text-sm font-mono">
+                            {task.sfCaseNumber ? (
+                              <span className="text-blue-300">{task.sfCaseNumber}</span>
+                            ) : (
+                              <span className="text-white/40">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             {task.sfOrderLink ? (

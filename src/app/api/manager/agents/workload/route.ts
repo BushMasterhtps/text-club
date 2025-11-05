@@ -16,58 +16,60 @@ export async function GET() {
       },
     });
 
-    // Get workload breakdown for each agent
-    const workloadData = await Promise.all(
-      agents.map(async (agent) => {
-        const [wodIvcsCount, textClubCount, emailRequestsCount, standaloneRefundsCount] = await Promise.all([
-          // WOD/IVCS tasks (IN_PROGRESS only)
-          prisma.task.count({
-            where: {
-              assignedToId: agent.id,
-              taskType: 'WOD_IVCS',
-              status: 'IN_PROGRESS',
-            },
-          }),
-          // Text Club tasks (IN_PROGRESS only)
-          prisma.task.count({
-            where: {
-              assignedToId: agent.id,
-              taskType: 'TEXT_CLUB',
-              status: 'IN_PROGRESS',
-            },
-          }),
-          // Email Requests tasks (IN_PROGRESS only)
-          prisma.task.count({
-            where: {
-              assignedToId: agent.id,
-              taskType: 'EMAIL_REQUESTS',
-              status: 'IN_PROGRESS',
-            },
-          }),
-          // Standalone Refunds tasks (IN_PROGRESS only)
-          prisma.task.count({
-            where: {
-              assignedToId: agent.id,
-              taskType: 'STANDALONE_REFUNDS',
-              status: 'IN_PROGRESS',
-            },
-          }),
-        ]);
+    // OPTIMIZED: Get all workloads in a single query using groupBy
+    const taskCounts = await prisma.task.groupBy({
+      by: ['assignedToId', 'taskType'],
+      where: {
+        assignedToId: { not: null },
+        status: 'IN_PROGRESS'
+      },
+      _count: {
+        id: true
+      }
+    });
 
-        return {
-          agentId: agent.id,
-          agentName: agent.name,
-          agentEmail: agent.email,
-          workload: {
-            wodIvcs: wodIvcsCount,
-            textClub: textClubCount,
-            emailRequests: emailRequestsCount,
-            standaloneRefunds: standaloneRefundsCount,
-            total: wodIvcsCount + textClubCount + emailRequestsCount + standaloneRefundsCount,
-          },
-        };
-      })
-    );
+    // Build a map of agent task counts for fast lookup
+    const taskCountMap = new Map<string, Map<string, number>>();
+    
+    for (const group of taskCounts) {
+      if (!group.assignedToId) continue;
+      
+      if (!taskCountMap.has(group.assignedToId)) {
+        taskCountMap.set(group.assignedToId, new Map());
+      }
+      
+      const agentMap = taskCountMap.get(group.assignedToId)!;
+      agentMap.set(group.taskType, group._count.id);
+    }
+
+    // Map agents with their workload breakdowns
+    const workloadData = agents.map((agent) => {
+      const agentCounts = taskCountMap.get(agent.id);
+      
+      const wodIvcsCount = agentCounts?.get('WOD_IVCS') ?? 0;
+      const textClubCount = agentCounts?.get('TEXT_CLUB') ?? 0;
+      const emailRequestsCount = agentCounts?.get('EMAIL_REQUESTS') ?? 0;
+      const standaloneRefundsCount = agentCounts?.get('STANDALONE_REFUNDS') ?? 0;
+      const yotpoCount = agentCounts?.get('YOTPO') ?? 0;
+      const holdsCount = agentCounts?.get('HOLDS') ?? 0;
+      
+      const total = wodIvcsCount + textClubCount + emailRequestsCount + standaloneRefundsCount + yotpoCount + holdsCount;
+
+      return {
+        agentId: agent.id,
+        agentName: agent.name,
+        agentEmail: agent.email,
+        workload: {
+          wodIvcs: wodIvcsCount,
+          textClub: textClubCount,
+          emailRequests: emailRequestsCount,
+          standaloneRefunds: standaloneRefundsCount,
+          yotpo: yotpoCount,
+          holds: holdsCount,
+          total,
+        },
+      };
+    });
 
     return NextResponse.json({
       success: true,

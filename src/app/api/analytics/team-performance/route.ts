@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     for (const agent of agents) {
       // Get completed tasks for each task type
-      const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'STANDALONE_REFUNDS'];
+      const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'YOTPO', 'HOLDS', 'STANDALONE_REFUNDS'];
       
       for (const taskType of taskTypes) {
         // Count completed tasks (including sent-back tasks)

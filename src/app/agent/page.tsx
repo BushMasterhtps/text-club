@@ -1837,13 +1837,50 @@ function TaskCard({
                 />
               </div>
             )}
+
+            {/* SF Case # field for Yotpo (required for most dispositions, with 4 exceptions) */}
+            {task.taskType === "YOTPO" && disposition && (() => {
+              // Exceptions: These dispositions DO NOT require SF Case Number
+              const noSfRequired = [
+                "Information – Unfeasible request or information not available",
+                "Duplicate Request – No new action required",
+                "Previously Assisted – Issue already resolved or refund previously issued",
+                "No Match – No valid account or order located"
+              ];
+              
+              return !noSfRequired.includes(disposition);
+            })() && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/80">
+                  SF Case # <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={sfCaseNumber}
+                  onChange={(e) => setSfCaseNumber(e.target.value)}
+                  placeholder="Enter Salesforce Case Number"
+                  className="w-full rounded-md bg-white/10 text-white placeholder-white/40 px-3 py-2 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            )}
             <PrimaryButton 
               onClick={handleComplete}
               disabled={!disposition || 
                 (disposition === "Answered in SF" && !sfCaseNumber.trim()) ||
                 (task.taskType === "EMAIL_REQUESTS" && disposition === "Completed" && !sfCaseNumber.trim()) ||
                 (task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete" && !subDisposition) ||
-                (task.taskType === "WOD_IVCS" && (disposition === "Completed" || disposition === "Unable to Complete") && !subDisposition)
+                (task.taskType === "WOD_IVCS" && (disposition === "Completed" || disposition === "Unable to Complete") && !subDisposition) ||
+                (task.taskType === "YOTPO" && (() => {
+                  // Yotpo: SF Case Number required for all dispositions EXCEPT these 4
+                  const noSfRequired = [
+                    "Information – Unfeasible request or information not available",
+                    "Duplicate Request – No new action required",
+                    "Previously Assisted – Issue already resolved or refund previously issued",
+                    "No Match – No valid account or order located"
+                  ];
+                  return !noSfRequired.includes(disposition) && !sfCaseNumber.trim();
+                })())
               }
               className="w-full"
             >

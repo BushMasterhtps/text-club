@@ -55,7 +55,9 @@ export async function GET() {
       const textClubCount = agentCounts?.get('TEXT_CLUB') ?? 0;
       const wodIvcsCount = agentCounts?.get('WOD_IVCS') ?? 0;
       const refundCount = agentCounts?.get('STANDALONE_REFUNDS') ?? 0;
-      const openCount = emailRequestCount + textClubCount + wodIvcsCount + refundCount;
+      const yotpoCount = agentCounts?.get('YOTPO') ?? 0;
+      const holdsCount = agentCounts?.get('HOLDS') ?? 0;
+      const openCount = emailRequestCount + textClubCount + wodIvcsCount + refundCount + yotpoCount + holdsCount;
 
       return {
         id: a.id,
@@ -66,6 +68,8 @@ export async function GET() {
         textClubCount,
         wodIvcsCount,
         refundCount,
+        yotpoCount,
+        holdsCount,
         isLive: a.isLive ?? false,
         lastSeen: a.lastSeen ?? null,
       };
