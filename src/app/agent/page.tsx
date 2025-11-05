@@ -199,7 +199,7 @@ export default function AgentPage() {
   // Personal Scorecard state
   const [scorecardData, setScorecardData] = useState<any>(null);
   const [loadingScorecard, setLoadingScorecard] = useState(false);
-  const [showScorecard, setShowScorecard] = useState(false);
+  const [showScorecard, setShowScorecard] = useState(true); // Expanded by default
 
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -628,20 +628,27 @@ export default function AgentPage() {
 
   const loadScorecard = async (emailToUse?: string) => {
     const currentEmail = emailToUse || email;
-    if (!currentEmail) return;
+    if (!currentEmail) {
+      console.log("⚠️ No email provided to loadScorecard");
+      return;
+    }
 
+    console.log("📊 Loading scorecard for:", currentEmail);
     setLoadingScorecard(true);
     try {
       const response = await fetch(`/api/agent/personal-scorecard?email=${encodeURIComponent(currentEmail)}`);
       const data = await response.json();
 
+      console.log("📊 Scorecard API response:", data);
+
       if (data.success) {
+        console.log("✅ Scorecard loaded successfully:", data.agent?.name);
         setScorecardData(data);
       } else {
-        console.error('Failed to load scorecard:', data.error);
+        console.error('❌ Failed to load scorecard:', data.error);
       }
     } catch (error) {
-      console.error('Error loading scorecard:', error);
+      console.error('❌ Error loading scorecard:', error);
     } finally {
       setLoadingScorecard(false);
     }
@@ -1114,12 +1121,113 @@ export default function AgentPage() {
           <div className="flex items-center justify-between mb-4">
             <H2>📊 Your Performance Scorecard</H2>
             <SmallButton onClick={() => setShowScorecard(!showScorecard)}>
-              {showScorecard ? '▲ Hide Details' : '▼ Show Details'}
+              {showScorecard ? '▲ Hide Details' : '▼ Show Full Details'}
             </SmallButton>
           </div>
 
+          {/* ALWAYS SHOW: Quick Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            {/* Today vs Yesterday */}
+            {scorecardData.today && scorecardData.yesterday && (
+              <div className="bg-white/5 rounded-lg p-4">
+                <div className="text-sm font-semibold text-white mb-3">📅 Today vs Yesterday</div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <div className="text-xs text-white/60">Tasks</div>
+                    <div className={`text-lg font-bold ${
+                      scorecardData.dailyComparison.tasksChange > 0 ? 'text-green-400' :
+                      scorecardData.dailyComparison.tasksChange < 0 ? 'text-red-400' :
+                      'text-white/70'
+                    }`}>
+                      {scorecardData.dailyComparison.tasksChange > 0 ? '+' : ''}{scorecardData.dailyComparison.tasksChange}
+                    </div>
+                    <div className="text-xs text-white/50">
+                      {scorecardData.today.my?.totalCompleted || 0} today
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-white/60">Points</div>
+                    <div className={`text-lg font-bold ${
+                      scorecardData.dailyComparison.ptsChange > 0 ? 'text-green-400' :
+                      scorecardData.dailyComparison.ptsChange < 0 ? 'text-red-400' :
+                      'text-white/70'
+                    }`}>
+                      {scorecardData.dailyComparison.ptsChange > 0 ? '+' : ''}{scorecardData.dailyComparison.ptsChange.toFixed(1)}
+                    </div>
+                    <div className="text-xs text-white/50">
+                      {scorecardData.today.my?.weightedPoints?.toFixed(1) || '0.0'} today
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-white/60">Speed</div>
+                    <div className={`text-lg font-bold ${
+                      scorecardData.dailyComparison.timeChange < 0 ? 'text-green-400' :
+                      scorecardData.dailyComparison.timeChange > 0 ? 'text-red-400' :
+                      'text-white/70'
+                    }`}>
+                      {scorecardData.dailyComparison.timeChange < 0 ? '↓' : scorecardData.dailyComparison.timeChange > 0 ? '↑' : '→'}
+                      {Math.floor(Math.abs(scorecardData.dailyComparison.timeChange) / 60)}m
+                    </div>
+                    <div className="text-xs text-white/50">
+                      {Math.floor((scorecardData.today.my?.avgHandleTimeSec || 0) / 60)}m today
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Current Rankings */}
+            {!scorecardData.agent.isSenior && (scorecardData.sprint?.my?.qualified || scorecardData.lifetime?.my?.qualified) && (
+              <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg p-4">
+                <div className="text-sm font-semibold text-purple-300 mb-2">🏆 Your Rankings</div>
+                <div className="space-y-2">
+                  {scorecardData.sprint?.my?.qualified && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/60">Current Sprint:</span>
+                      <span className="text-lg font-bold text-white">#{scorecardData.sprint.my.rankByHybrid}</span>
+                    </div>
+                  )}
+                  {scorecardData.lifetime?.my?.qualified && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/60">Lifetime Points:</span>
+                      <span className="text-lg font-bold text-yellow-300">#{scorecardData.lifetime.my.rankByPtsPerDay}</span>
+                    </div>
+                  )}
+                  {scorecardData.sprint?.my?.tier && (
+                    <div className="mt-2 pt-2 border-t border-white/10">
+                      <Badge tone={
+                        scorecardData.sprint.my.tier === 'Elite' ? 'success' :
+                        scorecardData.sprint.my.tier === 'High Performer' ? 'default' :
+                        scorecardData.sprint.my.tier === 'Solid Contributor' ? 'muted' :
+                        scorecardData.sprint.my.tier === 'Developing' ? 'warning' :
+                        'danger'
+                      }>
+                        {scorecardData.sprint.my.tier}
+                      </Badge>
+                      <div className="text-xs text-white/50 mt-1">Top {100 - scorecardData.sprint.my.percentile}%</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Senior Agent Badge */}
+            {scorecardData.agent.isSenior && (
+              <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-lg p-4 flex items-center gap-3">
+                <div className="text-3xl">👑</div>
+                <div>
+                  <div className="text-sm font-semibold text-blue-300">Senior Agent</div>
+                  <div className="text-xs text-white/60 mt-1">
+                    Exempt from rankings
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* EXPANDABLE: Full Details */}
           {showScorecard && (
-            <div className="space-y-4">
+            <div className="space-y-4 pt-4 border-t border-white/10">
               {/* Current Sprint Info */}
               {scorecardData.currentSprint && (
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
@@ -1136,55 +1244,7 @@ export default function AgentPage() {
                 </div>
               )}
 
-              {/* Daily Comparison (Today vs Yesterday) */}
-              {scorecardData.today && scorecardData.yesterday && (
-                <div className="bg-white/5 rounded-lg p-4">
-                  <div className="text-sm font-semibold text-white mb-3">📅 Today vs Yesterday</div>
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div>
-                      <div className="text-xs text-white/60">Tasks</div>
-                      <div className={`text-lg font-bold ${
-                        scorecardData.dailyComparison.tasksChange > 0 ? 'text-green-400' :
-                        scorecardData.dailyComparison.tasksChange < 0 ? 'text-red-400' :
-                        'text-white/70'
-                      }`}>
-                        {scorecardData.dailyComparison.tasksChange > 0 ? '+' : ''}{scorecardData.dailyComparison.tasksChange}
-                      </div>
-                      <div className="text-xs text-white/50">
-                        Today: {scorecardData.today.my?.totalCompleted || 0}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-white/60">Points</div>
-                      <div className={`text-lg font-bold ${
-                        scorecardData.dailyComparison.ptsChange > 0 ? 'text-green-400' :
-                        scorecardData.dailyComparison.ptsChange < 0 ? 'text-red-400' :
-                        'text-white/70'
-                      }`}>
-                        {scorecardData.dailyComparison.ptsChange > 0 ? '+' : ''}{scorecardData.dailyComparison.ptsChange.toFixed(1)}
-                      </div>
-                      <div className="text-xs text-white/50">
-                        Today: {scorecardData.today.my?.weightedPoints?.toFixed(1) || '0.0'}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-white/60">Avg Time</div>
-                      <div className={`text-lg font-bold ${
-                        scorecardData.dailyComparison.timeChange < 0 ? 'text-green-400' :
-                        scorecardData.dailyComparison.timeChange > 0 ? 'text-red-400' :
-                        'text-white/70'
-                      }`}>
-                        {scorecardData.dailyComparison.timeChange < 0 ? '' : '+'}{Math.floor(Math.abs(scorecardData.dailyComparison.timeChange) / 60)}m
-                      </div>
-                      <div className="text-xs text-white/50">
-                        Today: {Math.floor((scorecardData.today.my?.avgHandleTimeSec || 0) / 60)}m
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Ranking Tabs */}
+              {/* Detailed Rankings */}
               <div className="grid grid-cols-2 gap-4">
                 {/* Current Sprint Rankings */}
                 {scorecardData.sprint && scorecardData.sprint.my && scorecardData.sprint.my.qualified && !scorecardData.agent.isSenior && (
