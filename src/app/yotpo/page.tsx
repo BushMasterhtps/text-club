@@ -363,45 +363,49 @@ function PendingTasksSection() {
         </SmallButton>
       </div>
 
-      {/* Selection and Assignment Controls */}
-      {selectedTasks.size > 0 && (
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="text-sm text-blue-300 font-medium">
-              {selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''} selected
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-white/70">Assign selected to:</label>
-                <select
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleBulkAssign(e.target.value);
-                      e.target.value = ''; // Reset dropdown
-                    }
-                  }}
-                  disabled={assignLoading}
-                  className="px-3 py-1.5 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none"
-                  style={{ colorScheme: 'dark' }}
-                >
-                  <option value="">Choose agent...</option>
-                  {agents.map(agent => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <SmallButton onClick={() => setSelectedTasks(new Set())} className="bg-white/10 hover:bg-white/20">
-                Clear Selection
-              </SmallButton>
-              <SmallButton onClick={handleUnassign} disabled={assignLoading} className="bg-orange-600 hover:bg-orange-700">
-                Unassign Selected
-              </SmallButton>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Bulk Toolbar - Always visible like Text Club */}
+      <div className="flex flex-wrap items-center gap-2">
+        <SmallButton onClick={() => {
+          const allIds = tasks.map(t => t.id);
+          if (selectedTasks.size === tasks.length) {
+            setSelectedTasks(new Set()); // Clear all
+          } else {
+            setSelectedTasks(new Set(allIds)); // Select all
+          }
+        }}>
+          {selectedTasks.size === tasks.length && tasks.length > 0 ? "Clear all" : "Select all"}
+        </SmallButton>
+
+        <select
+          onChange={(e) => {
+            const v = e.target.value;
+            if (!v) return;
+            handleBulkAssign(v);
+            e.currentTarget.value = "";
+          }}
+          disabled={assignLoading || selectedTasks.size === 0}
+          className="rounded-lg px-3 py-2 bg-white/10 text-white text-sm ring-1 ring-white/10 disabled:opacity-50"
+          defaultValue=""
+          title="Assign selected to…"
+          style={{ colorScheme: 'dark' }}
+        >
+          <option value="" disabled>
+            Assign selected to…
+          </option>
+          {agents.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name || a.email}
+            </option>
+          ))}
+        </select>
+
+        <SmallButton 
+          onClick={handleUnassign} 
+          disabled={assignLoading || selectedTasks.size === 0}
+        >
+          Unassign selected
+        </SmallButton>
+      </div>
 
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
