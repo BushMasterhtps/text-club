@@ -196,6 +196,11 @@ export default function AgentPage() {
   const sortOrderRef = useRef<'asc' | 'desc'>(sortOrder);
   useEffect(() => { sortOrderRef.current = sortOrder; }, [sortOrder]);
 
+  // Personal Scorecard state
+  const [scorecardData, setScorecardData] = useState<any>(null);
+  const [loadingScorecard, setLoadingScorecard] = useState(false);
+  const [showScorecard, setShowScorecard] = useState(false);
+
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
@@ -254,6 +259,7 @@ export default function AgentPage() {
       console.log("🚀 Starting initial load and polling...");
       loadTasks(email);
       loadStats(email);
+      loadScorecard(email);
       startPolling();
     }, 100);
   }, [email]);
@@ -617,6 +623,27 @@ export default function AgentPage() {
       }
     } catch (error) {
       console.error("Error loading completion stats:", error);
+    }
+  };
+
+  const loadScorecard = async (emailToUse?: string) => {
+    const currentEmail = emailToUse || email;
+    if (!currentEmail) return;
+
+    setLoadingScorecard(true);
+    try {
+      const response = await fetch(`/api/agent/personal-scorecard?email=${encodeURIComponent(currentEmail)}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setScorecardData(data);
+      } else {
+        console.error('Failed to load scorecard:', data.error);
+      }
+    } catch (error) {
+      console.error('Error loading scorecard:', error);
+    } finally {
+      setLoadingScorecard(false);
     }
   };
 
@@ -1080,6 +1107,231 @@ export default function AgentPage() {
           </div>
         </div>
       </Card>
+
+      {/* Personal Scorecard */}
+      {scorecardData && scorecardData.agent && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <H2>📊 Your Performance Scorecard</H2>
+            <SmallButton onClick={() => setShowScorecard(!showScorecard)}>
+              {showScorecard ? '▲ Hide Details' : '▼ Show Details'}
+            </SmallButton>
+          </div>
+
+          {showScorecard && (
+            <div className="space-y-4">
+              {/* Current Sprint Info */}
+              {scorecardData.currentSprint && (
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-blue-300">Current Sprint #{scorecardData.currentSprint.number}</div>
+                      <div className="text-xs text-white/60">{scorecardData.currentSprint.period}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-white/60">Days Remaining</div>
+                      <div className="text-2xl font-bold text-blue-400">{scorecardData.currentSprint.daysRemaining}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Daily Comparison (Today vs Yesterday) */}
+              {scorecardData.today && scorecardData.yesterday && (
+                <div className="bg-white/5 rounded-lg p-4">
+                  <div className="text-sm font-semibold text-white mb-3">📅 Today vs Yesterday</div>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <div className="text-xs text-white/60">Tasks</div>
+                      <div className={`text-lg font-bold ${
+                        scorecardData.dailyComparison.tasksChange > 0 ? 'text-green-400' :
+                        scorecardData.dailyComparison.tasksChange < 0 ? 'text-red-400' :
+                        'text-white/70'
+                      }`}>
+                        {scorecardData.dailyComparison.tasksChange > 0 ? '+' : ''}{scorecardData.dailyComparison.tasksChange}
+                      </div>
+                      <div className="text-xs text-white/50">
+                        Today: {scorecardData.today.my?.totalCompleted || 0}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-white/60">Points</div>
+                      <div className={`text-lg font-bold ${
+                        scorecardData.dailyComparison.ptsChange > 0 ? 'text-green-400' :
+                        scorecardData.dailyComparison.ptsChange < 0 ? 'text-red-400' :
+                        'text-white/70'
+                      }`}>
+                        {scorecardData.dailyComparison.ptsChange > 0 ? '+' : ''}{scorecardData.dailyComparison.ptsChange.toFixed(1)}
+                      </div>
+                      <div className="text-xs text-white/50">
+                        Today: {scorecardData.today.my?.weightedPoints?.toFixed(1) || '0.0'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-white/60">Avg Time</div>
+                      <div className={`text-lg font-bold ${
+                        scorecardData.dailyComparison.timeChange < 0 ? 'text-green-400' :
+                        scorecardData.dailyComparison.timeChange > 0 ? 'text-red-400' :
+                        'text-white/70'
+                      }`}>
+                        {scorecardData.dailyComparison.timeChange < 0 ? '' : '+'}{Math.floor(Math.abs(scorecardData.dailyComparison.timeChange) / 60)}m
+                      </div>
+                      <div className="text-xs text-white/50">
+                        Today: {Math.floor((scorecardData.today.my?.avgHandleTimeSec || 0) / 60)}m
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Ranking Tabs */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Current Sprint Rankings */}
+                {scorecardData.sprint && scorecardData.sprint.my && scorecardData.sprint.my.qualified && !scorecardData.agent.isSenior && (
+                  <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg p-4">
+                    <div className="text-sm font-semibold text-purple-300 mb-2">🏆 Current Sprint</div>
+                    <div className="flex items-end gap-2">
+                      <div className="text-3xl font-bold text-white">#{scorecardData.sprint.my.rankByHybrid}</div>
+                      <div className="text-sm text-white/60 mb-1">of {scorecardData.sprint.totalCompetitors}</div>
+                    </div>
+                    <div className="mt-2">
+                      <Badge tone={
+                        scorecardData.sprint.my.tier === 'Elite' ? 'success' :
+                        scorecardData.sprint.my.tier === 'High Performer' ? 'default' :
+                        scorecardData.sprint.my.tier === 'Solid Contributor' ? 'muted' :
+                        scorecardData.sprint.my.tier === 'Developing' ? 'warning' :
+                        'danger'
+                      }>
+                        {scorecardData.sprint.my.tier}
+                      </Badge>
+                      <div className="text-xs text-white/50 mt-1">Top {100 - scorecardData.sprint.my.percentile}%</div>
+                    </div>
+                    {scorecardData.sprint.nextRankAgent && (
+                      <div className="mt-3 pt-3 border-t border-white/10">
+                        <div className="text-xs text-white/60">Gap to #{scorecardData.sprint.my.rankByHybrid - 1}:</div>
+                        <div className="text-sm font-semibold text-orange-300">
+                          +{(scorecardData.sprint.nextRankAgent.hybridScore - scorecardData.sprint.my.hybridScore).toFixed(1)} pts needed
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Lifetime Rankings */}
+                {scorecardData.lifetime && scorecardData.lifetime.my && scorecardData.lifetime.my.qualified && !scorecardData.agent.isSenior && (
+                  <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 rounded-lg p-4">
+                    <div className="text-sm font-semibold text-yellow-300 mb-2">⭐ Lifetime Points</div>
+                    <div className="flex items-end gap-2">
+                      <div className="text-3xl font-bold text-white">#{scorecardData.lifetime.my.rankByPtsPerDay}</div>
+                      <div className="text-sm text-white/60 mb-1">of {scorecardData.lifetime.totalCompetitors}</div>
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-xs text-white/60">Weighted Points</div>
+                      <div className="text-lg font-semibold text-white">{scorecardData.lifetime.my.weightedPoints.toFixed(1)} pts</div>
+                      <div className="text-xs text-white/50">{scorecardData.lifetime.my.weightedDailyAvg.toFixed(1)} pts/day</div>
+                    </div>
+                    {scorecardData.lifetime.nextRankAgent && (
+                      <div className="mt-3 pt-3 border-t border-white/10">
+                        <div className="text-xs text-white/60">Gap to #{scorecardData.lifetime.my.rankByPtsPerDay - 1}:</div>
+                        <div className="text-sm font-semibold text-orange-300">
+                          +{((scorecardData.lifetime.nextRankAgent.weightedDailyAvg - scorecardData.lifetime.my.weightedDailyAvg) * scorecardData.lifetime.my.daysWorked).toFixed(1)} pts total
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Senior Agent Message */}
+              {scorecardData.agent.isSenior && (
+                <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-lg p-4 text-center">
+                  <div className="text-2xl mb-2">👑</div>
+                  <div className="text-sm font-semibold text-blue-300">Senior Agent</div>
+                  <div className="text-xs text-white/60 mt-1">
+                    Your contributions are tracked for reference, but you're exempt from competitive rankings.
+                  </div>
+                </div>
+              )}
+
+              {/* Improvement Suggestions */}
+              {scorecardData.lifetime && scorecardData.lifetime.my && scorecardData.lifetime.my.qualified && !scorecardData.agent.isSenior && (() => {
+                const my = scorecardData.lifetime.my;
+                const teamAvg = scorecardData.lifetime.teamAverages;
+                
+                const complexityGap = my.weightedDailyAvg - teamAvg.ptsPerDay;
+                const volumeGap = my.tasksPerDay - teamAvg.tasksPerDay;
+                
+                const isTopPerformer = my.rankByHybrid <= 3;
+                const needsImprovement = my.rankByHybrid > (scorecardData.lifetime.totalCompetitors * 0.75);
+
+                return (
+                  <div className={`rounded-lg p-4 border ${
+                    isTopPerformer ? 'bg-green-500/10 border-green-500/30' :
+                    needsImprovement ? 'bg-orange-500/10 border-orange-500/30' :
+                    'bg-blue-500/10 border-blue-500/30'
+                  }`}>
+                    <div className="text-sm font-semibold text-white mb-2">
+                      {isTopPerformer ? '✅ Keep It Up!' :
+                       needsImprovement ? '⚠️ Focus Areas' :
+                       '🎯 Improvement Path'}
+                    </div>
+                    
+                    {isTopPerformer ? (
+                      <div className="text-xs text-green-400">
+                        Excellent performance! You're in the top 3. Keep up the great work! 🌟
+                      </div>
+                    ) : (
+                      <div className="space-y-2 text-xs">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-white/60">Complexity vs Team:</span>
+                            <span className={`ml-2 font-semibold ${complexityGap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {complexityGap >= 0 ? '+' : ''}{complexityGap.toFixed(1)} pts/day
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-white/60">Volume vs Team:</span>
+                            <span className={`ml-2 font-semibold ${volumeGap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {volumeGap >= 0 ? '+' : ''}{volumeGap.toFixed(1)} tasks/day
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-white/5 rounded p-2 text-white/70">
+                          <strong className="text-white">💡 Tips:</strong>
+                          {complexityGap < 0 && Math.abs(complexityGap) > Math.abs(volumeGap) && (
+                            <div className="mt-1">
+                              🎯 <strong>Priority:</strong> Request harder tasks (Email, Yotpo, WOD)
+                              <br/>
+                              Weighted tasks worth more points!
+                            </div>
+                          )}
+                          {volumeGap < 0 && Math.abs(volumeGap) > Math.abs(complexityGap) && (
+                            <div className="mt-1">
+                              📈 <strong>Priority:</strong> Increase daily task completion
+                              <br/>
+                              Reduce handle time & minimize gaps between tasks
+                            </div>
+                          )}
+                          {complexityGap < 0 && volumeGap < 0 && (
+                            <div className="mt-1">
+                              ⚡ <strong>Focus:</strong> Both volume AND complexity
+                              <br/>
+                              1. Request harder tasks
+                              <br/>
+                              2. Increase completion speed
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Tasks List */}
       <Card className="p-5">

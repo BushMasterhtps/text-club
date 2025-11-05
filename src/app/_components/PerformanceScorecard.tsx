@@ -402,6 +402,119 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                         </div>
                       </div>
 
+                      {/* Gap Analysis & Improvement Suggestions */}
+                      {sprintData.teamAverages && (() => {
+                        const teamAvg = sprintData.teamAverages;
+                        const nextRankAgent = sprintData.rankings.competitive[displayRank - 2]; // Agent one rank above
+                        
+                        // Calculate gaps
+                        const complexityGap = agent.weightedDailyAvg - teamAvg.ptsPerDay;
+                        const volumeGap = agent.tasksPerDay - teamAvg.tasksPerDay;
+                        const complexityPercent = teamAvg.ptsPerDay > 0 ? Math.round((complexityGap / teamAvg.ptsPerDay) * 100) : 0;
+                        const volumePercent = teamAvg.tasksPerDay > 0 ? Math.round((volumeGap / teamAvg.tasksPerDay) * 100) : 0;
+                        
+                        // Determine performance level
+                        const isTopPerformer = displayRank <= 3;
+                        const isAboveAverage = agent.hybridScore > teamAvg.hybridScore;
+                        const needsImprovement = displayRank > (sprintData.rankings.competitive.length * 0.75);
+
+                        const gapToNext = nextRankAgent ? (nextRankAgent.hybridScore - agent.hybridScore) : 0;
+
+                        return (
+                          <div className={`mt-4 rounded-lg p-3 border ${
+                            isTopPerformer ? 'bg-green-500/10 border-green-500/30' :
+                            isAboveAverage ? 'bg-blue-500/10 border-blue-500/30' :
+                            needsImprovement ? 'bg-orange-500/10 border-orange-500/30' :
+                            'bg-yellow-500/10 border-yellow-500/30'
+                          }`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-sm font-semibold text-white">
+                                {isTopPerformer ? '✅ EXCELLENT PERFORMANCE' :
+                                 isAboveAverage ? '🎯 ABOVE AVERAGE' :
+                                 needsImprovement ? '⚠️ IMPROVEMENT NEEDED' :
+                                 '📊 ROOM FOR GROWTH'}
+                              </span>
+                            </div>
+
+                            {/* vs Team Average */}
+                            <div className="grid grid-cols-2 gap-3 text-xs mb-3">
+                              <div>
+                                <div className="text-white/60">Complexity vs Team Avg:</div>
+                                <div className={`font-semibold ${complexityGap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {complexityGap >= 0 ? '+' : ''}{complexityGap.toFixed(1)} pts/day ({complexityPercent >= 0 ? '+' : ''}{complexityPercent}%)
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-white/60">Volume vs Team Avg:</div>
+                                <div className={`font-semibold ${volumeGap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {volumeGap >= 0 ? '+' : ''}{volumeGap.toFixed(1)} tasks/day ({volumePercent >= 0 ? '+' : ''}{volumePercent}%)
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Improvement Path */}
+                            {!isTopPerformer && (
+                              <div className="bg-white/5 rounded p-2 text-xs">
+                                {nextRankAgent && (
+                                  <div className="mb-2">
+                                    <span className="text-white/70">Gap to #{displayRank - 1}: </span>
+                                    <span className="font-semibold text-orange-300">+{gapToNext.toFixed(1)} points needed</span>
+                                  </div>
+                                )}
+                                
+                                <div className="text-white/70">
+                                  <strong className="text-white">💡 Improvement Tips:</strong>
+                                  {complexityGap < 0 && Math.abs(complexityGap) > Math.abs(volumeGap) && (
+                                    <div className="mt-1">
+                                      🎯 <strong>Priority:</strong> Increase task complexity (70% of score)
+                                      <br/>
+                                      ✅ Request more Email Requests (+6 pts each)
+                                      <br/>
+                                      ✅ Request more Yotpo tasks (+7 pts each)
+                                      <br/>
+                                      ✅ Reduce spam tasks (only +0.8 pts each)
+                                    </div>
+                                  )}
+                                  {volumeGap < 0 && Math.abs(volumeGap) > Math.abs(complexityGap) && (
+                                    <div className="mt-1">
+                                      📈 <strong>Priority:</strong> Increase task volume (30% of score)
+                                      <br/>
+                                      ✅ Reduce avg handle time to under 3 minutes
+                                      <br/>
+                                      ✅ Minimize time between tasks
+                                      <br/>
+                                      ✅ Request more task assignments
+                                    </div>
+                                  )}
+                                  {complexityGap < 0 && volumeGap < 0 && (
+                                    <div className="mt-1">
+                                      ⚡ <strong>Focus on BOTH:</strong>
+                                      <br/>
+                                      1. Request harder tasks (Email, Yotpo, WOD)
+                                      <br/>
+                                      2. Increase daily task completion
+                                      <br/>
+                                      3. Reduce avg handle time
+                                    </div>
+                                  )}
+                                  {isAboveAverage && !isTopPerformer && (
+                                    <div className="mt-1 text-green-400">
+                                      ✨ You're above team average! Keep pushing to reach top 3.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {isTopPerformer && (
+                              <div className="text-xs text-green-400">
+                                Keep up the excellent work! You're setting the standard for the team. 🌟
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                       {/* Detailed Task Type Breakdown */}
                       {agent.breakdown && Object.keys(agent.breakdown).length > 0 && (
                         <div className="mt-4">

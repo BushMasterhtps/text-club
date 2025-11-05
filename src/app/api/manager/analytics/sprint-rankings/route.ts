@@ -255,6 +255,20 @@ export async function GET(request: NextRequest) {
     const seniorAgents = agentScorecards.filter(a => a.isSenior);
     const unqualified = agentScorecards.filter(a => !a.isSenior && !a.qualified);
 
+    // Calculate team averages for comparison
+    const teamAverages = {
+      tasksPerDay: 0,
+      ptsPerDay: 0,
+      avgHandleTimeSec: 0,
+      hybridScore: 0
+    };
+
+    if (competitiveAgents.length > 0) {
+      teamAverages.tasksPerDay = competitiveAgents.reduce((sum, a) => sum + a.tasksPerDay, 0) / competitiveAgents.length;
+      teamAverages.ptsPerDay = competitiveAgents.reduce((sum, a) => sum + a.weightedDailyAvg, 0) / competitiveAgents.length;
+      teamAverages.avgHandleTimeSec = competitiveAgents.reduce((sum, a) => sum + a.avgHandleTimeSec, 0) / competitiveAgents.length;
+    }
+
     // Calculate hybrid scores (30% volume + 70% complexity)
     // Normalize both metrics to 0-100 scale before combining
     if (competitiveAgents.length > 0) {
@@ -267,6 +281,9 @@ export async function GET(request: NextRequest) {
         
         agent.hybridScore = (volumeScore * 0.30) + (complexityScore * 0.70);
       }
+
+      // Calculate team average hybrid score
+      teamAverages.hybridScore = competitiveAgents.reduce((sum, a) => sum + a.hybridScore, 0) / competitiveAgents.length;
     }
 
     // RANK BY WEIGHTED POINTS/DAY
@@ -345,7 +362,8 @@ export async function GET(request: NextRequest) {
         competitive: competitiveAgents,
         seniors: seniorAgents,
         unqualified
-      }
+      },
+      teamAverages
     });
 
   } catch (error) {
