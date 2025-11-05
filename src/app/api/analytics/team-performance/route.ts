@@ -18,10 +18,10 @@ export async function GET(request: NextRequest) {
     const start = new Date(startDate + 'T00:00:00.000Z');
     const end = new Date(endDate + 'T23:59:59.999Z');
 
-    // Get all agents
+    // Get all agents (including manager-agents)
     const agents = await prisma.user.findMany({
       where: {
-        role: { in: ["AGENT", "MANAGER"] }
+        role: { in: ["AGENT", "MANAGER_AGENT"] }
       },
       select: {
         id: true,

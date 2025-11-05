@@ -1250,6 +1250,28 @@ function TaskCard({
       
       // Send both disposition and SF Case # separately
       onComplete(task.id, disposition, sfCaseNumber.trim());
+    }
+    // For Yotpo, require SF Case # for all dispositions EXCEPT 4 exemptions
+    else if (task.taskType === "YOTPO") {
+      const noSfRequired = [
+        "Information – Unfeasible request or information not available",
+        "Duplicate Request – No new action required",
+        "Previously Assisted – Issue already resolved or refund previously issued",
+        "No Match – No valid account or order located"
+      ];
+      
+      // If disposition requires SF # but none provided
+      if (!noSfRequired.includes(disposition) && !sfCaseNumber.trim()) {
+        alert("Please enter the SF Case # for this Yotpo disposition.");
+        return;
+      }
+      
+      // Send disposition and SF Case # (if provided)
+      if (sfCaseNumber.trim()) {
+        onComplete(task.id, disposition, sfCaseNumber.trim());
+      } else {
+        onComplete(task.id, disposition);
+      }
     } else {
       onComplete(task.id, disposition);
     }

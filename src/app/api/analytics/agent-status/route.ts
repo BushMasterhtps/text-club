@@ -3,10 +3,10 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
-    // Get all agents and managers
+    // Get all agents and manager-agents
     const agents = await prisma.user.findMany({
       where: {
-        role: { in: ["AGENT", "MANAGER"] },
+        role: { in: ["AGENT", "MANAGER_AGENT"] },
         isLive: true
       },
       select: {
