@@ -25,17 +25,19 @@ export async function GET(req: NextRequest) {
 
     // Get current date boundaries (today in PST)
     // Server runs in UTC, but users are in PST (UTC-8)
+    // PST is 8 hours BEHIND UTC, so we SUBTRACT 8 hours
     const now = new Date();
-    const pstOffset = 8 * 60 * 60 * 1000; // PST is 8 hours behind UTC
-    const nowPST = new Date(now.getTime() + pstOffset);
+    const pstOffset = -8 * 60 * 60 * 1000; // PST = UTC - 8 hours
+    const nowPST = new Date(now.getTime() + pstOffset); // Subtract 8 hours
     
     const year = nowPST.getUTCFullYear();
     const month = nowPST.getUTCMonth();
     const day = nowPST.getUTCDate();
     
-    // Today in PST: Nov 5 00:00 PST = Nov 5 08:00 UTC
-    const todayStart = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) + pstOffset);
-    const todayEnd = new Date(Date.UTC(year, month, day, 23, 59, 59, 999) + pstOffset);
+    // Today in PST: Nov 6 00:00 PST = Nov 6 08:00 UTC
+    // We create UTC times that represent PST midnight
+    const todayStart = new Date(Date.UTC(year, month, day, 8, 0, 0, 0)); // 8 AM UTC = 12 AM PST
+    const todayEnd = new Date(Date.UTC(year, month, day + 1, 7, 59, 59, 999)); // Next day 7:59 AM UTC = 11:59 PM PST
     
     // Get current sprint info
     const currentSprint = getCurrentSprint();
@@ -64,8 +66,8 @@ export async function GET(req: NextRequest) {
     let lastWorkedEnd: Date | null = null;
     
     for (let daysBack = 1; daysBack <= 7; daysBack++) {
-      const checkStart = new Date(Date.UTC(year, month, day - daysBack, 0, 0, 0, 0) + pstOffset);
-      const checkEnd = new Date(Date.UTC(year, month, day - daysBack, 23, 59, 59, 999) + pstOffset);
+      const checkStart = new Date(Date.UTC(year, month, day - daysBack, 8, 0, 0, 0)); // 8 AM UTC = 12 AM PST
+      const checkEnd = new Date(Date.UTC(year, month, day - daysBack + 1, 7, 59, 59, 999)); // Next day 7:59 AM UTC = 11:59 PM PST
       
       // Check if agent completed any tasks on this day
       const hasTasksOnDay = await prisma.task.count({
