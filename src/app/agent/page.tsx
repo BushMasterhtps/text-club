@@ -1148,79 +1148,65 @@ export default function AgentPage() {
 
           {/* ALWAYS SHOW: Quick Summary */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            {/* Today vs Yesterday */}
-            {scorecardData.today && scorecardData.yesterday && (
-              <div className="bg-white/5 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="text-sm font-semibold text-white">📅 Today vs Yesterday</div>
-                  <div className="relative group">
-                    <span className="text-blue-400 cursor-help text-xs">ℹ️</span>
-                    <div className="absolute left-0 top-6 w-72 bg-gray-900 border border-blue-500/50 rounded-lg p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <div className="text-xs text-white space-y-1">
-                        <div className="font-semibold text-blue-300 mb-1">How to Read This:</div>
-                        <div className="text-white/70">
-                          🟢 <strong className="text-green-400">Green (+)</strong> = You did MORE today than yesterday (great!)
-                        </div>
-                        <div className="text-white/70">
-                          🔴 <strong className="text-red-400">Red (-)</strong> = You did LESS today than yesterday (need to catch up!)
-                        </div>
-                        <div className="text-white/70 mt-2 text-[10px]">
-                          💡 Early in the day? Numbers will be red until you complete more tasks than yesterday.
-                        </div>
-                      </div>
+            {/* Today's Performance (REDESIGNED - Much Clearer!) */}
+            {scorecardData.today && (
+              <div className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-lg p-4 border border-blue-500/30">
+                <div className="text-sm font-semibold text-white mb-3">📊 Today's Performance</div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-white/5 rounded-lg p-3 text-center">
+                    <div className="text-xs text-white/60 mb-1">Tasks Completed</div>
+                    <div className="text-3xl font-bold text-blue-400">
+                      {scorecardData.today.my?.totalCompleted || 0}
                     </div>
+                    {scorecardData.yesterday && (
+                      <div className="text-[10px] text-white/50 mt-2">
+                        {scorecardData.dailyComparison.tasksChange > 0 ? (
+                          <span className="text-green-400">↑ +{scorecardData.dailyComparison.tasksChange} vs yesterday</span>
+                        ) : scorecardData.dailyComparison.tasksChange < 0 ? (
+                          <span className="text-orange-400">↓ {scorecardData.dailyComparison.tasksChange} vs yesterday ({scorecardData.yesterday.my?.totalCompleted} yesterday)</span>
+                        ) : (
+                          <span className="text-white/50">→ Same as yesterday</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-3 text-center">
+                    <div className="text-xs text-white/60 mb-1">Points Earned</div>
+                    <div className="text-3xl font-bold text-yellow-400">
+                      {scorecardData.today.my?.weightedPoints?.toFixed(1) || '0.0'}
+                    </div>
+                    {scorecardData.yesterday && (
+                      <div className="text-[10px] text-white/50 mt-2">
+                        {scorecardData.dailyComparison.ptsChange > 0 ? (
+                          <span className="text-green-400">↑ +{scorecardData.dailyComparison.ptsChange.toFixed(1)} vs yesterday</span>
+                        ) : scorecardData.dailyComparison.ptsChange < 0 ? (
+                          <span className="text-orange-400">↓ {scorecardData.dailyComparison.ptsChange.toFixed(1)} vs yesterday ({scorecardData.yesterday.my?.weightedPoints?.toFixed(1)} yesterday)</span>
+                        ) : (
+                          <span className="text-white/50">→ Same as yesterday</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-3 text-center">
+                    <div className="text-xs text-white/60 mb-1">Avg Handle Time</div>
+                    <div className="text-3xl font-bold text-green-400">
+                      {Math.floor((scorecardData.today.my?.avgHandleTimeSec || 0) / 60)}m
+                    </div>
+                    {scorecardData.yesterday && (
+                      <div className="text-[10px] text-white/50 mt-2">
+                        {scorecardData.dailyComparison.timeChange < 0 ? (
+                          <span className="text-green-400">↓ Faster than yesterday!</span>
+                        ) : scorecardData.dailyComparison.timeChange > 0 ? (
+                          <span className="text-orange-400">↑ Slower than yesterday</span>
+                        ) : (
+                          <span className="text-white/50">→ Same as yesterday</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div>
-                    <div className="text-xs text-white/60">Tasks</div>
-                    <div className={`text-lg font-bold ${
-                      scorecardData.dailyComparison.tasksChange > 0 ? 'text-green-400' :
-                      scorecardData.dailyComparison.tasksChange < 0 ? 'text-red-400' :
-                      'text-white/70'
-                    }`}>
-                      {scorecardData.dailyComparison.tasksChange > 0 ? '+' : ''}{scorecardData.dailyComparison.tasksChange}
-                    </div>
-                    <div className="text-xs text-white/50">
-                      {scorecardData.today.my?.totalCompleted || 0} today
-                    </div>
-                    <div className="text-[10px] text-white/40 mt-1">
-                      vs {scorecardData.yesterday.my?.totalCompleted || 0} yesterday
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-white/60">Points</div>
-                    <div className={`text-lg font-bold ${
-                      scorecardData.dailyComparison.ptsChange > 0 ? 'text-green-400' :
-                      scorecardData.dailyComparison.ptsChange < 0 ? 'text-red-400' :
-                      'text-white/70'
-                    }`}>
-                      {scorecardData.dailyComparison.ptsChange > 0 ? '+' : ''}{scorecardData.dailyComparison.ptsChange.toFixed(1)}
-                    </div>
-                    <div className="text-xs text-white/50">
-                      {scorecardData.today.my?.weightedPoints?.toFixed(1) || '0.0'} today
-                    </div>
-                    <div className="text-[10px] text-white/40 mt-1">
-                      vs {scorecardData.yesterday.my?.weightedPoints?.toFixed(1) || '0.0'} yesterday
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-white/60">Speed</div>
-                    <div className={`text-lg font-bold ${
-                      scorecardData.dailyComparison.timeChange < 0 ? 'text-green-400' :
-                      scorecardData.dailyComparison.timeChange > 0 ? 'text-red-400' :
-                      'text-white/70'
-                    }`}>
-                      {scorecardData.dailyComparison.timeChange < 0 ? '↓' : scorecardData.dailyComparison.timeChange > 0 ? '↑' : '→'}
-                      {Math.floor(Math.abs(scorecardData.dailyComparison.timeChange) / 60)}m
-                    </div>
-                    <div className="text-xs text-white/50">
-                      {Math.floor((scorecardData.today.my?.avgHandleTimeSec || 0) / 60)}m today
-                    </div>
-                    <div className="text-[10px] text-white/40 mt-1">
-                      vs {Math.floor((scorecardData.yesterday.my?.avgHandleTimeSec || 0) / 60)}m yesterday
-                    </div>
-                  </div>
+                <div className="text-[10px] text-white/40 text-center mt-3">
+                  💡 These numbers show your actual output TODAY (not comparisons)
                 </div>
               </div>
             )}
