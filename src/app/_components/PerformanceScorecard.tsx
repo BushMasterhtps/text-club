@@ -316,7 +316,22 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
 
               {/* Competitive Rankings */}
               <div className="space-y-3">
-                {sprintData.rankings.competitive.map((agent: any) => {
+                {[...sprintData.rankings.competitive]
+                  .sort((a, b) => {
+                    // Sort by the appropriate rank based on current mode
+                    const rankA = rankingMode === 'sprint' ? a.rankByPtsPerDay :
+                                 rankingMode === 'lifetime-points' ? a.lifetimeRank :
+                                 rankingMode === 'efficiency' ? a.rankByPtsPerHour :
+                                 rankingMode === 'hybrid' ? a.rankByHybrid :
+                                 a.rankByTasksPerDay;
+                    const rankB = rankingMode === 'sprint' ? b.rankByPtsPerDay :
+                                 rankingMode === 'lifetime-points' ? b.lifetimeRank :
+                                 rankingMode === 'efficiency' ? b.rankByPtsPerHour :
+                                 rankingMode === 'hybrid' ? b.rankByHybrid :
+                                 b.rankByTasksPerDay;
+                    return rankA - rankB; // Ascending (1, 2, 3...)
+                  })
+                  .map((agent: any) => {
                   // Determine which rank to display based on mode
                   const displayRank = rankingMode === 'sprint' ? agent.rankByPtsPerDay :
                                     rankingMode === 'lifetime-points' ? agent.lifetimeRank :
