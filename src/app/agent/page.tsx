@@ -1434,9 +1434,9 @@ export default function AgentPage() {
                           <strong className="text-white">💡 Tips:</strong>
                           {complexityGap < 0 && Math.abs(complexityGap) > Math.abs(volumeGap) && (
                             <div className="mt-1">
-                              🎯 <strong>Priority:</strong> Request harder tasks (Email, Yotpo, WOD)
+                              🎯 <strong>Priority:</strong> Request more task assignments
                               <br/>
-                              Weighted tasks worth more points!
+                              High-volume workers get better task variety (Email, Yotpo, WOD mix)
                             </div>
                           )}
                           {volumeGap < 0 && Math.abs(volumeGap) > Math.abs(complexityGap) && (
@@ -1448,11 +1448,11 @@ export default function AgentPage() {
                           )}
                           {complexityGap < 0 && volumeGap < 0 && (
                             <div className="mt-1">
-                              ⚡ <strong>Focus:</strong> Both volume AND complexity
+                              ⚡ <strong>Focus:</strong> Both speed AND volume
                               <br/>
-                              1. Request harder tasks
+                              1. Work faster through your queue
                               <br/>
-                              2. Increase completion speed
+                              2. Request more assignments when done
                             </div>
                           )}
                         </div>

@@ -177,10 +177,10 @@ We rank agents in **4 different ways** to be fair and comprehensive:
 - 💡 **Result:** Same time investment, 50% MORE points!
 
 **Action Steps:**
-1. Request more **Email Requests** from manager
-2. Request more **Yotpo** tasks from manager
-3. Request **WOD/IVCS** tasks
-4. Avoid spam-heavy assignments
+1. Work through tasks **faster** (complete more per hour)
+2. Request **more task assignments** when you finish your queue
+3. The more tasks you complete, the more variety you'll naturally get (including Email, Yotpo, WOD)
+4. High performers naturally receive a better mix of task types
 
 #### **Option 2: Increase Task Volume (30% of score)**
 
@@ -252,9 +252,9 @@ Complexity vs Team: -25.3 pts/day (need harder tasks)
 Volume vs Team: +8.5 tasks/day (good!)
 
 💡 Priority: Increase task complexity (70% of score)
-   ✅ Request more Email Requests (+6 pts each)
-   ✅ Request more Yotpo tasks (+7 pts each)
-   ✅ Reduce spam tasks (only +0.8 pts each)
+   ✅ Work faster to complete your queue quicker
+   ✅ Request more task assignments when done
+   ✅ High volume workers naturally get better task variety (Email, Yotpo, WOD mix)
 ```
 
 **What This Means:**
@@ -262,7 +262,7 @@ Volume vs Team: +8.5 tasks/day (good!)
 - You're a **Solid Contributor** (doing well!)
 - Your **volume is good** (+8.5 tasks/day above team average)
 - Your **complexity needs work** (-25.3 pts/day below team average)
-- **Action:** Request harder tasks to earn more points!
+- **Action:** Work faster and request more assignments to get a better task variety!
 
 ---
 
@@ -286,16 +286,16 @@ Complexity vs Team: -45.3 pts/day (need harder tasks)
 Volume vs Team: -12.5 tasks/day (need more speed)
 
 💡 Focus on BOTH:
-   1. Request harder tasks (Email, Yotpo, WOD)
-   2. Increase daily task completion
-   3. Reduce avg handle time
+   1. Work faster and more efficiently
+   2. Request more task assignments when your queue is done
+   3. High performers naturally get better task variety
 ```
 
 **What This Means:**
 - You're **#10 in sprint**, **#9 all-time**
 - You're **Developing** (room to grow!)
 - Both **complexity AND volume** are below team average
-- **Action:** Request harder tasks AND work more efficiently
+- **Action:** Work faster AND request more assignments
 
 ---
 
@@ -455,9 +455,9 @@ Your **tier** shows where you stand compared to all agents:
 
 Gap to #7: +15.2 points
 
-💡 Priority: Request harder tasks
-   You're doing mostly spam (+0.8 pts)
-   Try Email Requests instead (+6 pts each)
+💡 Priority: Increase your task volume
+   Work faster to get through your queue
+   Request more assignments to get better task variety
 ```
 
 **Week 3 (Nov 15-21) - After following tips:**
@@ -473,9 +473,10 @@ Improvement:
 ```
 
 **What She Did:**
-1. Requested 20 Email Requests instead of spam
-2. Reduced avg handle time from 6min to 4min
-3. Worked more consistently (5 days instead of 3)
+1. Worked faster through her task queue (6min → 4min per task)
+2. Requested more task assignments when she finished
+3. Got assigned a better variety of tasks (Email, Yotpo, WOD mix)
+4. Worked more consistently (5 days instead of 3)
 
 **Result:** Moved from #8 to #5! 🚀
 
@@ -499,8 +500,8 @@ Gap to #6: +25.3 points
 ⚠️ IMPROVEMENT NEEDED
 Complexity vs Team: -35.2 pts/day
 
-💡 You completed 120 tasks but 90 were spam (0.8 pts)
-   Request harder tasks to earn more points!
+💡 You completed 120 tasks but 75% were low-value spam (0.8 pts)
+   Request MORE assignments to get better task variety!
 ```
 
 **What Happened:**
@@ -566,7 +567,7 @@ Gap to #4: +12.5 points needed
 - A: Make sure you clicked "Today" button or hard refresh your page. Stats update every 30 seconds.
 
 **Q: How do I move up faster?**
-- A: Request harder tasks! Email Requests (+6 pts) and Yotpo (+7 pts) are worth 10X more than spam (+0.8 pts).
+- A: Work faster and request MORE task assignments! The more you complete, the better variety you'll naturally receive (Email, Yotpo, WOD mix worth 6-7X more than spam).
 
 **Q: What if I'm ranked low?**
 - A: Follow the improvement tips! The system tells you exactly what to focus on (complexity vs volume).
@@ -630,7 +631,7 @@ Your manager sees:
 
 ### **Medium-Term Goals (This Sprint - Nov 1-14):**
 1. 🎯 Reach **Top 50%** (Solid Contributor tier)
-2. 🎯 Request harder task assignments
+2. 🎯 Complete tasks faster and request more assignments
 3. 🎯 Reduce avg handle time to under 4 minutes
 
 ### **Long-Term Goals (Career):**

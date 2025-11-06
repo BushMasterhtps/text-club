@@ -55,10 +55,11 @@ Tasks:    +15 ✓              Points:   +67.5 ✓            Speed:    ↓2m �
 
 ### **If You're Ranked Low:**
 
-**Strategy A: Request Better Tasks**
-- Replace 30 spam tasks → 10 Email Requests
-- **Gain:** +52 points/day
-- **Time:** Same!
+**Strategy A: Increase Your Volume (Get More Assignments)**
+- Work faster to clear your queue
+- Request more task assignments when done
+- **Gain:** Better task variety naturally (Email, Yotpo, WOD mix)
+- **Time:** Complete more per hour!
 
 **Strategy B: Work Faster**
 - Reduce handle time from 6min → 4min
@@ -66,7 +67,7 @@ Tasks:    +15 ✓              Points:   +67.5 ✓            Speed:    ↓2m �
 - **Action:** Focus more, minimize distractions
 
 **Strategy C: Both! (Best)**
-- Get 50% harder tasks + work 20% faster
+- Work 20% faster + request 50% more assignments
 - **Gain:** Massive rank boost!
 
 ---
@@ -76,7 +77,7 @@ Tasks:    +15 ✓              Points:   +67.5 ✓            Speed:    ↓2m �
 - [ ] Check "Today vs Yesterday" - am I improving?
 - [ ] Check my rank - did I move up or down?
 - [ ] Read improvement tips - what should I focus on?
-- [ ] Request harder tasks if doing mostly spam
+- [ ] Work faster and request more assignments when queue is done
 - [ ] Work during my peak productivity hours
 - [ ] Beat yesterday's task count!
 
@@ -132,7 +133,7 @@ Work 2 more days
 ## ❓ Quick FAQ
 
 **Q: How do I move up?**
-- A: Request harder tasks (Email, Yotpo) instead of spam!
+- A: Work faster and request MORE assignments! High-volume workers naturally get better task variety.
 
 **Q: Why am I not ranked?**
 - A: Need 20 tasks OR 3 days worked. Check your progress bars!
@@ -145,5 +146,5 @@ Work 2 more days
 
 ---
 
-**🎯 Bottom Line: Request harder tasks, work efficiently, beat yesterday! 🚀**
+**🎯 Bottom Line: Work fast, request more assignments, beat yesterday! 🚀**
 

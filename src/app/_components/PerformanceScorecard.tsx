@@ -468,11 +468,11 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                                     <div className="mt-1">
                                       🎯 <strong>Priority:</strong> Increase task complexity (70% of score)
                                       <br/>
-                                      ✅ Request more Email Requests (+6 pts each)
+                                      ✅ Work faster to clear queue quicker
                                       <br/>
-                                      ✅ Request more Yotpo tasks (+7 pts each)
+                                      ✅ Request more assignments when done
                                       <br/>
-                                      ✅ Reduce spam tasks (only +0.8 pts each)
+                                      ✅ High volume = better variety (Email, Yotpo, WOD mix)
                                     </div>
                                   )}
                                   {volumeGap < 0 && Math.abs(volumeGap) > Math.abs(complexityGap) && (
@@ -490,11 +490,11 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                                     <div className="mt-1">
                                       ⚡ <strong>Focus on BOTH:</strong>
                                       <br/>
-                                      1. Request harder tasks (Email, Yotpo, WOD)
+                                      1. Work faster through your queue
                                       <br/>
-                                      2. Increase daily task completion
+                                      2. Request more task assignments when done
                                       <br/>
-                                      3. Reduce avg handle time
+                                      3. High volume = better variety naturally
                                     </div>
                                   )}
                                   {isAboveAverage && !isTopPerformer && (
