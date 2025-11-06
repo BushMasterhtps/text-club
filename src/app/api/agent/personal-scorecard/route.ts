@@ -194,6 +194,42 @@ export async function GET(req: NextRequest) {
       const ptsPerActiveHour = activeHours > 0 ? totalWeightedPoints / activeHours : 0;
       const tasksPerActiveHour = activeHours > 0 ? totalCompleted / activeHours : 0;
 
+      // Calculate hourly breakdown (PST timezone) for tasks completed today/this period
+      const hourlyBreakdown: Record<number, { count: number; points: number }> = {};
+      
+      for (const task of tasks) {
+        if (!task.endTime) continue;
+        
+        // Convert UTC to PST (UTC-8)
+        const pstOffset = 8 * 60 * 60 * 1000;
+        const endTimePST = new Date(task.endTime.getTime() + pstOffset);
+        const hour = endTimePST.getUTCHours(); // Get PST hour (0-23)
+        
+        if (!hourlyBreakdown[hour]) {
+          hourlyBreakdown[hour] = { count: 0, points: 0 };
+        }
+        
+        hourlyBreakdown[hour].count++;
+        hourlyBreakdown[hour].points += getTaskWeight(task.taskType, task.disposition);
+      }
+
+      // Calculate idle time if we have task timestamps
+      let estimatedIdleHours = 0;
+      if (tasks.length > 1 && daysWorked > 0) {
+        // Sort tasks by end time
+        const sortedTasks = [...tasks].sort((a, b) => 
+          new Date(a.endTime!).getTime() - new Date(b.endTime!).getTime()
+        );
+        
+        // Calculate gaps between tasks (assuming 8-hour workday)
+        const assumedShiftHours = 8;
+        const totalShiftTime = daysWorked * assumedShiftHours * 3600; // seconds
+        estimatedIdleHours = (totalShiftTime - totalTimeSec) / 3600;
+        
+        // Cap at reasonable bounds (can't be negative, max 50% of shift)
+        estimatedIdleHours = Math.max(0, Math.min(estimatedIdleHours, daysWorked * 4));
+      }
+
       return {
         id: userId,
         name: userName,
@@ -210,11 +246,13 @@ export async function GET(req: NextRequest) {
         activeHours,
         ptsPerActiveHour,
         tasksPerActiveHour,
+        estimatedIdleHours, // NEW: Idle time analysis
+        hourlyBreakdown, // NEW: Tasks per hour (PST)
         breakdown,
         hybridScore: 0, // Will be calculated after normalization
         rankByTasksPerDay: 0,
         rankByPtsPerDay: 0,
-        rankByPtsPerHour: 0, // NEW: Efficiency ranking
+        rankByPtsPerHour: 0,
         rankByHybrid: 0,
         tier: '',
         percentile: 0,

@@ -1530,6 +1530,111 @@ export default function AgentPage() {
                   </div>
                 );
               })()}
+
+              {/* Productivity Insights (NEW!) */}
+              {scorecardData.today && scorecardData.today.my && scorecardData.today.my.totalCompleted > 0 && (
+                <div className="bg-white/5 rounded-lg p-4">
+                  <div className="text-sm font-semibold text-white mb-3">📊 Today's Productivity Insights</div>
+                  
+                  {/* Idle Time Analysis */}
+                  {scorecardData.today.my.estimatedIdleHours > 0 && (
+                    <div className="bg-orange-500/10 border border-orange-500/30 rounded p-3 mb-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-white/70">⏱️ Time Analysis:</span>
+                        <span className="text-xs text-orange-300 font-semibold">
+                          {scorecardData.today.my.estimatedIdleHours.toFixed(1)} hrs idle time detected
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[10px]">
+                        <div>
+                          <span className="text-white/50">Active on tasks:</span>
+                          <span className="text-white ml-1">{scorecardData.today.my.activeHours.toFixed(1)} hrs</span>
+                        </div>
+                        <div>
+                          <span className="text-white/50">Waiting/Between tasks:</span>
+                          <span className="text-orange-300 ml-1">{scorecardData.today.my.estimatedIdleHours.toFixed(1)} hrs</span>
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-white/60 mt-2">
+                        💡 <strong>Tip:</strong> Request more assignments when your queue is empty to reduce idle time!
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Hourly Productivity Graph */}
+                  {scorecardData.today.my.hourlyBreakdown && Object.keys(scorecardData.today.my.hourlyBreakdown).length > 0 && (
+                    <div className="bg-white/5 rounded p-3">
+                      <div className="text-xs text-white/70 mb-3">📈 Tasks Completed Per Hour (PST):</div>
+                      <div className="flex items-end gap-1 h-32">
+                        {Array.from({ length: 24 }, (_, hour) => {
+                          const data = scorecardData.today.my.hourlyBreakdown[hour];
+                          const count = data?.count || 0;
+                          const maxCount = Math.max(...Object.values(scorecardData.today.my.hourlyBreakdown).map((d: any) => d.count), 1);
+                          const heightPercent = count > 0 ? (count / maxCount) * 100 : 0;
+                          
+                          return (
+                            <div key={hour} className="flex-1 flex flex-col items-center group relative">
+                              <div 
+                                className={`w-full rounded-t transition-all ${
+                                  count > 0 ? 'bg-gradient-to-t from-blue-500 to-blue-400 hover:from-blue-400 hover:to-blue-300' : 'bg-white/5'
+                                }`}
+                                style={{ height: `${heightPercent}%` }}
+                              >
+                                {count > 0 && (
+                                  <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 border border-blue-500/50 rounded px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                    {hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}: {count} tasks
+                                  </div>
+                                )}
+                              </div>
+                              {hour % 3 === 0 && (
+                                <div className="text-[8px] text-white/40 mt-1">{hour % 12 || 12}{hour >= 12 ? 'p' : 'a'}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="text-[10px] text-white/50 mt-2 text-center">
+                        💡 Hover over bars to see exact counts • Peak hours highlighted in blue
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Clear Improvement Goals */}
+                  {scorecardData.lifetime && scorecardData.lifetime.nextRankAgent && (() => {
+                    const my = scorecardData.lifetime.my;
+                    const next = scorecardData.lifetime.nextRankAgent;
+                    const dailyGap = next.weightedDailyAvg - my.weightedDailyAvg;
+                    const taskGap = next.tasksPerDay - my.tasksPerDay;
+                    
+                    // Calculate how many more tasks needed based on current avg task value
+                    const myAvgPtsPerTask = my.totalCompleted > 0 ? my.weightedPoints / my.totalCompleted : 0;
+                    const tasksNeeded = myAvgPtsPerTask > 0 ? Math.ceil(dailyGap / myAvgPtsPerTask) : 0;
+                    
+                    return (
+                      <div className="bg-blue-500/10 border border-blue-500/30 rounded p-3 mt-3">
+                        <div className="text-xs font-semibold text-blue-300 mb-2">🎯 Clear Goal to Reach #{my.rankByHybrid - 1}:</div>
+                        <div className="space-y-2 text-[10px] text-white/80">
+                          <div className="flex items-center justify-between">
+                            <span>Daily Gap:</span>
+                            <span className="font-semibold text-orange-300">+{dailyGap.toFixed(1)} pts/day</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Tasks Needed (at your current mix):</span>
+                            <span className="font-semibold text-green-300">~{tasksNeeded} more tasks/day</span>
+                          </div>
+                          <div className="bg-white/5 rounded p-2 mt-2">
+                            <strong className="text-white">💡 Faster Path:</strong>
+                            <br/>
+                            Get {Math.ceil(tasksNeeded / 2)} Email Requests instead of spam
+                            <br/>
+                            <span className="text-green-400">(Email worth 6pts vs spam 0.8pts - 4X faster!)</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           )}
         </Card>
