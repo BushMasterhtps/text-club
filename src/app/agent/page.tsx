@@ -396,6 +396,9 @@ export default function AgentPage() {
     if (pollingInterval) clearInterval(pollingInterval);
     console.log("🔄 Starting SIMPLE polling system...");
     
+    // Scorecard polling counter (refresh every 15 cycles = 30 seconds)
+    let scorecardPollCount = 0;
+    
     // Simple direct polling every 2 seconds
     const interval = setInterval(async () => {
       console.log("🔄 SIMPLE Polling for updates...");
@@ -460,13 +463,21 @@ export default function AgentPage() {
                    });
                  }
                  
-                 // Update tasks
-                 setTasks(newTasks);
-                 setLastUpdate(new Date());
-            }
+                // Update tasks
+                setTasks(newTasks);
+                setLastUpdate(new Date());
+           }
           }
         } catch (error) {
           console.error("🔄 SIMPLE Polling error:", error);
+        }
+        
+        // Refresh scorecard every 30 seconds (15 polling cycles)
+        scorecardPollCount++;
+        if (scorecardPollCount >= 15) {
+          console.log("📊 Auto-refreshing scorecard...");
+          loadScorecard(currentEmail).catch(err => console.error("Failed to refresh scorecard:", err));
+          scorecardPollCount = 0; // Reset counter
         }
       } else {
         console.log("🔄 SIMPLE No email available");
@@ -731,8 +742,9 @@ export default function AgentPage() {
         });
         // Remove task from local state for instant UI update
         setTasks(prev => prev.filter(t => t.id !== taskId));
-        // Update stats to reflect the completion
+        // Update stats AND scorecard to reflect the completion
         await loadStats();
+        await loadScorecard(); // ← Add this to refresh scorecard!
       }
     } catch (error) {
       console.error("Failed to complete task:", error);
