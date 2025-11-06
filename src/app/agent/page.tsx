@@ -1188,38 +1188,99 @@ export default function AgentPage() {
               </div>
             )}
 
-            {/* Current Rankings */}
-            {!scorecardData.agent.isSenior && (scorecardData.sprint?.my?.qualified || scorecardData.lifetime?.my?.qualified) && (
+            {/* Current Rankings OR Unranked Status */}
+            {!scorecardData.agent.isSenior && (
               <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg p-4">
-                <div className="text-sm font-semibold text-purple-300 mb-2">🏆 Your Rankings</div>
-                <div className="space-y-2">
-                  {scorecardData.sprint?.my?.qualified && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-white/60">Current Sprint:</span>
-                      <span className="text-lg font-bold text-white">#{scorecardData.sprint.my.rankByHybrid}</span>
+                {(scorecardData.sprint?.my?.qualified || scorecardData.lifetime?.my?.qualified) ? (
+                  // QUALIFIED - Show Rankings
+                  <>
+                    <div className="text-sm font-semibold text-purple-300 mb-2">🏆 Your Rankings</div>
+                    <div className="space-y-2">
+                      {scorecardData.sprint?.my?.qualified && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-white/60">Current Sprint:</span>
+                          <span className="text-lg font-bold text-white">#{scorecardData.sprint.my.rankByHybrid}</span>
+                        </div>
+                      )}
+                      {scorecardData.lifetime?.my?.qualified && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-white/60">Lifetime Points:</span>
+                          <span className="text-lg font-bold text-yellow-300">#{scorecardData.lifetime.my.rankByPtsPerDay}</span>
+                        </div>
+                      )}
+                      {scorecardData.sprint?.my?.tier && (
+                        <div className="mt-2 pt-2 border-t border-white/10">
+                          <Badge tone={
+                            scorecardData.sprint.my.tier === 'Elite' ? 'success' :
+                            scorecardData.sprint.my.tier === 'High Performer' ? 'default' :
+                            scorecardData.sprint.my.tier === 'Solid Contributor' ? 'muted' :
+                            scorecardData.sprint.my.tier === 'Developing' ? 'warning' :
+                            'danger'
+                          }>
+                            {scorecardData.sprint.my.tier}
+                          </Badge>
+                          <div className="text-xs text-white/50 mt-1">Top {100 - scorecardData.sprint.my.percentile}%</div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {scorecardData.lifetime?.my?.qualified && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-white/60">Lifetime Points:</span>
-                      <span className="text-lg font-bold text-yellow-300">#{scorecardData.lifetime.my.rankByPtsPerDay}</span>
+                  </>
+                ) : (
+                  // NOT QUALIFIED - Show Unranked Status
+                  <>
+                    <div className="text-sm font-semibold text-yellow-300 mb-2">📊 Not Yet Ranked</div>
+                    <div className="space-y-3">
+                      {/* Lifetime Ranking Requirements */}
+                      {scorecardData.lifetime?.my && (
+                        <div className="bg-white/5 rounded p-3">
+                          <div className="text-xs text-white/70 mb-2">Lifetime Rankings:</div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-white/10 rounded-full h-2">
+                              <div 
+                                className="bg-yellow-500 rounded-full h-2 transition-all"
+                                style={{ width: `${Math.min(100, (scorecardData.lifetime.my.totalCompleted / 20) * 100)}%` }}
+                              ></div>
+                            </div>
+                            <div className="text-xs text-white/70 whitespace-nowrap">
+                              {scorecardData.lifetime.my.totalCompleted}/20
+                            </div>
+                          </div>
+                          <div className="text-xs text-white/50 mt-1">
+                            {scorecardData.lifetime.my.totalCompleted >= 20 
+                              ? '✓ Qualified!' 
+                              : `Need ${20 - scorecardData.lifetime.my.totalCompleted} more tasks to qualify`}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Sprint Ranking Requirements */}
+                      {scorecardData.sprint?.my && (
+                        <div className="bg-white/5 rounded p-3">
+                          <div className="text-xs text-white/70 mb-2">Current Sprint:</div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-white/10 rounded-full h-2">
+                              <div 
+                                className="bg-purple-500 rounded-full h-2 transition-all"
+                                style={{ width: `${Math.min(100, (scorecardData.sprint.my.daysWorked / 3) * 100)}%` }}
+                              ></div>
+                            </div>
+                            <div className="text-xs text-white/70 whitespace-nowrap">
+                              {scorecardData.sprint.my.daysWorked}/3
+                            </div>
+                          </div>
+                          <div className="text-xs text-white/50 mt-1">
+                            {scorecardData.sprint.my.daysWorked >= 3 
+                              ? '✓ Qualified!' 
+                              : `Work ${3 - scorecardData.sprint.my.daysWorked} more days to qualify`}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="text-xs text-white/40 text-center pt-2 border-t border-white/10">
+                        💡 Keep working! Rankings unlock as you complete more tasks.
+                      </div>
                     </div>
-                  )}
-                  {scorecardData.sprint?.my?.tier && (
-                    <div className="mt-2 pt-2 border-t border-white/10">
-                      <Badge tone={
-                        scorecardData.sprint.my.tier === 'Elite' ? 'success' :
-                        scorecardData.sprint.my.tier === 'High Performer' ? 'default' :
-                        scorecardData.sprint.my.tier === 'Solid Contributor' ? 'muted' :
-                        scorecardData.sprint.my.tier === 'Developing' ? 'warning' :
-                        'danger'
-                      }>
-                        {scorecardData.sprint.my.tier}
-                      </Badge>
-                      <div className="text-xs text-white/50 mt-1">Top {100 - scorecardData.sprint.my.percentile}%</div>
-                    </div>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
             )}
 
