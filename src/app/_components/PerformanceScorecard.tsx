@@ -439,13 +439,33 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                             {/* vs Team Average */}
                             <div className="grid grid-cols-2 gap-3 text-xs mb-3">
                               <div>
-                                <div className="text-white/60">Complexity vs Team Avg:</div>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-white/60">Complexity vs Team Avg:</span>
+                                  <div className="relative group">
+                                    <span className="text-blue-400 cursor-help text-[10px]">ℹ️</span>
+                                    <div className="absolute left-0 top-4 w-64 bg-gray-900 border border-blue-500/50 rounded p-2 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-[10px]">
+                                      <div className="text-white/80">
+                                        <strong className="text-blue-300">Task Difficulty (70% of rank):</strong> Weighted points per day. Email/Yotpo (6-7pts) vs Spam (0.8pts). Higher = handling harder tasks.
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
                                 <div className={`font-semibold ${complexityGap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                   {complexityGap >= 0 ? '+' : ''}{complexityGap.toFixed(1)} pts/day ({complexityPercent >= 0 ? '+' : ''}{complexityPercent}%)
                                 </div>
                               </div>
                               <div>
-                                <div className="text-white/60">Volume vs Team Avg:</div>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-white/60">Volume vs Team Avg:</span>
+                                  <div className="relative group">
+                                    <span className="text-blue-400 cursor-help text-[10px]">ℹ️</span>
+                                    <div className="absolute left-0 top-4 w-64 bg-gray-900 border border-blue-500/50 rounded p-2 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-[10px]">
+                                      <div className="text-white/80">
+                                        <strong className="text-blue-300">Tasks Completed (30% of rank):</strong> How many tasks finished per day vs team average.
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
                                 <div className={`font-semibold ${volumeGap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                   {volumeGap >= 0 ? '+' : ''}{volumeGap.toFixed(1)} tasks/day ({volumePercent >= 0 ? '+' : ''}{volumePercent}%)
                                 </div>

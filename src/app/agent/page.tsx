@@ -1151,7 +1151,26 @@ export default function AgentPage() {
             {/* Today vs Yesterday */}
             {scorecardData.today && scorecardData.yesterday && (
               <div className="bg-white/5 rounded-lg p-4">
-                <div className="text-sm font-semibold text-white mb-3">📅 Today vs Yesterday</div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="text-sm font-semibold text-white">📅 Today vs Yesterday</div>
+                  <div className="relative group">
+                    <span className="text-blue-400 cursor-help text-xs">ℹ️</span>
+                    <div className="absolute left-0 top-6 w-72 bg-gray-900 border border-blue-500/50 rounded-lg p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                      <div className="text-xs text-white space-y-1">
+                        <div className="font-semibold text-blue-300 mb-1">How to Read This:</div>
+                        <div className="text-white/70">
+                          🟢 <strong className="text-green-400">Green (+)</strong> = You did MORE today than yesterday (great!)
+                        </div>
+                        <div className="text-white/70">
+                          🔴 <strong className="text-red-400">Red (-)</strong> = You did LESS today than yesterday (need to catch up!)
+                        </div>
+                        <div className="text-white/70 mt-2 text-[10px]">
+                          💡 Early in the day? Numbers will be red until you complete more tasks than yesterday.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-3 gap-3 text-center">
                   <div>
                     <div className="text-xs text-white/60">Tasks</div>
@@ -1164,6 +1183,9 @@ export default function AgentPage() {
                     </div>
                     <div className="text-xs text-white/50">
                       {scorecardData.today.my?.totalCompleted || 0} today
+                    </div>
+                    <div className="text-[10px] text-white/40 mt-1">
+                      vs {scorecardData.yesterday.my?.totalCompleted || 0} yesterday
                     </div>
                   </div>
                   <div>
@@ -1178,6 +1200,9 @@ export default function AgentPage() {
                     <div className="text-xs text-white/50">
                       {scorecardData.today.my?.weightedPoints?.toFixed(1) || '0.0'} today
                     </div>
+                    <div className="text-[10px] text-white/40 mt-1">
+                      vs {scorecardData.yesterday.my?.weightedPoints?.toFixed(1) || '0.0'} yesterday
+                    </div>
                   </div>
                   <div>
                     <div className="text-xs text-white/60">Speed</div>
@@ -1191,6 +1216,9 @@ export default function AgentPage() {
                     </div>
                     <div className="text-xs text-white/50">
                       {Math.floor((scorecardData.today.my?.avgHandleTimeSec || 0) / 60)}m today
+                    </div>
+                    <div className="text-[10px] text-white/40 mt-1">
+                      vs {Math.floor((scorecardData.yesterday.my?.avgHandleTimeSec || 0) / 60)}m yesterday
                     </div>
                   </div>
                 </div>
@@ -1372,14 +1400,25 @@ export default function AgentPage() {
                       <div className="text-lg font-semibold text-white">{scorecardData.lifetime.my.weightedPoints.toFixed(1)} pts</div>
                       <div className="text-xs text-white/50">{scorecardData.lifetime.my.weightedDailyAvg.toFixed(1)} pts/day</div>
                     </div>
-                    {scorecardData.lifetime.nextRankAgent && (
-                      <div className="mt-3 pt-3 border-t border-white/10">
-                        <div className="text-xs text-white/60">Gap to #{scorecardData.lifetime.my.rankByPtsPerDay - 1}:</div>
-                        <div className="text-sm font-semibold text-orange-300">
-                          +{((scorecardData.lifetime.nextRankAgent.weightedDailyAvg - scorecardData.lifetime.my.weightedDailyAvg) * scorecardData.lifetime.my.daysWorked).toFixed(1)} pts total
+                    {scorecardData.lifetime.nextRankAgent && (() => {
+                      const dailyGap = scorecardData.lifetime.nextRankAgent.weightedDailyAvg - scorecardData.lifetime.my.weightedDailyAvg;
+                      const totalGap = dailyGap * scorecardData.lifetime.my.daysWorked;
+                      const daysNeeded = scorecardData.lifetime.my.weightedDailyAvg > 0 
+                        ? Math.ceil(Math.abs(totalGap) / scorecardData.lifetime.my.weightedDailyAvg)
+                        : 0;
+                      
+                      return (
+                        <div className="mt-3 pt-3 border-t border-white/10">
+                          <div className="text-xs text-white/60">Gap to #{scorecardData.lifetime.my.rankByPtsPerDay - 1}:</div>
+                          <div className="text-sm font-semibold text-orange-300">
+                            +{dailyGap.toFixed(1)} pts/day
+                          </div>
+                          <div className="text-[10px] text-white/50 mt-1">
+                            (~{daysNeeded} days at your current pace)
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -1426,16 +1465,36 @@ export default function AgentPage() {
                       <div className="space-y-2 text-xs">
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <span className="text-white/60">Complexity vs Team:</span>
-                            <span className={`ml-2 font-semibold ${complexityGap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            <div className="flex items-center gap-1">
+                              <span className="text-white/60">Complexity vs Team:</span>
+                              <div className="relative group">
+                                <span className="text-blue-400 cursor-help text-[10px]">ℹ️</span>
+                                <div className="absolute left-0 top-4 w-56 bg-gray-900 border border-blue-500/50 rounded p-2 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-[10px]">
+                                  <div className="text-white/80">
+                                    <strong className="text-blue-300">Task Difficulty:</strong> Points earned per day based on task types (Email, Yotpo, WOD = high pts, Spam = low pts)
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div className={`font-semibold ${complexityGap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                               {complexityGap >= 0 ? '+' : ''}{complexityGap.toFixed(1)} pts/day
-                            </span>
+                            </div>
                           </div>
                           <div>
-                            <span className="text-white/60">Volume vs Team:</span>
-                            <span className={`ml-2 font-semibold ${volumeGap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            <div className="flex items-center gap-1">
+                              <span className="text-white/60">Volume vs Team:</span>
+                              <div className="relative group">
+                                <span className="text-blue-400 cursor-help text-[10px]">ℹ️</span>
+                                <div className="absolute left-0 top-4 w-56 bg-gray-900 border border-blue-500/50 rounded p-2 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-[10px]">
+                                  <div className="text-white/80">
+                                    <strong className="text-blue-300">Tasks Completed:</strong> How many tasks you finish per day compared to team average
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div className={`font-semibold ${volumeGap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                               {volumeGap >= 0 ? '+' : ''}{volumeGap.toFixed(1)} tasks/day
-                            </span>
+                            </div>
                           </div>
                         </div>
                         
