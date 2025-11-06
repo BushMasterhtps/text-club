@@ -83,9 +83,14 @@ export async function GET(req: NextRequest) {
     // Fetch Trello data
     const allTrello = await prisma.trelloCompletion.findMany({
       select: {
-        agentEmail: true,
+        agentId: true,
         date: true,
-        count: true
+        cardsCount: true,
+        agent: {
+          select: {
+            email: true
+          }
+        }
       }
     });
 
@@ -101,7 +106,7 @@ export async function GET(req: NextRequest) {
       });
 
       const trello = allTrello.filter(t => {
-        if (t.agentEmail !== userEmail) return false;
+        if (t.agent.email !== userEmail) return false;
         if (!t.date) return false;
         if (startDate && t.date < startDate) return false;
         if (endDate && t.date > endDate) return false;
@@ -109,7 +114,7 @@ export async function GET(req: NextRequest) {
       });
 
       const tasksCompleted = tasks.length;
-      const trelloCompleted = trello.reduce((sum, t) => sum + t.count, 0);
+      const trelloCompleted = trello.reduce((sum, t) => sum + t.cardsCount, 0);
       const totalCompleted = tasksCompleted + trelloCompleted;
 
       // Calculate weighted points
