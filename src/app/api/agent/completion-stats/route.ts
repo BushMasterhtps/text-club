@@ -43,10 +43,10 @@ export async function GET(request: NextRequest) {
       endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
     }
 
-    // Convert to UTC for database queries to avoid timezone issues
-    const utcStartOfDay = new Date(startOfDay.getTime() - startOfDay.getTimezoneOffset() * 60000);
-    const utcEndOfDay = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000);
-
+    // Date objects are already stored internally as UTC timestamps
+    // When we create new Date(year, month, day, 0, 0, 0) in local time,
+    // JavaScript automatically converts it to UTC internally
+    // So we can use them directly in the query!
 
     // Get completion stats by task type for today (including sent-back tasks)
     const completionStats = await prisma.task.groupBy({
@@ -57,16 +57,16 @@ export async function GET(request: NextRequest) {
             assignedToId: user.id,
             status: 'COMPLETED',
             endTime: {
-              gte: utcStartOfDay,
-              lte: utcEndOfDay
+              gte: startOfDay,
+              lte: endOfDay
             }
           },
           {
             sentBackBy: user.id,
             status: 'PENDING',
             endTime: {
-              gte: utcStartOfDay,
-              lte: utcEndOfDay
+              gte: startOfDay,
+              lte: endOfDay
             }
           }
         ]
