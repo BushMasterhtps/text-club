@@ -43,10 +43,28 @@ export async function GET(req: NextRequest) {
     // Get current sprint info
     const currentSprint = getCurrentSprint();
 
-    // Fetch ALL agents for ranking purposes
+    // First, find the current user (agent/manager requesting scorecard)
+    const currentUser = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true
+      }
+    });
+
+    if (!currentUser) {
+      return NextResponse.json({
+        success: false,
+        error: "User not found"
+      }, { status: 404 });
+    }
+
+    // Fetch ALL agents for ranking purposes (include managers for comparison)
     const allUsers = await prisma.user.findMany({
       where: {
-        role: { in: ["AGENT", "MANAGER_AGENT"] }
+        role: { in: ["AGENT", "MANAGER_AGENT", "MANAGER"] }
       },
       select: {
         id: true,
@@ -54,6 +72,15 @@ export async function GET(req: NextRequest) {
         email: true
       }
     });
+
+    // Ensure current user is in the list (in case they have a different role or were missed)
+    if (!allUsers.find(u => u.id === currentUser.id)) {
+      allUsers.push({
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email
+      });
+    }
 
     // Senior agents (excluded from competitive rankings)
     const seniorEmails = [
@@ -200,12 +227,16 @@ export async function GET(req: NextRequest) {
 
     // Rank and calculate hybrid scores for each set
     const rankAndNormalize = (scorecards: any[], minTasks: number, minDays: number) => {
-      // Filter qualified competitive agents
+      // Separate agents into competitive, seniors, and unqualified
       const competitive = scorecards.filter(a => !a.isSenior && (
         minDays > 0 ? a.daysWorked >= minDays : a.totalCompleted >= minTasks
       ));
+      const seniors = scorecards.filter(a => a.isSenior);
+      const unqualified = scorecards.filter(a => !a.isSenior && (
+        minDays > 0 ? a.daysWorked < minDays : a.totalCompleted < minTasks
+      ));
 
-      if (competitive.length === 0) return { competitive: [], seniors: scorecards.filter(a => a.isSenior), teamAverages: {} };
+      if (competitive.length === 0) return { competitive: [], seniors, unqualified, teamAverages: {} };
 
       // Mark qualified
       competitive.forEach(a => a.qualified = true);
@@ -258,7 +289,7 @@ export async function GET(req: NextRequest) {
         hybridScore: competitive.reduce((sum, a) => sum + a.hybridScore, 0) / competitive.length
       };
 
-      return { competitive, seniors: scorecards.filter(a => a.isSenior), teamAverages };
+      return { competitive, seniors, unqualified, teamAverages };
     };
 
     const lifetimeRanked = rankAndNormalize(lifetimeScorecards, MINIMUM_TASKS_FOR_RANKING, 0);
@@ -266,9 +297,9 @@ export async function GET(req: NextRequest) {
     const todayRanked = rankAndNormalize(todayScorecards, 0, 0); // No minimum for daily
     const yesterdayRanked = rankAndNormalize(yesterdayScorecards, 0, 0);
 
-    // Find the logged-in agent's data
+    // Find the logged-in agent's data (check competitive, seniors, AND unqualified)
     const findAgent = (ranked: any) => {
-      return [...ranked.competitive, ...ranked.seniors].find(a => a.email === email);
+      return [...ranked.competitive, ...ranked.seniors, ...(ranked.unqualified || [])].find(a => a.email === email);
     };
 
     const myLifetime = findAgent(lifetimeRanked);
@@ -276,10 +307,12 @@ export async function GET(req: NextRequest) {
     const myToday = findAgent(todayRanked);
     const myYesterday = findAgent(yesterdayRanked);
 
+    // This should never happen now since we ensure the user is in allUsers
     if (!myLifetime) {
+      console.error("Agent not found in rankings:", email);
       return NextResponse.json({
         success: false,
-        error: "Agent not found"
+        error: "Agent data not found. You may need to complete some tasks first."
       }, { status: 404 });
     }
 
