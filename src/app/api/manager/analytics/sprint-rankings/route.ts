@@ -255,7 +255,9 @@ export async function GET(request: NextRequest) {
         isTopThree: false,
         qualified: mode === 'lifetime' 
           ? totalCompleted >= MINIMUM_TASKS_FOR_RANKING
-          : daysWorked >= MINIMUM_DAYS_FOR_SPRINT
+          : mode === 'custom'
+            ? totalCompleted >= 1 // Custom ranges: Just need 1 task
+            : daysWorked >= MINIMUM_DAYS_FOR_SPRINT // Sprint mode: Need 3 days
       });
     }
 

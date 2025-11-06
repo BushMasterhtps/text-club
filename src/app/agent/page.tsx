@@ -1158,14 +1158,14 @@ export default function AgentPage() {
                     <div className="text-3xl font-bold text-blue-400">
                       {scorecardData.today.my?.totalCompleted || 0}
                     </div>
-                    {scorecardData.lastWorked && scorecardData.lastWorked.date && (
+                    {scorecardData.lastWorked && scorecardData.lastWorked.date && scorecardData.lastWorked.my?.totalCompleted > 0 && (
                       <div className="text-[10px] text-white/50 mt-2">
                         {scorecardData.dailyComparison.tasksChange > 0 ? (
-                          <span className="text-green-400">↑ +{scorecardData.dailyComparison.tasksChange} vs last worked day</span>
+                          <span className="text-green-400">↑ {Math.abs(scorecardData.dailyComparison.tasksChange)} more than {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
                         ) : scorecardData.dailyComparison.tasksChange < 0 ? (
-                          <span className="text-orange-400">↓ Behind by {Math.abs(scorecardData.dailyComparison.tasksChange)} ({scorecardData.lastWorked.my?.totalCompleted} on {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})})</span>
+                          <span className="text-white/60">📅 You did {scorecardData.lastWorked.my?.totalCompleted} on {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
                         ) : (
-                          <span className="text-white/50">→ Same as last worked day</span>
+                          <span className="text-green-400">✓ Same pace as {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
                         )}
                       </div>
                     )}
@@ -1175,14 +1175,14 @@ export default function AgentPage() {
                     <div className="text-3xl font-bold text-yellow-400">
                       {scorecardData.today.my?.weightedPoints?.toFixed(1) || '0.0'}
                     </div>
-                    {scorecardData.lastWorked && scorecardData.lastWorked.date && (
+                    {scorecardData.lastWorked && scorecardData.lastWorked.date && scorecardData.lastWorked.my?.weightedPoints > 0 && (
                       <div className="text-[10px] text-white/50 mt-2">
                         {scorecardData.dailyComparison.ptsChange > 0 ? (
-                          <span className="text-green-400">↑ +{scorecardData.dailyComparison.ptsChange.toFixed(1)} vs last worked day</span>
+                          <span className="text-green-400">↑ {Math.abs(scorecardData.dailyComparison.ptsChange).toFixed(1)} more than {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
                         ) : scorecardData.dailyComparison.ptsChange < 0 ? (
-                          <span className="text-orange-400">↓ Behind by {Math.abs(scorecardData.dailyComparison.ptsChange).toFixed(1)} ({scorecardData.lastWorked.my?.weightedPoints?.toFixed(1)} on {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})})</span>
+                          <span className="text-white/60">📅 You earned {scorecardData.lastWorked.my?.weightedPoints?.toFixed(1)} on {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
                         ) : (
-                          <span className="text-white/50">→ Same as last worked day</span>
+                          <span className="text-green-400">✓ Same pace as {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
                         )}
                       </div>
                     )}
@@ -1192,14 +1192,14 @@ export default function AgentPage() {
                     <div className="text-3xl font-bold text-green-400">
                       {Math.floor((scorecardData.today.my?.avgHandleTimeSec || 0) / 60)}m
                     </div>
-                    {scorecardData.lastWorked && scorecardData.lastWorked.date && (
+                    {scorecardData.lastWorked && scorecardData.lastWorked.date && scorecardData.lastWorked.my?.avgHandleTimeSec > 0 && (
                       <div className="text-[10px] text-white/50 mt-2">
                         {scorecardData.dailyComparison.timeChange < 0 ? (
-                          <span className="text-green-400">↓ Faster than last worked day!</span>
+                          <span className="text-green-400">⚡ Faster than {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}!</span>
                         ) : scorecardData.dailyComparison.timeChange > 0 ? (
-                          <span className="text-orange-400">↑ Slower than last worked day</span>
+                          <span className="text-white/60">📅 {Math.floor((scorecardData.lastWorked.my?.avgHandleTimeSec || 0) / 60)}m on {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
                         ) : (
-                          <span className="text-white/50">→ Same as last worked day</span>
+                          <span className="text-green-400">✓ Same pace as {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
                         )}
                       </div>
                     )}
@@ -1208,6 +1208,44 @@ export default function AgentPage() {
                 <div className="text-[10px] text-white/40 text-center mt-3">
                   💡 These numbers show your actual output TODAY (not comparisons)
                 </div>
+                
+                {/* Hourly Productivity Graph */}
+                {scorecardData.today.my?.hourlyBreakdown && Object.keys(scorecardData.today.my.hourlyBreakdown).length > 0 && (
+                  <div className="mt-4 bg-white/5 rounded-lg p-4 border border-white/10">
+                    <div className="text-xs font-semibold text-white mb-3">📈 Your Hourly Productivity Today (PST):</div>
+                    <div className="flex items-end gap-1 h-32">
+                      {Array.from({ length: 24 }, (_, hour) => {
+                        const data = scorecardData.today.my.hourlyBreakdown[hour];
+                        const count = data?.count || 0;
+                        const maxCount = Math.max(...Object.values(scorecardData.today.my.hourlyBreakdown).map((d: any) => d.count), 1);
+                        const heightPercent = count > 0 ? (count / maxCount) * 100 : 0;
+                        
+                        return (
+                          <div key={hour} className="flex-1 flex flex-col items-center group relative">
+                            <div 
+                              className={`w-full rounded-t transition-all ${
+                                count > 0 ? 'bg-gradient-to-t from-blue-500 to-blue-400 hover:from-blue-400 hover:to-blue-300' : 'bg-white/5'
+                              }`}
+                              style={{ height: `${heightPercent}%`, minHeight: count > 0 ? '4px' : '2px' }}
+                            >
+                              {count > 0 && (
+                                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 border border-blue-500/50 rounded px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                  {hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}: {count} tasks ({data.points?.toFixed(1) || 0} pts)
+                                </div>
+                              )}
+                            </div>
+                            {hour % 3 === 0 && (
+                              <div className="text-[8px] text-white/40 mt-1">{hour % 12 || 12}{hour >= 12 ? 'p' : 'a'}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="text-[10px] text-white/50 mt-2 text-center">
+                      💡 Hover over bars to see counts & points • Shows when you're most productive
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
