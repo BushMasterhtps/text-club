@@ -37,6 +37,27 @@ export async function GET(req: NextRequest) {
     const todayStart = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) + pstOffset);
     const todayEnd = new Date(Date.UTC(year, month, day, 23, 59, 59, 999) + pstOffset);
     
+    // Get current sprint info
+    const currentSprint = getCurrentSprint();
+
+    // First, find the current user (agent/manager requesting scorecard) - MUST BE BEFORE LOOP!
+    const currentUser = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true
+      }
+    });
+
+    if (!currentUser) {
+      return NextResponse.json({
+        success: false,
+        error: "User not found"
+      }, { status: 404 });
+    }
+
     // Find LAST WORKED DAY (not just yesterday - agent might not have worked yesterday!)
     // Look back up to 7 days to find their most recent working day
     let lastWorkedStart: Date | null = null;
@@ -63,27 +84,6 @@ export async function GET(req: NextRequest) {
         lastWorkedEnd = checkEnd;
         break; // Found it!
       }
-    }
-
-    // Get current sprint info
-    const currentSprint = getCurrentSprint();
-
-    // First, find the current user (agent/manager requesting scorecard)
-    const currentUser = await prisma.user.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true
-      }
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({
-        success: false,
-        error: "User not found"
-      }, { status: 404 });
     }
 
     // Fetch ALL agents for ranking purposes (include managers for comparison)
