@@ -67,15 +67,14 @@ export async function GET(req: NextRequest) {
     const allTasks = await prisma.task.findMany({
       where: {
         status: "COMPLETED",
-        completedBy: { not: null },
-        completedAt: { not: null }
+        assignedToId: { not: null },
+        endTime: { not: null }
       },
       select: {
         id: true,
-        completedBy: true,
-        completedAt: true,
-        startTime: true,
+        assignedToId: true,
         endTime: true,
+        startTime: true,
         taskType: true,
         disposition: true
       }
@@ -94,10 +93,10 @@ export async function GET(req: NextRequest) {
     const buildAgentScorecard = (userId: string, userEmail: string, userName: string, startDate: Date | null, endDate: Date | null) => {
       // Filter tasks by date range if provided
       const tasks = allTasks.filter(t => {
-        if (t.completedBy !== userId) return false;
-        if (!t.completedAt) return false;
-        if (startDate && t.completedAt < startDate) return false;
-        if (endDate && t.completedAt > endDate) return false;
+        if (t.assignedToId !== userId) return false;
+        if (!t.endTime) return false;
+        if (startDate && t.endTime < startDate) return false;
+        if (endDate && t.endTime > endDate) return false;
         return true;
       });
 
@@ -148,7 +147,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Calculate days worked
-      const portalWorkedDates = new Set(tasks.map(t => t.completedAt!.toISOString().split('T')[0]));
+      const portalWorkedDates = new Set(tasks.map(t => t.endTime!.toISOString().split('T')[0]));
       const trelloWorkDates = new Set(trello.map(t => t.date.toISOString().split('T')[0]));
       const allWorkDates = new Set([...portalWorkedDates, ...trelloWorkDates]);
       const daysWorked = allWorkDates.size;
