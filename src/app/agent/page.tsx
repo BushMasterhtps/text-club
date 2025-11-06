@@ -200,6 +200,7 @@ export default function AgentPage() {
   const [scorecardData, setScorecardData] = useState<any>(null);
   const [loadingScorecard, setLoadingScorecard] = useState(false);
   const [showScorecard, setShowScorecard] = useState(true); // Expanded by default
+  const [showGuideModal, setShowGuideModal] = useState(false);
 
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -1132,9 +1133,17 @@ export default function AgentPage() {
         <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
             <H2>📊 Your Performance Scorecard</H2>
-            <SmallButton onClick={() => setShowScorecard(!showScorecard)}>
-              {showScorecard ? '▲ Hide Details' : '▼ Show Full Details'}
-            </SmallButton>
+            <div className="flex items-center gap-2">
+              <SmallButton 
+                onClick={() => setShowGuideModal(true)}
+                className="bg-blue-500/20 hover:bg-blue-500/30 ring-blue-500/40"
+              >
+                📚 How Rankings Work
+              </SmallButton>
+              <SmallButton onClick={() => setShowScorecard(!showScorecard)}>
+                {showScorecard ? '▲ Hide Details' : '▼ Show Full Details'}
+              </SmallButton>
+            </div>
           </div>
 
           {/* ALWAYS SHOW: Quick Summary */}
@@ -1571,6 +1580,326 @@ export default function AgentPage() {
           window.location.reload();
         }}
       />
+
+      {/* Scorecard Guide Modal */}
+      {showGuideModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowGuideModal(false)}>
+          <div 
+            className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden ring-1 ring-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border-b border-white/10 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-1">📊 Performance Scorecard Guide</h2>
+                  <p className="text-sm text-white/60">Everything you need to know about rankings</p>
+                </div>
+                <button
+                  onClick={() => setShowGuideModal(false)}
+                  className="text-white/60 hover:text-white text-2xl leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              <div className="space-y-6">
+                {/* Section 1: Quick Overview */}
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-blue-300 mb-3">🎯 How to Rank #1</h3>
+                  <div className="space-y-2 text-sm text-white/80">
+                    <div className="flex items-start gap-2">
+                      <span className="text-green-400">✅</span>
+                      <div>
+                        <strong className="text-white">Work FAST:</strong> Reduce your avg handle time (6min → 4min per task)
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-green-400">✅</span>
+                      <div>
+                        <strong className="text-white">Request MORE:</strong> Ask for more assignments when your queue is done
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-green-400">✅</span>
+                      <div>
+                        <strong className="text-white">Natural Variety:</strong> High-volume workers get better task mix (Email, Yotpo, WOD)
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-blue-500/20 text-xs text-blue-200">
+                    💡 <strong>Formula:</strong> 30% Task Volume + 70% Task Complexity
+                  </div>
+                </div>
+
+                {/* Section 2: Task Point Values */}
+                <div className="bg-white/5 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-3">⭐ Task Point Values</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">⭐ Yotpo</span>
+                      <span className="font-bold text-yellow-300">7.0 pts</span>
+                      <span className="text-xs text-green-400">Highest!</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">📧 Email Requests</span>
+                      <span className="font-bold text-green-300">6.0 pts</span>
+                      <span className="text-xs text-green-400">High value</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">🚧 Holds</span>
+                      <span className="font-bold text-orange-300">5.0 pts</span>
+                      <span className="text-xs text-blue-400">Good</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">📊 Trello</span>
+                      <span className="font-bold text-purple-300">5.0 pts</span>
+                      <span className="text-xs text-blue-400">Good</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">📦 WOD/IVCS</span>
+                      <span className="font-bold text-blue-300">2-4 pts</span>
+                      <span className="text-xs text-blue-400">Medium</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">📱 Text Club (Answered)</span>
+                      <span className="font-bold text-white/70">2-3 pts</span>
+                      <span className="text-xs text-white/50">OK</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">📱 Text Club (Spam)</span>
+                      <span className="font-bold text-red-300">0.8 pts</span>
+                      <span className="text-xs text-red-400">Low value</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-white/10 text-xs text-white/60">
+                    💡 Email Requests worth <strong className="text-green-400">7.5X more</strong> than spam!
+                  </div>
+                </div>
+
+                {/* Section 3: Understanding Your Stats */}
+                <div className="bg-white/5 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-3">📊 Reading Your Stats</h3>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-sm font-semibold text-green-300 mb-1">📦 Tasks</div>
+                      <div className="text-xs text-white/70 ml-4">
+                        <div><strong className="text-white">+15 ✓</strong> = 15 MORE tasks than yesterday (🟢 green = good!)</div>
+                        <div className="mt-1"><strong className="text-white">52 today</strong> = Total completed today</div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="text-sm font-semibold text-yellow-300 mb-1">⭐ Points</div>
+                      <div className="text-xs text-white/70 ml-4">
+                        <div><strong className="text-white">+67.5 ✓</strong> = 67.5 MORE points than yesterday</div>
+                        <div className="mt-1">Based on task difficulty (harder tasks = more points!)</div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="text-sm font-semibold text-blue-300 mb-1">⏱️ Speed</div>
+                      <div className="text-xs text-white/70 ml-4">
+                        <div><strong className="text-white">↓2m ✓</strong> = 2 minutes FASTER than yesterday (🟢 good!)</div>
+                        <div className="mt-1"><strong className="text-white">4m today</strong> = Avg time per task today</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-white/10 text-xs text-white/60">
+                    🎯 <strong>Goal:</strong> See green numbers every day = you're improving!
+                  </div>
+                </div>
+
+                {/* Section 4: Performance Tiers */}
+                <div className="bg-white/5 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-3">🏅 Performance Tiers</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Badge tone="success">Elite</Badge>
+                      <span className="text-xs text-white/70">Top 10% - Best of the best!</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge tone="default">High Performer</Badge>
+                      <span className="text-xs text-white/70">Top 25% - Excellent work!</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge tone="muted">Solid Contributor</Badge>
+                      <span className="text-xs text-white/70">Top 50% - Doing well!</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge tone="warning">Developing</Badge>
+                      <span className="text-xs text-white/70">Top 75% - Room to grow</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 5: Requirements */}
+                <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-purple-300 mb-3">📋 Requirements to See Your Rank</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white/5 rounded p-3">
+                      <div className="text-sm font-semibold text-yellow-300 mb-1">⭐ Lifetime Rankings</div>
+                      <div className="text-xs text-white/70">
+                        <div>• Complete <strong className="text-white">20 tasks</strong> total</div>
+                        <div className="mt-1">• Never resets (all-time record)</div>
+                      </div>
+                    </div>
+                    <div className="bg-white/5 rounded p-3">
+                      <div className="text-sm font-semibold text-purple-300 mb-1">🏆 Current Sprint</div>
+                      <div className="text-xs text-white/70">
+                        <div>• Work <strong className="text-white">3 days</strong> in sprint</div>
+                        <div className="mt-1">• Resets every 2 weeks</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs text-white/50 text-center">
+                    You'll see progress bars showing exactly where you are!
+                  </div>
+                </div>
+
+                {/* Section 6: Sprint System */}
+                <div className="bg-white/5 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-3">🏆 Sprint System</h3>
+                  <div className="space-y-2 text-sm text-white/80">
+                    <div className="flex items-start gap-2">
+                      <span>🔄</span>
+                      <div><strong className="text-white">Resets every 2 weeks</strong> - Everyone starts equal!</div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span>🏆</span>
+                      <div><strong className="text-white">Sprint Champion:</strong> #1 agent gets team-wide recognition</div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span>📅</span>
+                      <div><strong className="text-white">Current Sprint:</strong> Nov 1-14 (Sprint #1)</div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span>🎯</span>
+                      <div><strong className="text-white">Fresh Opportunity:</strong> New agents can compete with veterans!</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 7: Pro Tips */}
+                <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-green-300 mb-3">💡 Pro Tips to Rank Higher</h3>
+                  <div className="space-y-3 text-sm text-white/80">
+                    <div className="bg-white/5 rounded p-3">
+                      <div className="font-semibold text-white mb-2">Strategy 1: Increase Volume (Most Important! 70% of score)</div>
+                      <div className="text-xs space-y-1">
+                        <div>• Work faster (6min → 4min per task)</div>
+                        <div>• Request more assignments when queue is done</div>
+                        <div>• High volume = better task variety automatically</div>
+                        <div className="text-green-400 mt-2">✨ Result: Better tasks = more points!</div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white/5 rounded p-3">
+                      <div className="font-semibold text-white mb-2">Strategy 2: Maintain Consistency</div>
+                      <div className="text-xs space-y-1">
+                        <div>• Work 5 days/week minimum</div>
+                        <div>• Focus during peak productivity hours</div>
+                        <div>• Beat yesterday's performance daily</div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white/5 rounded p-3">
+                      <div className="font-semibold text-white mb-2">Real Example</div>
+                      <div className="text-xs space-y-1">
+                        <div className="text-red-300">❌ 50 spam tasks = 40 points</div>
+                        <div className="text-green-300">✅ 30 tasks (mixed variety) = 120 points</div>
+                        <div className="text-yellow-300 mt-2">💡 Same time, 3X more points!</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 8: FAQ */}
+                <div className="bg-white/5 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-3">❓ Common Questions</h3>
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <div className="font-semibold text-white">Q: Why am I not ranked yet?</div>
+                      <div className="text-xs text-white/70 ml-4 mt-1">
+                        A: You need 20 tasks OR 3 days worked. Check your progress bars!
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-semibold text-white">Q: How do I move up faster?</div>
+                      <div className="text-xs text-white/70 ml-4 mt-1">
+                        A: Work faster and request MORE assignments! High-volume workers naturally get better task variety.
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-semibold text-white">Q: Does the scorecard auto-update?</div>
+                      <div className="text-xs text-white/70 ml-4 mt-1">
+                        A: Yes! Updates after each task completion and every 30 seconds.
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-semibold text-white">Q: What if I'm #1?</div>
+                      <div className="text-xs text-white/70 ml-4 mt-1">
+                        A: Keep it up! You're the standard. The scorecard shows you how to maintain your lead.
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-semibold text-white">Q: Can I see other agents' names?</div>
+                      <div className="text-xs text-white/70 ml-4 mt-1">
+                        A: No. You only see your rank (e.g., "#5 of 11"). Keeps it competitive but respectful.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 9: Daily Checklist */}
+                <div className="bg-gradient-to-r from-orange-500/10 to-red-500/10 border border-orange-500/30 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-orange-300 mb-3">⚡ Daily Checklist</h3>
+                  <div className="space-y-2 text-sm text-white/80">
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" className="w-4 h-4" disabled />
+                      <span>Check "Today vs Yesterday" - am I improving?</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" className="w-4 h-4" disabled />
+                      <span>Check my rank - did I move up or down?</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" className="w-4 h-4" disabled />
+                      <span>Read improvement tips - what should I focus on?</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" className="w-4 h-4" disabled />
+                      <span>Work faster and request more assignments</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" className="w-4 h-4" disabled />
+                      <span>Beat yesterday's task count!</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Message */}
+                <div className="text-center pt-4">
+                  <div className="text-sm text-white/60 mb-3">
+                    Questions? Ask your manager for coaching and support!
+                  </div>
+                  <button
+                    onClick={() => setShowGuideModal(false)}
+                    className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition-all"
+                  >
+                    Got It! Let's Go! 🚀
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
