@@ -2460,6 +2460,7 @@ function TaskCard({
                   <option value="Unsubscribed – Customer removed from communications">🚫 Unsubscribed</option>
                   <option value="No Match – No valid account or order located">❓ No match found</option>
                   <option value="Escalation – Sent Negative Feedback Macro">⚠️ Escalation (negative feedback)</option>
+                  <option value="Passed MBG">🔬 Passed MBG</option>
                   <option value="Delivered – Order delivered after review, no further action required">✅ Delivered</option>
                 </>
               ) : (
