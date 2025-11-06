@@ -1240,16 +1240,10 @@ export default function AgentPage() {
                         </div>
                       )}
                   {scorecardData.lifetime?.my?.qualified && (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-white/60">Lifetime Points:</span>
-                        <span className="text-lg font-bold text-yellow-300">#{scorecardData.lifetime.my.rankByPtsPerDay}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-white/60">Efficiency (pts/hr):</span>
-                        <span className="text-lg font-bold text-green-300">#{scorecardData.lifetime.my.rankByPtsPerHour}</span>
-                      </div>
-                    </>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/60">Lifetime Points:</span>
+                      <span className="text-lg font-bold text-yellow-300">#{scorecardData.lifetime.my.rankByPtsPerDay}</span>
+                    </div>
                   )}
                       {scorecardData.sprint?.my?.tier && (
                         <div className="mt-2 pt-2 border-t border-white/10">
@@ -1361,7 +1355,7 @@ export default function AgentPage() {
               )}
 
               {/* Detailed Rankings */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Current Sprint Rankings */}
                 {scorecardData.sprint && scorecardData.sprint.my && scorecardData.sprint.my.qualified && !scorecardData.agent.isSenior && (
                   <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg p-4">
@@ -1428,24 +1422,6 @@ export default function AgentPage() {
                   </div>
                 )}
 
-                {/* Efficiency Rankings (NEW!) */}
-                {scorecardData.lifetime && scorecardData.lifetime.my && scorecardData.lifetime.my.qualified && !scorecardData.agent.isSenior && (
-                  <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-lg p-4">
-                    <div className="text-sm font-semibold text-green-300 mb-2">⚡ Efficiency (Active Time)</div>
-                    <div className="flex items-end gap-2">
-                      <div className="text-3xl font-bold text-white">#{scorecardData.lifetime.my.rankByPtsPerHour}</div>
-                      <div className="text-sm text-white/60 mb-1">of {scorecardData.lifetime.totalCompetitors}</div>
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-xs text-white/60">Performance per Hour</div>
-                      <div className="text-lg font-semibold text-white">{scorecardData.lifetime.my.ptsPerActiveHour.toFixed(1)} pts/hr</div>
-                      <div className="text-xs text-white/50">{scorecardData.lifetime.my.activeHours.toFixed(1)} active hours</div>
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-white/10 text-[10px] text-white/50">
-                      💡 Based on actual task completion time (ignores wait time between tasks)
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Senior Agent Message */}

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-type RankingMode = 'sprint' | 'lifetime-points' | 'task-day' | 'hybrid' | 'efficiency';
+type RankingMode = 'sprint' | 'lifetime-points' | 'task-day' | 'hybrid';
 
 interface Props {
   scorecardData: any;
@@ -27,7 +27,7 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
 
   // Load sprint data when component mounts, mode changes, or date range changes
   useEffect(() => {
-    if (expanded && (rankingMode === 'sprint' || rankingMode === 'lifetime-points' || rankingMode === 'hybrid' || rankingMode === 'efficiency')) {
+    if (expanded && (rankingMode === 'sprint' || rankingMode === 'lifetime-points' || rankingMode === 'hybrid')) {
       loadSprintData();
     }
     if (expanded) {
@@ -166,16 +166,6 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
             >
               🎯 Hybrid (30/70)
             </button>
-            <button
-              onClick={() => setRankingMode('efficiency')}
-              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                rankingMode === 'efficiency'
-                  ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
-                  : 'bg-transparent text-white/60 hover:text-white/80 hover:bg-white/5'
-              }`}
-            >
-              ⚡ Efficiency (Pts/Hr)
-            </button>
           </div>
 
           {/* Last Sprint Winner Banner (if available) */}
@@ -201,7 +191,7 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
             <div className="flex items-center justify-center py-12">
               <div className="text-white/60">Loading {rankingMode === 'sprint' ? 'sprint rankings' : 'scorecard'}...</div>
             </div>
-          ) : (rankingMode === 'sprint' || rankingMode === 'lifetime-points' || rankingMode === 'hybrid' || rankingMode === 'efficiency') && sprintData?.rankings?.competitive ? (
+          ) : (rankingMode === 'sprint' || rankingMode === 'lifetime-points' || rankingMode === 'hybrid') && sprintData?.rankings?.competitive ? (
             /* SPRINT / LIFETIME / HYBRID RANKINGS */
             <div className="space-y-4">
               {/* Date Range Info Banner (for custom ranges or sprint) */}
@@ -263,11 +253,6 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                       <strong>Lifetime Rankings:</strong> Career weighted points per day worked • Min 20 tasks to qualify
                     </>
                   )}
-                  {rankingMode === 'efficiency' && (
-                    <>
-                      <strong>Efficiency Rankings:</strong> Points per active hour worked (fair for part-time agents!) • Min 20 tasks to qualify
-                    </>
-                  )}
                   {rankingMode === 'hybrid' && (
                     <div className="flex items-center gap-2">
                       <span>
@@ -321,12 +306,10 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                     // Sort by the appropriate rank based on current mode
                     const rankA = rankingMode === 'sprint' ? a.rankByPtsPerDay :
                                  rankingMode === 'lifetime-points' ? a.lifetimeRank :
-                                 rankingMode === 'efficiency' ? a.rankByPtsPerHour :
                                  rankingMode === 'hybrid' ? a.rankByHybrid :
                                  a.rankByTasksPerDay;
                     const rankB = rankingMode === 'sprint' ? b.rankByPtsPerDay :
                                  rankingMode === 'lifetime-points' ? b.lifetimeRank :
-                                 rankingMode === 'efficiency' ? b.rankByPtsPerHour :
                                  rankingMode === 'hybrid' ? b.rankByHybrid :
                                  b.rankByTasksPerDay;
                     return rankA - rankB; // Ascending (1, 2, 3...)
@@ -335,13 +318,11 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                   // Determine which rank to display based on mode
                   const displayRank = rankingMode === 'sprint' ? agent.rankByPtsPerDay :
                                     rankingMode === 'lifetime-points' ? agent.lifetimeRank :
-                                    rankingMode === 'efficiency' ? agent.rankByPtsPerHour :
                                     rankingMode === 'hybrid' ? agent.rankByHybrid :
                                     agent.rankByTasksPerDay;
                   
                   const displayScore = rankingMode === 'sprint' ? agent.weightedDailyAvg :
                                       rankingMode === 'lifetime-points' ? agent.weightedDailyAvg :
-                                      rankingMode === 'efficiency' ? agent.ptsPerActiveHour :
                                       rankingMode === 'hybrid' ? agent.hybridScore :
                                       agent.tasksPerDay;
 
@@ -385,7 +366,6 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                           <div className="text-xs text-white/50">
                             {rankingMode === 'hybrid' ? 'Score' : 
                              rankingMode === 'task-day' ? 'Tasks/Day' : 
-                             rankingMode === 'efficiency' ? 'Pts/Hr' : 
                              'Pts/Day'}
                           </div>
                           <div className="text-xs text-white/40">
