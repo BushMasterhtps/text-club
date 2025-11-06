@@ -1158,14 +1158,14 @@ export default function AgentPage() {
                     <div className="text-3xl font-bold text-blue-400">
                       {scorecardData.today.my?.totalCompleted || 0}
                     </div>
-                    {scorecardData.yesterday && (
+                    {scorecardData.lastWorked && scorecardData.lastWorked.date && (
                       <div className="text-[10px] text-white/50 mt-2">
                         {scorecardData.dailyComparison.tasksChange > 0 ? (
-                          <span className="text-green-400">↑ +{scorecardData.dailyComparison.tasksChange} vs yesterday</span>
+                          <span className="text-green-400">↑ +{scorecardData.dailyComparison.tasksChange} vs last worked day</span>
                         ) : scorecardData.dailyComparison.tasksChange < 0 ? (
-                          <span className="text-orange-400">↓ {scorecardData.dailyComparison.tasksChange} vs yesterday ({scorecardData.yesterday.my?.totalCompleted} yesterday)</span>
+                          <span className="text-orange-400">↓ Behind by {Math.abs(scorecardData.dailyComparison.tasksChange)} ({scorecardData.lastWorked.my?.totalCompleted} on {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})})</span>
                         ) : (
-                          <span className="text-white/50">→ Same as yesterday</span>
+                          <span className="text-white/50">→ Same as last worked day</span>
                         )}
                       </div>
                     )}
@@ -1175,14 +1175,14 @@ export default function AgentPage() {
                     <div className="text-3xl font-bold text-yellow-400">
                       {scorecardData.today.my?.weightedPoints?.toFixed(1) || '0.0'}
                     </div>
-                    {scorecardData.yesterday && (
+                    {scorecardData.lastWorked && scorecardData.lastWorked.date && (
                       <div className="text-[10px] text-white/50 mt-2">
                         {scorecardData.dailyComparison.ptsChange > 0 ? (
-                          <span className="text-green-400">↑ +{scorecardData.dailyComparison.ptsChange.toFixed(1)} vs yesterday</span>
+                          <span className="text-green-400">↑ +{scorecardData.dailyComparison.ptsChange.toFixed(1)} vs last worked day</span>
                         ) : scorecardData.dailyComparison.ptsChange < 0 ? (
-                          <span className="text-orange-400">↓ {scorecardData.dailyComparison.ptsChange.toFixed(1)} vs yesterday ({scorecardData.yesterday.my?.weightedPoints?.toFixed(1)} yesterday)</span>
+                          <span className="text-orange-400">↓ Behind by {Math.abs(scorecardData.dailyComparison.ptsChange).toFixed(1)} ({scorecardData.lastWorked.my?.weightedPoints?.toFixed(1)} on {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})})</span>
                         ) : (
-                          <span className="text-white/50">→ Same as yesterday</span>
+                          <span className="text-white/50">→ Same as last worked day</span>
                         )}
                       </div>
                     )}
@@ -1192,14 +1192,14 @@ export default function AgentPage() {
                     <div className="text-3xl font-bold text-green-400">
                       {Math.floor((scorecardData.today.my?.avgHandleTimeSec || 0) / 60)}m
                     </div>
-                    {scorecardData.yesterday && (
+                    {scorecardData.lastWorked && scorecardData.lastWorked.date && (
                       <div className="text-[10px] text-white/50 mt-2">
                         {scorecardData.dailyComparison.timeChange < 0 ? (
-                          <span className="text-green-400">↓ Faster than yesterday!</span>
+                          <span className="text-green-400">↓ Faster than last worked day!</span>
                         ) : scorecardData.dailyComparison.timeChange > 0 ? (
-                          <span className="text-orange-400">↑ Slower than yesterday</span>
+                          <span className="text-orange-400">↑ Slower than last worked day</span>
                         ) : (
-                          <span className="text-white/50">→ Same as yesterday</span>
+                          <span className="text-white/50">→ Same as last worked day</span>
                         )}
                       </div>
                     )}

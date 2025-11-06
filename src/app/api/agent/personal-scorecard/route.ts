@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get current date boundaries (today and yesterday in PST)
+    // Get current date boundaries (today in PST)
     // Server runs in UTC, but users are in PST (UTC-8)
     const now = new Date();
     const pstOffset = 8 * 60 * 60 * 1000; // PST is 8 hours behind UTC
@@ -37,9 +37,33 @@ export async function GET(req: NextRequest) {
     const todayStart = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) + pstOffset);
     const todayEnd = new Date(Date.UTC(year, month, day, 23, 59, 59, 999) + pstOffset);
     
-    // Yesterday in PST
-    const yesterdayStart = new Date(Date.UTC(year, month, day - 1, 0, 0, 0, 0) + pstOffset);
-    const yesterdayEnd = new Date(Date.UTC(year, month, day - 1, 23, 59, 59, 999) + pstOffset);
+    // Find LAST WORKED DAY (not just yesterday - agent might not have worked yesterday!)
+    // Look back up to 7 days to find their most recent working day
+    let lastWorkedStart: Date | null = null;
+    let lastWorkedEnd: Date | null = null;
+    
+    for (let daysBack = 1; daysBack <= 7; daysBack++) {
+      const checkStart = new Date(Date.UTC(year, month, day - daysBack, 0, 0, 0, 0) + pstOffset);
+      const checkEnd = new Date(Date.UTC(year, month, day - daysBack, 23, 59, 59, 999) + pstOffset);
+      
+      // Check if agent completed any tasks on this day
+      const hasTasksOnDay = await prisma.task.count({
+        where: {
+          status: "COMPLETED",
+          assignedToId: currentUser.id,
+          endTime: {
+            gte: checkStart,
+            lte: checkEnd
+          }
+        }
+      });
+      
+      if (hasTasksOnDay > 0) {
+        lastWorkedStart = checkStart;
+        lastWorkedEnd = checkEnd;
+        break; // Found it!
+      }
+    }
 
     // Get current sprint info
     const currentSprint = getCurrentSprint();
@@ -270,8 +294,10 @@ export async function GET(req: NextRequest) {
     // Build today scorecards
     const todayScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, todayStart, todayEnd));
 
-    // Build yesterday scorecards
-    const yesterdayScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, yesterdayStart, yesterdayEnd));
+    // Build last worked day scorecards (null if no last worked day found)
+    const lastWorkedScorecards = lastWorkedStart && lastWorkedEnd 
+      ? allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, lastWorkedStart, lastWorkedEnd))
+      : todayScorecards; // Fallback to today if no previous work found
 
     // Rank and calculate hybrid scores for each set
     const rankAndNormalize = (scorecards: any[], minTasks: number, minDays: number) => {
@@ -352,7 +378,7 @@ export async function GET(req: NextRequest) {
     const lifetimeRanked = rankAndNormalize(lifetimeScorecards, MINIMUM_TASKS_FOR_RANKING, 0);
     const sprintRanked = rankAndNormalize(sprintScorecards, 0, MINIMUM_DAYS_FOR_SPRINT);
     const todayRanked = rankAndNormalize(todayScorecards, 0, 0); // No minimum for daily
-    const yesterdayRanked = rankAndNormalize(yesterdayScorecards, 0, 0);
+    const lastWorkedRanked = rankAndNormalize(lastWorkedScorecards, 0, 0);
 
     // Find the logged-in agent's data (check competitive, seniors, AND unqualified)
     const findAgent = (ranked: any) => {
@@ -362,7 +388,7 @@ export async function GET(req: NextRequest) {
     const myLifetime = findAgent(lifetimeRanked);
     const mySprint = findAgent(sprintRanked);
     const myToday = findAgent(todayRanked);
-    const myYesterday = findAgent(yesterdayRanked);
+    const myLastWorked = findAgent(lastWorkedRanked);
 
     // This should never happen now since we ensure the user is in allUsers
     if (!myLifetime) {
@@ -373,11 +399,12 @@ export async function GET(req: NextRequest) {
       }, { status: 404 });
     }
 
-    // Calculate daily comparison (today vs yesterday)
+    // Calculate daily comparison (today vs last worked day)
     const dailyComparison = {
-      tasksChange: myToday && myYesterday ? myToday.totalCompleted - myYesterday.totalCompleted : 0,
-      ptsChange: myToday && myYesterday ? myToday.weightedPoints - myYesterday.weightedPoints : 0,
-      timeChange: myToday && myYesterday ? myToday.avgHandleTimeSec - myYesterday.avgHandleTimeSec : 0
+      tasksChange: myToday && myLastWorked ? myToday.totalCompleted - myLastWorked.totalCompleted : 0,
+      ptsChange: myToday && myLastWorked ? myToday.weightedPoints - myLastWorked.weightedPoints : 0,
+      timeChange: myToday && myLastWorked ? myToday.avgHandleTimeSec - myLastWorked.avgHandleTimeSec : 0,
+      lastWorkedDate: lastWorkedStart ? lastWorkedStart.toISOString().split('T')[0] : null
     };
 
     // Find next rank agent (for gap analysis)
@@ -420,9 +447,10 @@ export async function GET(req: NextRequest) {
         my: myToday,
         teamAverages: todayRanked.teamAverages
       },
-      yesterday: {
-        my: myYesterday,
-        teamAverages: yesterdayRanked.teamAverages
+      lastWorked: {
+        my: myLastWorked,
+        teamAverages: lastWorkedRanked.teamAverages,
+        date: dailyComparison.lastWorkedDate
       },
       dailyComparison
     });

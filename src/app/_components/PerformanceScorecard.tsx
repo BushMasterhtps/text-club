@@ -567,6 +567,7 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                           </button>
 
                           {expandedAgentId === agent.id && (
+                            <>
                             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                               {Object.entries(agent.breakdown).map(([taskType, data]: [string, any]) => {
                                 const percentage = agent.totalCompleted > 0 
@@ -691,6 +692,7 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                                 </div>
                               </div>
                             )}
+                            </>
                           )}
                         </div>
                       )}
