@@ -21,28 +21,34 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    // Calculate date range - use provided date or default to today
+    // Calculate date range in PST timezone
+    // Server runs in UTC, but users are in PST (UTC-8)
     let dateStart: Date;
     let dateEnd: Date;
     
     if (dateParam) {
-      // Parse the date in local timezone, not UTC
+      // Parse the date as PST time
       const [year, month, day] = dateParam.split('-').map(Number);
       if (isNaN(year) || isNaN(month) || isNaN(day)) {
         return NextResponse.json({ success: false, error: "Invalid date format. Use YYYY-MM-DD" }, { status: 400 });
       }
-      dateStart = new Date(year, month - 1, day, 0, 0, 0, 0); // month is 0-indexed
-      dateEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+      
+      // Create date in PST: Nov 5 00:00 PST = Nov 5 08:00 UTC
+      const pstOffset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+      dateStart = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) + pstOffset);
+      dateEnd = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) + pstOffset);
     } else {
-      // Use today in local timezone
-      const today = new Date();
-      dateStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-      dateEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+      // Use today in PST timezone
+      const now = new Date();
+      const pstOffset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+      const nowPST = new Date(now.getTime() + pstOffset);
+      const year = nowPST.getUTCFullYear();
+      const month = nowPST.getUTCMonth();
+      const day = nowPST.getUTCDate();
+      
+      dateStart = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) + pstOffset);
+      dateEnd = new Date(Date.UTC(year, month, day, 23, 59, 59, 999) + pstOffset);
     }
-
-    // Convert to UTC for database queries to avoid timezone issues
-    const utcDateStart = new Date(dateStart.getTime() - dateStart.getTimezoneOffset() * 60000);
-    const utcDateEnd = new Date(dateEnd.getTime() - dateEnd.getTimezoneOffset() * 60000);
     
     // Get all tasks for this user (including sent-back tasks that are no longer assigned)
     const tasks = await prisma.task.findMany({
@@ -77,7 +83,7 @@ export async function GET(req: Request) {
       const endTime = new Date(t.endTime);
       const isCompleted = t.status === "COMPLETED";
       const isSentBack = t.status === "PENDING" && t.sentBackBy; // Sent back tasks still count as work
-      return (isCompleted || isSentBack) && endTime >= utcDateStart && endTime < utcDateEnd;
+      return (isCompleted || isSentBack) && endTime >= dateStart && endTime < dateEnd;
     }).length;
     
     const assistanceSent = tasks.filter(t => 

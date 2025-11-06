@@ -24,21 +24,22 @@ export async function GET(req: NextRequest) {
     }
 
     // Get current date boundaries (today and yesterday in PST)
+    // Server runs in UTC, but users are in PST (UTC-8)
     const now = new Date();
-    const pstOffset = -8 * 60; // PST is UTC-8
-    const nowPST = new Date(now.getTime() + (pstOffset - now.getTimezoneOffset()) * 60000);
+    const pstOffset = 8 * 60 * 60 * 1000; // PST is 8 hours behind UTC
+    const nowPST = new Date(now.getTime() + pstOffset);
     
-    const todayStart = new Date(nowPST);
-    todayStart.setHours(0, 0, 0, 0);
+    const year = nowPST.getUTCFullYear();
+    const month = nowPST.getUTCMonth();
+    const day = nowPST.getUTCDate();
     
-    const todayEnd = new Date(nowPST);
-    todayEnd.setHours(23, 59, 59, 999);
+    // Today in PST: Nov 5 00:00 PST = Nov 5 08:00 UTC
+    const todayStart = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) + pstOffset);
+    const todayEnd = new Date(Date.UTC(year, month, day, 23, 59, 59, 999) + pstOffset);
     
-    const yesterdayStart = new Date(todayStart);
-    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-    
-    const yesterdayEnd = new Date(todayEnd);
-    yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
+    // Yesterday in PST
+    const yesterdayStart = new Date(Date.UTC(year, month, day - 1, 0, 0, 0, 0) + pstOffset);
+    const yesterdayEnd = new Date(Date.UTC(year, month, day - 1, 23, 59, 59, 999) + pstOffset);
 
     // Get current sprint info
     const currentSprint = getCurrentSprint();

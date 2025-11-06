@@ -24,29 +24,37 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
     }
 
-    // Parse date - handle timezone properly
+    // Parse date - handle PST timezone properly
+    // The server runs in UTC, but our users are in PST (UTC-8)
+    // We need to convert the date to PST timezone
+    
     let startOfDay: Date;
     let endOfDay: Date;
     
     if (date) {
-      // Parse the date string as local time (not UTC)
+      // Parse the date string as PST time
       const [year, month, day] = date.split('-').map(Number);
       if (isNaN(year) || isNaN(month) || isNaN(day)) {
         return NextResponse.json({ success: false, error: "Invalid date format. Use YYYY-MM-DD" }, { status: 400 });
       }
-      startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0); // month is 0-indexed
-      endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
+      
+      // Create date in PST: Nov 5 00:00 PST = Nov 5 08:00 UTC
+      // PST is UTC-8, so we add 8 hours to get the UTC equivalent
+      const pstOffset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+      startOfDay = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) + pstOffset);
+      endOfDay = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) + pstOffset);
     } else {
-      // Use today in local timezone
-      const today = new Date();
-      startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-      endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+      // Use today in PST timezone
+      const now = new Date();
+      const pstOffset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+      const nowPST = new Date(now.getTime() + pstOffset);
+      const year = nowPST.getUTCFullYear();
+      const month = nowPST.getUTCMonth();
+      const day = nowPST.getUTCDate();
+      
+      startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) + pstOffset);
+      endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999) + pstOffset);
     }
-
-    // Date objects are already stored internally as UTC timestamps
-    // When we create new Date(year, month, day, 0, 0, 0) in local time,
-    // JavaScript automatically converts it to UTC internally
-    // So we can use them directly in the query!
 
     // Get completion stats by task type for today (including sent-back tasks)
     const completionStats = await prisma.task.groupBy({
