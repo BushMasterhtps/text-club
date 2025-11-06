@@ -220,6 +220,11 @@ export async function GET(request: NextRequest) {
       const weightedDailyAvg = totalWeightedPoints / daysWorked;
       const tasksPerDay = totalCompleted / daysWorked;
 
+      // Calculate active hours from task completion times (NEW for efficiency rankings)
+      const activeHours = totalHandleTimeSec / 3600; // Convert seconds to hours
+      const ptsPerActiveHour = activeHours > 0 ? totalWeightedPoints / activeHours : 0;
+      const tasksPerActiveHour = activeHours > 0 ? totalCompleted / activeHours : 0;
+
       agentScorecards.push({
         id: agent.id,
         name: agent.name || agent.email,
@@ -231,9 +236,13 @@ export async function GET(request: NextRequest) {
         weightedPoints: totalWeightedPoints,
         weightedDailyAvg,
         tasksPerDay,
+        activeHours, // NEW
+        ptsPerActiveHour, // NEW
+        tasksPerActiveHour, // NEW
         hybridScore: 0, // Will calculate after normalization
         rankByPtsPerDay: 0,
         rankByTasksPerDay: 0,
+        rankByPtsPerHour: 0, // NEW: Efficiency ranking
         rankByHybrid: 0,
         lifetimeRank: 0,
         tier: '',
@@ -259,6 +268,8 @@ export async function GET(request: NextRequest) {
     const teamAverages = {
       tasksPerDay: 0,
       ptsPerDay: 0,
+      ptsPerHour: 0, // NEW
+      activeHours: 0, // NEW
       avgHandleTimeSec: 0,
       hybridScore: 0
     };
@@ -266,6 +277,8 @@ export async function GET(request: NextRequest) {
     if (competitiveAgents.length > 0) {
       teamAverages.tasksPerDay = competitiveAgents.reduce((sum, a) => sum + a.tasksPerDay, 0) / competitiveAgents.length;
       teamAverages.ptsPerDay = competitiveAgents.reduce((sum, a) => sum + a.weightedDailyAvg, 0) / competitiveAgents.length;
+      teamAverages.ptsPerHour = competitiveAgents.reduce((sum, a) => sum + a.ptsPerActiveHour, 0) / competitiveAgents.length;
+      teamAverages.activeHours = competitiveAgents.reduce((sum, a) => sum + a.activeHours, 0) / competitiveAgents.length;
       teamAverages.avgHandleTimeSec = competitiveAgents.reduce((sum, a) => sum + a.avgHandleTimeSec, 0) / competitiveAgents.length;
     }
 
@@ -299,6 +312,13 @@ export async function GET(request: NextRequest) {
     tasksSorted.forEach((agent, index) => {
       const original = competitiveAgents.find(a => a.id === agent.id)!;
       original.rankByTasksPerDay = index + 1;
+    });
+
+    // RANK BY PTS/HOUR (Efficiency - NEW!)
+    const efficiencySorted = [...competitiveAgents].sort((a, b) => b.ptsPerActiveHour - a.ptsPerActiveHour);
+    efficiencySorted.forEach((agent, index) => {
+      const original = competitiveAgents.find(a => a.id === agent.id)!;
+      original.rankByPtsPerHour = index + 1;
     });
 
     // RANK BY HYBRID SCORE

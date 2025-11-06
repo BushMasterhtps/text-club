@@ -189,6 +189,11 @@ export async function GET(req: NextRequest) {
       const weightedDailyAvg = daysWorked > 0 ? totalWeightedPoints / daysWorked : 0;
       const avgHandleTimeSec = tasksCompleted > 0 ? Math.floor(totalTimeSec / tasksCompleted) : 0;
 
+      // Calculate active hours from task completion times
+      const activeHours = totalTimeSec / 3600; // Convert seconds to hours
+      const ptsPerActiveHour = activeHours > 0 ? totalWeightedPoints / activeHours : 0;
+      const tasksPerActiveHour = activeHours > 0 ? totalCompleted / activeHours : 0;
+
       return {
         id: userId,
         name: userName,
@@ -202,10 +207,14 @@ export async function GET(req: NextRequest) {
         weightedDailyAvg,
         avgHandleTimeSec,
         totalTimeSec,
+        activeHours,
+        ptsPerActiveHour,
+        tasksPerActiveHour,
         breakdown,
         hybridScore: 0, // Will be calculated after normalization
         rankByTasksPerDay: 0,
         rankByPtsPerDay: 0,
+        rankByPtsPerHour: 0, // NEW: Efficiency ranking
         rankByHybrid: 0,
         tier: '',
         percentile: 0,
@@ -282,10 +291,19 @@ export async function GET(req: NextRequest) {
         if (original) original.rankByPtsPerDay = index + 1;
       });
 
+      // Rank by pts/hour (efficiency - NEW!)
+      const byPtsPerHour = [...competitive].sort((a, b) => b.ptsPerActiveHour - a.ptsPerActiveHour);
+      byPtsPerHour.forEach((agent, index) => {
+        const original = competitive.find(a => a.id === agent.id);
+        if (original) original.rankByPtsPerHour = index + 1;
+      });
+
       // Calculate team averages
       const teamAverages = {
         tasksPerDay: competitive.reduce((sum, a) => sum + a.tasksPerDay, 0) / competitive.length,
         ptsPerDay: competitive.reduce((sum, a) => sum + a.weightedDailyAvg, 0) / competitive.length,
+        ptsPerHour: competitive.reduce((sum, a) => sum + a.ptsPerActiveHour, 0) / competitive.length,
+        activeHours: competitive.reduce((sum, a) => sum + a.activeHours, 0) / competitive.length,
         avgHandleTimeSec: competitive.reduce((sum, a) => sum + a.avgHandleTimeSec, 0) / competitive.length,
         hybridScore: competitive.reduce((sum, a) => sum + a.hybridScore, 0) / competitive.length
       };
