@@ -60,86 +60,14 @@ export async function GET(req: NextRequest) {
       }, { status: 404 });
     }
 
-    // Find LAST WORKED DAY (not just yesterday - agent might not have worked yesterday!)
-    // Look back up to 7 days to find their most recent working day
-    let lastWorkedStart: Date | null = null;
-    let lastWorkedEnd: Date | null = null;
-    let lastWorkedDatePST: string | null = null;
+    // Calculate 7-day rolling average (this week vs last week)
+    // This Week = Last 7 days (including today)
+    // Last Week = 8-14 days ago
+    const thisWeekStart = new Date(Date.UTC(year, month, day - 6, 8, 0, 0, 0)); // 7 days ago (including today)
+    const thisWeekEnd = new Date(Date.UTC(year, month, day + 1, 7, 59, 59, 999)); // End of today
     
-    for (let daysBack = 1; daysBack <= 7; daysBack++) {
-      // Calculate the PST date we're checking
-      const checkDatePST = new Date(nowPST);
-      checkDatePST.setUTCDate(checkDatePST.getUTCDate() - daysBack);
-      const checkYear = checkDatePST.getUTCFullYear();
-      const checkMonth = checkDatePST.getUTCMonth();
-      const checkDay = checkDatePST.getUTCDate();
-      
-      // Create UTC boundaries: PST midnight = 8 AM UTC
-      const checkStart = new Date(Date.UTC(checkYear, checkMonth, checkDay, 8, 0, 0, 0));
-      const checkEnd = new Date(Date.UTC(checkYear, checkMonth, checkDay + 1, 7, 59, 59, 999));
-      
-      const checkDateDisplay = `${checkYear}-${String(checkMonth + 1).padStart(2, '0')}-${String(checkDay).padStart(2, '0')}`;
-      
-      console.log(`[Last Worked Day] Checking ${daysBack} days back:`, {
-        checkDatePST: checkDateDisplay,
-        checkStart: checkStart.toISOString(),
-        checkEnd: checkEnd.toISOString(),
-        agentEmail: currentUser.email
-      });
-      
-      // Check if agent completed any tasks on this day
-      // Be MORE permissive - just look for any completed tasks with ANY valid timestamp
-      const hasTasksOnDay = await prisma.task.count({
-        where: {
-          assignedToId: currentUser.id,
-          AND: [
-            {
-              OR: [
-                { status: "COMPLETED" },
-                { disposition: { not: null } } // If it has a disposition, it was worked on
-              ]
-            },
-            {
-              OR: [
-                // Check endTime first (most reliable)
-                {
-                  endTime: {
-                    gte: checkStart,
-                    lt: checkEnd
-                  }
-                },
-                // Check updatedAt 
-                {
-                  updatedAt: {
-                    gte: checkStart,
-                    lt: checkEnd
-                  }
-                },
-                // Check createdAt as last resort
-                {
-                  createdAt: {
-                    gte: checkStart,
-                    lt: checkEnd
-                  }
-                }
-              ]
-            }
-          ]
-        }
-      });
-      
-      console.log(`[Last Worked Day] Found ${hasTasksOnDay} tasks on this day`);
-      
-      if (hasTasksOnDay > 0) {
-        lastWorkedStart = checkStart;
-        lastWorkedEnd = checkEnd;
-        lastWorkedDatePST = checkDateDisplay; // Save the PST date for display!
-        console.log(`[Last Worked Day] ✅ Last worked day found:`, checkDateDisplay);
-        break; // Found it!
-      }
-    }
-    
-    console.log(`[Last Worked Day] Final result:`, lastWorkedDatePST || 'None found');
+    const lastWeekStart = new Date(Date.UTC(year, month, day - 13, 8, 0, 0, 0)); // 14 days ago
+    const lastWeekEnd = new Date(Date.UTC(year, month, day - 6, 7, 59, 59, 999)); // 7 days ago
 
     // Fetch ALL agents for ranking purposes (include managers for comparison)
     const allUsers = await prisma.user.findMany({
@@ -363,10 +291,9 @@ export async function GET(req: NextRequest) {
     // Build today scorecards
     const todayScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, todayStart, todayEnd));
 
-    // Build last worked day scorecards (null if no last worked day found)
-    const lastWorkedScorecards = lastWorkedStart && lastWorkedEnd 
-      ? allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, lastWorkedStart, lastWorkedEnd))
-      : todayScorecards; // Fallback to today if no previous work found
+    // Build weekly scorecards for trend analysis
+    const thisWeekScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, thisWeekStart, thisWeekEnd));
+    const lastWeekScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, lastWeekStart, lastWeekEnd));
 
     // Rank and calculate hybrid scores for each set
     const rankAndNormalize = (scorecards: any[], minTasks: number, minDays: number) => {
@@ -447,7 +374,8 @@ export async function GET(req: NextRequest) {
     const lifetimeRanked = rankAndNormalize(lifetimeScorecards, MINIMUM_TASKS_FOR_RANKING, 0);
     const sprintRanked = rankAndNormalize(sprintScorecards, 0, MINIMUM_DAYS_FOR_SPRINT);
     const todayRanked = rankAndNormalize(todayScorecards, 0, 0); // No minimum for daily
-    const lastWorkedRanked = rankAndNormalize(lastWorkedScorecards, 0, 0);
+    const thisWeekRanked = rankAndNormalize(thisWeekScorecards, 0, 0); // No minimum for weekly trends
+    const lastWeekRanked = rankAndNormalize(lastWeekScorecards, 0, 0);
 
     // Find the logged-in agent's data (check competitive, seniors, AND unqualified)
     const findAgent = (ranked: any) => {
@@ -457,7 +385,8 @@ export async function GET(req: NextRequest) {
     const myLifetime = findAgent(lifetimeRanked);
     const mySprint = findAgent(sprintRanked);
     const myToday = findAgent(todayRanked);
-    const myLastWorked = findAgent(lastWorkedRanked);
+    const myThisWeek = findAgent(thisWeekRanked);
+    const myLastWeek = findAgent(lastWeekRanked);
 
     // This should never happen now since we ensure the user is in allUsers
     if (!myLifetime) {
@@ -468,13 +397,45 @@ export async function GET(req: NextRequest) {
       }, { status: 404 });
     }
 
-    // Calculate daily comparison (today vs last worked day)
-    const dailyComparison = {
-      tasksChange: myToday && myLastWorked ? myToday.totalCompleted - myLastWorked.totalCompleted : 0,
-      ptsChange: myToday && myLastWorked ? myToday.weightedPoints - myLastWorked.weightedPoints : 0,
-      timeChange: myToday && myLastWorked ? myToday.avgHandleTimeSec - myLastWorked.avgHandleTimeSec : 0,
-      lastWorkedDate: lastWorkedDatePST // Use the PST date we saved in the loop!
+    // Calculate 7-day rolling average trends
+    const weeklyTrend = {
+      thisWeek: {
+        tasksPerDay: myThisWeek ? myThisWeek.tasksPerDay : 0,
+        ptsPerDay: myThisWeek ? myThisWeek.weightedDailyAvg : 0,
+        avgHandleTimeSec: myThisWeek ? myThisWeek.avgHandleTimeSec : 0,
+        totalTasks: myThisWeek ? myThisWeek.totalCompleted : 0,
+        daysWorked: myThisWeek ? myThisWeek.daysWorked : 0
+      },
+      lastWeek: {
+        tasksPerDay: myLastWeek ? myLastWeek.tasksPerDay : 0,
+        ptsPerDay: myLastWeek ? myLastWeek.weightedDailyAvg : 0,
+        avgHandleTimeSec: myLastWeek ? myLastWeek.avgHandleTimeSec : 0,
+        totalTasks: myLastWeek ? myLastWeek.totalCompleted : 0,
+        daysWorked: myLastWeek ? myLastWeek.daysWorked : 0
+      },
+      changes: {
+        tasksPerDay: 0,
+        ptsPerDay: 0,
+        avgHandleTimeSec: 0,
+        tasksPercent: 0,
+        ptsPercent: 0,
+        speedPercent: 0
+      }
     };
+    
+    // Calculate changes and percentages
+    if (myThisWeek && myLastWeek && myLastWeek.tasksPerDay > 0) {
+      weeklyTrend.changes.tasksPerDay = myThisWeek.tasksPerDay - myLastWeek.tasksPerDay;
+      weeklyTrend.changes.ptsPerDay = myThisWeek.weightedDailyAvg - myLastWeek.weightedDailyAvg;
+      weeklyTrend.changes.avgHandleTimeSec = myThisWeek.avgHandleTimeSec - myLastWeek.avgHandleTimeSec;
+      
+      weeklyTrend.changes.tasksPercent = Math.round((weeklyTrend.changes.tasksPerDay / myLastWeek.tasksPerDay) * 100);
+      weeklyTrend.changes.ptsPercent = Math.round((weeklyTrend.changes.ptsPerDay / myLastWeek.weightedDailyAvg) * 100);
+      
+      if (myLastWeek.avgHandleTimeSec > 0) {
+        weeklyTrend.changes.speedPercent = Math.round((weeklyTrend.changes.avgHandleTimeSec / myLastWeek.avgHandleTimeSec) * 100);
+      }
+    }
 
     // Find next rank agent (for gap analysis)
     const getNextRankAgent = (ranked: any, myAgent: any) => {
@@ -516,12 +477,7 @@ export async function GET(req: NextRequest) {
         my: myToday,
         teamAverages: todayRanked.teamAverages
       },
-      lastWorked: {
-        my: myLastWorked,
-        teamAverages: lastWorkedRanked.teamAverages,
-        date: dailyComparison.lastWorkedDate
-      },
-      dailyComparison
+      weeklyTrend
     });
 
   } catch (error) {

@@ -1175,8 +1175,107 @@ export default function AgentPage() {
                     {/* REMOVED: Confusing daily comparison - will add 7-day trend instead */}
                   </div>
                 </div>
+                {/* 7-Day Rolling Average Trend */}
+                {scorecardData.weeklyTrend && scorecardData.weeklyTrend.thisWeek.daysWorked > 0 && (
+                  <div className="mt-4 bg-gradient-to-r from-green-500/10 to-blue-500/10 border border-green-500/30 rounded-lg p-4">
+                    <div className="text-sm font-semibold text-white mb-3">📊 7-Day Performance Trend</div>
+                    <div className="grid grid-cols-3 gap-3 text-xs">
+                      {/* Tasks/Day Trend */}
+                      <div className="text-center">
+                        <div className="text-white/60 mb-1">Tasks/Day</div>
+                        <div className="text-lg font-bold text-blue-400">
+                          {scorecardData.weeklyTrend.thisWeek.tasksPerDay.toFixed(1)}
+                        </div>
+                        {scorecardData.weeklyTrend.lastWeek.daysWorked > 0 && (
+                          <div className="mt-1">
+                            {scorecardData.weeklyTrend.changes.tasksPercent > 0 ? (
+                              <div className="text-green-400 font-semibold">
+                                ↑ +{scorecardData.weeklyTrend.changes.tasksPercent}%
+                              </div>
+                            ) : scorecardData.weeklyTrend.changes.tasksPercent < 0 ? (
+                              <div className="text-orange-400 font-semibold">
+                                ↓ {scorecardData.weeklyTrend.changes.tasksPercent}%
+                              </div>
+                            ) : (
+                              <div className="text-white/50">→ Same</div>
+                            )}
+                            <div className="text-[10px] text-white/40">vs last week</div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Points/Day Trend */}
+                      <div className="text-center">
+                        <div className="text-white/60 mb-1">Points/Day</div>
+                        <div className="text-lg font-bold text-yellow-400">
+                          {scorecardData.weeklyTrend.thisWeek.ptsPerDay.toFixed(1)}
+                        </div>
+                        {scorecardData.weeklyTrend.lastWeek.daysWorked > 0 && (
+                          <div className="mt-1">
+                            {scorecardData.weeklyTrend.changes.ptsPercent > 0 ? (
+                              <div className="text-green-400 font-semibold">
+                                ↑ +{scorecardData.weeklyTrend.changes.ptsPercent}%
+                              </div>
+                            ) : scorecardData.weeklyTrend.changes.ptsPercent < 0 ? (
+                              <div className="text-orange-400 font-semibold">
+                                ↓ {scorecardData.weeklyTrend.changes.ptsPercent}%
+                              </div>
+                            ) : (
+                              <div className="text-white/50">→ Same</div>
+                            )}
+                            <div className="text-[10px] text-white/40">vs last week</div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Speed Trend */}
+                      <div className="text-center">
+                        <div className="text-white/60 mb-1">Avg Speed</div>
+                        <div className="text-lg font-bold text-green-400">
+                          {Math.floor(scorecardData.weeklyTrend.thisWeek.avgHandleTimeSec / 60)}m
+                        </div>
+                        {scorecardData.weeklyTrend.lastWeek.daysWorked > 0 && scorecardData.weeklyTrend.lastWeek.avgHandleTimeSec > 0 && (
+                          <div className="mt-1">
+                            {scorecardData.weeklyTrend.changes.speedPercent < 0 ? (
+                              <div className="text-green-400 font-semibold">
+                                ↓ {Math.abs(scorecardData.weeklyTrend.changes.speedPercent)}% faster
+                              </div>
+                            ) : scorecardData.weeklyTrend.changes.speedPercent > 0 ? (
+                              <div className="text-orange-400 font-semibold">
+                                ↑ +{scorecardData.weeklyTrend.changes.speedPercent}% slower
+                              </div>
+                            ) : (
+                              <div className="text-white/50">→ Same</div>
+                            )}
+                            <div className="text-[10px] text-white/40">vs last week</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Summary Message */}
+                    {scorecardData.weeklyTrend.lastWeek.daysWorked > 0 && (
+                      <div className="mt-3 pt-3 border-t border-white/10">
+                        {scorecardData.weeklyTrend.changes.tasksPercent > 0 && scorecardData.weeklyTrend.changes.ptsPercent > 0 ? (
+                          <div className="text-xs text-green-400 text-center font-semibold">
+                            🎉 Great progress! You're improving across all metrics!
+                          </div>
+                        ) : scorecardData.weeklyTrend.changes.tasksPercent > 0 || scorecardData.weeklyTrend.changes.ptsPercent > 0 ? (
+                          <div className="text-xs text-blue-400 text-center font-semibold">
+                            👍 Solid improvement! Keep it up!
+                          </div>
+                        ) : (
+                          <div className="text-xs text-white/60 text-center">
+                            💪 Stay consistent to see improvement trends
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
                 <div className="text-[10px] text-white/40 text-center mt-3">
-                  💡 These numbers show your actual output TODAY (not comparisons)
+                  💡 7-day averages help you track sustained improvement
                 </div>
                 
                 {/* Hourly Productivity Graph */}
