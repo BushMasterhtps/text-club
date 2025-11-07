@@ -64,13 +64,24 @@ export async function GET(req: NextRequest) {
     // Look back up to 7 days to find their most recent working day
     let lastWorkedStart: Date | null = null;
     let lastWorkedEnd: Date | null = null;
+    let lastWorkedDatePST: string | null = null;
     
     for (let daysBack = 1; daysBack <= 7; daysBack++) {
-      const checkStart = new Date(Date.UTC(year, month, day - daysBack, 8, 0, 0, 0)); // 8 AM UTC = 12 AM PST
-      const checkEnd = new Date(Date.UTC(year, month, day - daysBack + 1, 7, 59, 59, 999)); // Next day 7:59 AM UTC = 11:59 PM PST
+      // Calculate the PST date we're checking
+      const checkDatePST = new Date(nowPST);
+      checkDatePST.setUTCDate(checkDatePST.getUTCDate() - daysBack);
+      const checkYear = checkDatePST.getUTCFullYear();
+      const checkMonth = checkDatePST.getUTCMonth();
+      const checkDay = checkDatePST.getUTCDate();
+      
+      // Create UTC boundaries: PST midnight = 8 AM UTC
+      const checkStart = new Date(Date.UTC(checkYear, checkMonth, checkDay, 8, 0, 0, 0));
+      const checkEnd = new Date(Date.UTC(checkYear, checkMonth, checkDay + 1, 7, 59, 59, 999));
+      
+      const checkDateDisplay = `${checkYear}-${String(checkMonth + 1).padStart(2, '0')}-${String(checkDay).padStart(2, '0')}`;
       
       console.log(`[Last Worked Day] Checking ${daysBack} days back:`, {
-        checkDate: checkStart.toISOString().split('T')[0],
+        checkDatePST: checkDateDisplay,
         checkStart: checkStart.toISOString(),
         checkEnd: checkEnd.toISOString(),
         agentEmail: currentUser.email
@@ -122,12 +133,13 @@ export async function GET(req: NextRequest) {
       if (hasTasksOnDay > 0) {
         lastWorkedStart = checkStart;
         lastWorkedEnd = checkEnd;
-        console.log(`[Last Worked Day] ✅ Last worked day found:`, checkStart.toISOString().split('T')[0]);
+        lastWorkedDatePST = checkDateDisplay; // Save the PST date for display!
+        console.log(`[Last Worked Day] ✅ Last worked day found:`, checkDateDisplay);
         break; // Found it!
       }
     }
     
-    console.log(`[Last Worked Day] Final result:`, lastWorkedStart ? lastWorkedStart.toISOString().split('T')[0] : 'None found');
+    console.log(`[Last Worked Day] Final result:`, lastWorkedDatePST || 'None found');
 
     // Fetch ALL agents for ranking purposes (include managers for comparison)
     const allUsers = await prisma.user.findMany({
@@ -461,7 +473,7 @@ export async function GET(req: NextRequest) {
       tasksChange: myToday && myLastWorked ? myToday.totalCompleted - myLastWorked.totalCompleted : 0,
       ptsChange: myToday && myLastWorked ? myToday.weightedPoints - myLastWorked.weightedPoints : 0,
       timeChange: myToday && myLastWorked ? myToday.avgHandleTimeSec - myLastWorked.avgHandleTimeSec : 0,
-      lastWorkedDate: lastWorkedStart ? lastWorkedStart.toISOString().split('T')[0] : null
+      lastWorkedDate: lastWorkedDatePST // Use the PST date we saved in the loop!
     };
 
     // Find next rank agent (for gap analysis)
