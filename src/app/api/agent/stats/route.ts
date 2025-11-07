@@ -23,6 +23,7 @@ export async function GET(req: Request) {
 
     // Calculate date range in PST timezone
     // Server runs in UTC, but users are in PST (UTC-8)
+    // PST is 8 hours BEHIND UTC, so we SUBTRACT 8 hours
     let dateStart: Date;
     let dateEnd: Date;
     
@@ -34,20 +35,19 @@ export async function GET(req: Request) {
       }
       
       // Create date in PST: Nov 5 00:00 PST = Nov 5 08:00 UTC
-      const pstOffset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
-      dateStart = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) + pstOffset);
-      dateEnd = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) + pstOffset);
+      dateStart = new Date(Date.UTC(year, month - 1, day, 8, 0, 0, 0)); // 8 AM UTC = 12 AM PST
+      dateEnd = new Date(Date.UTC(year, month - 1, day + 1, 7, 59, 59, 999)); // Next day 7:59 AM UTC = 11:59 PM PST
     } else {
       // Use today in PST timezone
       const now = new Date();
-      const pstOffset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+      const pstOffset = -8 * 60 * 60 * 1000; // PST = UTC - 8 hours
       const nowPST = new Date(now.getTime() + pstOffset);
       const year = nowPST.getUTCFullYear();
       const month = nowPST.getUTCMonth();
       const day = nowPST.getUTCDate();
       
-      dateStart = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) + pstOffset);
-      dateEnd = new Date(Date.UTC(year, month, day, 23, 59, 59, 999) + pstOffset);
+      dateStart = new Date(Date.UTC(year, month, day, 8, 0, 0, 0)); // 8 AM UTC = 12 AM PST
+      dateEnd = new Date(Date.UTC(year, month, day + 1, 7, 59, 59, 999)); // Next day 7:59 AM UTC = 11:59 PM PST
     }
     
     // Get all tasks for this user (including sent-back tasks that are no longer assigned)
@@ -100,7 +100,7 @@ export async function GET(req: Request) {
         const end = new Date(task.endTime);
         if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
           // Only include tasks completed on the selected date
-          if (end >= utcDateStart && end < utcDateEnd) {
+          if (end >= dateStart && end < dateEnd) {
             const mins = Math.round((end.getTime() - start.getTime()) / 60000);
             totalDuration += mins;
             durationCount++;
