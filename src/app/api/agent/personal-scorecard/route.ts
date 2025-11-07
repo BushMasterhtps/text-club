@@ -77,32 +77,41 @@ export async function GET(req: NextRequest) {
       });
       
       // Check if agent completed any tasks on this day
-      // Check multiple date fields to catch all completed work
+      // Be MORE permissive - just look for any completed tasks with ANY valid timestamp
       const hasTasksOnDay = await prisma.task.count({
         where: {
-          status: "COMPLETED",
           assignedToId: currentUser.id,
-          OR: [
-            // Check endTime first (most reliable)
+          AND: [
             {
-              endTime: {
-                gte: checkStart,
-                lte: checkEnd
-              }
+              OR: [
+                { status: "COMPLETED" },
+                { disposition: { not: null } } // If it has a disposition, it was worked on
+              ]
             },
-            // Check updatedAt if endTime not available
             {
-              updatedAt: {
-                gte: checkStart,
-                lte: checkEnd
-              }
-            },
-            // Check createdAt as last resort
-            {
-              createdAt: {
-                gte: checkStart,
-                lte: checkEnd
-              }
+              OR: [
+                // Check endTime first (most reliable)
+                {
+                  endTime: {
+                    gte: checkStart,
+                    lt: checkEnd
+                  }
+                },
+                // Check updatedAt 
+                {
+                  updatedAt: {
+                    gte: checkStart,
+                    lt: checkEnd
+                  }
+                },
+                // Check createdAt as last resort
+                {
+                  createdAt: {
+                    gte: checkStart,
+                    lt: checkEnd
+                  }
+                }
+              ]
             }
           ]
         }
