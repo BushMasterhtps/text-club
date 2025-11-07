@@ -1158,51 +1158,21 @@ export default function AgentPage() {
                     <div className="text-3xl font-bold text-blue-400">
                       {scorecardData.today.my?.totalCompleted || 0}
                     </div>
-                    {scorecardData.lastWorked && scorecardData.lastWorked.date && scorecardData.lastWorked.my?.totalCompleted > 0 && (
-                      <div className="text-[10px] text-white/50 mt-2">
-                        {scorecardData.dailyComparison.tasksChange > 0 ? (
-                          <span className="text-green-400">↑ {Math.abs(scorecardData.dailyComparison.tasksChange)} more than {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
-                        ) : scorecardData.dailyComparison.tasksChange < 0 ? (
-                          <span className="text-white/60">📅 You did {scorecardData.lastWorked.my?.totalCompleted} on {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
-                        ) : (
-                          <span className="text-green-400">✓ Same pace as {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
-                        )}
-                      </div>
-                    )}
+                    {/* REMOVED: Confusing daily comparison - will add 7-day trend instead */}
                   </div>
                   <div className="bg-white/5 rounded-lg p-3 text-center">
                     <div className="text-xs text-white/60 mb-1">Points Earned</div>
                     <div className="text-3xl font-bold text-yellow-400">
                       {scorecardData.today.my?.weightedPoints?.toFixed(1) || '0.0'}
                     </div>
-                    {scorecardData.lastWorked && scorecardData.lastWorked.date && scorecardData.lastWorked.my?.weightedPoints > 0 && (
-                      <div className="text-[10px] text-white/50 mt-2">
-                        {scorecardData.dailyComparison.ptsChange > 0 ? (
-                          <span className="text-green-400">↑ {Math.abs(scorecardData.dailyComparison.ptsChange).toFixed(1)} more than {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
-                        ) : scorecardData.dailyComparison.ptsChange < 0 ? (
-                          <span className="text-white/60">📅 You earned {scorecardData.lastWorked.my?.weightedPoints?.toFixed(1)} on {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
-                        ) : (
-                          <span className="text-green-400">✓ Same pace as {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
-                        )}
-                      </div>
-                    )}
+                    {/* REMOVED: Confusing daily comparison - will add 7-day trend instead */}
                   </div>
                   <div className="bg-white/5 rounded-lg p-3 text-center">
                     <div className="text-xs text-white/60 mb-1">Avg Handle Time</div>
                     <div className="text-3xl font-bold text-green-400">
                       {Math.floor((scorecardData.today.my?.avgHandleTimeSec || 0) / 60)}m
                     </div>
-                    {scorecardData.lastWorked && scorecardData.lastWorked.date && scorecardData.lastWorked.my?.avgHandleTimeSec > 0 && (
-                      <div className="text-[10px] text-white/50 mt-2">
-                        {scorecardData.dailyComparison.timeChange < 0 ? (
-                          <span className="text-green-400">⚡ Faster than {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}!</span>
-                        ) : scorecardData.dailyComparison.timeChange > 0 ? (
-                          <span className="text-white/60">📅 {Math.floor((scorecardData.lastWorked.my?.avgHandleTimeSec || 0) / 60)}m on {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
-                        ) : (
-                          <span className="text-green-400">✓ Same pace as {new Date(scorecardData.lastWorked.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
-                        )}
-                      </div>
-                    )}
+                    {/* REMOVED: Confusing daily comparison - will add 7-day trend instead */}
                   </div>
                 </div>
                 <div className="text-[10px] text-white/40 text-center mt-3">
