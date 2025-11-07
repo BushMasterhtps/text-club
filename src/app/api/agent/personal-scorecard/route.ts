@@ -70,14 +70,26 @@ export async function GET(req: NextRequest) {
       const checkEnd = new Date(Date.UTC(year, month, day - daysBack + 1, 7, 59, 59, 999)); // Next day 7:59 AM UTC = 11:59 PM PST
       
       // Check if agent completed any tasks on this day
+      // Look for tasks with endTime OR disposition (completed tasks should have at least one)
       const hasTasksOnDay = await prisma.task.count({
         where: {
           status: "COMPLETED",
           assignedToId: currentUser.id,
-          endTime: {
-            gte: checkStart,
-            lte: checkEnd
-          }
+          OR: [
+            {
+              endTime: {
+                gte: checkStart,
+                lte: checkEnd
+              }
+            },
+            {
+              disposition: { not: null },
+              updatedAt: {
+                gte: checkStart,
+                lte: checkEnd
+              }
+            }
+          ]
         }
       });
       
