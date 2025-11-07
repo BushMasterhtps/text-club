@@ -726,14 +726,17 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                                             const heightPercent = count > 0 ? (count / maxCount) * 100 : 0;
                                             
                                             return (
-                                              <div key={hour} className="flex-1 flex flex-col items-center group relative cursor-pointer">
+                                              <div key={hour} className="flex-1 flex flex-col items-center group relative cursor-pointer min-w-[8px]">
                                                 <div 
                                                   className={`w-full rounded-t transition-all ${
                                                     count > 0 
-                                                      ? 'bg-gradient-to-t from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600' 
-                                                      : 'bg-white/5'
+                                                      ? 'bg-gradient-to-t from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600 shadow-lg' 
+                                                      : 'bg-white/10'
                                                   }`}
-                                                  style={{ height: `${heightPercent}%`, minHeight: count > 0 ? '12px' : '2px' }}
+                                                  style={{ 
+                                                    height: count > 0 ? `${Math.max(heightPercent, 20)}%` : '4px',
+                                                    minHeight: count > 0 ? '24px' : '4px'
+                                                  }}
                                                 >
                                                   {count > 0 && (
                                                     <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-950 border-2 border-white/40 rounded-lg px-4 py-3 text-xs opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-2xl backdrop-blur-sm">
