@@ -79,9 +79,13 @@ export async function GET(request: NextRequest) {
     let sprintNumber = 0;
 
     if (mode === 'custom' && customStart && customEnd) {
-      // Use custom date range
-      sprintStart = new Date(customStart + 'T00:00:00.000Z');
-      sprintEnd = new Date(customEnd + 'T23:59:59.999Z');
+      // Use custom date range (dates come from PST date picker, need to convert to UTC)
+      // PST midnight = 8 AM UTC
+      const [startYear, startMonth, startDay] = customStart.split('-').map(Number);
+      const [endYear, endMonth, endDay] = customEnd.split('-').map(Number);
+      
+      sprintStart = new Date(Date.UTC(startYear, startMonth - 1, startDay, 8, 0, 0, 0)); // PST midnight = 8 AM UTC
+      sprintEnd = new Date(Date.UTC(endYear, endMonth - 1, endDay + 1, 7, 59, 59, 999)); // PST 11:59 PM = next day 7:59 AM UTC
       isCurrentSprint = false;
       sprintNumber = 0; // Custom ranges don't have sprint numbers
     } else if (mode === 'lifetime') {
@@ -393,12 +397,22 @@ export async function GET(request: NextRequest) {
       await saveSprintResults(sprintNumber, [...competitiveAgents, ...seniorAgents]);
     }
 
+    // For display, return the PST dates that were originally selected (not UTC query boundaries)
+    let displayStart = sprintStart.toISOString();
+    let displayEnd = sprintEnd.toISOString();
+    
+    if (mode === 'custom' && customStart && customEnd) {
+      // Return the original PST dates for display
+      displayStart = customStart + 'T00:00:00.000Z';
+      displayEnd = customEnd + 'T23:59:59.999Z';
+    }
+    
     return NextResponse.json({
       success: true,
       mode: mode === 'custom' ? 'custom' : mode === 'lifetime' ? 'lifetime' : 'sprint',
       dateRange: {
-        start: sprintStart.toISOString(),
-        end: sprintEnd.toISOString(),
+        start: displayStart,
+        end: displayEnd,
         isCustom: mode === 'custom',
         isLifetime: mode === 'lifetime'
       },

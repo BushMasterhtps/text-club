@@ -635,43 +635,7 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                               })}
                             </div>
 
-                            {/* Hourly Productivity Graph (NEW!) */}
-                            {agent.hourlyBreakdown && Object.keys(agent.hourlyBreakdown).length > 0 && (
-                              <div className="mt-4 bg-white/5 rounded-lg p-3 border border-white/10">
-                                <div className="text-xs font-semibold text-white mb-3">📈 Hourly Productivity (PST) for Selected Period:</div>
-                                <div className="flex items-end gap-1 h-32">
-                                  {Array.from({ length: 24 }, (_, hour) => {
-                                    const data = agent.hourlyBreakdown[hour];
-                                    const count = data?.count || 0;
-                                    const maxCount = Math.max(...Object.values(agent.hourlyBreakdown).map((d: any) => d.count), 1);
-                                    const heightPercent = count > 0 ? (count / maxCount) * 100 : 0;
-                                    
-                                    return (
-                                      <div key={hour} className="flex-1 flex flex-col items-center group relative">
-                                        <div 
-                                          className={`w-full rounded-t transition-all ${
-                                            count > 0 ? 'bg-gradient-to-t from-blue-500 to-blue-400 hover:from-blue-400 hover:to-blue-300' : 'bg-white/5'
-                                          }`}
-                                          style={{ height: `${heightPercent}%` }}
-                                        >
-                                          {count > 0 && (
-                                            <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 border border-blue-500/50 rounded px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                              {hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}: {count} tasks ({data.points?.toFixed(1) || 0} pts)
-                                            </div>
-                                          )}
-                                        </div>
-                                        {hour % 3 === 0 && (
-                                          <div className="text-[8px] text-white/40 mt-1">{hour % 12 || 12}{hour >= 12 ? 'p' : 'a'}</div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <div className="text-[10px] text-white/50 mt-2 text-center">
-                                  💡 Hover over bars to see counts & points • Identifies peak productivity hours
-                                </div>
-                              </div>
-                            )}
+                            {/* REMOVED: Old duplicate hourly chart - now in toggleable productivity analysis section below */}
 
                             {/* Idle Time Insight (NEW!) */}
                             {agent.estimatedIdleHours > 0 && (
