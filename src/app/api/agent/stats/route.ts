@@ -71,9 +71,14 @@ export async function GET(req: Request) {
     });
 
     // Calculate stats
-    const assigned = tasks.filter(t => 
-      ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"].includes(t.status)
-    ).length;
+    // Assigned = tasks currently in agent's queue (NOT sent back tasks!)
+    const assigned = tasks.filter(t => {
+      const isInQueue = ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"].includes(t.status);
+      const wasSentBack = t.sentBackBy !== null; // Task was sent back, no longer "assigned"
+      
+      // Only count as assigned if it's in queue AND wasn't sent back
+      return isInQueue && !wasSentBack;
+    }).length;
     
     const completed = tasks.filter(t => {
       // Count as completed if:
