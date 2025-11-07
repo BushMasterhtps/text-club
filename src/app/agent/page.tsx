@@ -1221,16 +1221,17 @@ export default function AgentPage() {
                         const heightPercent = count > 0 ? (count / maxCount) * 100 : 0;
                         
                         return (
-                          <div key={hour} className="flex-1 flex flex-col items-center group relative">
+                          <div key={hour} className="flex-1 flex flex-col items-center group relative cursor-pointer">
                             <div 
                               className={`w-full rounded-t transition-all ${
                                 count > 0 ? 'bg-gradient-to-t from-blue-500 to-blue-400 hover:from-blue-400 hover:to-blue-300' : 'bg-white/5'
                               }`}
-                              style={{ height: `${heightPercent}%`, minHeight: count > 0 ? '4px' : '2px' }}
+                              style={{ height: `${heightPercent}%`, minHeight: count > 0 ? '12px' : '2px' }}
                             >
                               {count > 0 && (
-                                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 border border-blue-500/50 rounded px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                  {hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}: {count} tasks ({data.points?.toFixed(1) || 0} pts)
+                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 border border-blue-500/50 rounded-lg px-3 py-2 text-xs text-white opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-xl">
+                                  <div className="font-semibold">{hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}</div>
+                                  <div className="text-[10px] text-white/80 mt-1">{count} tasks • {data.points?.toFixed(1) || 0} pts</div>
                                 </div>
                               )}
                             </div>
@@ -1597,16 +1598,17 @@ export default function AgentPage() {
                           const heightPercent = count > 0 ? (count / maxCount) * 100 : 0;
                           
                           return (
-                            <div key={hour} className="flex-1 flex flex-col items-center group relative">
+                            <div key={hour} className="flex-1 flex flex-col items-center group relative cursor-pointer">
                               <div 
                                 className={`w-full rounded-t transition-all ${
                                   count > 0 ? 'bg-gradient-to-t from-blue-500 to-blue-400 hover:from-blue-400 hover:to-blue-300' : 'bg-white/5'
                                 }`}
-                                style={{ height: `${heightPercent}%` }}
+                                style={{ height: `${heightPercent}%`, minHeight: count > 0 ? '12px' : '2px' }}
                               >
                                 {count > 0 && (
-                                  <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-900 border border-blue-500/50 rounded px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                    {hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}: {count} tasks
+                                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 border border-blue-500/50 rounded-lg px-3 py-2 text-xs text-white opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-xl">
+                                    <div className="font-semibold">{hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}</div>
+                                    <div className="text-[10px] text-white/80 mt-1">{count} tasks • {data.points?.toFixed(1) || 0} pts</div>
                                   </div>
                                 )}
                               </div>

@@ -227,8 +227,9 @@ export async function GET(req: NextRequest) {
         if (!task.endTime) continue;
         
         // Convert UTC to PST (UTC-8)
-        const pstOffset = 8 * 60 * 60 * 1000;
-        const endTimePST = new Date(task.endTime.getTime() + pstOffset);
+        // PST is 8 hours BEHIND UTC, so SUBTRACT 8 hours
+        const pstOffset = -8 * 60 * 60 * 1000; // PST = UTC - 8
+        const endTimePST = new Date(task.endTime.getTime() + pstOffset); // Subtract 8 hours
         const hour = endTimePST.getUTCHours(); // Get PST hour (0-23)
         
         if (!hourlyBreakdown[hour]) {
@@ -239,21 +240,34 @@ export async function GET(req: NextRequest) {
         hourlyBreakdown[hour].points += getTaskWeight(task.taskType, task.disposition);
       }
 
-      // Calculate idle time if we have task timestamps
+      // Calculate idle time based on actual gaps between task completions
+      // Only calculate if we have multiple tasks on the same day
       let estimatedIdleHours = 0;
-      if (tasks.length > 1 && daysWorked > 0) {
-        // Sort tasks by end time
-        const sortedTasks = [...tasks].sort((a, b) => 
-          new Date(a.endTime!).getTime() - new Date(b.endTime!).getTime()
-        );
+      if (tasks.length > 1 && daysWorked > 0 && startDate && endDate) {
+        // Only calculate idle time for single-day views (today view)
+        const daySpan = (endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000);
         
-        // Calculate gaps between tasks (assuming 8-hour workday)
-        const assumedShiftHours = 8;
-        const totalShiftTime = daysWorked * assumedShiftHours * 3600; // seconds
-        estimatedIdleHours = (totalShiftTime - totalTimeSec) / 3600;
-        
-        // Cap at reasonable bounds (can't be negative, max 50% of shift)
-        estimatedIdleHours = Math.max(0, Math.min(estimatedIdleHours, daysWorked * 4));
+        if (daySpan <= 1) {
+          // Sort tasks by end time
+          const sortedTasks = [...tasks]
+            .filter(t => t.startTime && t.endTime)
+            .sort((a, b) => new Date(a.endTime!).getTime() - new Date(b.endTime!).getTime());
+          
+          if (sortedTasks.length > 1) {
+            // Calculate time from first task start to last task end
+            const firstTaskStart = new Date(sortedTasks[0].startTime!);
+            const lastTaskEnd = new Date(sortedTasks[sortedTasks.length - 1].endTime!);
+            const totalSpanHours = (lastTaskEnd.getTime() - firstTaskStart.getTime()) / (60 * 60 * 1000);
+            
+            // Idle time = total span - actual active time
+            estimatedIdleHours = Math.max(0, totalSpanHours - activeHours);
+            
+            // Don't show if it's unreasonable (more than 6 hours idle suggests they took breaks, which is fine)
+            if (estimatedIdleHours > 6) {
+              estimatedIdleHours = 0;
+            }
+          }
+        }
       }
 
       return {
