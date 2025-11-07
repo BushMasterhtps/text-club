@@ -1231,9 +1231,9 @@ export default function AgentPage() {
                               style={{ height: `${heightPercent}%`, minHeight: count > 0 ? '12px' : '2px' }}
                             >
                               {count > 0 && (
-                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-blue-900 dark:bg-gray-900 border-2 border-blue-700 dark:border-blue-500/50 rounded-lg px-4 py-2.5 text-xs text-white opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-2xl">
-                                  <div className="font-bold text-sm">{hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}</div>
-                                  <div className="text-xs text-white mt-1 font-medium">{count} tasks • {data.points?.toFixed(1) || 0} pts</div>
+                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-blue-900 dark:bg-gray-900 border-2 border-white/20 rounded-lg px-4 py-2.5 text-xs opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-2xl">
+                                  <div className="font-bold text-base text-white">{hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}</div>
+                                  <div className="text-sm text-white mt-1 font-semibold">{count} tasks • {data.points?.toFixed(1) || 0} pts</div>
                                 </div>
                               )}
                             </div>
@@ -1610,9 +1610,9 @@ export default function AgentPage() {
                                 style={{ height: `${heightPercent}%`, minHeight: count > 0 ? '12px' : '2px' }}
                               >
                                 {count > 0 && (
-                                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-blue-900 dark:bg-gray-900 border-2 border-blue-700 dark:border-blue-500/50 rounded-lg px-4 py-2.5 text-xs text-white opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-2xl">
-                                    <div className="font-bold text-sm">{hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}</div>
-                                    <div className="text-xs text-white mt-1 font-medium">{count} tasks • {data.points?.toFixed(1) || 0} pts</div>
+                                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-blue-900 dark:bg-gray-900 border-2 border-white/20 rounded-lg px-4 py-2.5 text-xs opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-2xl">
+                                    <div className="font-bold text-base text-white">{hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}</div>
+                                    <div className="text-sm text-white mt-1 font-semibold">{count} tasks • {data.points?.toFixed(1) || 0} pts</div>
                                   </div>
                                 )}
                               </div>

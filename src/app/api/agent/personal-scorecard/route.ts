@@ -69,22 +69,37 @@ export async function GET(req: NextRequest) {
       const checkStart = new Date(Date.UTC(year, month, day - daysBack, 8, 0, 0, 0)); // 8 AM UTC = 12 AM PST
       const checkEnd = new Date(Date.UTC(year, month, day - daysBack + 1, 7, 59, 59, 999)); // Next day 7:59 AM UTC = 11:59 PM PST
       
+      console.log(`[Last Worked Day] Checking ${daysBack} days back:`, {
+        checkDate: checkStart.toISOString().split('T')[0],
+        checkStart: checkStart.toISOString(),
+        checkEnd: checkEnd.toISOString(),
+        agentEmail: currentUser.email
+      });
+      
       // Check if agent completed any tasks on this day
-      // Look for tasks with endTime OR disposition (completed tasks should have at least one)
+      // Check multiple date fields to catch all completed work
       const hasTasksOnDay = await prisma.task.count({
         where: {
           status: "COMPLETED",
           assignedToId: currentUser.id,
           OR: [
+            // Check endTime first (most reliable)
             {
               endTime: {
                 gte: checkStart,
                 lte: checkEnd
               }
             },
+            // Check updatedAt if endTime not available
             {
-              disposition: { not: null },
               updatedAt: {
+                gte: checkStart,
+                lte: checkEnd
+              }
+            },
+            // Check createdAt as last resort
+            {
+              createdAt: {
                 gte: checkStart,
                 lte: checkEnd
               }
@@ -93,12 +108,17 @@ export async function GET(req: NextRequest) {
         }
       });
       
+      console.log(`[Last Worked Day] Found ${hasTasksOnDay} tasks on this day`);
+      
       if (hasTasksOnDay > 0) {
         lastWorkedStart = checkStart;
         lastWorkedEnd = checkEnd;
+        console.log(`[Last Worked Day] ✅ Last worked day found:`, checkStart.toISOString().split('T')[0]);
         break; // Found it!
       }
     }
+    
+    console.log(`[Last Worked Day] Final result:`, lastWorkedStart ? lastWorkedStart.toISOString().split('T')[0] : 'None found');
 
     // Fetch ALL agents for ranking purposes (include managers for comparison)
     const allUsers = await prisma.user.findMany({
