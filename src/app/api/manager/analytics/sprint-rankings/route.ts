@@ -165,6 +165,10 @@ export async function GET(request: NextRequest) {
       let totalWeightedPoints = 0;
       let totalHandleTimeSec = 0;
       const breakdown: Record<string, { count: number; weightedPoints: number; avgSec: number; totalSec: number }> = {};
+      
+      // NEW: Hourly and daily productivity tracking
+      const hourlyBreakdown: Record<number, { count: number; points: number }> = {};
+      const dailyBreakdown: Record<string, { count: number; points: number; activeHours: number }> = {};
 
       for (const task of portalTasks) {
         const weight = getTaskWeight(task.taskType, task.disposition);
@@ -178,6 +182,31 @@ export async function GET(request: NextRequest) {
         breakdown[task.taskType].count++;
         breakdown[task.taskType].weightedPoints += weight;
         breakdown[task.taskType].totalSec += task.durationSec || 0;
+        
+        // NEW: Track hourly and daily productivity (PST timezone)
+        if (task.endTime) {
+          const pstOffset = -8 * 60 * 60 * 1000; // PST = UTC - 8
+          const endTimePST = new Date(task.endTime.getTime() + pstOffset);
+          const hour = endTimePST.getUTCHours(); // 0-23
+          const dayKey = endTimePST.toISOString().split('T')[0]; // YYYY-MM-DD
+          
+          // Hourly breakdown
+          if (!hourlyBreakdown[hour]) {
+            hourlyBreakdown[hour] = { count: 0, points: 0 };
+          }
+          hourlyBreakdown[hour].count++;
+          hourlyBreakdown[hour].points += weight;
+          
+          // Daily breakdown
+          if (!dailyBreakdown[dayKey]) {
+            dailyBreakdown[dayKey] = { count: 0, points: 0, activeHours: 0 };
+          }
+          dailyBreakdown[dayKey].count++;
+          dailyBreakdown[dayKey].points += weight;
+          if (task.durationSec) {
+            dailyBreakdown[dayKey].activeHours += task.durationSec / 3600;
+          }
+        }
       }
 
       // Calculate averages for each task type
@@ -250,6 +279,8 @@ export async function GET(request: NextRequest) {
         avgHandleTimeSec,
         totalTimeSec: totalHandleTimeSec,
         breakdown, // Add task type breakdown
+        hourlyBreakdown, // NEW: Hourly productivity
+        dailyBreakdown, // NEW: Daily productivity
         isSenior,
         isChampion: false,
         isTopThree: false,

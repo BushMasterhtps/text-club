@@ -24,6 +24,9 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
   const [sprintLoading, setSprintLoading] = useState(false);
   const [sprintHistory, setSprintHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  
+  // NEW: Productivity charts toggle
+  const [showProductivityCharts, setShowProductivityCharts] = useState<string | null>(null); // agentId whose charts are shown
 
   // Load sprint data when component mounts, mode changes, or date range changes
   useEffect(() => {
@@ -690,6 +693,164 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                                 <div className="text-[10px] text-white/60 mt-2">
                                   💡 {agent.estimatedIdleHours > 2 ? 'High idle time - encourage to request more assignments!' : 'Good utilization of shift time!'}
                                 </div>
+                              </div>
+                            )}
+                            
+                            {/* NEW: Productivity Charts (Hourly or Daily based on date range) */}
+                            {(agent.hourlyBreakdown || agent.dailyBreakdown) && (
+                              <div className="mt-4">
+                                <button
+                                  onClick={() => {
+                                    if (showProductivityCharts === agent.id) {
+                                      setShowProductivityCharts(null);
+                                    } else {
+                                      setShowProductivityCharts(agent.id);
+                                    }
+                                  }}
+                                  className="text-xs text-purple-400 hover:text-purple-300 underline flex items-center gap-1"
+                                >
+                                  {showProductivityCharts === agent.id ? '📊 Hide productivity analysis' : '📊 Show productivity analysis'}
+                                </button>
+
+                                {showProductivityCharts === agent.id && (
+                                  <div className="mt-3 bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
+                                    {/* Single Day View: Hourly Breakdown */}
+                                    {dateRange && dateRange.start === dateRange.end && agent.hourlyBreakdown && Object.keys(agent.hourlyBreakdown).length > 0 && (
+                                      <div>
+                                        <div className="text-sm font-semibold text-white mb-3">⏰ Hourly Productivity on {dateRange.start}</div>
+                                        <div className="flex items-end gap-1 h-32">
+                                          {Array.from({ length: 24 }, (_, hour) => {
+                                            const data = agent.hourlyBreakdown[hour];
+                                            const count = data?.count || 0;
+                                            const maxCount = Math.max(...Object.values(agent.hourlyBreakdown).map((d: any) => d.count), 1);
+                                            const heightPercent = count > 0 ? (count / maxCount) * 100 : 0;
+                                            
+                                            return (
+                                              <div key={hour} className="flex-1 flex flex-col items-center group relative cursor-pointer">
+                                                <div 
+                                                  className={`w-full rounded-t transition-all ${
+                                                    count > 0 
+                                                      ? 'bg-gradient-to-t from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600' 
+                                                      : 'bg-white/5'
+                                                  }`}
+                                                  style={{ height: `${heightPercent}%`, minHeight: count > 0 ? '12px' : '2px' }}
+                                                >
+                                                  {count > 0 && (
+                                                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-950 border-2 border-white/40 rounded-lg px-4 py-3 text-xs opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-2xl backdrop-blur-sm">
+                                                      <div className="font-extrabold text-lg text-white drop-shadow-lg">{hour % 12 || 12}{hour >= 12 ? 'PM' : 'AM'}</div>
+                                                      <div className="text-base text-white mt-1 font-bold drop-shadow-md">{count} tasks • {data.points?.toFixed(1) || 0} pts</div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                                {hour % 3 === 0 && (
+                                                  <div className="text-[8px] text-white/40 mt-1">{hour % 12 || 12}{hour >= 12 ? 'p' : 'a'}</div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                        
+                                        {/* Peak Hours Analysis */}
+                                        {(() => {
+                                          const sortedHours = Object.entries(agent.hourlyBreakdown)
+                                            .map(([hour, data]: [string, any]) => ({ hour: parseInt(hour), ...data }))
+                                            .sort((a, b) => b.count - a.count)
+                                            .slice(0, 3);
+                                          
+                                          if (sortedHours.length > 0 && sortedHours[0].count > 0) {
+                                            return (
+                                              <div className="mt-3 text-xs text-white/70">
+                                                🏆 Peak Hours: {sortedHours.map(h => `${h.hour % 12 || 12}${h.hour >= 12 ? 'PM' : 'AM'} (${h.count})`).join(', ')}
+                                              </div>
+                                            );
+                                          }
+                                          return null;
+                                        })()}
+                                        
+                                        <div className="text-[10px] text-white/50 mt-2 text-center">
+                                          💡 Hover over bars to see counts & points
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Multi-Day View: Daily Breakdown */}
+                                    {dateRange && dateRange.start !== dateRange.end && agent.dailyBreakdown && Object.keys(agent.dailyBreakdown).length > 0 && (
+                                      <div>
+                                        <div className="text-sm font-semibold text-white mb-3">📅 Daily Productivity Breakdown</div>
+                                        <div className="space-y-2">
+                                          {Object.entries(agent.dailyBreakdown)
+                                            .sort(([a], [b]) => a.localeCompare(b))
+                                            .map(([day, data]: [string, any]) => {
+                                              const maxCount = Math.max(...Object.values(agent.dailyBreakdown).map((d: any) => d.count));
+                                              const widthPercent = maxCount > 0 ? (data.count / maxCount) * 100 : 0;
+                                              const dayOfWeek = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+                                              const displayDate = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                              
+                                              return (
+                                                <div key={day} className="flex items-center gap-3">
+                                                  <div className="text-xs text-white/60 w-20">{dayOfWeek} {displayDate}</div>
+                                                  <div className="flex-1 relative">
+                                                    <div className="bg-white/5 rounded h-8 relative overflow-hidden">
+                                                      <div 
+                                                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-600 to-purple-500 rounded flex items-center justify-end pr-2 transition-all"
+                                                        style={{ width: `${widthPercent}%` }}
+                                                      >
+                                                        <span className="text-xs font-semibold text-white">{data.count} tasks</span>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                  <div className="text-xs text-white/70 w-24 text-right">
+                                                    {data.points.toFixed(1)} pts • {data.activeHours.toFixed(1)}h
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                        </div>
+                                        
+                                        {/* Peak Days Analysis */}
+                                        {(() => {
+                                          const sortedDays = Object.entries(agent.dailyBreakdown)
+                                            .map(([day, data]: [string, any]) => ({ day, ...data }))
+                                            .sort((a, b) => b.count - a.count)
+                                            .slice(0, 3);
+                                          
+                                          const avgTasksPerDay = Object.values(agent.dailyBreakdown).reduce((sum: number, d: any) => sum + d.count, 0) / Object.keys(agent.dailyBreakdown).length;
+                                          const avgHoursPerDay = Object.values(agent.dailyBreakdown).reduce((sum: number, d: any) => sum + d.activeHours, 0) / Object.keys(agent.dailyBreakdown).length;
+                                          
+                                          // Find peak hour across all days
+                                          const allHourlyData: Record<number, number> = {};
+                                          if (agent.hourlyBreakdown) {
+                                            for (const [hour, data] of Object.entries(agent.hourlyBreakdown) as any) {
+                                              allHourlyData[hour] = (data.count || 0);
+                                            }
+                                          }
+                                          const peakHour = Object.entries(allHourlyData).sort(([, a], [, b]) => (b as number) - (a as number))[0];
+                                          
+                                          return (
+                                            <div className="mt-3 bg-purple-500/10 rounded p-3 space-y-2 text-xs">
+                                              <div className="text-white/70">
+                                                📊 <strong className="text-white">Averages:</strong> {avgTasksPerDay.toFixed(1)} tasks/day • {avgHoursPerDay.toFixed(1)} hours/day
+                                              </div>
+                                              {sortedDays.length > 0 && (
+                                                <div className="text-white/70">
+                                                  🏆 <strong className="text-white">Peak Days:</strong> {sortedDays.map(d => {
+                                                    const date = new Date(d.day + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                                    return `${date} (${d.count})`;
+                                                  }).join(', ')}
+                                                </div>
+                                              )}
+                                              {peakHour && peakHour[1] > 0 && (
+                                                <div className="text-white/70">
+                                                  ⏰ <strong className="text-white">Peak Time Window:</strong> {parseInt(peakHour[0]) % 12 || 12}{parseInt(peakHour[0]) >= 12 ? 'PM' : 'AM'} (most productive hour)
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )}
                             </>
