@@ -871,16 +871,39 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                                               {/* Disposition rows */}
                                               {data.dispositions && data.dispositions.length > 0 ? (
                                                 <div className="space-y-1 ml-4">
-                                                  {data.dispositions.map((disp: any) => (
-                                                    <div key={disp.disposition} className="flex items-center justify-between text-xs py-1">
-                                                      <div className="text-white/70 flex-1">
-                                                        └─ {disp.disposition}
+                                                  {data.dispositions.map((disp: any) => {
+                                                    const dispPercent = agent.totalTasks > 0 ? ((disp.count / agent.totalTasks) * 100).toFixed(1) : '0.0';
+                                                    
+                                                    return (
+                                                      <div key={disp.disposition} className="flex items-center justify-between text-xs py-1 hover:bg-white/5 rounded px-2 -mx-2 group cursor-pointer transition-colors">
+                                                        <div className="text-white/70 flex-1">
+                                                          └─ {disp.disposition}
+                                                        </div>
+                                                        <div className="text-white/60 text-right flex items-center gap-2">
+                                                          <span>{disp.count} tasks ({dispPercent}%) • {disp.avgTime || 'N/A'} • {disp.points.toFixed(1)} pts</span>
+                                                          <button
+                                                            onClick={async (e) => {
+                                                              e.stopPropagation();
+                                                              // Download raw data for this disposition
+                                                              const params = new URLSearchParams({
+                                                                agentId: agent.id,
+                                                                taskType: taskType,
+                                                                disposition: disp.disposition,
+                                                                startDate: dateRange?.start || '',
+                                                                endDate: dateRange?.end || ''
+                                                              });
+                                                              const url = `/api/manager/analytics/raw-tasks-export?${params}`;
+                                                              window.open(url, '_blank');
+                                                            }}
+                                                            className="opacity-0 group-hover:opacity-100 transition-opacity text-cyan-400 hover:text-cyan-300"
+                                                            title="Download raw task data"
+                                                          >
+                                                            📥
+                                                          </button>
+                                                        </div>
                                                       </div>
-                                                      <div className="text-white/60 text-right">
-                                                        {disp.count} tasks • {disp.avgTime || 'N/A'} • {disp.points.toFixed(1)} pts
-                                                      </div>
-                                                    </div>
-                                                  ))}
+                                                    );
+                                                  })}
                                                 </div>
                                               ) : (
                                                 <div className="text-xs text-white/50 ml-4">No disposition data available</div>
@@ -903,12 +926,37 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                                           </div>
                                           
                                           <div className="ml-4 space-y-1">
-                                            <div className="flex items-center justify-between text-xs py-1">
+                                            <div className="flex items-center justify-between text-xs py-1 hover:bg-white/5 rounded px-2 -mx-2 group cursor-pointer transition-colors">
                                               <div className="text-white/70 flex-1">
                                                 └─ Completed
                                               </div>
-                                              <div className="text-white/60 text-right">
-                                                {agent.breakdown.TRELLO.count} tasks • N/A • {agent.breakdown.TRELLO.weightedPoints.toFixed(1)} pts
+                                              <div className="text-white/60 text-right flex items-center gap-2">
+                                                {(() => {
+                                                  const trelloPercent = agent.totalTasks > 0 ? ((agent.breakdown.TRELLO.count / agent.totalTasks) * 100).toFixed(1) : '0.0';
+                                                  return (
+                                                    <>
+                                                      <span>{agent.breakdown.TRELLO.count} tasks ({trelloPercent}%) • N/A • {agent.breakdown.TRELLO.weightedPoints.toFixed(1)} pts</span>
+                                                      <button
+                                                        onClick={async (e) => {
+                                                          e.stopPropagation();
+                                                          // Download Trello data (from trelloCompletions table)
+                                                          const params = new URLSearchParams({
+                                                            agentId: agent.id,
+                                                            taskType: 'TRELLO',
+                                                            startDate: dateRange?.start || '',
+                                                            endDate: dateRange?.end || ''
+                                                          });
+                                                          const url = `/api/manager/analytics/raw-tasks-export?${params}`;
+                                                          window.open(url, '_blank');
+                                                        }}
+                                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-amber-400 hover:text-amber-300"
+                                                        title="Download Trello completion data"
+                                                      >
+                                                        📥
+                                                      </button>
+                                                    </>
+                                                  );
+                                                })()}
                                               </div>
                                             </div>
                                             
