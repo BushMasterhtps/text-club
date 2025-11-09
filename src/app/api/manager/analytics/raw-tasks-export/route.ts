@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
 
     // Handle portal tasks (TEXT_CLUB, WOD_IVCS, EMAIL_REQUESTS, YOTPO, HOLDS, etc.)
     console.log('🔍 Querying portal tasks with filters:', {
-      assignedTo: agentId,
+      assignedToId: agentId,
       taskType,
       status: 'COMPLETED',
       disposition: disposition || 'all',
@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
 
     const tasks = await prisma.task.findMany({
       where: {
-        assignedTo: agentId,
+        assignedToId: agentId, // Use the foreign key field, not the relation
         taskType: taskType,
         status: 'COMPLETED',
         ...(disposition ? { disposition } : {}),
