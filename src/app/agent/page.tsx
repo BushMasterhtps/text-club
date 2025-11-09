@@ -144,34 +144,8 @@ interface AgentStats {
 }
 
 export default function AgentPage() {
-  // SECURITY: Client-side auth guard - verify role before rendering
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [authChecking, setAuthChecking] = useState(true);
-  
-  useEffect(() => {
-    const verifyAuth = async () => {
-      try {
-        const res = await fetch('/api/auth/me', { cache: 'no-store' });
-        const data = await res.json();
-        
-        if (!data.success || (data.role !== 'AGENT' && data.role !== 'MANAGER_AGENT')) {
-          // Unauthorized - redirect to login
-          window.location.href = '/login';
-          return;
-        }
-        
-        // Authorized - allow page to render
-        setIsAuthorized(true);
-      } catch (error) {
-        // Error checking auth - redirect to login
-        window.location.href = '/login';
-      } finally {
-        setAuthChecking(false);
-      }
-    };
-    
-    verifyAuth();
-  }, []);
+  // SECURITY: Middleware handles auth - client-side guard removed to prevent login loops
+  // The middleware already verifies JWT and role, which is sufficient protection
   
   const [email, setEmail] = useState<string>("");
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -822,22 +796,6 @@ export default function AgentPage() {
         <H2>Loading...</H2>
       </main>
     );
-  }
-
-  // SECURITY: Don't render page until auth is verified
-  if (authChecking) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-neutral-900 to-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-white/60">Verifying access...</p>
-        </div>
-      </div>
-    );
-  }
-  
-  if (!isAuthorized) {
-    return null; // Redirecting to login
   }
 
   // Check if user is coming from role switching (has agentEmail) or needs to login
