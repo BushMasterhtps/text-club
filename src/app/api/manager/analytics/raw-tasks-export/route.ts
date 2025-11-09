@@ -109,42 +109,73 @@ export async function GET(req: NextRequest) {
         taskType: true,
         status: true,
         disposition: true,
-        incomingMessage: true,
+        // Basic fields
+        text: true, // Customer message/request
+        phone: true,
+        email: true,
+        brand: true,
         customerName: true,
-        customerPhone: true,
-        customerEmail: true,
-        orderNumber: true,
-        orderDate: true,
+        // Timing
         startTime: true,
         endTime: true,
-        sfCaseNumber: true,
+        durationSec: true,
         createdAt: true,
-        // Task-type specific fields
-        productName: true, // YOTPO
-        issueTopic: true, // YOTPO
-        reviewText: true, // YOTPO
-        reviewDate: true, // YOTPO
-        prOrYotpo: true, // YOTPO
-        priority: true, // HOLDS
-        daysInSystem: true, // HOLDS
+        // Common fields
+        sfCaseNumber: true,
+        sfOrderNumber: true,
+        assistanceNotes: true,
+        // WOD/IVCS fields
+        wodIvcsSource: true,
+        documentNumber: true,
+        purchaseDate: true,
+        // Email Request fields
+        emailRequestFor: true,
+        details: true,
+        salesforceCaseNumber: true,
+        completionTime: true,
+        // Standalone Refunds fields
+        salesOrderId: true,
+        orderDate: true,
+        amountToBeRefunded: true,
+        refundReason: true,
+        paymentMethod: true,
+        // Holds fields
+        holdsOrderDate: true,
+        holdsOrderNumber: true,
+        holdsCustomerEmail: true,
+        holdsPriority: true,
+        holdsDaysInSystem: true,
+        holdsStatus: true,
+        // Yotpo fields
+        yotpoDateSubmitted: true,
+        yotpoPrOrYotpo: true,
+        yotpoCustomerName: true,
+        yotpoEmail: true,
+        yotpoOrderDate: true,
+        yotpoProduct: true,
+        yotpoIssueTopic: true,
+        yotpoReviewDate: true,
+        yotpoReview: true,
+        yotpoSfOrderLink: true,
       }
     });
 
     console.log(`✅ Found ${tasks.length} tasks`);
 
     // CSV Header (comprehensive for all task types)
-    csvData = 'Task ID,Task Type,Disposition,Customer Name,Phone,Email,Order Number,Order Date,Created Date,Start Time,End Time,Duration (seconds),SF Case Number,Incoming Message,Product,Issue Topic,Review Text,Review Date,PR/Yotpo,Priority,Days In System\n';
+    csvData = 'Task ID,Task Type,Disposition,Customer Name,Phone,Email,Brand,Customer Message,SF Case Number,SF Order Number,Start Time,End Time,Duration (seconds),Created Date,Purchase Date,Order Date,Holds Order Date,Yotpo Order Date,Holds Order Number,Holds Customer Email,Holds Priority,Holds Days In System,Holds Status,Yotpo Date Submitted,Yotpo PR/Yotpo,Yotpo Customer Name,Yotpo Email,Yotpo Product,Yotpo Issue Topic,Yotpo Review Date,Yotpo Review,Yotpo SF Order Link,Email Request For,Details,Assistance Notes,Payment Method,Refund Reason,Amount To Be Refunded\n';
 
     // CSV Rows
     for (const task of tasks) {
       const startTime = task.startTime ? task.startTime.toISOString() : '';
       const endTime = task.endTime ? task.endTime.toISOString() : '';
-      const duration = task.startTime && task.endTime 
+      const duration = task.durationSec || (task.startTime && task.endTime 
         ? Math.floor((task.endTime.getTime() - task.startTime.getTime()) / 1000)
-        : 0;
+        : 0);
       const createdAt = task.createdAt.toISOString();
-      const orderDate = task.orderDate ? task.orderDate.toISOString().split('T')[0] : '';
-      const reviewDate = task.reviewDate ? task.reviewDate.toISOString().split('T')[0] : '';
+      
+      // Date formatting helper
+      const formatDate = (date: any) => date ? new Date(date).toISOString().split('T')[0] : '';
 
       // Escape fields that might contain commas or quotes
       const escape = (val: any) => {
@@ -158,23 +189,40 @@ export async function GET(req: NextRequest) {
         escape(task.taskType),
         escape(task.disposition || ''),
         escape(task.customerName || ''),
-        escape(task.customerPhone || ''),
-        escape(task.customerEmail || ''),
-        escape(task.orderNumber || ''),
-        escape(orderDate),
-        escape(createdAt),
+        escape(task.phone || ''),
+        escape(task.email || ''),
+        escape(task.brand || ''),
+        escape(task.text || ''),
+        escape(task.sfCaseNumber || ''),
+        escape(task.sfOrderNumber || ''),
         escape(startTime),
         escape(endTime),
         escape(duration),
-        escape(task.sfCaseNumber || ''),
-        escape(task.incomingMessage || ''),
-        escape(task.productName || ''),
-        escape(task.issueTopic || ''),
-        escape(task.reviewText || ''),
-        escape(reviewDate),
-        escape(task.prOrYotpo || ''),
-        escape(task.priority || ''),
-        escape(task.daysInSystem || '')
+        escape(createdAt),
+        escape(formatDate(task.purchaseDate)),
+        escape(formatDate(task.orderDate)),
+        escape(formatDate(task.holdsOrderDate)),
+        escape(formatDate(task.yotpoOrderDate)),
+        escape(task.holdsOrderNumber || ''),
+        escape(task.holdsCustomerEmail || ''),
+        escape(task.holdsPriority || ''),
+        escape(task.holdsDaysInSystem || ''),
+        escape(task.holdsStatus || ''),
+        escape(formatDate(task.yotpoDateSubmitted)),
+        escape(task.yotpoPrOrYotpo || ''),
+        escape(task.yotpoCustomerName || ''),
+        escape(task.yotpoEmail || ''),
+        escape(task.yotpoProduct || ''),
+        escape(task.yotpoIssueTopic || ''),
+        escape(formatDate(task.yotpoReviewDate)),
+        escape(task.yotpoReview || ''),
+        escape(task.yotpoSfOrderLink || ''),
+        escape(task.emailRequestFor || ''),
+        escape(task.details || ''),
+        escape(task.assistanceNotes || ''),
+        escape(task.paymentMethod || ''),
+        escape(task.refundReason || ''),
+        escape(task.amountToBeRefunded?.toString() || '')
       ].join(',') + '\n';
     }
 
