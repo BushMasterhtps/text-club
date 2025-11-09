@@ -15,7 +15,10 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
+    console.log('📥 Raw Tasks Export Request:', { agentId, taskType, disposition, startDate, endDate });
+
     if (!agentId || !taskType) {
+      console.error('❌ Missing required parameters:', { agentId, taskType });
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
@@ -26,12 +29,17 @@ export async function GET(req: NextRequest) {
     });
 
     if (!agent) {
+      console.error('❌ Agent not found:', agentId);
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
     }
+
+    console.log('✅ Agent found:', agent.name);
 
     let csvData = '';
     const agentName = agent.name.replace(/\s+/g, '_');
     const dateStr = startDate && endDate ? `${startDate}_to_${endDate}` : 'all_time';
+    
+    console.log('📁 Preparing export for:', { agentName, taskType, dateStr });
     
     // Handle Trello separately (no task records, only trelloCompletions)
     if (taskType === 'TRELLO') {
@@ -51,6 +59,8 @@ export async function GET(req: NextRequest) {
       // CSV Header for Trello
       csvData = 'Date,Cards Completed,Note\n';
 
+      console.log(`✅ Found ${trelloCompletions.length} Trello completions`);
+
       // CSV Rows
       for (const completion of trelloCompletions) {
         const date = completion.date.toISOString().split('T')[0];
@@ -59,6 +69,7 @@ export async function GET(req: NextRequest) {
       }
 
       const filename = `Trello_${agentName}_${dateStr}.csv`;
+      console.log(`📥 Downloading: ${filename}`);
 
       return new NextResponse(csvData, {
         headers: {
@@ -69,6 +80,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Handle portal tasks (TEXT_CLUB, WOD_IVCS, EMAIL_REQUESTS, YOTPO, HOLDS, etc.)
+    console.log('🔍 Querying portal tasks with filters:', {
+      assignedTo: agentId,
+      taskType,
+      status: 'COMPLETED',
+      disposition: disposition || 'all',
+      dateRange: startDate && endDate ? `${startDate} to ${endDate}` : 'all time'
+    });
+
     const tasks = await prisma.task.findMany({
       where: {
         assignedTo: agentId,
@@ -110,6 +129,8 @@ export async function GET(req: NextRequest) {
         daysInSystem: true, // HOLDS
       }
     });
+
+    console.log(`✅ Found ${tasks.length} tasks`);
 
     // CSV Header (comprehensive for all task types)
     csvData = 'Task ID,Task Type,Disposition,Customer Name,Phone,Email,Order Number,Order Date,Created Date,Start Time,End Time,Duration (seconds),SF Case Number,Incoming Message,Product,Issue Topic,Review Text,Review Date,PR/Yotpo,Priority,Days In System\n';
@@ -161,6 +182,8 @@ export async function GET(req: NextRequest) {
     const dispositionStr = disposition ? `_${disposition.replace(/[^a-zA-Z0-9]/g, '_')}` : '';
     const filename = `${taskTypeName}${dispositionStr}_${agentName}_${dateStr}.csv`;
 
+    console.log(`📥 Downloading: ${filename} (${tasks.length} tasks, ${csvData.length} bytes)`);
+
     return new NextResponse(csvData, {
       headers: {
         'Content-Type': 'text/csv',
@@ -169,9 +192,15 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error exporting raw tasks:', error);
+    console.error('❌ Error exporting raw tasks:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Error details:', errorMessage);
     return NextResponse.json(
-      { error: 'Failed to export data' },
+      { 
+        error: 'Failed to export data',
+        details: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      },
       { status: 500 }
     );
   }

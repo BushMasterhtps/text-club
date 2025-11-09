@@ -319,6 +319,7 @@ export async function GET(request: NextRequest) {
         tasksCompleted: portalTasks.length,
         trelloCompleted: trelloCount,
         totalCompleted,
+        totalTasks: totalCompleted, // Alias for frontend compatibility
         daysWorked,
         weightedPoints: totalWeightedPoints,
         weightedDailyAvg,
