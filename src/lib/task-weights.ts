@@ -71,7 +71,7 @@ const TASK_TYPE_DEFAULTS: Record<string, number> = {
   WOD_IVCS: 2.14,            // Avg of all WOD_IVCS dispositions
   EMAIL_REQUESTS: 5.27,      // Avg of all EMAIL_REQUESTS dispositions
   YOTPO: 7.0,                // Initial estimate (will update after ~1 week of data)
-  TRELLO: 5.0,               // Fixed estimate (no disposition data)
+  TRELLO: 3.0,               // Adjusted down from 5.0 (no disposition/time tracking = lower confidence)
   HOLDS: 4.0,                // Estimate (moderate complexity)
   STANDALONE_REFUNDS: 3.0,   // Estimate
 };
@@ -193,7 +193,7 @@ export const WEIGHT_SUMMARY = {
     WOD_IVCS: { avgWeight: 2.14, dispositions: Object.keys(WOD_IVCS_WEIGHTS).length, tasksAnalyzed: 9963 },
     EMAIL_REQUESTS: { avgWeight: 5.27, dispositions: Object.keys(EMAIL_REQUESTS_WEIGHTS).length, tasksAnalyzed: 986 },
     YOTPO: { avgWeight: 7.0, dispositions: 0, tasksAnalyzed: 0 }, // Initial estimate
-    TRELLO: { avgWeight: 5.0, dispositions: 0, tasksAnalyzed: 0 },
+    TRELLO: { avgWeight: 3.0, dispositions: 0, tasksAnalyzed: 0 }, // Adjusted down (no tracking)
   },
   highestWeight: 7.17, // EMAIL: Unable to Complete - Link/Sale Unavailable
   lowestWeight: 0.57,  // TEXT_CLUB: Spam - One word statement

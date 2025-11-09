@@ -168,7 +168,22 @@ export async function GET(request: NextRequest) {
       // Calculate weighted points and task type breakdown
       let totalWeightedPoints = 0;
       let totalHandleTimeSec = 0;
-      const breakdown: Record<string, { count: number; weightedPoints: number; avgSec: number; totalSec: number }> = {};
+      const breakdown: Record<string, { 
+        count: number; 
+        weightedPoints: number; 
+        avgSec: number; 
+        totalSec: number;
+        dispositions?: Array<{
+          disposition: string;
+          count: number;
+          points: number;
+          avgTime: string;
+          totalSec: number;
+        }>;
+      }> = {};
+      
+      // Track dispositions per task type
+      const dispositionTracker: Record<string, Record<string, { count: number; points: number; totalSec: number }>> = {};
       
       // NEW: Hourly and daily productivity tracking
       const hourlyBreakdown: Record<number, { count: number; points: number }> = {};
@@ -181,11 +196,24 @@ export async function GET(request: NextRequest) {
 
         // Track breakdown by task type
         if (!breakdown[task.taskType]) {
-          breakdown[task.taskType] = { count: 0, weightedPoints: 0, avgSec: 0, totalSec: 0 };
+          breakdown[task.taskType] = { count: 0,  weightedPoints: 0, avgSec: 0, totalSec: 0 };
         }
         breakdown[task.taskType].count++;
         breakdown[task.taskType].weightedPoints += weight;
         breakdown[task.taskType].totalSec += task.durationSec || 0;
+        
+        // Track disposition within task type
+        if (task.disposition) {
+          if (!dispositionTracker[task.taskType]) {
+            dispositionTracker[task.taskType] = {};
+          }
+          if (!dispositionTracker[task.taskType][task.disposition]) {
+            dispositionTracker[task.taskType][task.disposition] = { count: 0, points: 0, totalSec: 0 };
+          }
+          dispositionTracker[task.taskType][task.disposition].count++;
+          dispositionTracker[task.taskType][task.disposition].points += weight;
+          dispositionTracker[task.taskType][task.disposition].totalSec += task.durationSec || 0;
+        }
         
         // NEW: Track hourly and daily productivity (PST timezone)
         if (task.endTime) {
@@ -219,13 +247,39 @@ export async function GET(request: NextRequest) {
           breakdown[taskType].avgSec = Math.round(breakdown[taskType].totalSec / breakdown[taskType].count);
         }
       }
+      
+      // Add disposition details to breakdown
+      for (const taskType in dispositionTracker) {
+        const dispositions = Object.entries(dispositionTracker[taskType]).map(([disposition, data]) => {
+          const avgSec = data.count > 0 ? Math.round(data.totalSec / data.count) : 0;
+          const minutes = Math.floor(avgSec / 60);
+          const seconds = avgSec % 60;
+          const avgTime = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+          
+          return {
+            disposition,
+            count: data.count,
+            points: Math.round(data.points * 100) / 100,
+            avgTime,
+            totalSec: data.totalSec
+          };
+        });
+        
+        // Sort by count descending
+        dispositions.sort((a, b) => b.count - a.count);
+        
+        if (breakdown[taskType]) {
+          breakdown[taskType].dispositions = dispositions;
+        }
+      }
 
-      // Add Trello points (5.0 pts each)
-      totalWeightedPoints += trelloCount * 5.0;
+      // Add Trello points (using dynamic weight from task-weights.ts)
+      const trelloWeight = getTaskWeight("TRELLO");
+      totalWeightedPoints += trelloCount * trelloWeight;
       if (trelloCount > 0) {
         breakdown.TRELLO = {
           count: trelloCount,
-          weightedPoints: trelloCount * 5.0,
+          weightedPoints: trelloCount * trelloWeight,
           avgSec: 0, // No handle time for Trello
           totalSec: 0
         };

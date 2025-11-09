@@ -436,7 +436,7 @@ function calculateAgentScore(
   }
   
   // Add Trello as a separate category
-  const trelloWeightedPoints = trelloCount * getTaskWeight("TRELLO"); // 5.0 points each
+  const trelloWeightedPoints = trelloCount * getTaskWeight("TRELLO"); // Dynamic weight from task-weights.ts
   totalWeightedPoints += trelloWeightedPoints;
   
   breakdown.TRELLO = {

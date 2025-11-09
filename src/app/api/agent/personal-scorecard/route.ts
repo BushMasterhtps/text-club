@@ -176,14 +176,15 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // Add Trello to breakdown
+      // Add Trello to breakdown (using dynamic weight from task-weights.ts)
       if (trelloCompleted > 0) {
+        const trelloWeight = getTaskWeight("TRELLO");
         breakdown['TRELLO'] = {
           count: trelloCompleted,
-          weightedPoints: trelloCompleted * 5.0,
+          weightedPoints: trelloCompleted * trelloWeight,
           totalSec: 0
         };
-        totalWeightedPoints += trelloCompleted * 5.0;
+        totalWeightedPoints += trelloCompleted * trelloWeight;
       }
 
       // Calculate days worked

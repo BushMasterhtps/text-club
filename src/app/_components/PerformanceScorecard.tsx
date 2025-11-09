@@ -27,6 +27,9 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
   
   // NEW: Productivity charts toggle
   const [showProductivityCharts, setShowProductivityCharts] = useState<string | null>(null); // agentId whose charts are shown
+  
+  // NEW: Disposition breakdown toggle
+  const [showDispositionBreakdown, setShowDispositionBreakdown] = useState<string | null>(null); // agentId whose breakdown is shown
 
   // Load sprint data when component mounts, mode changes, or date range changes
   useEffect(() => {
@@ -814,6 +817,130 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                                             </div>
                                           );
                                         })()}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* NEW: Disposition Breakdown Toggle */}
+                            {agent.breakdown && Object.keys(agent.breakdown).length > 0 && (
+                              <div className="mt-4">
+                                <button
+                                  onClick={() => {
+                                    if (showDispositionBreakdown === agent.id) {
+                                      setShowDispositionBreakdown(null);
+                                    } else {
+                                      setShowDispositionBreakdown(agent.id);
+                                    }
+                                  }}
+                                  className="text-xs text-cyan-400 hover:text-cyan-300 underline flex items-center gap-1"
+                                >
+                                  {showDispositionBreakdown === agent.id ? '📋 Hide disposition breakdown' : '📋 Show disposition breakdown'}
+                                </button>
+
+                                {showDispositionBreakdown === agent.id && (
+                                  <div className="mt-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4">
+                                    <div className="text-sm font-semibold text-white mb-3">📋 Task & Disposition Breakdown</div>
+                                    
+                                    {/* Display breakdown grouped by task type */}
+                                    <div className="space-y-4">
+                                      {Object.entries(agent.breakdown)
+                                        .filter(([taskType]) => taskType !== 'TRELLO') // Show Trello separately
+                                        .map(([taskType, data]: [string, any]) => {
+                                          const taskTypeName = taskType === 'TEXT_CLUB' ? 'Text Club' : 
+                                                             taskType === 'WOD_IVCS' ? 'WOD/IVCS' : 
+                                                             taskType === 'EMAIL_REQUESTS' ? 'Email Requests' :
+                                                             taskType === 'YOTPO' ? 'Yotpo' :
+                                                             taskType === 'HOLDS' ? 'Holds' : taskType;
+                                          
+                                          const totalPercent = agent.totalTasks > 0 ? ((data.count / agent.totalTasks) * 100).toFixed(0) : '0';
+                                          
+                                          return (
+                                            <div key={taskType} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                                              <div className="flex items-center justify-between mb-2">
+                                                <div className="font-semibold text-white text-sm">
+                                                  {taskTypeName}
+                                                </div>
+                                                <div className="text-xs text-white/60">
+                                                  {data.count} tasks • {data.weightedPoints.toFixed(1)} pts • {totalPercent}%
+                                                </div>
+                                              </div>
+                                              
+                                              {/* Disposition rows */}
+                                              {data.dispositions && data.dispositions.length > 0 ? (
+                                                <div className="space-y-1 ml-4">
+                                                  {data.dispositions.map((disp: any) => (
+                                                    <div key={disp.disposition} className="flex items-center justify-between text-xs py-1">
+                                                      <div className="text-white/70 flex-1">
+                                                        └─ {disp.disposition}
+                                                      </div>
+                                                      <div className="text-white/60 text-right">
+                                                        {disp.count} tasks • {disp.avgTime || 'N/A'} • {disp.points.toFixed(1)} pts
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <div className="text-xs text-white/50 ml-4">No disposition data available</div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      
+                                      {/* Trello with Warning */}
+                                      {agent.breakdown.TRELLO && (
+                                        <div className="bg-amber-500/10 rounded-lg p-3 border border-amber-500/30">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <div className="font-semibold text-white text-sm flex items-center gap-2">
+                                              <span>Trello</span>
+                                              <span className="text-amber-400">⚠️</span>
+                                            </div>
+                                            <div className="text-xs text-white/60">
+                                              {agent.breakdown.TRELLO.count} tasks • {agent.breakdown.TRELLO.weightedPoints.toFixed(1)} pts • {agent.totalTasks > 0 ? ((agent.breakdown.TRELLO.count / agent.totalTasks) * 100).toFixed(0) : '0'}%
+                                            </div>
+                                          </div>
+                                          
+                                          <div className="ml-4 space-y-1">
+                                            <div className="flex items-center justify-between text-xs py-1">
+                                              <div className="text-white/70 flex-1">
+                                                └─ Completed
+                                              </div>
+                                              <div className="text-white/60 text-right">
+                                                {agent.breakdown.TRELLO.count} tasks • N/A • {agent.breakdown.TRELLO.weightedPoints.toFixed(1)} pts
+                                              </div>
+                                            </div>
+                                            
+                                            <div className="mt-2 bg-amber-500/20 rounded p-2 text-[10px] text-amber-200">
+                                              📊 <strong>From Power BI imports</strong> • No time/disposition tracking available<br/>
+                                              ⚠️ Weighted at 3.0 pts each (estimated complexity)
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Multi-Day Summary */}
+                                    {dateRange && dateRange.start !== dateRange.end && agent.daysWorked > 1 && (
+                                      <div className="mt-4 bg-cyan-500/10 rounded p-3 space-y-1 text-xs">
+                                        <div className="font-semibold text-white mb-2">📊 Period Summary ({dateRange.start} to {dateRange.end})</div>
+                                        <div className="text-white/70">
+                                          • <strong className="text-white">Total Tasks:</strong> {agent.totalTasks} tasks over {agent.daysWorked} days
+                                        </div>
+                                        <div className="text-white/70">
+                                          • <strong className="text-white">Avg per Day:</strong> {(agent.totalTasks / agent.daysWorked).toFixed(1)} tasks/day • {(agent.totalWeightedPoints / agent.daysWorked).toFixed(1)} pts/day
+                                        </div>
+                                        <div className="text-white/70">
+                                          • <strong className="text-white">Avg Handle Time:</strong> {agent.avgHandleTime || 'N/A'}
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Single Day View */}
+                                    {dateRange && dateRange.start === dateRange.end && (
+                                      <div className="mt-4 text-xs text-white/50 text-center">
+                                        Showing breakdown for {dateRange.start}
                                       </div>
                                     )}
                                   </div>
