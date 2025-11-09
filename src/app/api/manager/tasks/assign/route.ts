@@ -1,6 +1,7 @@
 // src/app/api/manager/tasks/assign/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireManagerRole } from "@/lib/auth";
 
 // ---- request body shapes ----------------------------------------------------
 
@@ -14,7 +15,13 @@ type AgentRow = { id: string; email: string; maxOpen: number | null };
 
 // ---- handler ----------------------------------------------------------------
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  // SECURITY: Verify manager role - this is a critical endpoint!
+  const auth = requireManagerRole(req);
+  if (!auth.success) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
+  }
+  
   try {
     const body = (await req.json().catch(() => ({}))) as Body;
 

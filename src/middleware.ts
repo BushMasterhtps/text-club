@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('CRITICAL: JWT_SECRET environment variable is not set! Check Netlify configuration.');
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

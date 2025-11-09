@@ -3093,6 +3093,35 @@ function UsersAdminSection() {
 /*  PAGE                                                                       */
 /* ========================================================================== */
 export default function ManagerPage() {
+  // SECURITY: Client-side auth guard - verify role before rendering
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
+  
+  useEffect(() => {
+    const verifyAuth = async () => {
+      try {
+        const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        const data = await res.json();
+        
+        if (!data.success || (data.role !== 'MANAGER' && data.role !== 'MANAGER_AGENT')) {
+          // Unauthorized - redirect to login
+          window.location.href = '/login';
+          return;
+        }
+        
+        // Authorized - allow page to render
+        setIsAuthorized(true);
+      } catch (error) {
+        // Error checking auth - redirect to login
+        window.location.href = '/login';
+      } finally {
+        setAuthChecking(false);
+      }
+    };
+    
+    verifyAuth();
+  }, []);
+  
   // Auto-logout functionality
   const {
     timeLeft,
@@ -3104,7 +3133,7 @@ export default function ManagerPage() {
     warningMinutes: 5,   // 5 minutes warning
     onLogout: () => {
       localStorage.removeItem('currentRole');
-      fetch('/api/auth/logout', { method: 'POST' });
+      fetch('/api/auth/logout', { method: 'Post' });
       window.location.href = '/login';
     }
   });
@@ -3461,6 +3490,22 @@ export default function ManagerPage() {
     { id: "analytics", label: "📈 Analytics", description: "Text Club specific analytics and insights" },
     { id: "team-analytics", label: "📊 Team Analytics", description: "Team-wide performance and task insights", external: true, href: "/analytics" }
   ];
+
+  // SECURITY: Don't render page until auth is verified
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-neutral-900 to-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-white/60">Verifying access...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!isAuthorized) {
+    return null; // Redirecting to login
+  }
 
   return (
     <main className="mx-auto max-w-[1400px] p-6 text-white dark:text-white light:text-slate-800 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
