@@ -59,6 +59,18 @@ interface AssistanceRequest {
   createdAt: string;
   updatedAt: string;
   status: string;
+  taskType?: string;
+  // Yotpo specific fields
+  yotpoDateSubmitted?: string;
+  yotpoPrOrYotpo?: string;
+  yotpoCustomerName?: string;
+  yotpoEmail?: string;
+  yotpoOrderDate?: string;
+  yotpoProduct?: string;
+  yotpoIssueTopic?: string;
+  yotpoReviewDate?: string;
+  yotpoReview?: string;
+  yotpoSfOrderLink?: string;
 }
 
 interface AssistanceRequestsSectionProps {
@@ -173,10 +185,45 @@ export function AssistanceRequestsSection({
                       <div className="text-white">{request.phone || "Unknown"}</div>
                     </div>
                   </div>
-                  <div className="mt-3">
-                    <div className="text-sm text-neutral-400 mb-1">Message</div>
-                    <div className="text-white bg-neutral-800 p-3 rounded">{request.text}</div>
-                  </div>
+                  
+                  {/* Task-specific content */}
+                  {request.taskType === "YOTPO" ? (
+                    <div className="mt-3 text-sm text-white space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div><strong>👤 Customer:</strong> {request.yotpoCustomerName || "N/A"}</div>
+                        <div><strong>📧 Email:</strong> {request.yotpoEmail || "N/A"}</div>
+                        <div><strong>📅 Order Date:</strong> {request.yotpoOrderDate ? new Date(request.yotpoOrderDate).toLocaleDateString() : "N/A"}</div>
+                        <div><strong>📦 Product:</strong> {request.yotpoProduct || "N/A"}</div>
+                        <div><strong>🏷️ Issue Topic:</strong> {request.yotpoIssueTopic || "N/A"}</div>
+                        <div><strong>📅 Review Date:</strong> {request.yotpoReviewDate ? new Date(request.yotpoReviewDate).toLocaleDateString() : "N/A"}</div>
+                      </div>
+                      <div className="mt-2">
+                        <strong>⭐ Review:</strong>
+                        <div className="mt-1 bg-neutral-800 p-3 rounded whitespace-pre-wrap text-white">
+                          {request.yotpoReview || "No review text"}
+                        </div>
+                      </div>
+                      {request.yotpoSfOrderLink && (
+                        <div>
+                          <strong>🔗 SF Order:</strong>{' '}
+                          <a
+                            href={request.yotpoSfOrderLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 underline"
+                          >
+                            Open in Salesforce →
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-3">
+                      <div className="text-sm text-neutral-400 mb-1">Message</div>
+                      <div className="text-white bg-neutral-800 p-3 rounded">{request.text}</div>
+                    </div>
+                  )}
+                  
                   <div className="mt-3">
                     <div className="text-sm text-neutral-400 mb-1">Agent Request</div>
                     <div className="text-white bg-red-800/30 p-3 rounded border border-red-700">
@@ -255,10 +302,45 @@ export function AssistanceRequestsSection({
                       <div className="text-white">{request.phone || "Unknown"}</div>
                     </div>
                   </div>
-                  <div className="mt-3">
-                    <div className="text-sm text-neutral-400 mb-1">Message</div>
-                    <div className="text-white bg-neutral-800 p-3 rounded">{request.text}</div>
-                  </div>
+                  
+                  {/* Task-specific content for responded requests */}
+                  {request.taskType === "YOTPO" ? (
+                    <div className="mt-3 text-sm text-white space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div><strong>👤 Customer:</strong> {request.yotpoCustomerName || "N/A"}</div>
+                        <div><strong>📧 Email:</strong> {request.yotpoEmail || "N/A"}</div>
+                        <div><strong>📅 Order Date:</strong> {request.yotpoOrderDate ? new Date(request.yotpoOrderDate).toLocaleDateString() : "N/A"}</div>
+                        <div><strong>📦 Product:</strong> {request.yotpoProduct || "N/A"}</div>
+                        <div><strong>🏷️ Issue Topic:</strong> {request.yotpoIssueTopic || "N/A"}</div>
+                        <div><strong>📅 Review Date:</strong> {request.yotpoReviewDate ? new Date(request.yotpoReviewDate).toLocaleDateString() : "N/A"}</div>
+                      </div>
+                      <div className="mt-2">
+                        <strong>⭐ Review:</strong>
+                        <div className="mt-1 bg-neutral-800 p-3 rounded whitespace-pre-wrap text-white">
+                          {request.yotpoReview || "No review text"}
+                        </div>
+                      </div>
+                      {request.yotpoSfOrderLink && (
+                        <div>
+                          <strong>🔗 SF Order:</strong>{' '}
+                          <a
+                            href={request.yotpoSfOrderLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 underline"
+                          >
+                            Open in Salesforce →
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-3">
+                      <div className="text-sm text-neutral-400 mb-1">Message</div>
+                      <div className="text-white bg-neutral-800 p-3 rounded">{request.text}</div>
+                    </div>
+                  )}
+                  
                   <div className="mt-3">
                     <div className="text-sm text-neutral-400 mb-1">Agent Request</div>
                     <div className="text-white bg-neutral-700 p-3 rounded">
