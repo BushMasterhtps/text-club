@@ -1,6 +1,6 @@
 // API route for fetching previous action items from last one-on-one
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 
 // Helper to verify authentication

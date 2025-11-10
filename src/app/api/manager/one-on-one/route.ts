@@ -1,6 +1,6 @@
 // API route for managing one-on-one meeting notes
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 
 // Helper to verify authentication
