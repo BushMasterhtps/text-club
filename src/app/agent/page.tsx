@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import ThemeToggle from '@/app/_components/ThemeToggle';
+import AgentOneOnOneNotes from '@/app/_components/AgentOneOnOneNotes';
 
 /* ========== Tiny UI atoms (iOS-ish) ========== */
 function Card({
@@ -204,6 +205,9 @@ export default function AgentPage() {
   const [loadingScorecard, setLoadingScorecard] = useState(false);
   const [showScorecard, setShowScorecard] = useState(true); // Expanded by default
   const [showGuideModal, setShowGuideModal] = useState(false);
+
+  // One-on-One Notes
+  const [showOneOnOneNotes, setShowOneOnOneNotes] = useState(false);
 
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -989,6 +993,11 @@ export default function AgentPage() {
         </Card>
       )}
 
+      {/* One-on-One Notes Section */}
+      {showOneOnOneNotes && (
+        <AgentOneOnOneNotes agentEmail={email} />
+      )}
+
       {/* Task Picker */}
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
@@ -1137,6 +1146,12 @@ export default function AgentPage() {
           <div className="flex items-center justify-between mb-4">
             <H2>📊 Your Performance Scorecard</H2>
             <div className="flex items-center gap-2">
+              <SmallButton 
+                onClick={() => setShowOneOnOneNotes(!showOneOnOneNotes)}
+                className="bg-purple-500/20 hover:bg-purple-500/30 ring-purple-500/40"
+              >
+                💬 1:1 Notes
+              </SmallButton>
               <SmallButton 
                 onClick={() => setShowGuideModal(true)}
                 className="bg-blue-500/20 hover:bg-blue-500/30 ring-blue-500/40"
@@ -2508,12 +2523,12 @@ function TaskCard({
               </div>
             </div>
             
-            {/* Review Text - Full scrollable view */}
+            {/* Review Text - Full scrollable view (no height limit to show complete reviews) */}
             <div className="flex items-start gap-2">
               <span className="text-yellow-400 mt-1">⭐</span>
               <span className="text-white/60 min-w-fit">Review:</span>
               {isTaskStarted ? (
-                <div className="flex-1 max-h-40 overflow-y-auto text-sm leading-relaxed bg-white/5 rounded p-3 border border-white/10">
+                <div className="flex-1 text-sm leading-relaxed bg-white/5 rounded p-3 border border-white/10 whitespace-pre-wrap">
                   {task.yotpoReview || "No review text provided"}
                 </div>
               ) : (

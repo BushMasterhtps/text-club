@@ -36,6 +36,17 @@ interface AssistanceRequest {
   refundAmount?: number;
   paymentMethod?: string;
   refundReason?: string;
+  // Yotpo specific fields
+  yotpoDateSubmitted?: string;
+  yotpoPrOrYotpo?: string;
+  yotpoCustomerName?: string;
+  yotpoEmail?: string;
+  yotpoOrderDate?: string;
+  yotpoProduct?: string;
+  yotpoIssueTopic?: string;
+  yotpoReviewDate?: string;
+  yotpoReview?: string;
+  yotpoSfOrderLink?: string;
 }
 
 export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: AssistanceRequestsSectionProps) {
@@ -109,6 +120,8 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
       return { label: "Email Request", emoji: "📧", color: "text-green-400" };
     } else if (task.taskType === "STANDALONE_REFUNDS") {
       return { label: "Standalone Refund", emoji: "💰", color: "text-purple-400" };
+    } else if (task.taskType === "YOTPO") {
+      return { label: "Yotpo Review", emoji: "⭐", color: "text-yellow-400" };
     } else {
       return { label: "Text Club", emoji: "💬", color: "text-blue-400" };
     }
@@ -194,6 +207,36 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                               <div><strong>Payment Method:</strong> {request.paymentMethod || "N/A"}</div>
                               <div><strong>Reason:</strong> {request.refundReason || "N/A"}</div>
                             </div>
+                          ) : request.taskType === "YOTPO" ? (
+                            <div className="text-sm text-white/80 space-y-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div><strong>👤 Customer:</strong> {request.yotpoCustomerName || "N/A"}</div>
+                                <div><strong>📧 Email:</strong> {request.yotpoEmail || "N/A"}</div>
+                                <div><strong>📅 Order Date:</strong> {request.yotpoOrderDate ? new Date(request.yotpoOrderDate).toLocaleDateString() : "N/A"}</div>
+                                <div><strong>📦 Product:</strong> {request.yotpoProduct || "N/A"}</div>
+                                <div><strong>🏷️ Issue Topic:</strong> {request.yotpoIssueTopic || "N/A"}</div>
+                                <div><strong>📅 Review Date:</strong> {request.yotpoReviewDate ? new Date(request.yotpoReviewDate).toLocaleDateString() : "N/A"}</div>
+                              </div>
+                              <div className="mt-2">
+                                <strong>⭐ Review:</strong>
+                                <div className="mt-1 bg-white/5 p-3 rounded border border-white/10 whitespace-pre-wrap text-white/90">
+                                  {request.yotpoReview || "No review text"}
+                                </div>
+                              </div>
+                              {request.yotpoSfOrderLink && (
+                                <div>
+                                  <strong>🔗 SF Order:</strong>{' '}
+                                  <a
+                                    href={request.yotpoSfOrderLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-400 hover:text-blue-300 underline"
+                                  >
+                                    Open in Salesforce →
+                                  </a>
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <div className="text-sm text-white/80 space-y-1">
                               <div><strong>Phone:</strong> {request.phone}</div>
@@ -258,6 +301,55 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                             <span className="text-white/40">•</span>
                             <span className="text-sm text-white/60">{request.agentName}</span>
                           </div>
+                          
+                          {/* Task-specific content (same as pending requests) */}
+                          {request.taskType === "YOTPO" ? (
+                            <div className="text-sm text-white/80 space-y-2 mt-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div><strong>👤 Customer:</strong> {request.yotpoCustomerName || "N/A"}</div>
+                                <div><strong>📧 Email:</strong> {request.yotpoEmail || "N/A"}</div>
+                                <div><strong>📅 Order Date:</strong> {request.yotpoOrderDate ? new Date(request.yotpoOrderDate).toLocaleDateString() : "N/A"}</div>
+                                <div><strong>📦 Product:</strong> {request.yotpoProduct || "N/A"}</div>
+                                <div><strong>🏷️ Issue Topic:</strong> {request.yotpoIssueTopic || "N/A"}</div>
+                                <div><strong>📅 Review Date:</strong> {request.yotpoReviewDate ? new Date(request.yotpoReviewDate).toLocaleDateString() : "N/A"}</div>
+                              </div>
+                              <div className="mt-2">
+                                <strong>⭐ Review:</strong>
+                                <div className="mt-1 bg-white/5 p-3 rounded border border-white/10 whitespace-pre-wrap text-white/90">
+                                  {request.yotpoReview || "No review text"}
+                                </div>
+                              </div>
+                              {request.yotpoSfOrderLink && (
+                                <div>
+                                  <strong>🔗 SF Order:</strong>{' '}
+                                  <a
+                                    href={request.yotpoSfOrderLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-400 hover:text-blue-300 underline"
+                                  >
+                                    Open in Salesforce →
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          ) : request.taskType === "WOD_IVCS" ? (
+                            <div className="text-sm text-white/80 space-y-1 mt-2">
+                              <div><strong>Customer:</strong> {request.customerName || "N/A"}</div>
+                              <div><strong>Order:</strong> {request.documentNumber || "N/A"}</div>
+                              <div><strong>Amount:</strong> {request.amount ? `$${request.amount}` : "N/A"}</div>
+                            </div>
+                          ) : request.taskType === "EMAIL_REQUESTS" ? (
+                            <div className="text-sm text-white/80 space-y-1 mt-2">
+                              <div><strong>Request For:</strong> {request.emailRequestFor || "N/A"}</div>
+                              <div><strong>Details:</strong> {request.details || "N/A"}</div>
+                            </div>
+                          ) : request.taskType === "STANDALONE_REFUNDS" ? (
+                            <div className="text-sm text-white/80 space-y-1 mt-2">
+                              <div><strong>Refund Amount:</strong> {request.refundAmount ? `$${request.refundAmount}` : "N/A"}</div>
+                              <div><strong>Payment Method:</strong> {request.paymentMethod || "N/A"}</div>
+                            </div>
+                          ) : null}
                         </div>
                         <div className="text-2xl">{getStatusEmoji(request.status)}</div>
                       </div>

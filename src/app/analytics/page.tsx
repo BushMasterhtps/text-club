@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/app/_components/Card';
 import { SmallButton } from '@/app/_components/SmallButton';
 import PerformanceScorecard from '@/app/_components/PerformanceScorecard';
+import OneOnOneNotes from '@/app/_components/OneOnOneNotes';
 
 // Typography components
 function H1({ children }: { children: React.ReactNode }) {
@@ -994,6 +995,15 @@ export default function AnalyticsPage() {
             </div>
           )}
         </Card>
+
+        {/* One-on-One Notes Section */}
+        <OneOnOneNotes 
+          agents={agentStatus.map(agent => ({
+            id: agent.id,
+            name: agent.name,
+            email: agent.email
+          }))}
+        />
       </div>
     </main>
   );

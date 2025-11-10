@@ -494,3 +494,46 @@ model SprintRanking {
   @@index([rankByPtsPerDay])
   @@index([rankByHybrid])
 }
+
+/////////////////////////////////////
+// One-on-One Meeting Notes
+/////////////////////////////////////
+
+model OneOnOneNote {
+  id          String   @id @default(cuid())
+  
+  // Meeting info
+  meetingDate DateTime // Date of the one-on-one meeting
+  agentId     String   // Agent this meeting is about
+  agentName   String   // Agent name (denormalized for easy display)
+  agentEmail  String   // Agent email (denormalized)
+  managerId   String   // Manager who conducted the meeting
+  managerName String?  // Manager name
+  
+  // Meeting content
+  discussionPoints String?  @db.Text // Key discussion points from the meeting
+  strengths        String?  @db.Text // Strengths highlighted during meeting
+  areasForImprovement String? @db.Text // Areas identified for improvement
+  notes            String?  @db.Text // General manager notes (private)
+  
+  // Action items tracking
+  actionItems      Json?    // Array of action items/goals set during meeting
+  // Format: [{ id: string, description: string, status: 'pending'|'in_progress'|'completed', dueDate?: string }]
+  
+  // Follow-up info
+  nextMeetingDate  DateTime? // Scheduled date for next one-on-one
+  followUpRequired Boolean   @default(false) // Flag if follow-up needed
+  
+  // Email template
+  emailTemplate    String?   @db.Text // Generated email template for recap
+  emailSent        Boolean   @default(false) // Whether recap email was sent
+  emailSentAt      DateTime? // When email was sent
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([agentId])
+  @@index([meetingDate])
+  @@index([managerId])
+  @@index([agentId, meetingDate])
+}
