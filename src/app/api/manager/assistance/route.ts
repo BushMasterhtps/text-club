@@ -43,6 +43,17 @@ export async function GET(req: Request) {
         refundAmount: true,
         paymentMethod: true,
         refundReason: true,
+        // Yotpo specific fields
+        yotpoDateSubmitted: true,
+        yotpoPrOrYotpo: true,
+        yotpoCustomerName: true,
+        yotpoEmail: true,
+        yotpoOrderDate: true,
+        yotpoProduct: true,
+        yotpoIssueTopic: true,
+        yotpoReviewDate: true,
+        yotpoReview: true,
+        yotpoSfOrderLink: true,
         // NOTE: orderDate is excluded - it's only for Standalone Refunds
         assignedTo: {
           select: {
@@ -105,6 +116,17 @@ export async function GET(req: Request) {
         refundAmount: task.refundAmount,
         paymentMethod: task.paymentMethod,
         refundReason: task.refundReason,
+        // Yotpo specific fields
+        yotpoDateSubmitted: task.yotpoDateSubmitted?.toISOString(),
+        yotpoPrOrYotpo: task.yotpoPrOrYotpo,
+        yotpoCustomerName: task.yotpoCustomerName,
+        yotpoEmail: task.yotpoEmail,
+        yotpoOrderDate: task.yotpoOrderDate?.toISOString(),
+        yotpoProduct: task.yotpoProduct,
+        yotpoIssueTopic: task.yotpoIssueTopic,
+        yotpoReviewDate: task.yotpoReviewDate?.toISOString(),
+        yotpoReview: task.yotpoReview,
+        yotpoSfOrderLink: task.yotpoSfOrderLink,
       };
     });
 
