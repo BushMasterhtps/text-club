@@ -1,18 +1,11 @@
 // API route for agent profile information
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    let email = searchParams.get('email');
-    
-    // If no email provided, get from cookies (current user)
-    if (!email) {
-      const cookieStore = await cookies();
-      email = cookieStore.get('user_email')?.value || null;
-    }
+    const email = searchParams.get('email');
     
     if (!email) {
       return NextResponse.json(

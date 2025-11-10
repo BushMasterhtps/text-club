@@ -1,36 +1,10 @@
 // API route for fetching previous action items from last one-on-one
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { cookies } from 'next/headers';
-
-// Helper to verify authentication
-async function getAuthenticatedUser(request: NextRequest) {
-  const cookieStore = await cookies();
-  const userEmail = cookieStore.get('user_email')?.value;
-  
-  if (!userEmail) {
-    return null;
-  }
-  
-  const user = await prisma.user.findUnique({
-    where: { email: userEmail },
-    select: { id: true, email: true, name: true, role: true }
-  });
-  
-  return user;
-}
 
 // GET - Fetch previous action items for an agent
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
     
     const { searchParams } = new URL(request.url);
     const agentId = searchParams.get('agentId');
