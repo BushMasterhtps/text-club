@@ -2724,6 +2724,7 @@ function TaskCard({
                   <option value="Subscription – Updated (next charge date, frequency, etc.)">🔄 Updated (date/frequency)</option>
                   <option value="Subscription – Cancelled due to PayPal limitations">💳 Cancelled (PayPal limitations)</option>
                   <option value="" disabled className="text-white/40 text-xs">— Information —</option>
+                  <option value="Information – Billing Inquiry">💳 Billing Inquiry</option>
                   <option value="Information – Tracking or delivery status provided">📍 Tracking or delivery status</option>
                   <option value="Information – Product usage or transition tips sent">💡 Product usage/transition tips</option>
                   <option value="Information – Product Information sent">ℹ️ Product Information sent</option>
