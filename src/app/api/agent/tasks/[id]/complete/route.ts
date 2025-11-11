@@ -12,6 +12,7 @@ export async function POST(
     const email = body.email;
     const disposition = body.disposition;
     const sfCaseNumber = body.sfCaseNumber;
+    const orderAmount = body.orderAmount;
 
     if (!email || !disposition) {
       return NextResponse.json({ success: false, error: "Email and disposition required" }, { status: 400 });
@@ -143,7 +144,8 @@ export async function POST(
         // Holds-specific updates
         ...(task.taskType === "HOLDS" && {
           holdsStatus: newHoldsQueue,
-          holdsQueueHistory: newQueueHistory
+          holdsQueueHistory: newQueueHistory,
+          holdsOrderAmount: orderAmount ? parseFloat(orderAmount) : null
         }),
         // Add send-back tracking fields for WOD/IVCS
         ...(isSendBack && {

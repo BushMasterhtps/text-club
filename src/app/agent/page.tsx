@@ -141,6 +141,7 @@ interface Task {
   holdsPriority?: number;
   holdsStatus?: string;
   holdsDaysInSystem?: number;
+  holdsOrderAmount?: number;
 }
 
 interface AgentStats {
@@ -737,7 +738,7 @@ export default function AgentPage() {
     }
   };
 
-  const completeTask = async (taskId: string, disposition: string, sfCaseNumber?: string) => {
+  const completeTask = async (taskId: string, disposition: string, sfCaseNumberOrOrderAmount?: string) => {
     if (!disposition) {
       alert("Please select a disposition.");
       return;
@@ -746,7 +747,12 @@ export default function AgentPage() {
       const res = await fetch(`/api/agent/tasks/${taskId}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, disposition, sfCaseNumber }),
+        body: JSON.stringify({ 
+          email, 
+          disposition, 
+          sfCaseNumber: sfCaseNumberOrOrderAmount, 
+          orderAmount: sfCaseNumberOrOrderAmount 
+        }),
       });
       if (res.ok) {
         // Remove from started tasks since it's completed
@@ -2211,6 +2217,7 @@ function TaskCard({
   const [subDisposition, setSubDisposition] = useState("");
   const [assistanceMsg, setAssistanceMsg] = useState("");
   const [sfCaseNumber, setSfCaseNumber] = useState("");
+  const [orderAmount, setOrderAmount] = useState("");
 
   // Clear form fields after successful actions
   const handleComplete = () => {
@@ -2278,6 +2285,12 @@ function TaskCard({
     }
     // For Holds, handle queue movements and completion
     else if (task.taskType === "HOLDS") {
+      // MANDATORY: Order Amount required for all Holds completions
+      if (!orderAmount || parseFloat(orderAmount) <= 0) {
+        alert("Please enter the Order Amount before completing this Holds task.");
+        return;
+      }
+      
       // Determine if this completes the task or moves to another queue
       const completionDispositions = [
         "Refunded & Closed",
@@ -2297,12 +2310,12 @@ function TaskCard({
       if (movesToDuplicates || movesToCustomerContact) {
         // Queue movement only - task stays PENDING
         // The API will handle queue movement
-        onComplete(task.id, disposition);
+        onComplete(task.id, disposition, orderAmount);
       } else if (completionDispositions.includes(disposition)) {
         // Task completion - status becomes COMPLETED
-        onComplete(task.id, disposition);
+        onComplete(task.id, disposition, orderAmount);
       } else {
-        onComplete(task.id, disposition);
+        onComplete(task.id, disposition, orderAmount);
       }
     } else {
       onComplete(task.id, disposition);
@@ -2312,6 +2325,7 @@ function TaskCard({
     setDisposition("");
     setSubDisposition("");
     setSfCaseNumber("");
+    setOrderAmount("");
   };
 
   const handleAssistance = () => {
@@ -2760,7 +2774,33 @@ function TaskCard({
         )}
 
         {showDispo && (
-          <div className="space-y-2">
+          <div className="space-y-4">
+            {/* Order Amount field for Holds tasks - MANDATORY */}
+            {task.taskType === "HOLDS" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white">
+                  Order Amount: <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={orderAmount}
+                    onChange={(e) => setOrderAmount(e.target.value)}
+                    className="w-full rounded-md bg-white/10 text-white pl-8 pr-3 py-2 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-white/50">
+                  Enter the order amount to track financial impact per disposition
+                </p>
+              </div>
+            )}
+            
+            <div className="space-y-2">
             <label className="block text-sm font-medium">Disposition:</label>
             <select
               value={disposition}
@@ -3011,6 +3051,7 @@ function TaskCard({
                 (task.taskType === "EMAIL_REQUESTS" && disposition === "Completed" && !sfCaseNumber.trim()) ||
                 (task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete" && !subDisposition) ||
                 (task.taskType === "WOD_IVCS" && (disposition === "Completed" || disposition === "Unable to Complete") && !subDisposition) ||
+                (task.taskType === "HOLDS" && (!orderAmount || parseFloat(orderAmount) <= 0)) ||
                 (task.taskType === "YOTPO" && (() => {
                   // Yotpo: SF Case Number required for all dispositions EXCEPT these 4
                   const noSfRequired = [
@@ -3026,6 +3067,7 @@ function TaskCard({
             >
               Complete Task
             </PrimaryButton>
+          </div>
           </div>
         )}
 
