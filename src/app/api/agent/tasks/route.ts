@@ -54,10 +54,11 @@ export async function GET(req: Request) {
         taskType: true,
         // Holds specific fields
         holdsOrderDate: true,
+        holdsOrderNumber: true,
+        holdsCustomerEmail: true,
         holdsPriority: true,
         holdsDaysInSystem: true,
-        holdsCustomerEmail: true,
-        holdsOrderNumber: true,
+        holdsStatus: true,
         // WOD/IVCS specific fields
         wodIvcsSource: true,
         documentNumber: true,
