@@ -59,11 +59,12 @@ export default function CsvImportSection() {
       <h2 className="text-xl font-semibold mb-4">📁 CSV Import</h2>
       <p className="text-white/70 mb-4">
         Import holds data from Google Sheets CSV. Expected columns:
-        <br />• A: Order Date
-        <br />• B: Order Number
-        <br />• C: Customer Email
-        <br />• D: Priority (4-5)
-        <br />• E: Days in System
+        <br />• <span className="text-white/40">A: (Ignored)</span>
+        <br />• B: Order Date
+        <br />• C: Order Number
+        <br />• D: Customer Email (e.g., customer@example.com)
+        <br />• E: Priority (4-5)
+        <br />• F: Days in System
       </p>
       
       <div className="space-y-4">

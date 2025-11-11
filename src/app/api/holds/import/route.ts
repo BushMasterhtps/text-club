@@ -56,31 +56,33 @@ export async function POST(request: NextRequest) {
     // Process each record
     for (const [index, record] of records.entries()) {
       try {
-        // Parse fields with multiple possible column names
-        // Column A: Order Date
+        // Parse fields with actual CSV column positions
+        // Column A: IGNORE (not used)
+        
+        // Column B: Order Date
         const orderDate = parseDate(
-          record['Order Date'] || record['A'] || record['order_date'] || 
-          record['OrderDate'] || record['DATE'] || ''
+          record['B'] || record['Order Date'] || record['order_date'] || 
+          record['OrderDate'] || ''
         );
         
-        // Column B: Order Number (unique identifier)
+        // Column C: Order Number (unique identifier)
         const orderNumber = (
-          record['Order Number'] || record['B'] || record['order_number'] || 
-          record['OrderNumber'] || record['ORDER_NUMBER'] || ''
+          record['C'] || record['Order Number'] || record['order_number'] || 
+          record['OrderNumber'] || ''
         ).trim() || null;
         
-        // Column C: Customer Email
+        // Column D: Customer Email
         const customerEmail = (
-          record['Customer Email'] || record['C'] || record['customer_email'] || 
-          record['Email'] || record['EMAIL'] || ''
+          record['D'] || record['Customer Email'] || record['customer_email'] || 
+          record['Email'] || ''
         ).trim() || null;
         
-        // Column D: Priority (4-5)
-        const priorityRaw = record['Priority'] || record['D'] || record['priority'] || record['PRIORITY'] || '4';
+        // Column E: Priority (4-5)
+        const priorityRaw = record['E'] || record['Priority'] || record['priority'] || '4';
         const priority = parseInt(priorityRaw) || 4;
         
-        // Column E: Days in System (calculated field from CSV)
-        const daysInSystemRaw = record['Days in System'] || record['E'] || record['days_in_system'] || record['DAYS'] || '0';
+        // Column F: Days in System (calculated field from CSV)
+        const daysInSystemRaw = record['F'] || record['Days in System'] || record['days_in_system'] || '0';
         const daysInSystem = parseInt(daysInSystemRaw) || 0;
         
         // Skip rows with no order number (invalid data)
