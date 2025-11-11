@@ -307,11 +307,35 @@ export default function AssemblyLineQueues() {
                   </span>
                 )}
               </h3>
-              {selectedTasks.size > 0 && (
-                <div className="text-sm text-white/70">
-                  {selectedTasks.size} task(s) selected
-                </div>
-              )}
+              <div className="flex items-center gap-4">
+                {selectedTasks.size > 0 && (
+                  <div className="text-sm text-white/70">
+                    {selectedTasks.size} task(s) selected
+                  </div>
+                )}
+                {/* Pagination info */}
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm text-white/60">
+                      Page {currentPage} of {totalPages}
+                    </div>
+                    <div className="flex gap-1">
+                      <SmallButton
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        ←
+                      </SmallButton>
+                      <SmallButton
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        →
+                      </SmallButton>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Bulk assignment controls */}
