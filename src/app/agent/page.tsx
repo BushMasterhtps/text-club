@@ -2268,6 +2268,35 @@ function TaskCard({
       } else {
         onComplete(task.id, disposition);
       }
+    }
+    // For Holds, handle queue movements and completion
+    else if (task.taskType === "HOLDS") {
+      // Determine if this completes the task or moves to another queue
+      const completionDispositions = [
+        "Refunded & Closed",
+        "Refunded & Closed - Customer Requested Cancelation",
+        "Refunded & Closed - No Contact",
+        "Refunded & Closed - Comma Issue",
+        "Resolved - fixed format",
+        "Resolved - fixed address from prev. order/account",
+        "Resolved - Customer Clarified",
+        "Resolved - FRT Released",
+        "Resolved - Other"
+      ];
+      
+      const movesToDuplicates = disposition === "Duplicate";
+      const movesToCustomerContact = disposition === "Unable to Resolve";
+      
+      if (movesToDuplicates || movesToCustomerContact) {
+        // Queue movement only - task stays PENDING
+        // The API will handle queue movement
+        onComplete(task.id, disposition);
+      } else if (completionDispositions.includes(disposition)) {
+        // Task completion - status becomes COMPLETED
+        onComplete(task.id, disposition);
+      } else {
+        onComplete(task.id, disposition);
+      }
     } else {
       onComplete(task.id, disposition);
     }
@@ -2594,32 +2623,61 @@ function TaskCard({
         </>
       ) : task.taskType === "HOLDS" ? (
         <>
-          {/* Holds specific data */}
+          {/* Holds specific data - Hidden until started */}
           <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-300">🏷️</span>
+              <span className="text-white/60">Queue:</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{(task as any).holdsStatus || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <span className="text-yellow-300">📅</span>
               <span className="text-white/60">Order Date:</span>
-              <span className="font-mono">{task.holdsOrderDate ? new Date(task.holdsOrderDate as any).toLocaleString() : "N/A"}</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{task.holdsOrderDate ? new Date(task.holdsOrderDate as any).toLocaleDateString() : "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-yellow-300">#</span>
               <span className="text-white/60">Order Number:</span>
-              <span className="font-mono">{(task as any).holdsOrderNumber || "N/A"}</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{(task as any).holdsOrderNumber || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-yellow-300">✉️</span>
               <span className="text-white/60">Customer Email:</span>
-              <span className="font-mono">{(task as any).holdsCustomerEmail || "N/A"}</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{(task as any).holdsCustomerEmail || "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-yellow-300">⭐</span>
               <span className="text-white/60">Priority:</span>
-              <span className="font-mono">{(task as any).holdsPriority ?? "N/A"}</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{(task as any).holdsPriority ?? "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-yellow-300">📆</span>
               <span className="text-white/60">Days in System:</span>
-              <span className="font-mono">{(task as any).holdsDaysInSystem ?? "N/A"}</span>
+              {isTaskStarted ? (
+                <span className="font-mono">{(task as any).holdsDaysInSystem ?? "N/A"}</span>
+              ) : (
+                <span className="text-white/40 italic">[hidden until Start]</span>
+              )}
             </div>
           </div>
         </>
@@ -2745,6 +2803,44 @@ function TaskCard({
                   <option value="Escalation – Sent Negative Feedback Macro">⚠️ Escalation (negative feedback)</option>
                   <option value="Passed MBG">🔬 Passed MBG</option>
                   <option value="Delivered – Order delivered after review, no further action required">✅ Delivered</option>
+                </>
+              ) : task.taskType === "HOLDS" ? (
+                <>
+                  {/* Dispositions vary by current queue */}
+                  {(task as any).holdsStatus === "Agent Research" ? (
+                    <>
+                      <option value="Duplicate">🔄 Duplicate</option>
+                      <option value="Refunded & Closed">💰 Refunded & Closed</option>
+                      <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
+                      <option value="Resolved - fixed format">✅ Resolved - fixed format</option>
+                      <option value="Resolved - fixed address from prev. order/account">✅ Resolved - fixed address</option>
+                      <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Customer Contact)</option>
+                    </>
+                  ) : (task as any).holdsStatus === "Customer Contact" ? (
+                    <>
+                      <option value="Refunded & Closed - No Contact">💰 Refunded & Closed - No Contact</option>
+                      <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
+                      <option value="Refunded & Closed - Comma Issue">🔧 Refunded & Closed - Comma Issue</option>
+                      <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
+                      <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
+                    </>
+                  ) : (task as any).holdsStatus === "Escalated Call 5+ Day" ? (
+                    <>
+                      <option value="International Order - Unable to Call / Sent Email">🌍 International Order - Unable to Call / Sent Email</option>
+                      <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
+                      <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
+                      <option value="Refunded & Closed - No Contact">💰 Refunded & Closed - No Contact</option>
+                      <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
+                      <option value="Resolved - Other">✅ Resolved - Other</option>
+                    </>
+                  ) : (
+                    <>
+                      {/* Duplicates queue or unknown - show all options */}
+                      <option value="Duplicate">🔄 Duplicate</option>
+                      <option value="Refunded & Closed">💰 Refunded & Closed</option>
+                      <option value="Resolved - fixed format">✅ Resolved - fixed format</option>
+                    </>
+                  )}
                 </>
               ) : (
                 <>

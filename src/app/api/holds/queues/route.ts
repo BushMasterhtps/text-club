@@ -5,11 +5,8 @@ import { prisma } from '@/lib/prisma';
 const HOLDS_QUEUES = [
   'Agent Research',
   'Customer Contact', 
-  'Escalated Call',
-  'Email Bounce',
-  'Resolved',
-  'Cancelled',
-  'Refunded'
+  'Escalated Call 5+ Day',
+  'Duplicates'
 ] as const;
 
 type HoldsQueue = typeof HOLDS_QUEUES[number];

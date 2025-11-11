@@ -46,6 +46,9 @@ export async function POST(
         startTime: true,
         text: true,
         brand: true,
+        taskType: true,
+        holdsStatus: true,
+        holdsQueueHistory: true,
         rawMessage: {
           select: {
             text: true,
@@ -71,18 +74,78 @@ export async function POST(
     // Check if this is a "send back" disposition for WOD/IVCS
     const isSendBack = disposition.includes("Not Completed - No edit button");
     
+    // Handle Holds-specific queue movements and status changes
+    let newStatus = "COMPLETED";
+    let newHoldsQueue = task.holdsStatus;
+    let newQueueHistory = task.holdsQueueHistory || [];
+    let shouldUnassign = false;
+    
+    if (task.taskType === "HOLDS") {
+      // Completion dispositions (task goes to COMPLETED status)
+      const completionDispositions = [
+        "Refunded & Closed",
+        "Refunded & Closed - Customer Requested Cancelation",
+        "Refunded & Closed - No Contact",
+        "Refunded & Closed - Comma Issue",
+        "Resolved - fixed format",
+        "Resolved - fixed address from prev. order/account",
+        "Resolved - Customer Clarified",
+        "Resolved - FRT Released",
+        "Resolved - Other"
+      ];
+      
+      if (disposition === "Duplicate") {
+        // Move to Duplicates queue, stay PENDING
+        newStatus = "PENDING";
+        newHoldsQueue = "Duplicates";
+        shouldUnassign = true; // Unassign for manager review
+      } else if (disposition === "Unable to Resolve") {
+        // Move to Customer Contact queue, stay PENDING
+        newStatus = "PENDING";
+        newHoldsQueue = "Customer Contact";
+        // Keep assigned to agent
+      } else if (completionDispositions.includes(disposition)) {
+        // Complete the task
+        newStatus = "COMPLETED";
+        newHoldsQueue = task.holdsStatus; // Keep current queue for reporting
+      }
+      
+      // Update queue history timeline
+      if (newHoldsQueue !== task.holdsStatus) {
+        const history = Array.isArray(newQueueHistory) ? [...newQueueHistory] : [];
+        // Close out current queue entry
+        if (history.length > 0) {
+          history[history.length - 1].exitedAt = new Date().toISOString();
+        }
+        // Add new queue entry
+        history.push({
+          queue: newHoldsQueue,
+          enteredAt: new Date().toISOString(),
+          exitedAt: null,
+          movedBy: `Agent (${disposition})`,
+          disposition: disposition
+        });
+        newQueueHistory = history;
+      }
+    }
+    
     // Update task status, end time, duration, and disposition
     const updatedTask = await prisma.task.update({
       where: { id },
       data: {
-        status: isSendBack ? "PENDING" : "COMPLETED", // Send back to pending queue
+        status: isSendBack ? "PENDING" : (task.taskType === "HOLDS" ? newStatus : "COMPLETED"),
         endTime: new Date(),
         durationSec,
         disposition,
         sfCaseNumber: sfCaseNumber || null,
-        assignedToId: isSendBack ? null : task.assignedToId, // Unassign if sending back
+        assignedToId: isSendBack ? null : (task.taskType === "HOLDS" && shouldUnassign ? null : task.assignedToId),
         updatedAt: new Date(),
-        // Add send-back tracking fields
+        // Holds-specific updates
+        ...(task.taskType === "HOLDS" && {
+          holdsStatus: newHoldsQueue,
+          holdsQueueHistory: newQueueHistory
+        }),
+        // Add send-back tracking fields for WOD/IVCS
         ...(isSendBack && {
           sentBackBy: user.id,
           sentBackAt: new Date(),

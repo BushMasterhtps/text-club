@@ -164,12 +164,15 @@ model Task {
   refundAmount         Decimal?
 
   // 🆕 Holds specific fields (all nullable - no existing data affected)
-  holdsOrderDate       DateTime?  // From CSV column B - for 5-day calculation
-  holdsPriority        Int?       // From CSV column E (4-5)
-  holdsDaysInSystem    Int?       // From CSV column F (calculated field)
-  holdsStatus          String?    // Assembly line status: "Agent Research", "Customer Contact", etc.
-  holdsCustomerEmail   String?    // From CSV column D
-  holdsOrderNumber     String?    // From CSV column C
+  holdsOrderDate       DateTime?  // From CSV column A - for 5-day calculation
+  holdsOrderNumber     String?    // From CSV column B - unique identifier
+  holdsCustomerEmail   String?    // From CSV column C
+  holdsPriority        Int?       // From CSV column D (4-5)
+  holdsDaysInSystem    Int?       // From CSV column E (calculated field)
+  holdsStatus          String?    // Assembly line queue: "Agent Research", "Customer Contact", "Escalated Call 5+ Day", "Duplicates"
+  holdsPhoneNumber     String?    // Customer phone number (for Escalated Call)
+  holdsNotes           String?    @db.Text // Agent notes and tracking information
+  holdsQueueHistory    Json?      // Timeline of queue movements: [{ queue: string, enteredAt: DateTime, exitedAt?: DateTime, movedBy?: string }]
 
   // 🆕 Yotpo specific fields (all nullable - no existing data affected)
   yotpoDateSubmitted   DateTime?  // From CSV column A - when customer submitted review/request

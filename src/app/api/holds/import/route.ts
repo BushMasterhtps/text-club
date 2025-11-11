@@ -32,8 +32,10 @@ export async function POST(request: NextRequest) {
       imported: 0,
       updated: 0,
       errors: 0,
+      duplicates: 0,
       totalRows: records.length,
       errorDetails: [] as any[],
+      duplicateDetails: [] as any[],
     };
 
     // Create import session record
@@ -54,78 +56,113 @@ export async function POST(request: NextRequest) {
     // Process each record
     for (const [index, record] of records.entries()) {
       try {
-        // Parse order date (Column A)
-        const orderDate = parseDate(record['Order Date'] || record['A'] || record['order_date']);
+        // Parse fields with multiple possible column names
+        // Column A: Order Date
+        const orderDate = parseDate(
+          record['Order Date'] || record['A'] || record['order_date'] || 
+          record['OrderDate'] || record['DATE'] || ''
+        );
         
-        // Parse order number (Column B)
-        const orderNumber = record['Order Number'] || record['B'] || record['order_number'] || null;
+        // Column B: Order Number (unique identifier)
+        const orderNumber = (
+          record['Order Number'] || record['B'] || record['order_number'] || 
+          record['OrderNumber'] || record['ORDER_NUMBER'] || ''
+        ).trim() || null;
         
-        // Parse customer email (Column C)
-        const customerEmail = record['Customer Email'] || record['C'] || record['customer_email'] || null;
+        // Column C: Customer Email
+        const customerEmail = (
+          record['Customer Email'] || record['C'] || record['customer_email'] || 
+          record['Email'] || record['EMAIL'] || ''
+        ).trim() || null;
         
-        // Parse priority (Column D - values 4-5)
-        const priority = parseInt(record['Priority'] || record['D'] || record['priority'] || '4');
+        // Column D: Priority (4-5)
+        const priorityRaw = record['Priority'] || record['D'] || record['priority'] || record['PRIORITY'] || '4';
+        const priority = parseInt(priorityRaw) || 4;
         
-        // Parse days in system (Column E - calculated field)
-        const daysInSystem = parseInt(record['Days in System'] || record['E'] || record['days_in_system'] || '0');
+        // Column E: Days in System (calculated field from CSV)
+        const daysInSystemRaw = record['Days in System'] || record['E'] || record['days_in_system'] || record['DAYS'] || '0';
+        const daysInSystem = parseInt(daysInSystemRaw) || 0;
+        
+        // Skip rows with no order number (invalid data)
+        if (!orderNumber) {
+          console.warn(`Skipping row ${index + 1}: No order number provided`);
+          results.errors++;
+          results.errorDetails.push({
+            row: index + 1,
+            reason: 'No order number',
+            data: record
+          });
+          continue;
+        }
         
         // Generate customer name from email if not provided
         const customerName = customerEmail ? customerEmail.split('@')[0] : `Customer-${orderNumber || 'Unknown'}`;
 
-        // Check for existing task by order number
-        let existingTask = null;
-        if (orderNumber) {
-          existingTask = await prisma.task.findFirst({
-            where: {
-              taskType: 'HOLDS',
-              holdsOrderNumber: orderNumber,
-            },
-          });
-        }
+        // Check for existing task by order number (DUPLICATE DETECTION)
+        const existingTask = await prisma.task.findFirst({
+          where: {
+            taskType: 'HOLDS',
+            holdsOrderNumber: orderNumber,
+          },
+          select: {
+            id: true,
+            status: true,
+            holdsStatus: true,
+            disposition: true,
+            assignedTo: {
+              select: {
+                name: true,
+                email: true
+              }
+            }
+          }
+        });
 
         // Calculate 5-day aging from order date
         const currentDate = new Date();
         const daysSinceOrder = orderDate ? Math.floor((currentDate.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
         
-        // Determine initial status based on age and priority
-        let initialStatus = 'Agent Research'; // Default starting status
+        // Determine initial queue based on age
+        let initialQueue = 'Agent Research'; // Default starting queue
         if (daysSinceOrder >= 5) {
-          initialStatus = 'Escalated Call'; // 5+ days = escalated
-        } else if (daysSinceOrder >= 2) {
-          initialStatus = 'Customer Contact'; // 2+ days = customer contact
+          initialQueue = 'Escalated Call 5+ Day'; // 5+ days = escalated
         }
 
         if (existingTask) {
-          // Update existing task
-          await prisma.task.update({
-            where: { id: existingTask.id },
-            data: {
-              taskType: 'HOLDS', // Ensure taskType is set
-              holdsOrderDate: orderDate,
-              holdsPriority: priority,
-              holdsDaysInSystem: daysInSystem,
-              holdsStatus: initialStatus,
-              holdsCustomerEmail: customerEmail,
-              holdsOrderNumber: orderNumber,
-              // Update text to show it was updated
-              text: `Holds - ${customerName} (Updated)`,
-              // Keep track of update
-              updatedAt: new Date(),
-            },
+          // DUPLICATE FOUND
+          results.duplicates++;
+          results.duplicateDetails.push({
+            row: index + 1,
+            orderNumber,
+            customerEmail,
+            existingTaskId: existingTask.id,
+            existingStatus: existingTask.status,
+            existingQueue: existingTask.holdsStatus,
+            existingDisposition: existingTask.disposition,
+            assignedTo: existingTask.assignedTo?.name || 'Unassigned'
           });
-          results.updated++;
-          console.log(`Updated existing holds task: ${orderNumber}`);
+          console.log(`Duplicate found: Order ${orderNumber} already exists (${existingTask.status})`);
         } else {
           // Create new task
+          // Initialize queue history timeline
+          const queueHistory = [{
+            queue: initialQueue,
+            enteredAt: new Date().toISOString(),
+            exitedAt: null,
+            movedBy: 'System (CSV Import)',
+            daysSinceOrder: daysSinceOrder
+          }];
+
           const taskData = {
             taskType: 'HOLDS' as const,
             status: 'PENDING' as const,
             holdsOrderDate: orderDate,
+            holdsOrderNumber: orderNumber,
+            holdsCustomerEmail: customerEmail,
             holdsPriority: priority,
             holdsDaysInSystem: daysInSystem,
-            holdsStatus: initialStatus,
-            holdsCustomerEmail: customerEmail,
-            holdsOrderNumber: orderNumber,
+            holdsStatus: initialQueue,
+            holdsQueueHistory: queueHistory,
             text: `Holds - ${customerName}`,
             brand: 'Holds', // Default brand for holds
           };
@@ -134,7 +171,7 @@ export async function POST(request: NextRequest) {
             data: taskData,
           });
           results.imported++;
-          console.log(`Created new holds task: ${orderNumber}`);
+          console.log(`✅ Created holds task: ${orderNumber} → ${initialQueue} queue (${daysSinceOrder} days old)`);
         }
       } catch (error) {
         console.error(`Error processing row ${index + 1}:`, error);
@@ -152,17 +189,18 @@ export async function POST(request: NextRequest) {
       where: { id: importSession.id },
       data: {
         imported: results.imported,
-        duplicates: results.updated, // Count updates as "duplicates" for reporting
+        duplicates: results.duplicates,
         filtered: 0,
         errors: results.errors,
+        duplicateDetails: results.duplicateDetails.length > 0 ? results.duplicateDetails : null,
       },
     });
 
-    console.log(`✅ Holds import completed: ${results.imported} imported, ${results.updated} updated, ${results.errors} errors`);
+    console.log(`✅ Holds import completed: ${results.imported} imported, ${results.duplicates} duplicates skipped, ${results.errors} errors`);
 
     return NextResponse.json({
       success: true,
-      message: `Import completed: ${results.imported} imported, ${results.updated} updated, ${results.errors} errors`,
+      message: `Import completed: ${results.imported} imported, ${results.duplicates} duplicates skipped, ${results.errors} errors`,
       results,
     });
 

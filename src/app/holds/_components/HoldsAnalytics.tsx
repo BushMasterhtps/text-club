@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
+import ResolvedOrdersReport from "./ResolvedOrdersReport";
 
 interface AnalyticsData {
   overview: {
@@ -27,7 +28,7 @@ export default function HoldsAnalytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [agingReport, setAgingReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'aging'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'aging' | 'resolved'>('overview');
 
   useEffect(() => {
     fetchAnalytics();
@@ -92,6 +93,16 @@ export default function HoldsAnalytics() {
             }`}
           >
             Aging Report
+          </button>
+          <button
+            onClick={() => setActiveTab('resolved')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              activeTab === 'resolved'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white/10 text-white/70 hover:bg-white/20'
+            }`}
+          >
+            📊 Resolved Orders
           </button>
         </div>
 
@@ -230,7 +241,20 @@ export default function HoldsAnalytics() {
             </div>
           </div>
         )}
+        
+        {activeTab === 'resolved' && (
+          <div>
+            {/* Resolved Orders Report is its own component */}
+          </div>
+        )}
       </Card>
+      
+      {/* Resolved Orders Report (separate card below) */}
+      {activeTab === 'resolved' && (
+        <div className="mt-6">
+          <ResolvedOrdersReport />
+        </div>
+      )}
     </div>
   );
 }

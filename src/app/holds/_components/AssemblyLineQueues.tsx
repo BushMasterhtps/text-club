@@ -19,15 +19,13 @@ export default function AssemblyLineQueues() {
   const [queueStats, setQueueStats] = useState<QueueStats>({});
   const [loading, setLoading] = useState(true);
   const [selectedQueue, setSelectedQueue] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const queueColors = {
     'Agent Research': 'bg-blue-900/20 border-blue-500/30',
     'Customer Contact': 'bg-yellow-900/20 border-yellow-500/30',
-    'Escalated Call': 'bg-red-900/20 border-red-500/30',
-    'Email Bounce': 'bg-orange-900/20 border-orange-500/30',
-    'Resolved': 'bg-green-900/20 border-green-500/30',
-    'Cancelled': 'bg-gray-900/20 border-gray-500/30',
-    'Refunded': 'bg-purple-900/20 border-purple-500/30',
+    'Escalated Call 5+ Day': 'bg-red-900/20 border-red-500/30',
+    'Duplicates': 'bg-purple-900/20 border-purple-500/30',
   };
 
   useEffect(() => {
@@ -69,6 +67,18 @@ export default function AssemblyLineQueues() {
     );
   }
 
+  // Filter tasks by search query
+  const getFilteredTasks = (tasks: any[]) => {
+    if (!searchQuery.trim()) return tasks;
+    
+    const query = searchQuery.toLowerCase();
+    return tasks.filter(task => 
+      task.holdsOrderNumber?.toLowerCase().includes(query) ||
+      task.holdsCustomerEmail?.toLowerCase().includes(query) ||
+      (task.holdsOrderDate && new Date(task.holdsOrderDate).toLocaleDateString().includes(query))
+    );
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -76,6 +86,28 @@ export default function AssemblyLineQueues() {
         <p className="text-white/70 mb-4">
           Visualize and manage tasks across different holds queues. Click on a queue to see details.
         </p>
+        
+        {/* Search Bar */}
+        <div className="mb-6">
+          <label className="block text-sm text-white/60 mb-2">🔍 Search Orders</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by order number, email, or date..."
+              className="flex-1 px-3 py-2 bg-white/10 rounded-md text-white text-sm placeholder-white/40 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-md text-white text-sm"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Object.entries(queueStats).map(([queueName, stats]) => {
@@ -111,13 +143,20 @@ export default function AssemblyLineQueues() {
         </div>
       </Card>
 
-      {selectedQueue && queueStats[selectedQueue] && (
-        <Card>
-          <h3 className="text-lg font-semibold mb-4">
-            {selectedQueue} - Task Details
-          </h3>
-          <div className="space-y-3">
-            {queueStats[selectedQueue].tasks.slice(0, 10).map((task) => (
+      {selectedQueue && queueStats[selectedQueue] && (() => {
+        const filteredTasks = getFilteredTasks(queueStats[selectedQueue].tasks);
+        return (
+          <Card>
+            <h3 className="text-lg font-semibold mb-4">
+              {selectedQueue} - Task Details
+              {searchQuery && (
+                <span className="text-sm font-normal text-white/60 ml-2">
+                  ({filteredTasks.length} of {queueStats[selectedQueue].tasks.length} matching)
+                </span>
+              )}
+            </h3>
+            <div className="space-y-3">
+              {filteredTasks.slice(0, 20).map((task) => (
               <div
                 key={task.id}
                 className="p-3 bg-white/5 rounded-lg border border-white/10"
@@ -155,15 +194,21 @@ export default function AssemblyLineQueues() {
                   </div>
                 )}
               </div>
-            ))}
-            {queueStats[selectedQueue].tasks.length > 10 && (
-              <p className="text-center text-white/60 text-sm">
-                ... and {queueStats[selectedQueue].tasks.length - 10} more tasks
-              </p>
-            )}
-          </div>
-        </Card>
-      )}
+              ))}
+              {filteredTasks.length === 0 && (
+                <p className="text-center text-white/60 py-4">
+                  No tasks match your search
+                </p>
+              )}
+              {filteredTasks.length > 20 && (
+                <p className="text-center text-white/60 text-sm">
+                  ... and {filteredTasks.length - 20} more tasks
+                </p>
+              )}
+            </div>
+          </Card>
+        );
+      })()}
     </div>
   );
 }

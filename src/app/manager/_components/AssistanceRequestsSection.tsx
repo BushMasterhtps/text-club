@@ -47,6 +47,13 @@ interface AssistanceRequest {
   yotpoReviewDate?: string;
   yotpoReview?: string;
   yotpoSfOrderLink?: string;
+  // Holds specific fields
+  holdsOrderDate?: string;
+  holdsOrderNumber?: string;
+  holdsCustomerEmail?: string;
+  holdsPriority?: number;
+  holdsStatus?: string;
+  holdsDaysInSystem?: number;
 }
 
 export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: AssistanceRequestsSectionProps) {
@@ -122,6 +129,8 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
       return { label: "Standalone Refund", emoji: "💰", color: "text-purple-400" };
     } else if (task.taskType === "YOTPO") {
       return { label: "Yotpo Review", emoji: "⭐", color: "text-yellow-400" };
+    } else if (task.taskType === "HOLDS") {
+      return { label: "Holds", emoji: "📄", color: "text-orange-400" };
     } else {
       return { label: "Text Club", emoji: "💬", color: "text-blue-400" };
     }
@@ -206,6 +215,15 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                               <div><strong>Refund Amount:</strong> {request.refundAmount ? `$${request.refundAmount}` : "N/A"}</div>
                               <div><strong>Payment Method:</strong> {request.paymentMethod || "N/A"}</div>
                               <div><strong>Reason:</strong> {request.refundReason || "N/A"}</div>
+                            </div>
+                          ) : request.taskType === "HOLDS" ? (
+                            <div className="text-sm text-white/80 space-y-1">
+                              <div><strong>📄 Order Number:</strong> {request.holdsOrderNumber || "N/A"}</div>
+                              <div><strong>✉️ Customer Email:</strong> {request.holdsCustomerEmail || "N/A"}</div>
+                              <div><strong>📅 Order Date:</strong> {request.holdsOrderDate ? new Date(request.holdsOrderDate).toLocaleDateString() : "N/A"}</div>
+                              <div><strong>🏷️ Queue:</strong> {request.holdsStatus || "N/A"}</div>
+                              <div><strong>⭐ Priority:</strong> {request.holdsPriority || "N/A"}</div>
+                              <div><strong>📆 Days in System:</strong> {request.holdsDaysInSystem || "N/A"}</div>
                             </div>
                           ) : request.taskType === "YOTPO" ? (
                             <div className="text-sm text-white/80 space-y-2">
@@ -348,6 +366,13 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                             <div className="text-sm text-white/80 space-y-1 mt-2">
                               <div><strong>Refund Amount:</strong> {request.refundAmount ? `$${request.refundAmount}` : "N/A"}</div>
                               <div><strong>Payment Method:</strong> {request.paymentMethod || "N/A"}</div>
+                            </div>
+                          ) : request.taskType === "HOLDS" ? (
+                            <div className="text-sm text-white/80 space-y-1 mt-2">
+                              <div><strong>📄 Order Number:</strong> {request.holdsOrderNumber || "N/A"}</div>
+                              <div><strong>✉️ Customer Email:</strong> {request.holdsCustomerEmail || "N/A"}</div>
+                              <div><strong>🏷️ Queue:</strong> {request.holdsStatus || "N/A"}</div>
+                              <div><strong>⭐ Priority:</strong> {request.holdsPriority || "N/A"}</div>
                             </div>
                           ) : null}
                         </div>

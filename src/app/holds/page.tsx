@@ -99,14 +99,13 @@ export default function HoldsPage() {
               <div className="p-6 bg-green-900/20 border border-green-500/30 rounded-lg">
                 <h2 className="text-xl font-semibold mb-4 text-green-200">🏭 Assembly Line Queues</h2>
                 <p className="text-white/70 mb-4">
-                  Tasks flow through these queues based on their status and age:
+                  Tasks flow through these queues based on agent actions and age:
                 </p>
                 <ul className="text-sm text-white/60 space-y-1">
-                  <li>• <strong>Agent Research</strong> - Initial review</li>
-                  <li>• <strong>Customer Contact</strong> - 48-hour window</li>
-                  <li>• <strong>Escalated Call</strong> - 5+ days</li>
-                  <li>• <strong>Email Bounce</strong> - Requires phone</li>
-                  <li>• <strong>Resolved/Cancelled/Refunded</strong> - Final states</li>
+                  <li>• <strong>Agent Research</strong> - Initial review and formatting</li>
+                  <li>• <strong>Customer Contact</strong> - 48-hour customer outreach window</li>
+                  <li>• <strong>Escalated Call 5+ Day</strong> - Orders 5+ days old requiring calls</li>
+                  <li>• <strong>Duplicates</strong> - Duplicate orders pending manager review</li>
                 </ul>
               </div>
 

@@ -54,6 +54,13 @@ export async function GET(req: Request) {
         yotpoReviewDate: true,
         yotpoReview: true,
         yotpoSfOrderLink: true,
+        // Holds specific fields
+        holdsOrderDate: true,
+        holdsOrderNumber: true,
+        holdsCustomerEmail: true,
+        holdsPriority: true,
+        holdsStatus: true,
+        holdsDaysInSystem: true,
         // NOTE: orderDate is excluded - it's only for Standalone Refunds
         assignedTo: {
           select: {
@@ -127,6 +134,13 @@ export async function GET(req: Request) {
         yotpoReviewDate: task.yotpoReviewDate?.toISOString(),
         yotpoReview: task.yotpoReview,
         yotpoSfOrderLink: task.yotpoSfOrderLink,
+        // Holds specific fields
+        holdsOrderDate: task.holdsOrderDate?.toISOString(),
+        holdsOrderNumber: task.holdsOrderNumber,
+        holdsCustomerEmail: task.holdsCustomerEmail,
+        holdsPriority: task.holdsPriority,
+        holdsStatus: task.holdsStatus,
+        holdsDaysInSystem: task.holdsDaysInSystem,
       };
     });
 

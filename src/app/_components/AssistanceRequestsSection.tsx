@@ -71,6 +71,13 @@ interface AssistanceRequest {
   yotpoReviewDate?: string;
   yotpoReview?: string;
   yotpoSfOrderLink?: string;
+  // Holds specific fields
+  holdsOrderDate?: string;
+  holdsOrderNumber?: string;
+  holdsCustomerEmail?: string;
+  holdsPriority?: number;
+  holdsStatus?: string;
+  holdsDaysInSystem?: number;
 }
 
 interface AssistanceRequestsSectionProps {
@@ -187,7 +194,16 @@ export function AssistanceRequestsSection({
                   </div>
                   
                   {/* Task-specific content */}
-                  {request.taskType === "YOTPO" ? (
+                  {request.taskType === "HOLDS" ? (
+                    <div className="mt-3 text-sm text-white space-y-1">
+                      <div><strong>📄 Order Number:</strong> {request.holdsOrderNumber || "N/A"}</div>
+                      <div><strong>✉️ Email:</strong> {request.holdsCustomerEmail || "N/A"}</div>
+                      <div><strong>📅 Order Date:</strong> {request.holdsOrderDate ? new Date(request.holdsOrderDate).toLocaleDateString() : "N/A"}</div>
+                      <div><strong>🏷️ Queue:</strong> {request.holdsStatus || "N/A"}</div>
+                      <div><strong>⭐ Priority:</strong> {request.holdsPriority || "N/A"}</div>
+                      <div><strong>📆 Days in System:</strong> {request.holdsDaysInSystem || "N/A"}</div>
+                    </div>
+                  ) : request.taskType === "YOTPO" ? (
                     <div className="mt-3 text-sm text-white space-y-2">
                       <div className="grid grid-cols-2 gap-2">
                         <div><strong>👤 Customer:</strong> {request.yotpoCustomerName || "N/A"}</div>
@@ -304,7 +320,14 @@ export function AssistanceRequestsSection({
                   </div>
                   
                   {/* Task-specific content for responded requests */}
-                  {request.taskType === "YOTPO" ? (
+                  {request.taskType === "HOLDS" ? (
+                    <div className="mt-3 text-sm text-white space-y-1">
+                      <div><strong>📄 Order Number:</strong> {request.holdsOrderNumber || "N/A"}</div>
+                      <div><strong>✉️ Email:</strong> {request.holdsCustomerEmail || "N/A"}</div>
+                      <div><strong>🏷️ Queue:</strong> {request.holdsStatus || "N/A"}</div>
+                      <div><strong>⭐ Priority:</strong> {request.holdsPriority || "N/A"}</div>
+                    </div>
+                  ) : request.taskType === "YOTPO" ? (
                     <div className="mt-3 text-sm text-white space-y-2">
                       <div className="grid grid-cols-2 gap-2">
                         <div><strong>👤 Customer:</strong> {request.yotpoCustomerName || "N/A"}</div>
