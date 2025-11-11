@@ -15,17 +15,32 @@ export async function POST(request: NextRequest) {
     }
 
     const csvText = await file.text();
-    const records = parse(csvText, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-    });
-
-    console.log(`🚧 Importing ${records.length} holds records`);
     
-    // Debug: Log available columns from first record
-    if (records.length > 0) {
-      console.log('📋 Available columns:', Object.keys(records[0]));
+    // Parse CSV - detect if it has headers or not
+    let records;
+    try {
+      // First, try parsing with headers
+      records = parse(csvText, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+      });
+      
+      console.log(`🚧 Importing ${records.length} holds records`);
+      
+      // Debug: Log available columns from first record
+      if (records.length > 0) {
+        console.log('📋 CSV Headers detected:', Object.keys(records[0]));
+        console.log('📋 First record sample:', records[0]);
+      }
+    } catch (parseError) {
+      // If parsing with headers fails, try without headers
+      console.log('Parsing without headers...');
+      records = parse(csvText, {
+        columns: false,
+        skip_empty_lines: true,
+        trim: true,
+      });
     }
 
     const results = {
@@ -56,34 +71,48 @@ export async function POST(request: NextRequest) {
     // Process each record
     for (const [index, record] of records.entries()) {
       try {
-        // Parse fields with actual CSV column positions
-        // Column A: IGNORE (not used)
+        // Parse fields - try multiple column name variations
+        // The CSV parser uses the FIRST ROW as headers, so we need to handle various possible header names
         
-        // Column B: Order Date
+        // Get all keys from the record to understand the structure
+        const keys = Object.keys(record);
+        
+        // Column B: Order Date (2nd column, index 1)
         const orderDate = parseDate(
-          record['B'] || record['Order Date'] || record['order_date'] || 
-          record['OrderDate'] || ''
+          record[keys[1]] || record['B'] || record['Order Date'] || record['order_date'] || 
+          record['OrderDate'] || record['Date Added'] || ''
         );
         
-        // Column C: Order Number (unique identifier)
+        // Column C: Order Number (3rd column, index 2)
         const orderNumber = (
-          record['C'] || record['Order Number'] || record['order_number'] || 
+          record[keys[2]] || record['C'] || record['Order Number'] || record['order_number'] || 
           record['OrderNumber'] || ''
-        ).trim() || null;
+        ).toString().trim() || null;
         
-        // Column D: Customer Email
+        // Column D: Customer Email (4th column, index 3)
         const customerEmail = (
-          record['D'] || record['Customer Email'] || record['customer_email'] || 
-          record['Email'] || ''
-        ).trim() || null;
+          record[keys[3]] || record['D'] || record['Customer Email'] || record['customer_email'] || 
+          record['Email'] || record['email'] || ''
+        ).toString().trim() || null;
         
-        // Column E: Priority (4-5)
-        const priorityRaw = record['E'] || record['Priority'] || record['priority'] || '4';
-        const priority = parseInt(priorityRaw) || 4;
+        // Column E: Priority (5th column, index 4)
+        const priorityRaw = record[keys[4]] || record['E'] || record['Priority'] || record['priority'] || '4';
+        const priority = parseInt(priorityRaw.toString()) || 4;
         
-        // Column F: Days in System (calculated field from CSV)
-        const daysInSystemRaw = record['F'] || record['Days in System'] || record['days_in_system'] || '0';
-        const daysInSystem = parseInt(daysInSystemRaw) || 0;
+        // Column F: Days in System (6th column, index 5)
+        const daysInSystemRaw = record[keys[5]] || record['F'] || record['Days in System'] || record['days_in_system'] || '0';
+        const daysInSystem = parseInt(daysInSystemRaw.toString()) || 0;
+        
+        // Debug log for first few records
+        if (index < 3) {
+          console.log(`Row ${index + 1}:`, {
+            orderDate: orderDate?.toISOString().split('T')[0] || 'NULL',
+            orderNumber: orderNumber || 'NULL',
+            customerEmail: customerEmail || 'NULL',
+            priority,
+            daysInSystem
+          });
+        }
         
         // Skip rows with no order number (invalid data)
         if (!orderNumber) {
