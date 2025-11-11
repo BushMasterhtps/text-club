@@ -29,7 +29,19 @@ export async function GET(request: NextRequest) {
 
     const tasks = await prisma.task.findMany({
       where: whereClause,
-      include: {
+      select: {
+        id: true,
+        text: true,
+        status: true,
+        holdsStatus: true,
+        holdsOrderNumber: true,
+        holdsCustomerEmail: true,
+        holdsOrderDate: true,
+        holdsPriority: true,
+        holdsDaysInSystem: true,
+        holdsQueueHistory: true,
+        createdAt: true,
+        updatedAt: true,
         assignedTo: {
           select: {
             id: true,
@@ -46,13 +58,26 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    // Calculate aging for each task
+    // Calculate aging and time in queue for each task
     const tasksWithAging = tasks.map(task => {
       const currentDate = new Date();
       const orderDate = task.holdsOrderDate;
       const daysSinceOrder = orderDate ? Math.floor((currentDate.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
       const isAging = daysSinceOrder >= 5;
       const isApproaching = daysSinceOrder >= 3;
+
+      // Calculate time in current queue from holdsQueueHistory
+      let hoursInQueue = 0;
+      if (task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory)) {
+        const history = task.holdsQueueHistory as Array<any>;
+        // Get the most recent queue entry (current queue)
+        const currentQueueEntry = history[history.length - 1];
+        if (currentQueueEntry && currentQueueEntry.enteredAt) {
+          const enteredAt = new Date(currentQueueEntry.enteredAt);
+          const hoursElapsed = (currentDate.getTime() - enteredAt.getTime()) / (1000 * 60 * 60);
+          hoursInQueue = Math.floor(hoursElapsed);
+        }
+      }
 
       return {
         ...task,
@@ -62,6 +87,8 @@ export async function GET(request: NextRequest) {
           isApproaching,
           orderDate,
         },
+        hoursInQueue,
+        needsAttention: hoursInQueue >= 48, // Flag if 48+ hours in queue
       };
     });
 

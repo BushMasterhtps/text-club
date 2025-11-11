@@ -96,14 +96,14 @@ export async function POST(
       
       if (disposition === "Duplicate") {
         // Move to Duplicates queue, stay PENDING
-        newStatus = "PENDING";
+        newStatus = "COMPLETED"; // Count towards agent's completion stats
         newHoldsQueue = "Duplicates";
         shouldUnassign = true; // Unassign for manager review
       } else if (disposition === "Unable to Resolve") {
-        // Move to Customer Contact queue, stay PENDING
-        newStatus = "PENDING";
+        // Move to Customer Contact queue - Complete for agent, PENDING for reassignment
+        newStatus = "COMPLETED"; // Task is complete for THIS agent (counts towards their stats)
         newHoldsQueue = "Customer Contact";
-        // Keep assigned to agent
+        shouldUnassign = true; // Remove from agent's queue so it can be reassigned
       } else if (completionDispositions.includes(disposition)) {
         // Complete the task
         newStatus = "COMPLETED";

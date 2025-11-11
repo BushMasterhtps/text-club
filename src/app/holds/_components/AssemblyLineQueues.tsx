@@ -20,6 +20,8 @@ export default function AssemblyLineQueues() {
   const [loading, setLoading] = useState(true);
   const [selectedQueue, setSelectedQueue] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [agents, setAgents] = useState<any[]>([]);
+  const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null);
 
   const queueColors = {
     'Agent Research': 'bg-blue-900/20 border-blue-500/30',
@@ -30,6 +32,7 @@ export default function AssemblyLineQueues() {
 
   useEffect(() => {
     fetchQueueStats();
+    fetchAgents();
   }, []);
 
   const fetchQueueStats = async () => {
@@ -51,6 +54,42 @@ export default function AssemblyLineQueues() {
       console.error('Error fetching queue stats:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAgents = async () => {
+    try {
+      const response = await fetch('/api/manager/agents');
+      const data = await response.json();
+      if (data.success && data.agents) {
+        setAgents(data.agents.filter((agent: any) => agent.isLive));
+      }
+    } catch (error) {
+      console.error('Error fetching agents:', error);
+    }
+  };
+
+  const assignTask = async (taskId: string, agentId: string) => {
+    try {
+      setAssigningTaskId(taskId);
+      const response = await fetch('/api/holds/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds: [taskId], agentId }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Refresh queue stats
+        await fetchQueueStats();
+        alert('Task assigned successfully!');
+      } else {
+        alert(`Error: ${data.error || 'Failed to assign task'}`);
+      }
+    } catch (error) {
+      console.error('Error assigning task:', error);
+      alert('Failed to assign task');
+    } finally {
+      setAssigningTaskId(null);
     }
   };
 
@@ -161,8 +200,8 @@ export default function AssemblyLineQueues() {
                 key={task.id}
                 className="p-3 bg-white/5 rounded-lg border border-white/10"
               >
-                <div className="flex justify-between items-start">
-                  <div>
+                <div className="flex justify-between items-start gap-4">
+                  <div className="flex-1">
                     <p className="font-medium text-white">
                       {task.text?.replace('Holds - ', '') || 'Unknown Customer'}
                     </p>
@@ -172,8 +211,27 @@ export default function AssemblyLineQueues() {
                     <p className="text-sm text-white/60">
                       Email: {task.holdsCustomerEmail || 'N/A'}
                     </p>
+                    
+                    {/* Time in Queue */}
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs text-white/50">⏱️ Time in queue:</span>
+                      <span className={`text-xs font-medium ${
+                        task.hoursInQueue >= 48 
+                          ? 'text-red-400' 
+                          : task.hoursInQueue >= 36 
+                          ? 'text-yellow-400'
+                          : 'text-green-400'
+                      }`}>
+                        {task.hoursInQueue || 0}h
+                      </span>
+                      {task.hoursInQueue >= 48 && (
+                        <span className="text-xs bg-red-900/50 text-red-200 px-2 py-0.5 rounded">
+                          Needs Assignment!
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right space-y-2">
                     <div className={`px-2 py-1 rounded text-xs font-medium ${
                       task.aging?.isAging 
                         ? 'bg-red-900/50 text-red-200' 
@@ -183,16 +241,44 @@ export default function AssemblyLineQueues() {
                     }`}>
                       {task.aging?.daysSinceOrder || 0} days
                     </div>
-                    <p className="text-xs text-white/50 mt-1">
-                      Priority: {task.holdsPriority || 4}
+                    <p className="text-xs text-white/50">
+                      Priority: {task.holdsPriority === 1 || task.holdsPriority === 2 ? '👑 White Glove' : '📦 Normal'}
                     </p>
                   </div>
                 </div>
-                {task.assignedTo && (
-                  <div className="mt-2 text-xs text-blue-300">
-                    Assigned to: {task.assignedTo.name}
-                  </div>
-                )}
+                
+                {/* Assignment Section */}
+                <div className="mt-3 pt-3 border-t border-white/10">
+                  {task.assignedTo ? (
+                    <div className="text-xs text-blue-300">
+                      ✅ Assigned to: <span className="font-medium">{task.assignedTo.name}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/60">Assign to:</span>
+                      <select
+                        className="flex-1 px-2 py-1 bg-white/10 rounded text-xs text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            assignTask(task.id, e.target.value);
+                            e.target.value = ''; // Reset
+                          }
+                        }}
+                        disabled={assigningTaskId === task.id}
+                      >
+                        <option value="">Select agent...</option>
+                        {agents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.name}
+                          </option>
+                        ))}
+                      </select>
+                      {assigningTaskId === task.id && (
+                        <span className="text-xs text-white/60">Assigning...</span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               ))}
               {filteredTasks.length === 0 && (
