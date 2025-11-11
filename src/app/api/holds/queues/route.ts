@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
         holdsOrderDate: true,
         holdsPriority: true,
         holdsDaysInSystem: true,
+        holdsOrderAmount: true,
         holdsQueueHistory: true,
         createdAt: true,
         updatedAt: true,

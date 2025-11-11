@@ -434,6 +434,18 @@ export default function AssemblyLineQueues() {
                         </span>
                       )}
                     </div>
+                    
+                    {/* Order Amount - Show for Completed queue */}
+                    {task.holdsOrderAmount && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-xs text-white/50">💰 Order Amount:</span>
+                        <span className="text-xs font-medium text-green-400">
+                          ${typeof task.holdsOrderAmount === 'number' 
+                            ? task.holdsOrderAmount.toFixed(2) 
+                            : parseFloat(task.holdsOrderAmount).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="text-right space-y-2">
                     <div className={`px-2 py-1 rounded text-xs font-medium ${

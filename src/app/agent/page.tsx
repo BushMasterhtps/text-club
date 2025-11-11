@@ -2789,7 +2789,16 @@ function TaskCard({
                     min="0"
                     placeholder="0.00"
                     value={orderAmount}
-                    onChange={(e) => setOrderAmount(e.target.value)}
+                    onChange={(e) => {
+                      // Allow decimal input and preserve trailing zeros during typing
+                      setOrderAmount(e.target.value);
+                    }}
+                    onBlur={(e) => {
+                      // Format to 2 decimal places when field loses focus
+                      if (e.target.value && !isNaN(parseFloat(e.target.value))) {
+                        setOrderAmount(parseFloat(e.target.value).toFixed(2));
+                      }
+                    }}
                     className="w-full rounded-md bg-white/10 text-white pl-8 pr-3 py-2 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />
