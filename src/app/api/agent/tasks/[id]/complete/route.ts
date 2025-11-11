@@ -95,7 +95,7 @@ export async function POST(
       ];
       
       if (disposition === "Duplicate") {
-        // Move to Duplicates queue, stay PENDING
+        // Move to Duplicates queue for manager review
         newStatus = "COMPLETED"; // Count towards agent's completion stats
         newHoldsQueue = "Duplicates";
         shouldUnassign = true; // Unassign for manager review
@@ -105,9 +105,9 @@ export async function POST(
         newHoldsQueue = "Customer Contact";
         shouldUnassign = true; // Remove from agent's queue so it can be reassigned
       } else if (completionDispositions.includes(disposition)) {
-        // Complete the task
+        // Move to Completed queue - Task is fully resolved
         newStatus = "COMPLETED";
-        newHoldsQueue = task.holdsStatus; // Keep current queue for reporting
+        newHoldsQueue = "Completed"; // Move to Completed queue
       }
       
       // Update queue history timeline

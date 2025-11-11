@@ -32,6 +32,7 @@ export default function AssemblyLineQueues() {
     'Customer Contact': 'bg-yellow-900/20 border-yellow-500/30',
     'Escalated Call 5+ Day': 'bg-red-900/20 border-red-500/30',
     'Duplicates': 'bg-purple-900/20 border-purple-500/30',
+    'Completed': 'bg-green-900/20 border-green-500/30',
   };
 
   useEffect(() => {

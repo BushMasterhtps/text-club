@@ -6,7 +6,8 @@ const HOLDS_QUEUES = [
   'Agent Research',
   'Customer Contact', 
   'Escalated Call 5+ Day',
-  'Duplicates'
+  'Duplicates',
+  'Completed'
 ] as const;
 
 type HoldsQueue = typeof HOLDS_QUEUES[number];
