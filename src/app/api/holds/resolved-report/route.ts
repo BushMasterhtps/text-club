@@ -23,10 +23,19 @@ export async function GET(request: NextRequest) {
     const skip = parseInt(searchParams.get('skip') || '0', 10);
     
     // Build where clause
+    // Exclude dispositions that just move to another queue (not truly resolved)
+    const excludedDispositions = [
+      'Unable to Resolve', // Moves to Customer Contact
+      'Duplicate'          // Moves to Duplicates queue
+    ];
+    
     const where: any = {
       taskType: 'HOLDS',
       status: 'COMPLETED',
-      disposition: { not: null }
+      disposition: { 
+        not: null,
+        notIn: excludedDispositions // Only show actually resolved orders
+      }
     };
     
     // Date range filter
