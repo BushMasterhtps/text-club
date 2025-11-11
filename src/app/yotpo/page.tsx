@@ -11,6 +11,7 @@ import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import YotpoAnalytics from '@/app/_components/YotpoAnalytics';
 import { AssistanceRequestsSection } from '@/app/_components/AssistanceRequestsSection';
 import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
+import SubmissionsReport from '@/app/yotpo/_components/SubmissionsReport';
 
 // Utility functions
 function clamp(value: number | null | undefined): number {
@@ -1015,6 +1016,7 @@ export default function YotpoPage() {
   const navigationItems = [
     { id: "overview", label: "📊 Overview", description: "Yotpo metrics and progress" },
     { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage Yotpo tasks" },
+    { id: "submissions", label: "📝 Form Submissions", description: "Track external rep submissions and productivity" },
     { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.filter(r => r.status === "ASSISTANCE_REQUIRED").length },
     { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
     { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" }
@@ -1236,6 +1238,11 @@ export default function YotpoPage() {
               <p className="text-white/60">Agent progress tracking for Yotpo tasks coming soon</p>
             </div>
           </Card>
+        )}
+
+        {/* Form Submissions Report */}
+        {activeSection === "submissions" && (
+          <SubmissionsReport />
         )}
 
         {/* Analytics Section */}
