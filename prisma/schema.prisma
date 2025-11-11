@@ -164,11 +164,11 @@ model Task {
   refundAmount         Decimal?
 
   // 🆕 Holds specific fields (all nullable - no existing data affected)
-  holdsOrderDate       DateTime?  // From CSV column A - for 5-day calculation
-  holdsOrderNumber     String?    // From CSV column B - unique identifier
-  holdsCustomerEmail   String?    // From CSV column C
-  holdsPriority        Int?       // From CSV column D (4-5)
-  holdsDaysInSystem    Int?       // From CSV column E (calculated field)
+  holdsOrderDate       DateTime?  // From CSV column B - for 5-day calculation
+  holdsOrderNumber     String?    // From CSV column C - unique identifier
+  holdsCustomerEmail   String?    // From CSV column D - customer email
+  holdsPriority        Int?       // From CSV column E (1-2: White Glove, 4-5: Normal)
+  holdsDaysInSystem    Int?       // From CSV column F (calculated field)
   holdsStatus          String?    // Assembly line queue: "Agent Research", "Customer Contact", "Escalated Call 5+ Day", "Duplicates"
   holdsPhoneNumber     String?    // Customer phone number (for Escalated Call)
   holdsNotes           String?    @db.Text // Agent notes and tracking information
