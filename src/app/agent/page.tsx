@@ -134,6 +134,13 @@ interface Task {
   yotpoReviewDate?: string;
   yotpoReview?: string;
   yotpoSfOrderLink?: string;
+  // Holds specific fields
+  holdsOrderDate?: string;
+  holdsOrderNumber?: string;
+  holdsCustomerEmail?: string;
+  holdsPriority?: number;
+  holdsStatus?: string;
+  holdsDaysInSystem?: number;
 }
 
 interface AgentStats {
@@ -2629,7 +2636,7 @@ function TaskCard({
               <span className="text-yellow-300">🏷️</span>
               <span className="text-white/60">Queue:</span>
               {isTaskStarted ? (
-                <span className="font-mono">{(task as any).holdsStatus || "N/A"}</span>
+                <span className="font-mono">{task.holdsStatus || "N/A"}</span>
               ) : (
                 <span className="text-white/40 italic">[hidden until Start]</span>
               )}
@@ -2647,7 +2654,7 @@ function TaskCard({
               <span className="text-yellow-300">#</span>
               <span className="text-white/60">Order Number:</span>
               {isTaskStarted ? (
-                <span className="font-mono">{(task as any).holdsOrderNumber || "N/A"}</span>
+                <span className="font-mono">{task.holdsOrderNumber || "N/A"}</span>
               ) : (
                 <span className="text-white/40 italic">[hidden until Start]</span>
               )}
@@ -2656,7 +2663,7 @@ function TaskCard({
               <span className="text-yellow-300">✉️</span>
               <span className="text-white/60">Customer Email:</span>
               {isTaskStarted ? (
-                <span className="font-mono">{(task as any).holdsCustomerEmail || "N/A"}</span>
+                <span className="font-mono">{task.holdsCustomerEmail || "N/A"}</span>
               ) : (
                 <span className="text-white/40 italic">[hidden until Start]</span>
               )}
@@ -2665,7 +2672,17 @@ function TaskCard({
               <span className="text-yellow-300">⭐</span>
               <span className="text-white/60">Priority:</span>
               {isTaskStarted ? (
-                <span className="font-mono">{(task as any).holdsPriority ?? "N/A"}</span>
+                <span className={`font-medium ${
+                  task.holdsPriority && task.holdsPriority <= 2 
+                    ? 'text-yellow-300' 
+                    : 'text-white/80'
+                }`}>
+                  {task.holdsPriority && task.holdsPriority <= 2 
+                    ? '👑 White Glove Customer' 
+                    : task.holdsPriority && task.holdsPriority >= 4 
+                    ? '📦 Normal Customer'
+                    : task.holdsPriority || "N/A"}
+                </span>
               ) : (
                 <span className="text-white/40 italic">[hidden until Start]</span>
               )}
@@ -2674,7 +2691,7 @@ function TaskCard({
               <span className="text-yellow-300">📆</span>
               <span className="text-white/60">Days in System:</span>
               {isTaskStarted ? (
-                <span className="font-mono">{(task as any).holdsDaysInSystem ?? "N/A"}</span>
+                <span className="font-mono">{task.holdsDaysInSystem ?? "N/A"}</span>
               ) : (
                 <span className="text-white/40 italic">[hidden until Start]</span>
               )}
@@ -2807,7 +2824,7 @@ function TaskCard({
               ) : task.taskType === "HOLDS" ? (
                 <>
                   {/* Dispositions vary by current queue */}
-                  {(task as any).holdsStatus === "Agent Research" ? (
+                  {task.holdsStatus === "Agent Research" ? (
                     <>
                       <option value="Duplicate">🔄 Duplicate</option>
                       <option value="Refunded & Closed">💰 Refunded & Closed</option>
@@ -2816,7 +2833,7 @@ function TaskCard({
                       <option value="Resolved - fixed address from prev. order/account">✅ Resolved - fixed address</option>
                       <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Customer Contact)</option>
                     </>
-                  ) : (task as any).holdsStatus === "Customer Contact" ? (
+                  ) : task.holdsStatus === "Customer Contact" ? (
                     <>
                       <option value="Refunded & Closed - No Contact">💰 Refunded & Closed - No Contact</option>
                       <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
@@ -2824,7 +2841,7 @@ function TaskCard({
                       <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
                       <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
                     </>
-                  ) : (task as any).holdsStatus === "Escalated Call 5+ Day" ? (
+                  ) : task.holdsStatus === "Escalated Call 5+ Day" ? (
                     <>
                       <option value="International Order - Unable to Call / Sent Email">🌍 International Order - Unable to Call / Sent Email</option>
                       <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
@@ -2835,10 +2852,13 @@ function TaskCard({
                     </>
                   ) : (
                     <>
-                      {/* Duplicates queue or unknown - show all options */}
+                      {/* Duplicates queue or unknown - show Agent Research options as default */}
                       <option value="Duplicate">🔄 Duplicate</option>
                       <option value="Refunded & Closed">💰 Refunded & Closed</option>
+                      <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
                       <option value="Resolved - fixed format">✅ Resolved - fixed format</option>
+                      <option value="Resolved - fixed address from prev. order/account">✅ Resolved - fixed address</option>
+                      <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Customer Contact)</option>
                     </>
                   )}
                 </>

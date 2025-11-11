@@ -142,6 +142,7 @@ export async function POST(request: NextRequest) {
     // Assign tasks
     const tasksToUpdate = taskIds.slice(0, tasksToAssign);
     
+    // Ensure holdsStatus is set to "Agent Research" if not already set
     const updateResult = await prisma.task.updateMany({
       where: {
         id: { in: tasksToUpdate },
@@ -151,6 +152,7 @@ export async function POST(request: NextRequest) {
       },
       data: {
         assignedToId: agentId,
+        holdsStatus: 'Agent Research', // Ensure queue is set
         updatedAt: new Date(),
       },
     });
