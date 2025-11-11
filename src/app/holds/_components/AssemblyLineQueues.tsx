@@ -22,6 +22,10 @@ export default function AssemblyLineQueues() {
   const [searchQuery, setSearchQuery] = useState('');
   const [agents, setAgents] = useState<any[]>([]);
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null);
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [bulkAssigning, setBulkAssigning] = useState(false);
+  const tasksPerPage = 50;
 
   const queueColors = {
     'Agent Research': 'bg-blue-900/20 border-blue-500/30',
@@ -93,18 +97,105 @@ export default function AssemblyLineQueues() {
     }
   };
 
-  const handleQueueClick = (queueName: string) => {
-    setSelectedQueue(selectedQueue === queueName ? null : queueName);
+  const bulkAssign = async (agentId: string) => {
+    if (selectedTasks.size === 0) {
+      alert('Please select at least one task');
+      return;
+    }
+    
+    try {
+      setBulkAssigning(true);
+      const response = await fetch('/api/holds/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          taskIds: Array.from(selectedTasks), 
+          agentId 
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        await fetchQueueStats();
+        setSelectedTasks(new Set());
+        alert(`Successfully assigned ${data.data.assigned} tasks!`);
+      } else {
+        alert(`Error: ${data.error || 'Failed to assign tasks'}`);
+      }
+    } catch (error) {
+      console.error('Error assigning tasks:', error);
+      alert('Failed to assign tasks');
+    } finally {
+      setBulkAssigning(false);
+    }
   };
 
-  if (loading) {
-    return (
-      <Card>
-        <h2 className="text-xl font-semibold mb-4">🏭 Assembly Line Queues</h2>
-        <div className="text-white/60">Loading queue data...</div>
-      </Card>
-    );
-  }
+  const bulkUnassign = async () => {
+    if (selectedTasks.size === 0) {
+      alert('Please select at least one task');
+      return;
+    }
+    
+    if (!confirm(`Unassign ${selectedTasks.size} task(s)?`)) {
+      return;
+    }
+    
+    try {
+      setBulkAssigning(true);
+      const response = await fetch('/api/holds/assign', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds: Array.from(selectedTasks) }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        await fetchQueueStats();
+        setSelectedTasks(new Set());
+        alert(`Successfully unassigned ${data.data.unassigned} tasks!`);
+      } else {
+        alert(`Error: ${data.error || 'Failed to unassign tasks'}`);
+      }
+    } catch (error) {
+      console.error('Error unassigning tasks:', error);
+      alert('Failed to unassign tasks');
+    } finally {
+      setBulkAssigning(false);
+    }
+  };
+
+  const toggleTaskSelection = (taskId: string) => {
+    const newSelected = new Set(selectedTasks);
+    if (newSelected.has(taskId)) {
+      newSelected.delete(taskId);
+    } else {
+      newSelected.add(taskId);
+    }
+    setSelectedTasks(newSelected);
+  };
+
+  const toggleSelectAll = (tasks: any[]) => {
+    const paginatedTasks = getPaginatedTasks(tasks);
+    const paginatedTaskIds = paginatedTasks.map(t => t.id);
+    
+    const allSelected = paginatedTaskIds.every(id => selectedTasks.has(id));
+    
+    if (allSelected) {
+      // Deselect all on current page
+      const newSelected = new Set(selectedTasks);
+      paginatedTaskIds.forEach(id => newSelected.delete(id));
+      setSelectedTasks(newSelected);
+    } else {
+      // Select all on current page
+      const newSelected = new Set(selectedTasks);
+      paginatedTaskIds.forEach(id => newSelected.add(id));
+      setSelectedTasks(newSelected);
+    }
+  };
+
+  const handleQueueClick = (queueName: string) => {
+    setSelectedQueue(selectedQueue === queueName ? null : queueName);
+    setCurrentPage(1); // Reset to page 1 when switching queues
+    setSelectedTasks(new Set()); // Clear selections
+  };
 
   // Filter tasks by search query
   const getFilteredTasks = (tasks: any[]) => {
@@ -117,6 +208,22 @@ export default function AssemblyLineQueues() {
       (task.holdsOrderDate && new Date(task.holdsOrderDate).toLocaleDateString().includes(query))
     );
   };
+
+  // Paginate tasks
+  const getPaginatedTasks = (tasks: any[]) => {
+    const startIndex = (currentPage - 1) * tasksPerPage;
+    const endIndex = startIndex + tasksPerPage;
+    return tasks.slice(startIndex, endIndex);
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <h2 className="text-xl font-semibold mb-4">🏭 Assembly Line Queues</h2>
+        <div className="text-white/60">Loading queue data...</div>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -184,24 +291,96 @@ export default function AssemblyLineQueues() {
 
       {selectedQueue && queueStats[selectedQueue] && (() => {
         const filteredTasks = getFilteredTasks(queueStats[selectedQueue].tasks);
+        const paginatedTasks = getPaginatedTasks(filteredTasks);
+        const totalPages = Math.ceil(filteredTasks.length / tasksPerPage);
+        const allOnPageSelected = paginatedTasks.every(t => selectedTasks.has(t.id));
+        
         return (
           <Card>
-            <h3 className="text-lg font-semibold mb-4">
-              {selectedQueue} - Task Details
-              {searchQuery && (
-                <span className="text-sm font-normal text-white/60 ml-2">
-                  ({filteredTasks.length} of {queueStats[selectedQueue].tasks.length} matching)
-                </span>
+            {/* Header with bulk actions */}
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">
+                {selectedQueue} - Task Details
+                {searchQuery && (
+                  <span className="text-sm font-normal text-white/60 ml-2">
+                    ({filteredTasks.length} of {queueStats[selectedQueue].tasks.length} matching)
+                  </span>
+                )}
+              </h3>
+              {selectedTasks.size > 0 && (
+                <div className="text-sm text-white/70">
+                  {selectedTasks.size} task(s) selected
+                </div>
               )}
-            </h3>
+            </div>
+
+            {/* Bulk assignment controls */}
+            {filteredTasks.length > 0 && (
+              <div className="mb-4 p-3 bg-white/5 rounded-lg border border-white/10">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm text-white/70">
+                    <input
+                      type="checkbox"
+                      checked={allOnPageSelected && paginatedTasks.length > 0}
+                      onChange={() => toggleSelectAll(filteredTasks)}
+                      className="w-4 h-4 rounded"
+                    />
+                    Select All on Page
+                  </label>
+                  
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-white/60">Assign selected to:</span>
+                    <select
+                      className="px-3 py-1.5 bg-white/10 rounded text-sm text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          bulkAssign(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      disabled={bulkAssigning || selectedTasks.size === 0}
+                    >
+                      <option value="">Select agent...</option>
+                      {agents.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                    
+                    <SmallButton
+                      onClick={bulkUnassign}
+                      disabled={bulkAssigning || selectedTasks.size === 0}
+                      className="text-red-400 hover:text-red-300"
+                    >
+                      Unassign Selected
+                    </SmallButton>
+                  </div>
+                  
+                  {bulkAssigning && (
+                    <span className="text-sm text-white/60">Processing...</span>
+                  )}
+                </div>
+              </div>
+            )}
+            
             <div className="space-y-3">
-              {filteredTasks.slice(0, 20).map((task) => (
+              {paginatedTasks.map((task) => (
               <div
                 key={task.id}
                 className="p-3 bg-white/5 rounded-lg border border-white/10"
               >
                 <div className="flex justify-between items-start gap-4">
-                  <div className="flex-1">
+                  {/* Checkbox for selection */}
+                  <div className="flex items-start gap-3 flex-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedTasks.has(task.id)}
+                      onChange={() => toggleTaskSelection(task.id)}
+                      className="w-4 h-4 mt-1 rounded"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <div className="flex-1">
                     <p className="font-medium text-white">
                       {task.text?.replace('Holds - ', '') || 'Unknown Customer'}
                     </p>
@@ -280,18 +459,37 @@ export default function AssemblyLineQueues() {
                   )}
                 </div>
               </div>
+              </div>
               ))}
               {filteredTasks.length === 0 && (
                 <p className="text-center text-white/60 py-4">
                   No tasks match your search
                 </p>
               )}
-              {filteredTasks.length > 20 && (
-                <p className="text-center text-white/60 text-sm">
-                  ... and {filteredTasks.length - 20} more tasks
-                </p>
-              )}
             </div>
+            
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
+                <div className="text-sm text-white/60">
+                  Page {currentPage} of {totalPages} ({filteredTasks.length} total tasks)
+                </div>
+                <div className="flex gap-2">
+                  <SmallButton
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    ← Previous
+                  </SmallButton>
+                  <SmallButton
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next →
+                  </SmallButton>
+                </div>
+              </div>
+            )}
           </Card>
         );
       })()}

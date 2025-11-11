@@ -7,15 +7,17 @@ export async function GET(request: NextRequest) {
     const agentId = searchParams.get('agentId');
     const queue = searchParams.get('queue');
 
-    // Build where clause
+    // Build where clause - include both PENDING and COMPLETED (for reassignment)
     const whereClause: any = {
       taskType: 'HOLDS',
-      status: 'PENDING',
+      status: { in: ['PENDING', 'COMPLETED'] },
     };
 
-    // Filter by agent if specified
+    // Filter by agent if specified (otherwise only unassigned)
     if (agentId) {
       whereClause.assignedToId = agentId;
+    } else {
+      whereClause.assignedToId = null; // Only show unassigned tasks
     }
 
     // Filter by queue if specified
@@ -142,7 +144,29 @@ export async function POST(request: NextRequest) {
     // Assign tasks
     const tasksToUpdate = taskIds.slice(0, tasksToAssign);
     
-    // Ensure holdsStatus is set to "Agent Research" if not already set
+    // First, check which tasks need to be reassigned (COMPLETED tasks)
+    const tasksToReassign = await prisma.task.findMany({
+      where: {
+        id: { in: tasksToUpdate },
+        taskType: 'HOLDS',
+        status: 'COMPLETED',
+      },
+      select: { id: true, holdsStatus: true }
+    });
+    
+    // Set COMPLETED tasks back to PENDING for reassignment
+    if (tasksToReassign.length > 0) {
+      await prisma.task.updateMany({
+        where: {
+          id: { in: tasksToReassign.map(t => t.id) },
+        },
+        data: {
+          status: 'PENDING',
+        },
+      });
+    }
+    
+    // Now assign all tasks (both previously PENDING and newly reassigned)
     const updateResult = await prisma.task.updateMany({
       where: {
         id: { in: tasksToUpdate },
@@ -152,7 +176,6 @@ export async function POST(request: NextRequest) {
       },
       data: {
         assignedToId: agentId,
-        holdsStatus: 'Agent Research', // Ensure queue is set
         updatedAt: new Date(),
       },
     });
