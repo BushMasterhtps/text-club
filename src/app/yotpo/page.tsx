@@ -45,6 +45,8 @@ interface YotpoTask {
   reviewDate: string | null;
   review: string | null;
   sfOrderLink: string | null;
+  importSource: string | null;
+  submittedBy: string | null;
   assignedTo: { id: string; name: string; email: string } | null;
   createdAt: string;
   updatedAt: string;
@@ -524,13 +526,24 @@ function PendingTasksSection() {
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      task.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-300' :
-                      task.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-300' :
-                      'bg-green-500/20 text-green-300'
-                    }`}>
-                      {task.status}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        task.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-300' :
+                        task.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-300' :
+                        'bg-green-500/20 text-green-300'
+                      }`}>
+                        {task.status}
+                      </span>
+                      {task.importSource && (
+                        <span className={`px-2 py-0.5 rounded text-xs ${
+                          task.importSource === 'Form' 
+                            ? 'bg-purple-500/20 text-purple-300' 
+                            : 'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {task.importSource === 'Form' ? '📝 Form' : '📄 CSV'}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-white/80">{fmtDate(task.dateSubmitted)}</td>
                   <td className="px-3 py-2 text-white/80">{task.prOrYotpo || '—'}</td>
@@ -720,6 +733,28 @@ function PendingTasksSection() {
                 <div className="text-xs text-white/50 mb-1">PR/Yotpo</div>
                 <div className="text-white">{viewTask.prOrYotpo || '—'}</div>
               </div>
+              
+              {/* Import Source */}
+              {viewTask.importSource && (
+                <div>
+                  <div className="text-xs text-white/50 mb-1">Import Source</div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    viewTask.importSource === 'Form' 
+                      ? 'bg-purple-500/20 text-purple-300' 
+                      : 'bg-gray-500/20 text-gray-400'
+                  }`}>
+                    {viewTask.importSource === 'Form' ? '📝 Form Submission' : '📄 CSV Import'}
+                  </span>
+                </div>
+              )}
+              
+              {/* Submitted By (for Form submissions) */}
+              {viewTask.submittedBy && (
+                <div>
+                  <div className="text-xs text-white/50 mb-1">Submitted By</div>
+                  <div className="text-white font-medium">{viewTask.submittedBy}</div>
+                </div>
+              )}
             </div>
           </div>
         </div>

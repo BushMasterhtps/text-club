@@ -114,6 +114,10 @@ export async function GET(request: NextRequest) {
         review: task.yotpoReview,
         sfOrderLink: task.yotpoSfOrderLink,
         
+        // Import tracking
+        importSource: task.yotpoImportSource,
+        submittedBy: task.yotpoSubmittedBy,
+        
         // Assignment info
         assignedTo: task.assignedTo ? {
           id: task.assignedTo.id,

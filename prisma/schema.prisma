@@ -186,6 +186,8 @@ model Task {
   yotpoReviewDate      DateTime?  // From CSV column H - when review was posted
   yotpoReview          String?    // From CSV column I - full review text (can be long)
   yotpoSfOrderLink     String?    // From CSV column J - Salesforce order URL/reference
+  yotpoImportSource    String?    // Import source: "Form" or "CSV" - for tracking/display only
+  yotpoSubmittedBy     String?    // Name of person who submitted via form (if applicable)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

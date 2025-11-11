@@ -189,6 +189,7 @@ export async function POST(request: NextRequest) {
           yotpoReviewDate: reviewDate,
           yotpoReview: record['Review']?.trim() || null,
           yotpoSfOrderLink: record['SF Order Referenced (link)']?.trim() || null,
+          yotpoImportSource: 'CSV', // Track import source
           
           // For agent portal display
           text: customerName || email || 'Yotpo Request',
