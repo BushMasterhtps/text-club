@@ -25,6 +25,7 @@ export default function AssemblyLineQueues() {
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [bulkAssigning, setBulkAssigning] = useState(false);
+  const [escalating, setEscalating] = useState(false);
   const tasksPerPage = 50;
 
   const queueColors = {
@@ -198,6 +199,33 @@ export default function AssemblyLineQueues() {
     setSelectedTasks(new Set()); // Clear selections
   };
 
+  const runAutoEscalation = async () => {
+    if (!confirm('Auto-escalate all tasks that are 4+ days old to Escalated Call queue?')) {
+      return;
+    }
+    
+    try {
+      setEscalating(true);
+      const response = await fetch('/api/holds/auto-escalate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(`✅ Auto-escalated ${data.escalated} task(s)!`);
+        await fetchQueueStats(); // Refresh to show updated queues
+      } else {
+        alert(`Error: ${data.error || 'Failed to auto-escalate'}`);
+      }
+    } catch (error) {
+      console.error('Error running auto-escalation:', error);
+      alert('Failed to run auto-escalation');
+    } finally {
+      setEscalating(false);
+    }
+  };
+
   // Filter tasks by search query
   const getFilteredTasks = (tasks: any[]) => {
     if (!searchQuery.trim()) return tasks;
@@ -229,10 +257,21 @@ export default function AssemblyLineQueues() {
   return (
     <div className="space-y-6">
       <Card>
-        <h2 className="text-xl font-semibold mb-4">🏭 Workflow Queues</h2>
-        <p className="text-white/70 mb-4">
-          Visualize and manage tasks across different holds queues. Click on a queue to see details.
-        </p>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-semibold">🏭 Workflow Queues</h2>
+            <p className="text-white/70 mt-1">
+              Visualize and manage tasks across different holds queues. Click on a queue to see details.
+            </p>
+          </div>
+          <SmallButton 
+            onClick={runAutoEscalation}
+            disabled={escalating}
+            className="bg-orange-600 hover:bg-orange-700"
+          >
+            {escalating ? '⏳ Escalating...' : '🚨 Auto-Escalate 4+ Days'}
+          </SmallButton>
+        </div>
         
         {/* Search Bar */}
         <div className="mb-6">
@@ -443,6 +482,58 @@ export default function AssemblyLineQueues() {
                             ? task.holdsOrderAmount.toFixed(2) 
                             : parseFloat(task.holdsOrderAmount).toFixed(2)}
                         </span>
+                      </div>
+                    )}
+                    
+                    {/* Queue Journey/History */}
+                    {task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-white/10">
+                        <div className="text-xs text-white/50 mb-2">📍 Queue Journey:</div>
+                        <div className="space-y-2">
+                          {task.holdsQueueHistory.map((entry: any, idx: number) => {
+                            const enteredDate = entry.enteredAt ? new Date(entry.enteredAt) : null;
+                            const exitedDate = entry.exitedAt ? new Date(entry.exitedAt) : null;
+                            const durationMs = enteredDate && exitedDate 
+                              ? exitedDate.getTime() - enteredDate.getTime()
+                              : enteredDate 
+                              ? new Date().getTime() - enteredDate.getTime()
+                              : 0;
+                            const hours = Math.floor(durationMs / (1000 * 60 * 60));
+                            const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+                            const durationText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+                            
+                            return (
+                              <div key={idx} className="text-xs bg-white/5 rounded p-2 border-l-2 border-blue-500/50">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-medium text-white">{idx + 1}. {entry.queue}</span>
+                                  <span className={`text-xs ${exitedDate ? 'text-white/50' : 'text-green-400 font-medium'}`}>
+                                    {exitedDate ? durationText : `${durationText} (current)`}
+                                  </span>
+                                </div>
+                                {entry.movedBy && (
+                                  <div className="text-white/60">
+                                    👤 {entry.movedBy}
+                                  </div>
+                                )}
+                                {entry.disposition && (
+                                  <div className="text-white/60">
+                                    📋 Disposition: {entry.disposition}
+                                  </div>
+                                )}
+                                {enteredDate && (
+                                  <div className="text-white/50">
+                                    ⏰ {enteredDate.toLocaleString()}
+                                  </div>
+                                )}
+                                {entry.note && (
+                                  <div className="text-white/50 italic">
+                                    💬 {entry.note}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>

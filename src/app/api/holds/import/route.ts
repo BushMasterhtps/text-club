@@ -21,15 +21,15 @@ export async function POST(request: NextRequest) {
     try {
       // First, try parsing with headers
       records = parse(csvText, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-      });
-      
-      console.log(`🚧 Importing ${records.length} holds records`);
-      
-      // Debug: Log available columns from first record
-      if (records.length > 0) {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    });
+
+    console.log(`🚧 Importing ${records.length} holds records`);
+    
+    // Debug: Log available columns from first record
+    if (records.length > 0) {
         console.log('📋 CSV Headers detected:', Object.keys(records[0]));
         console.log('📋 First record sample:', records[0]);
       }
@@ -131,10 +131,10 @@ export async function POST(request: NextRequest) {
 
         // Check for existing task by order number (DUPLICATE DETECTION)
         const existingTask = await prisma.task.findFirst({
-          where: {
-            taskType: 'HOLDS',
-            holdsOrderNumber: orderNumber,
-          },
+            where: {
+              taskType: 'HOLDS',
+              holdsOrderNumber: orderNumber,
+            },
           select: {
             id: true,
             status: true,
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
               }
             }
           }
-        });
+          });
 
         // Calculate aging from order date (4+ days = escalated)
         const currentDate = new Date();
