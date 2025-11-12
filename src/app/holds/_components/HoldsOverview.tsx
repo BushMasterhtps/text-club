@@ -70,7 +70,7 @@ export default function HoldsOverview() {
         const queues = metricsData.data.queues;
         const agentResearch = queues['Agent Research']?.total || 0;
         const customerContact = queues['Customer Contact']?.total || 0;
-        const escalatedCall = queues['Escalated Call 5+ Day']?.total || 0;
+        const escalatedCall = queues['Escalated Call 4+ Day']?.total || 0;
         const duplicates = queues['Duplicates']?.total || 0;
         const completed = queues['Completed']?.total || 0;
         

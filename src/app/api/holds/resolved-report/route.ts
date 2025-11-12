@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
           task.duration || '',
           task.queueTimes['Agent Research'] || '0',
           task.queueTimes['Customer Contact'] || '0',
-          task.queueTimes['Escalated Call 5+ Day'] || '0'
+          task.queueTimes['Escalated Call 4+ Day'] || '0'
         ].map(field => `"${String(field).replace(/"/g, '""')}"`);
         
         csvRows.push(row.join(','));

@@ -155,8 +155,8 @@ export async function POST(request: NextRequest) {
         
         // Determine initial queue based on age
         let initialQueue = 'Agent Research'; // Default starting queue
-        if (daysSinceOrder >= 5) {
-          initialQueue = 'Escalated Call 5+ Day'; // 5+ days = escalated
+        if (daysSinceOrder >= 4) {
+          initialQueue = 'Escalated Call 4+ Day'; // 4+ days = escalated
         }
 
         if (existingTask) {
