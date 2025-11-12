@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (existingTask && orderNumber !== forceImportOrderNumber) {
-          // DUPLICATE FOUND - Just report it, DON'T move the existing task
+          // DUPLICATE FOUND - Create reference task in Duplicates queue
           results.duplicates++;
           results.duplicateDetails.push({
             row: index + 1,
@@ -182,8 +182,35 @@ export async function POST(request: NextRequest) {
             queueJourney: existingTask.holdsQueueHistory || []
           });
           
-          console.log(`Duplicate found: Order ${orderNumber} already exists in ${existingTask.holdsStatus} queue - SKIPPED`);
-          // DO NOT move the existing task - leave it where it is!
+          console.log(`Duplicate found: Order ${orderNumber} already exists in ${existingTask.holdsStatus} queue - Creating reference in Duplicates queue`);
+          
+          // CREATE NEW REFERENCE TASK in Duplicates queue (don't touch existing task)
+          const duplicateReferenceHistory = [{
+            queue: 'Duplicates',
+            enteredAt: new Date().toISOString(),
+            exitedAt: null,
+            movedBy: 'System (Duplicate Import)',
+            note: `Duplicate of existing order in ${existingTask.holdsStatus} queue. Original task ID: ${existingTask.id}`,
+            source: 'Auto-Import'
+          }];
+          
+          await prisma.task.create({
+            data: {
+              taskType: 'HOLDS' as const,
+              status: 'PENDING' as const,
+              holdsOrderDate: orderDate,
+              holdsOrderNumber: `${orderNumber} (DUPLICATE)`, // Mark as duplicate
+              holdsCustomerEmail: customerEmail,
+              holdsPriority: priority,
+              holdsDaysInSystem: daysInSystem,
+              holdsStatus: 'Duplicates',
+              holdsQueueHistory: duplicateReferenceHistory,
+              text: `Holds - ${customerName} (DUPLICATE)`,
+              brand: 'Holds',
+            },
+          });
+          
+          console.log(`Created duplicate reference task for ${orderNumber} in Duplicates queue`);
         } else {
           // Create new task (either no duplicate found OR this specific order is force imported)
           if (existingTask && orderNumber === forceImportOrderNumber) {

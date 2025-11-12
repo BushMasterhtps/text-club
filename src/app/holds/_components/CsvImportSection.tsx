@@ -8,7 +8,14 @@ export default function CsvImportSection() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [duplicateHistory, setDuplicateHistory] = useState<any[]>([]);
+  const [duplicateHistory, setDuplicateHistory] = useState<any[]>(() => {
+    // Load from localStorage on mount
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('holdsDuplicateHistory');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -46,14 +53,19 @@ export default function CsvImportSection() {
         
         // Add to duplicate history if duplicates were found
         if (data.results?.duplicateDetails && data.results.duplicateDetails.length > 0) {
-          setDuplicateHistory(prev => [
+          const newHistory = [
             {
               timestamp: new Date().toISOString(),
               fileName: file.name,
               duplicates: data.results.duplicateDetails
             },
-            ...prev.slice(0, 9) // Keep last 10 imports
-          ]);
+            ...duplicateHistory.slice(0, 9) // Keep last 10 imports
+          ];
+          setDuplicateHistory(newHistory);
+          // Persist to localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('holdsDuplicateHistory', JSON.stringify(newHistory));
+          }
         }
         
         // Only clear file if no force import (allow re-importing specific ones)
