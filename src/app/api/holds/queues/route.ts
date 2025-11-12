@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 const HOLDS_QUEUES = [
   'Agent Research',
   'Customer Contact', 
-  'Escalated Call 5+ Day',
+  'Escalated Call 4+ Day',
   'Duplicates',
   'Completed'
 ] as const;
@@ -65,8 +65,8 @@ export async function GET(request: NextRequest) {
       const currentDate = new Date();
       const orderDate = task.holdsOrderDate;
       const daysSinceOrder = orderDate ? Math.floor((currentDate.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-      const isAging = daysSinceOrder >= 5;
-      const isApproaching = daysSinceOrder >= 3;
+      const isAging = daysSinceOrder >= 4; // Changed from 5 to 4
+      const isApproaching = daysSinceOrder === 3; // Changed from >= 3 to exactly 3
 
       // Calculate time in current queue from holdsQueueHistory
       let hoursInQueue = 0;
@@ -97,12 +97,10 @@ export async function GET(request: NextRequest) {
     // Group by queue status
     const queueStats = HOLDS_QUEUES.reduce((acc, queueName) => {
       const queueTasks = tasksWithAging.filter(task => task.holdsStatus === queueName);
-      const agingTasks = queueTasks.filter(task => task.aging.isAging);
       const approachingTasks = queueTasks.filter(task => task.aging.isApproaching);
 
       acc[queueName] = {
         total: queueTasks.length,
-        aging: agingTasks.length,
         approaching: approachingTasks.length,
         tasks: queueTasks,
       };
@@ -111,7 +109,6 @@ export async function GET(request: NextRequest) {
 
     // Calculate overall stats
     const totalTasks = tasksWithAging.length;
-    const totalAging = tasksWithAging.filter(task => task.aging.isAging).length;
     const totalApproaching = tasksWithAging.filter(task => task.aging.isApproaching).length;
     const unassignedTasks = tasksWithAging.filter(task => !task.assignedTo).length;
 
@@ -121,7 +118,6 @@ export async function GET(request: NextRequest) {
         queues: queueStats,
         summary: {
           totalTasks,
-          totalAging,
           totalApproaching,
           unassignedTasks,
         },

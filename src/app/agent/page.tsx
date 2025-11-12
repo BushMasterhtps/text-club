@@ -2890,7 +2890,7 @@ function TaskCard({
                       <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
                       <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
                     </>
-                  ) : task.holdsStatus === "Escalated Call 5+ Day" ? (
+                  ) : task.holdsStatus === "Escalated Call 4+ Day" ? (
                     <>
                       <option value="International Order - Unable to Call / Sent Email">🌍 International Order - Unable to Call / Sent Email</option>
                       <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>

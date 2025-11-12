@@ -30,7 +30,7 @@ export default function AssemblyLineQueues() {
   const queueColors = {
     'Agent Research': 'bg-blue-900/20 border-blue-500/30',
     'Customer Contact': 'bg-yellow-900/20 border-yellow-500/30',
-    'Escalated Call 5+ Day': 'bg-red-900/20 border-red-500/30',
+    'Escalated Call 4+ Day': 'bg-red-900/20 border-red-500/30',
     'Duplicates': 'bg-purple-900/20 border-purple-500/30',
     'Completed': 'bg-green-900/20 border-green-500/30',
   };
@@ -276,11 +276,7 @@ export default function AssemblyLineQueues() {
                     <span className="text-white font-medium">{stats.total}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-white/70">Aging (5+ days):</span>
-                    <span className="text-red-300 font-medium">{stats.aging}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/70">Approaching (3-4 days):</span>
+                    <span className="text-white/70">3 Days Old:</span>
                     <span className="text-yellow-300 font-medium">{stats.approaching}</span>
                   </div>
                 </div>
@@ -449,9 +445,9 @@ export default function AssemblyLineQueues() {
                   </div>
                   <div className="text-right space-y-2">
                     <div className={`px-2 py-1 rounded text-xs font-medium ${
-                      task.aging?.isAging 
+                      task.aging?.daysSinceOrder >= 4
                         ? 'bg-red-900/50 text-red-200' 
-                        : task.aging?.isApproaching 
+                        : task.aging?.daysSinceOrder === 3
                         ? 'bg-yellow-900/50 text-yellow-200'
                         : 'bg-green-900/50 text-green-200'
                     }`}>

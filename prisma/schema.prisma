@@ -170,7 +170,7 @@ model Task {
   holdsCustomerEmail   String?    // From CSV column D - customer email
   holdsPriority        Int?       // From CSV column E (1-2: White Glove, 4-5: Normal)
   holdsDaysInSystem    Int?       // From CSV column F (calculated field)
-  holdsStatus          String?    // Assembly line queue: "Agent Research", "Customer Contact", "Escalated Call 5+ Day", "Duplicates"
+  holdsStatus          String?    // Assembly line queue: "Agent Research", "Customer Contact", "Escalated Call 4+ Day", "Duplicates"
   holdsPhoneNumber     String?    // Customer phone number (for Escalated Call)
   holdsOrderAmount     Decimal?   // Order dollar amount (required to complete task) - for financial impact tracking
   holdsNotes           String?    @db.Text // Agent notes and tracking information

@@ -50,8 +50,8 @@ export async function GET(request: NextRequest) {
       const currentDate = new Date();
       const orderDate = task.holdsOrderDate;
       const daysSinceOrder = orderDate ? Math.floor((currentDate.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-      const isAging = daysSinceOrder >= 5;
-      const isApproaching = daysSinceOrder >= 3;
+      const isAging = daysSinceOrder >= 4;
+      const isApproaching = daysSinceOrder === 3;
 
       return {
         ...task,

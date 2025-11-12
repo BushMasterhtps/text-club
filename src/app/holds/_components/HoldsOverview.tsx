@@ -179,15 +179,13 @@ export default function HoldsOverview() {
         <Card className="p-4">
           <div className="text-sm text-white/60">Escalated Calls</div>
           <div className="text-3xl font-bold mt-1 text-red-400">{metrics.escalatedCall}</div>
-          <div className="text-xs text-white/50 mt-1">5+ days old</div>
+          <div className="text-xs text-white/50 mt-1">4+ days old</div>
         </Card>
 
         <Card className="p-4">
-          <div className="text-sm text-white/60">Aging Tasks</div>
-          <div className="text-3xl font-bold mt-1 text-orange-400">{metrics.aging}</div>
-          <div className="text-xs text-white/50 mt-1">
-            {metrics.approaching} approaching
-          </div>
+          <div className="text-sm text-white/60">3 Days Old</div>
+          <div className="text-3xl font-bold mt-1 text-yellow-400">{metrics.approaching}</div>
+          <div className="text-xs text-white/50 mt-1">Need attention</div>
         </Card>
       </section>
 
