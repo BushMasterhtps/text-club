@@ -269,6 +269,55 @@ export default function CsvImportSection() {
             )}
           </div>
         )}
+        
+        {/* Historical Duplicates */}
+        {duplicateHistory.length > 0 && (
+          <div className="mt-6 p-4 bg-blue-900/10 border border-blue-500/20 rounded-lg">
+            <h3 className="font-semibold text-blue-200 mb-3">
+              📚 Duplicate History ({duplicateHistory.length} import{duplicateHistory.length > 1 ? 's' : ''})
+            </h3>
+            <p className="text-xs text-white/60 mb-3">
+              Previous imports with duplicate detections (last 10 shown)
+            </p>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {duplicateHistory.map((session, sessionIdx) => (
+                <div key={sessionIdx} className="p-3 bg-white/5 rounded-lg border border-white/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs text-white/70">
+                      📁 {session.fileName}
+                    </div>
+                    <div className="text-xs text-white/50">
+                      {new Date(session.timestamp).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="text-xs text-purple-300">
+                    {session.duplicates.length} duplicate{session.duplicates.length > 1 ? 's' : ''} found
+                  </div>
+                  
+                  <details className="mt-2">
+                    <summary className="text-xs text-white/60 cursor-pointer hover:text-white/80">
+                      View duplicates...
+                    </summary>
+                    <div className="mt-2 space-y-2 ml-2">
+                      {session.duplicates.slice(0, 10).map((dup: any, dupIdx: number) => (
+                        <div key={dupIdx} className="text-xs text-white/60 p-2 bg-white/5 rounded">
+                          <div className="font-medium text-white">{dup.orderNumber}</div>
+                          <div>{dup.customerEmail || 'N/A'}</div>
+                          <div className="text-white/50">Queue: {dup.existingQueue}</div>
+                        </div>
+                      ))}
+                      {session.duplicates.length > 10 && (
+                        <div className="text-xs text-white/50 text-center">
+                          ... and {session.duplicates.length - 10} more
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Card>
   );
