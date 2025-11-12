@@ -69,7 +69,11 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
       const data = await response.json();
       
       if (data.success) {
-        setRequests(data.requests || []);
+        // Filter by taskType if specified
+        const filteredRequests = taskType 
+          ? (data.requests || []).filter((req: AssistanceRequest) => req.taskType === taskType)
+          : (data.requests || []);
+        setRequests(filteredRequests);
       } else {
         console.error("Failed to load assistance requests:", data.error);
       }

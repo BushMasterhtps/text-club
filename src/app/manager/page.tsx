@@ -3298,8 +3298,10 @@ export default function ManagerPage() {
       if (response.ok) {
         const data = await response.json();
         console.log("🔍 Assistance API data:", data);
-        const newRequests = data.requests || [];
-        console.log("🔍 New requests count:", newRequests.length);
+        // Filter out HOLDS tasks - they should only appear in Holds dashboard
+        const filteredRequests = (data.requests || []).filter((req: any) => req.taskType !== 'HOLDS');
+        const newRequests = filteredRequests;
+        console.log("🔍 New requests count (excluding HOLDS):", newRequests.length);
         
         // Check for new requests
         const currentCount = assistanceRequests.length;

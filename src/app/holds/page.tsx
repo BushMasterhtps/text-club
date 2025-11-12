@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardSwitcher from '@/app/_components/DashboardSwitcher';
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
@@ -8,6 +8,7 @@ import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
 import SessionTimer from '@/app/_components/SessionTimer';
 import ThemeToggle from '@/app/_components/ThemeToggle';
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
+import { AssistanceRequestsSection } from '@/app/manager/_components/AssistanceRequestsSection';
 import CsvImportSection from './_components/CsvImportSection';
 import AssemblyLineQueues from './_components/AssemblyLineQueues';
 import AgentAssignmentSection from './_components/AgentAssignmentSection';
@@ -16,6 +17,9 @@ import HoldsOverview from './_components/HoldsOverview';
 
 export default function HoldsPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'assistance' | 'agents' | 'analytics'>('overview');
+  const [assistanceRequests, setAssistanceRequests] = useState<any[]>([]);
+  const [newAssistanceCount, setNewAssistanceCount] = useState(0);
+  const [showNotification, setShowNotification] = useState(false);
   
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -50,6 +54,40 @@ export default function HoldsPage() {
     checkPassword();
   }, []);
 
+  // Load assistance requests
+  const loadAssistanceRequests = async () => {
+    try {
+      const response = await fetch('/api/manager/assistance', { cache: 'no-store' });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Filter for HOLDS tasks only
+          const holdsRequests = data.requests.filter((req: any) => req.taskType === 'HOLDS');
+          setAssistanceRequests(holdsRequests);
+          
+          // Check for pending requests
+          const pendingRequests = holdsRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
+          
+          // Show notification if there are pending requests
+          if (pendingRequests.length > 0 && (newAssistanceCount === 0 || pendingRequests.length > newAssistanceCount)) {
+            setShowNotification(true);
+            setTimeout(() => setShowNotification(false), 5000);
+          }
+          
+          setNewAssistanceCount(pendingRequests.length);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading assistance requests:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadAssistanceRequests();
+    const interval = setInterval(loadAssistanceRequests, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
   // Handle logout
   const handleLogout = () => {
     localStorage.removeItem('authToken');
@@ -71,6 +109,34 @@ export default function HoldsPage() {
 
   return (
     <div className="min-h-screen bg-neutral-900 text-white">
+      {/* Notification for new assistance requests */}
+      {showNotification && newAssistanceCount > 0 && (
+        <div className="fixed top-4 right-4 z-50 bg-gradient-to-r from-orange-600 to-red-600 text-white px-6 py-4 rounded-lg shadow-2xl border border-orange-400/30 animate-bounce">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🆘</span>
+            <div>
+              <p className="font-semibold text-lg">New Holds Assistance Requests!</p>
+              <p className="text-sm text-white/90">{newAssistanceCount} agent{newAssistanceCount > 1 ? 's' : ''} need help</p>
+            </div>
+            <button
+              onClick={() => {
+                setShowNotification(false);
+                setActiveTab('assistance');
+              }}
+              className="ml-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors"
+            >
+              View
+            </button>
+            <button
+              onClick={() => setShowNotification(false)}
+              className="ml-2 text-white/70 hover:text-white text-xl"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top header with logo and title */}
       <div className="bg-neutral-900/50 border-b border-white/10">
         <div className="px-6 py-4">
@@ -147,13 +213,18 @@ export default function HoldsPage() {
             </button>
             <button
               onClick={() => setActiveTab('assistance')}
-              className={`px-4 py-3 text-sm font-medium transition-all border-b-2 ${
+              className={`px-4 py-3 text-sm font-medium transition-all border-b-2 relative ${
                 activeTab === 'assistance'
                   ? 'border-blue-500 text-blue-400'
                   : 'border-transparent text-white/70 hover:text-white hover:bg-white/5'
               }`}
             >
               🆘 Assistance Requests
+              {newAssistanceCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  {newAssistanceCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab('agents')}
@@ -201,8 +272,8 @@ export default function HoldsPage() {
 
         {/* Assistance Requests Tab */}
         {activeTab === 'assistance' && (
-          <div className="text-center py-12 text-white/60">
-            <p>Assistance requests feature coming soon...</p>
+          <div className="space-y-6">
+            <AssistanceRequestsSection taskType="HOLDS" />
           </div>
         )}
 
