@@ -505,7 +505,18 @@ export default function AssemblyLineQueues() {
                             return (
                               <div key={idx} className="text-xs bg-white/5 rounded p-2 border-l-2 border-blue-500/50">
                                 <div className="flex items-center justify-between mb-1">
-                                  <span className="font-medium text-white">{idx + 1}. {entry.queue}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-white">{idx + 1}. {entry.queue}</span>
+                                    {entry.source && (
+                                      <span className={`px-1.5 py-0.5 rounded text-xs ${
+                                        entry.source === 'Auto-Import' 
+                                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' 
+                                          : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                      }`}>
+                                        {entry.source === 'Auto-Import' ? '📥 Auto' : '👤 Agent'}
+                                      </span>
+                                    )}
+                                  </div>
                                   <span className={`text-xs ${exitedDate ? 'text-white/50' : 'text-green-400 font-medium'}`}>
                                     {exitedDate ? durationText : `${durationText} (current)`}
                                   </span>
