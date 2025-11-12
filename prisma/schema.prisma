@@ -78,6 +78,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   isLive   Boolean   @default(false)
+  agentTypes String[] @default([]) // Agent specializations: ["TEXT_CLUB", "HOLDS", "WOD_IVCS", "EMAIL_REQUESTS", "YOTPO"]
   lastSeen DateTime?
   maxOpen  Int       @default(200)
 

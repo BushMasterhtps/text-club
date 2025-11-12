@@ -6,6 +6,7 @@ import CsvImportSection from './_components/CsvImportSection';
 import AssemblyLineQueues from './_components/AssemblyLineQueues';
 import AgentAssignmentSection from './_components/AgentAssignmentSection';
 import HoldsAnalytics from './_components/HoldsAnalytics';
+import HoldsOverview from './_components/HoldsOverview';
 
 export default function HoldsPage() {
   const [activeSection, setActiveSection] = useState<'overview' | 'import' | 'queues' | 'assignment' | 'analytics'>('overview');
@@ -79,49 +80,7 @@ export default function HoldsPage() {
 
         {/* Content Sections */}
         {activeSection === 'overview' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="p-6 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-                <h2 className="text-xl font-semibold mb-4 text-blue-200">📊 System Overview</h2>
-                <p className="text-white/70 mb-4">
-                  The Holds system manages assembly line workflows for order processing. 
-                  Tasks flow through different queues based on their status and age.
-                </p>
-                <ul className="text-sm text-white/60 space-y-1">
-                  <li>• Import CSV data from Google Sheets</li>
-                  <li>• Manage 7 different assembly line queues</li>
-                  <li>• Assign tasks to agents (max 200 per agent)</li>
-                  <li>• Track 5-day aging from order date</li>
-                  <li>• View detailed analytics and reports</li>
-                </ul>
-              </div>
-
-              <div className="p-6 bg-green-900/20 border border-green-500/30 rounded-lg">
-                <h2 className="text-xl font-semibold mb-4 text-green-200">🏭 Assembly Line Queues</h2>
-                <p className="text-white/70 mb-4">
-                  Tasks flow through these queues based on agent actions and age:
-                </p>
-                <ul className="text-sm text-white/60 space-y-1">
-                  <li>• <strong>Agent Research</strong> - Initial review and formatting</li>
-                  <li>• <strong>Customer Contact</strong> - 48-hour customer outreach window</li>
-                  <li>• <strong>Escalated Call 5+ Day</strong> - Orders 5+ days old requiring calls</li>
-                  <li>• <strong>Duplicates</strong> - Duplicate orders pending manager review</li>
-                </ul>
-              </div>
-
-              <div className="p-6 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-                <h2 className="text-xl font-semibold mb-4 text-purple-200">⏰ 5-Day Aging System</h2>
-                <p className="text-white/70 mb-4">
-                  Aging is calculated from the "Order Date" in your CSV:
-                </p>
-                <ul className="text-sm text-white/60 space-y-1">
-                  <li>• <span className="text-green-300">0-2 days</span> - Normal processing</li>
-                  <li>• <span className="text-yellow-300">3-4 days</span> - Approaching limit</li>
-                  <li>• <span className="text-red-300">5+ days</span> - Priority escalation</li>
-                </ul>
-              </div>
-            </div>
-          </div>
+          <HoldsOverview />
         )}
 
         {activeSection === 'import' && <CsvImportSection />}

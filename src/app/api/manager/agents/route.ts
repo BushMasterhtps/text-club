@@ -10,14 +10,35 @@ const OPEN_STATUSES: $Enums.TaskStatus[] = [
   "ASSISTANCE_REQUIRED",
 ];
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    // Get filter parameter (e.g., ?filter=TEXT_CLUB or ?filter=HOLDS)
+    const url = new URL(request.url);
+    const filter = url.searchParams.get('filter');
+    
+    // Build where clause
+    const where: any = {
+      role: { in: ["AGENT", "MANAGER_AGENT"] }
+    };
+    
+    // Filter by agent type if specified
+    if (filter === 'TEXT_CLUB') {
+      // TEXT_CLUB: agents who have TEXT_CLUB in agentTypes OR have empty agentTypes (legacy agents)
+      where.OR = [
+        { agentTypes: { has: 'TEXT_CLUB' } },
+        { agentTypes: { isEmpty: true } } // Legacy agents default to TEXT_CLUB
+      ];
+    } else if (filter === 'HOLDS') {
+      // HOLDS: only agents with HOLDS in agentTypes
+      where.agentTypes = { has: 'HOLDS' };
+    }
+    // No filter = return all agents (used by some dashboards)
+    
     // Fetch agents and their task counts in parallel using optimized queries
     const [agents, taskCountsByAgent] = await Promise.all([
       prisma.user.findMany({
-        // Include both AGENT and MANAGER_AGENT roles for assignment
-        where: { role: { in: ["AGENT", "MANAGER_AGENT"] } },
-        select: { id: true, email: true, name: true, isLive: true, lastSeen: true },
+        where,
+        select: { id: true, email: true, name: true, isLive: true, lastSeen: true, agentTypes: true },
         orderBy: { createdAt: "asc" },
       }),
       // Single query to get all task counts grouped by agent and task type

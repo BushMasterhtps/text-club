@@ -3330,7 +3330,8 @@ export default function ManagerPage() {
   async function loadAgents() {
     try {
       setAgentsLoading(true);
-      const res = await fetch("/api/manager/agents", { cache: "no-store" });
+      // Filter to only show TEXT_CLUB agents (exclude Holds-only agents)
+      const res = await fetch("/api/manager/agents?filter=TEXT_CLUB", { cache: "no-store" });
       const data = await res.json();
       if (data?.success && Array.isArray(data.agents)) {
         setAgents(data.agents as Agent[]);
