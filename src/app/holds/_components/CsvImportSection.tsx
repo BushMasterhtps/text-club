@@ -8,6 +8,7 @@ export default function CsvImportSection() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [forceImport, setForceImport] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -19,7 +20,7 @@ export default function CsvImportSection() {
     }
   };
 
-  const handleUpload = async () => {
+  const handleUpload = async (skipDuplicateCheck = false) => {
     if (!file) {
       alert('Please select a file first');
       return;
@@ -29,6 +30,9 @@ export default function CsvImportSection() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      if (skipDuplicateCheck) {
+        formData.append('forceImport', 'true');
+      }
 
       const response = await fetch('/api/holds/import', {
         method: 'POST',
@@ -39,10 +43,13 @@ export default function CsvImportSection() {
       
       if (data.success) {
         setResult(data);
-        setFile(null);
-        // Reset file input
-        const fileInput = document.getElementById('csv-file') as HTMLInputElement;
-        if (fileInput) fileInput.value = '';
+        if (!skipDuplicateCheck) {
+          setFile(null);
+          setForceImport(false);
+          // Reset file input
+          const fileInput = document.getElementById('csv-file') as HTMLInputElement;
+          if (fileInput) fileInput.value = '';
+        }
       } else {
         alert(`Import failed: ${data.error}`);
       }
@@ -52,6 +59,42 @@ export default function CsvImportSection() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const exportDuplicates = () => {
+    if (!result?.results?.duplicateDetails || result.results.duplicateDetails.length === 0) {
+      alert('No duplicates to export');
+      return;
+    }
+
+    // Create CSV content
+    const headers = ['Row in CSV', 'Order Number', 'Customer Email', 'Existing Status', 'Current Queue', 'Assigned To', 'Last Disposition', 'Import Date'];
+    const rows = result.results.duplicateDetails.map((dup: any) => [
+      dup.row,
+      dup.orderNumber,
+      dup.customerEmail || '',
+      dup.existingStatus,
+      dup.existingQueue || '',
+      dup.assignedTo || 'Unassigned',
+      dup.existingDisposition || '',
+      dup.existingCreatedAt ? new Date(dup.existingCreatedAt).toLocaleString() : ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    // Download
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `holds-duplicates-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -78,13 +121,32 @@ export default function CsvImportSection() {
           />
         </div>
         
-        <SmallButton 
-          onClick={handleUpload} 
-          disabled={!file || uploading}
-          className="w-full"
-        >
-          {uploading ? 'Uploading...' : 'Import CSV'}
-        </SmallButton>
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <SmallButton 
+              onClick={() => handleUpload(forceImport)} 
+              disabled={!file || uploading}
+              className={`flex-1 ${forceImport ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+              {uploading ? 'Uploading...' : forceImport ? '⚠️ Force Import CSV' : 'Import CSV'}
+            </SmallButton>
+          </div>
+          
+          <label className="flex items-center gap-2 px-3 py-2 bg-orange-900/20 border border-orange-500/30 rounded-lg cursor-pointer hover:bg-orange-900/30 transition-all">
+            <input
+              type="checkbox"
+              checked={forceImport}
+              onChange={(e) => setForceImport(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <div className="flex-1">
+              <span className="text-sm text-orange-200 font-medium">Force import duplicates</span>
+              <p className="text-xs text-orange-300/70 mt-0.5">
+                Import all rows even if order numbers already exist in the system
+              </p>
+            </div>
+          </label>
+        </div>
         
         {result && (
           <div className="mt-4 space-y-4">
@@ -102,38 +164,85 @@ export default function CsvImportSection() {
             {/* Duplicates Details */}
             {result.results?.duplicateDetails && result.results.duplicateDetails.length > 0 && (
               <div className="p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-                <h3 className="font-semibold text-purple-200 mb-2">
-                  🔄 Duplicate Orders Found ({result.results.duplicateDetails.length})
-                </h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-purple-200">
+                    🔄 Duplicate Orders Found ({result.results.duplicateDetails.length})
+                  </h3>
+                  <div className="flex gap-2">
+                    <SmallButton 
+                      onClick={exportDuplicates}
+                      className="bg-green-600 hover:bg-green-700 text-xs"
+                    >
+                      📥 Export CSV
+                    </SmallButton>
+                    {!forceImport && (
+                      <SmallButton 
+                        onClick={() => handleUpload(true)}
+                        disabled={uploading}
+                        className="bg-orange-600 hover:bg-orange-700 text-xs"
+                      >
+                        ⚠️ Force Import All
+                      </SmallButton>
+                    )}
+                  </div>
+                </div>
                 <p className="text-xs text-white/60 mb-3">
-                  These orders already exist in the system and were not re-imported:
+                  These orders already exist in the system. View details below or force import to create duplicates anyway.
                 </p>
-                <div className="max-h-60 overflow-y-auto space-y-2">
+                <div className="max-h-96 overflow-y-auto space-y-3">
                   {result.results.duplicateDetails.map((dup: any, idx: number) => (
-                    <div key={idx} className="p-2 bg-white/5 rounded border border-white/10 text-xs">
-                      <div className="flex justify-between items-start">
+                    <div key={idx} className="p-3 bg-white/5 rounded-lg border border-purple-500/20">
+                      {/* Header */}
+                      <div className="flex justify-between items-start mb-3 pb-2 border-b border-white/10">
                         <div>
-                          <p className="font-medium text-white">Order: {dup.orderNumber}</p>
-                          <p className="text-white/60">Email: {dup.customerEmail || 'N/A'}</p>
-                          <p className="text-white/60">Row {dup.row} in CSV</p>
+                          <p className="font-semibold text-white">📦 {dup.orderNumber}</p>
+                          <p className="text-white/60 text-xs">✉️ {dup.customerEmail || 'N/A'}</p>
+                          <p className="text-white/50 text-xs">CSV Row: {dup.row}</p>
                         </div>
                         <div className="text-right">
-                          <p className={`px-2 py-0.5 rounded text-xs ${
+                          <p className={`px-2 py-1 rounded text-xs font-medium ${
                             dup.existingStatus === 'COMPLETED' 
                               ? 'bg-green-500/20 text-green-300' 
+                              : dup.existingStatus === 'IN_PROGRESS'
+                              ? 'bg-blue-500/20 text-blue-300'
                               : 'bg-yellow-500/20 text-yellow-300'
                           }`}>
                             {dup.existingStatus}
                           </p>
-                          <p className="text-white/50 mt-1">{dup.existingQueue || 'Unknown Queue'}</p>
+                          <p className="text-white/70 font-medium mt-1">📍 {dup.existingQueue || 'Unknown'}</p>
                           {dup.assignedTo && (
-                            <p className="text-blue-300 mt-1">{dup.assignedTo}</p>
+                            <p className="text-blue-300 text-xs mt-1">👤 {dup.assignedTo}</p>
                           )}
                         </div>
                       </div>
-                      {dup.existingDisposition && (
-                        <p className="text-white/60 mt-1">Last action: {dup.existingDisposition}</p>
-                      )}
+                      
+                      {/* Current Task Info */}
+                      <div className="space-y-1 text-xs">
+                        <p className="text-white/60">
+                          <span className="text-white/50">First imported:</span> {dup.existingCreatedAt ? new Date(dup.existingCreatedAt).toLocaleString() : 'Unknown'}
+                        </p>
+                        {dup.existingDisposition && (
+                          <p className="text-white/60">
+                            <span className="text-white/50">Last disposition:</span> {dup.existingDisposition}
+                          </p>
+                        )}
+                        
+                        {/* Queue Journey for Duplicate */}
+                        {dup.queueJourney && dup.queueJourney.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-white/10">
+                            <p className="text-white/50 mb-1">📍 Queue Journey:</p>
+                            <div className="space-y-1 ml-2">
+                              {dup.queueJourney.map((entry: any, jIdx: number) => (
+                                <div key={jIdx} className="text-xs text-white/60">
+                                  {jIdx + 1}. {entry.queue} 
+                                  {entry.movedBy && ` (by ${entry.movedBy})`}
+                                  {entry.disposition && ` - ${entry.disposition}`}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

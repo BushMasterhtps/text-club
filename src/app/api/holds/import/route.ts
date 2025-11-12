@@ -6,12 +6,17 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const forceImport = formData.get('forceImport') === 'true';
 
     if (!file) {
       return NextResponse.json({ 
         success: false, 
         error: 'No file provided' 
       }, { status: 400 });
+    }
+    
+    if (forceImport) {
+      console.log('⚠️ FORCE IMPORT enabled - duplicates will be imported');
     }
 
     const csvText = await file.text();
@@ -140,6 +145,8 @@ export async function POST(request: NextRequest) {
             status: true,
             holdsStatus: true,
             disposition: true,
+            holdsQueueHistory: true,
+            createdAt: true,
             assignedTo: {
               select: {
                 name: true,
@@ -159,8 +166,8 @@ export async function POST(request: NextRequest) {
           initialQueue = 'Escalated Call 4+ Day'; // 4+ days = escalated
         }
 
-        if (existingTask) {
-          // DUPLICATE FOUND
+        if (existingTask && !forceImport) {
+          // DUPLICATE FOUND - Skip unless force import is enabled
           results.duplicates++;
           results.duplicateDetails.push({
             row: index + 1,
@@ -170,10 +177,16 @@ export async function POST(request: NextRequest) {
             existingStatus: existingTask.status,
             existingQueue: existingTask.holdsStatus,
             existingDisposition: existingTask.disposition,
-            assignedTo: existingTask.assignedTo?.name || 'Unassigned'
+            existingCreatedAt: existingTask.createdAt,
+            assignedTo: existingTask.assignedTo?.name || 'Unassigned',
+            queueJourney: existingTask.holdsQueueHistory || []
           });
           console.log(`Duplicate found: Order ${orderNumber} already exists (${existingTask.status})`);
         } else {
+          // Create new task (either no duplicate found OR force import enabled)
+          if (existingTask && forceImport) {
+            console.log(`⚠️ Force importing duplicate: ${orderNumber}`);
+          }
           // Create new task
           // Initialize queue history timeline
           const queueHistory = [{
