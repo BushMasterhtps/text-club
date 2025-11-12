@@ -275,10 +275,13 @@ export default function AssemblyLineQueues() {
                     <span className="text-white/70">Total:</span>
                     <span className="text-white font-medium">{stats.total}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/70">3 Days Old:</span>
-                    <span className="text-yellow-300 font-medium">{stats.approaching}</span>
-                  </div>
+                  {/* Only show approaching count for Agent Research and Customer Contact */}
+                  {(queueName === 'Agent Research' || queueName === 'Customer Contact') && (
+                    <div className="flex justify-between">
+                      <span className="text-white/70">Approaching 4 days:</span>
+                      <span className="text-yellow-300 font-medium">{stats.approaching}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             );
