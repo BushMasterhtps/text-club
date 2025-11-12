@@ -9,6 +9,7 @@ export default function CsvImportSection() {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [duplicateHistory, setDuplicateHistory] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   const loadImportHistory = async () => {
     try {
@@ -282,20 +283,31 @@ export default function CsvImportSection() {
         {duplicateHistory.length > 0 && (
           <div className="mt-6 p-4 bg-blue-900/10 border border-blue-500/20 rounded-lg">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-blue-200">
-                📚 Duplicate History ({duplicateHistory.length} import{duplicateHistory.length > 1 ? 's' : ''})
-              </h3>
-              <SmallButton 
-                onClick={loadImportHistory}
-                className="bg-blue-600 hover:bg-blue-700 text-xs"
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className="flex items-center gap-2 hover:text-white transition-colors"
               >
-                🔄 Refresh
-              </SmallButton>
+                <span className="text-xl">{showHistory ? '▼' : '▶'}</span>
+                <h3 className="font-semibold text-blue-200">
+                  📚 Duplicate History ({duplicateHistory.length} import{duplicateHistory.length > 1 ? 's' : ''})
+                </h3>
+              </button>
+              <div className="flex gap-2">
+                <SmallButton 
+                  onClick={loadImportHistory}
+                  className="bg-blue-600 hover:bg-blue-700 text-xs"
+                >
+                  🔄 Refresh
+                </SmallButton>
+              </div>
             </div>
-            <p className="text-xs text-white/60 mb-3">
-              Previous imports with duplicate detections (last 10 shown)
-            </p>
-            <div className="space-y-4">
+            
+            {showHistory && (
+              <>
+                <p className="text-xs text-white/60 mb-3">
+                  Previous imports with duplicate detections (last 10 shown)
+                </p>
+                <div className="space-y-4">
               {duplicateHistory.map((session, sessionIdx) => (
                 <div key={sessionIdx} className="p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
@@ -398,7 +410,9 @@ export default function CsvImportSection() {
                   </details>
                 </div>
               ))}
-            </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

@@ -26,6 +26,7 @@ export default function AssemblyLineQueues() {
   const [currentPage, setCurrentPage] = useState(1);
   const [bulkAssigning, setBulkAssigning] = useState(false);
   const [escalating, setEscalating] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const tasksPerPage = 50;
 
   const queueColors = {
@@ -258,20 +259,31 @@ export default function AssemblyLineQueues() {
     <div className="space-y-6">
       <Card>
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-xl font-semibold">🏭 Workflow Queues</h2>
-            <p className="text-white/70 mt-1">
-              Visualize and manage tasks across different holds queues. Click on a queue to see details.
-            </p>
-          </div>
-          <SmallButton 
-            onClick={runAutoEscalation}
-            disabled={escalating}
-            className="bg-orange-600 hover:bg-orange-700"
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center gap-2 hover:text-white transition-colors"
           >
-            {escalating ? '⏳ Escalating...' : '🚨 Auto-Escalate 4+ Days'}
-          </SmallButton>
+            <span className="text-xl">{isExpanded ? '▼' : '▶'}</span>
+            <div className="text-left">
+              <h2 className="text-xl font-semibold">🏭 Workflow Queues</h2>
+              <p className="text-white/70 mt-1 text-sm">
+                Visualize and manage tasks across different holds queues. Click to {isExpanded ? 'collapse' : 'expand'}.
+              </p>
+            </div>
+          </button>
+          {isExpanded && (
+            <SmallButton 
+              onClick={runAutoEscalation}
+              disabled={escalating}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {escalating ? '⏳ Escalating...' : '🚨 Auto-Escalate 4+ Days'}
+            </SmallButton>
+          )}
         </div>
+        
+        {isExpanded && (
+          <>
         
         {/* Search Bar */}
         <div className="mb-6">
@@ -326,9 +338,11 @@ export default function AssemblyLineQueues() {
             );
           })}
         </div>
+          </>
+        )}
       </Card>
 
-      {selectedQueue && queueStats[selectedQueue] && (() => {
+      {isExpanded && selectedQueue && queueStats[selectedQueue] && (() => {
         const filteredTasks = getFilteredTasks(queueStats[selectedQueue].tasks);
         const paginatedTasks = getPaginatedTasks(filteredTasks);
         const totalPages = Math.ceil(filteredTasks.length / tasksPerPage);

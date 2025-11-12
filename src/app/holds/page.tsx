@@ -189,29 +189,18 @@ export default function HoldsPage() {
 
       {/* Main content */}
       <div className="container mx-auto p-6 space-y-6">
-        {/* Overview Tab */}
+        {/* Overview Tab - Only stats and live agent status */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
             <HoldsOverview />
-            
-            <div className="pt-6">
-              <CsvImportSection />
-            </div>
-            
-            <div className="pt-6">
-              <AssemblyLineQueues />
-            </div>
-            
-            <div className="pt-6">
-              <AgentAssignmentSection />
-            </div>
           </div>
         )}
 
-        {/* Task Management Tab */}
+        {/* Task Management Tab - CSV Import + Workflow Queues */}
         {activeTab === 'tasks' && (
           <div className="space-y-6">
-            <HoldsAnalytics />
+            <CsvImportSection />
+            <AssemblyLineQueues />
           </div>
         )}
 
@@ -229,10 +218,10 @@ export default function HoldsPage() {
           </div>
         )}
 
-        {/* Analytics Tab */}
+        {/* Analytics Tab - Reports */}
         {activeTab === 'analytics' && (
-          <div className="text-center py-12 text-white/60">
-            <p>Advanced analytics coming soon...</p>
+          <div className="space-y-6">
+            <HoldsAnalytics />
           </div>
         )}
       </div>
