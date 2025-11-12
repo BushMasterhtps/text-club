@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 
@@ -8,14 +8,24 @@ export default function CsvImportSection() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [duplicateHistory, setDuplicateHistory] = useState<any[]>(() => {
-    // Load from localStorage on mount
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('holdsDuplicateHistory');
-      return saved ? JSON.parse(saved) : [];
+  const [duplicateHistory, setDuplicateHistory] = useState<any[]>([]);
+
+  const loadImportHistory = async () => {
+    try {
+      const response = await fetch('/api/holds/import-history');
+      const data = await response.json();
+      if (data.success && data.sessions) {
+        setDuplicateHistory(data.sessions);
+      }
+    } catch (error) {
+      console.error('Error loading import history:', error);
     }
-    return [];
-  });
+  };
+
+  // Load import history on mount
+  useEffect(() => {
+    loadImportHistory();
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -51,22 +61,8 @@ export default function CsvImportSection() {
       if (data.success) {
         setResult(data);
         
-        // Add to duplicate history if duplicates were found
-        if (data.results?.duplicateDetails && data.results.duplicateDetails.length > 0) {
-          const newHistory = [
-            {
-              timestamp: new Date().toISOString(),
-              fileName: file.name,
-              duplicates: data.results.duplicateDetails
-            },
-            ...duplicateHistory.slice(0, 9) // Keep last 10 imports
-          ];
-          setDuplicateHistory(newHistory);
-          // Persist to localStorage
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('holdsDuplicateHistory', JSON.stringify(newHistory));
-          }
-        }
+        // Reload import history to show the new import (it's saved in DB by the import API)
+        await loadImportHistory();
         
         // Only clear file if no force import (allow re-importing specific ones)
         if (!forceImportOrderNumber) {
@@ -290,17 +286,10 @@ export default function CsvImportSection() {
                 📚 Duplicate History ({duplicateHistory.length} import{duplicateHistory.length > 1 ? 's' : ''})
               </h3>
               <SmallButton 
-                onClick={() => {
-                  if (confirm('Clear all duplicate history?')) {
-                    setDuplicateHistory([]);
-                    if (typeof window !== 'undefined') {
-                      localStorage.removeItem('holdsDuplicateHistory');
-                    }
-                  }
-                }}
-                className="bg-red-600 hover:bg-red-700 text-xs"
+                onClick={loadImportHistory}
+                className="bg-blue-600 hover:bg-blue-700 text-xs"
               >
-                Clear History
+                🔄 Refresh
               </SmallButton>
             </div>
             <p className="text-xs text-white/60 mb-3">
