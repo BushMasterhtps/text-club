@@ -101,14 +101,14 @@ export default function HoldsPage() {
 
   if (!passwordCheckDone) {
     return (
-      <div className="min-h-screen bg-neutral-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-neutral-900 to-black flex items-center justify-center">
         <p className="text-white/60">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-neutral-900 to-black text-white">
       {/* Notification for new assistance requests */}
       {showNotification && newAssistanceCount > 0 && (
         <div className="fixed top-4 right-4 z-50 bg-gradient-to-r from-orange-600 to-red-600 text-white px-6 py-4 rounded-lg shadow-2xl border border-orange-400/30 animate-bounce">
