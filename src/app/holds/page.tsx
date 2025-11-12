@@ -20,7 +20,7 @@ export default function HoldsPage() {
         <div className="mb-6 p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
           <p className="text-green-200">
             <strong>✅ Holds Dashboard - Fully Functional</strong><br/>
-            Assembly line management for holds tasks is now available. Import CSV data, manage queues, assign tasks, and view analytics.
+            Workflow queue management for holds tasks is now available. Import CSV data, manage queues, assign tasks, and view analytics.
           </p>
         </div>
 
@@ -54,7 +54,7 @@ export default function HoldsPage() {
                 : 'bg-white/10 text-white/70 hover:bg-white/20'
             }`}
           >
-            🏭 Assembly Line Queues
+            🏭 Workflow Queues
           </button>
           <button
             onClick={() => setActiveSection('assignment')}

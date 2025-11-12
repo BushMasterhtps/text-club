@@ -229,7 +229,7 @@ export default function AssemblyLineQueues() {
   return (
     <div className="space-y-6">
       <Card>
-        <h2 className="text-xl font-semibold mb-4">🏭 Assembly Line Queues</h2>
+        <h2 className="text-xl font-semibold mb-4">🏭 Workflow Queues</h2>
         <p className="text-white/70 mb-4">
           Visualize and manage tasks across different holds queues. Click on a queue to see details.
         </p>
