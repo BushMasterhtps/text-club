@@ -170,7 +170,7 @@ export default function CsvImportSection() {
                   </SmallButton>
                 </div>
                 <p className="text-xs text-white/60 mb-3">
-                  These orders already exist and have been <strong className="text-purple-300">moved to Duplicates queue</strong> for manager review.
+                  These orders already exist in the system. <strong className="text-purple-300">Existing tasks remain in their current queues.</strong> Review details below or force import individual orders if needed.
                 </p>
                 <div className="max-h-96 overflow-y-auto space-y-3">
                   {result.results.duplicateDetails.map((dup: any, idx: number) => (
