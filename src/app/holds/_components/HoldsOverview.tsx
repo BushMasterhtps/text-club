@@ -21,6 +21,21 @@ interface QueueMetrics {
   completed: number;
   aging: number;
   approaching: number;
+  totalTasks: number;
+  completedAllTime: number;
+}
+
+// Progress bar component
+function ProgressBar({ value }: { value: number }) {
+  const pct = Math.max(0, Math.min(100, value || 0));
+  return (
+    <div className="w-full h-3 rounded-full bg-white/10 overflow-hidden">
+      <div
+        className="h-full bg-gradient-to-r from-emerald-400 to-sky-500 transition-all duration-500"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
 }
 
 export default function HoldsOverview() {
@@ -32,7 +47,9 @@ export default function HoldsOverview() {
     duplicates: 0,
     completed: 0,
     aging: 0,
-    approaching: 0
+    approaching: 0,
+    totalTasks: 0,
+    completedAllTime: 0
   });
   const [loading, setLoading] = useState(true);
 
@@ -51,14 +68,26 @@ export default function HoldsOverview() {
       const metricsData = await metricsRes.json();
       if (metricsData.success && metricsData.data) {
         const queues = metricsData.data.queues;
+        const agentResearch = queues['Agent Research']?.total || 0;
+        const customerContact = queues['Customer Contact']?.total || 0;
+        const escalatedCall = queues['Escalated Call 5+ Day']?.total || 0;
+        const duplicates = queues['Duplicates']?.total || 0;
+        const completed = queues['Completed']?.total || 0;
+        
+        // Calculate total and completion percentage
+        const totalActive = agentResearch + customerContact + escalatedCall + duplicates;
+        const totalAll = totalActive + completed;
+        
         setMetrics({
-          agentResearch: queues['Agent Research']?.total || 0,
-          customerContact: queues['Customer Contact']?.total || 0,
-          escalatedCall: queues['Escalated Call 5+ Day']?.total || 0,
-          duplicates: queues['Duplicates']?.total || 0,
-          completed: queues['Completed']?.total || 0,
+          agentResearch,
+          customerContact,
+          escalatedCall,
+          duplicates,
+          completed,
           aging: metricsData.data.summary?.totalAging || 0,
-          approaching: metricsData.data.summary?.totalApproaching || 0
+          approaching: metricsData.data.summary?.totalApproaching || 0,
+          totalTasks: totalActive,
+          completedAllTime: completed
         });
       }
     } catch (error) {
@@ -110,8 +139,29 @@ export default function HoldsOverview() {
     return `${hours}h ${mins}m ago`;
   };
 
+  const totalAllTasks = metrics.totalTasks + metrics.completedAllTime;
+  const completionPercent = totalAllTasks > 0 
+    ? Math.round((metrics.completedAllTime / totalAllTasks) * 100) 
+    : 0;
+
   return (
     <div className="space-y-8">
+      {/* Progress Bar */}
+      <section>
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-white/60">Overall Progress</div>
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-white/10 text-white">
+              {completionPercent}% done
+            </span>
+          </div>
+          <ProgressBar value={completionPercent} />
+          <div className="text-xs text-white/50">
+            Active Queue: {metrics.totalTasks} • Completed: {metrics.completedAllTime}
+          </div>
+        </Card>
+      </section>
+
       {/* Queue Metrics */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
