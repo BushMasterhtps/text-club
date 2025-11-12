@@ -27,6 +27,7 @@ export default function AssemblyLineQueues() {
   const [bulkAssigning, setBulkAssigning] = useState(false);
   const [escalating, setEscalating] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [expandedJourneys, setExpandedJourneys] = useState<Set<string>>(new Set());
   const tasksPerPage = 50;
 
   const queueColors = {
@@ -192,6 +193,16 @@ export default function AssemblyLineQueues() {
       paginatedTaskIds.forEach(id => newSelected.add(id));
       setSelectedTasks(newSelected);
     }
+  };
+
+  const toggleJourney = (taskId: string) => {
+    const newExpanded = new Set(expandedJourneys);
+    if (newExpanded.has(taskId)) {
+      newExpanded.delete(taskId);
+    } else {
+      newExpanded.add(taskId);
+    }
+    setExpandedJourneys(newExpanded);
   };
 
   const handleQueueClick = (queueName: string) => {
@@ -502,7 +513,16 @@ export default function AssemblyLineQueues() {
                     {/* Queue Journey/History */}
                     {task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-white/10">
-                        <div className="text-xs text-white/50 mb-2">📍 Queue Journey:</div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs text-white/50">📍 Queue Journey:</div>
+                          <button
+                            onClick={() => toggleJourney(task.id)}
+                            className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                          >
+                            {expandedJourneys.has(task.id) ? '🔽 Hide Journey' : '▶️ Show Journey'}
+                          </button>
+                        </div>
+                        {expandedJourneys.has(task.id) && (
                         <div className="space-y-2">
                           {task.holdsQueueHistory.map((entry: any, idx: number) => {
                             const enteredDate = entry.enteredAt ? new Date(entry.enteredAt) : null;
@@ -559,6 +579,7 @@ export default function AssemblyLineQueues() {
                             );
                           })}
                         </div>
+                        )}
                       </div>
                     )}
                   </div>
