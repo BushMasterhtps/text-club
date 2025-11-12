@@ -124,7 +124,8 @@ export async function POST(
           enteredAt: new Date().toISOString(),
           exitedAt: null,
           movedBy: `Agent (${disposition})`,
-          disposition: disposition
+          disposition: disposition,
+          source: disposition === 'Duplicate' ? 'Agent-Disposition' : undefined // Mark agent-moved duplicates
         });
         newQueueHistory = history;
       }

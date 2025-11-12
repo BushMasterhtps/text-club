@@ -8,7 +8,7 @@ export default function CsvImportSection() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [forceImport, setForceImport] = useState(false);
+  const [duplicateHistory, setDuplicateHistory] = useState<any[]>([]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -20,7 +20,7 @@ export default function CsvImportSection() {
     }
   };
 
-  const handleUpload = async (skipDuplicateCheck = false) => {
+  const handleUpload = async (forceImportOrderNumber?: string) => {
     if (!file) {
       alert('Please select a file first');
       return;
@@ -30,8 +30,8 @@ export default function CsvImportSection() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      if (skipDuplicateCheck) {
-        formData.append('forceImport', 'true');
+      if (forceImportOrderNumber) {
+        formData.append('forceImportOrderNumber', forceImportOrderNumber);
       }
 
       const response = await fetch('/api/holds/import', {
@@ -43,9 +43,22 @@ export default function CsvImportSection() {
       
       if (data.success) {
         setResult(data);
-        if (!skipDuplicateCheck) {
+        
+        // Add to duplicate history if duplicates were found
+        if (data.results?.duplicateDetails && data.results.duplicateDetails.length > 0) {
+          setDuplicateHistory(prev => [
+            {
+              timestamp: new Date().toISOString(),
+              fileName: file.name,
+              duplicates: data.results.duplicateDetails
+            },
+            ...prev.slice(0, 9) // Keep last 10 imports
+          ]);
+        }
+        
+        // Only clear file if no force import (allow re-importing specific ones)
+        if (!forceImportOrderNumber) {
           setFile(null);
-          setForceImport(false);
           // Reset file input
           const fileInput = document.getElementById('csv-file') as HTMLInputElement;
           if (fileInput) fileInput.value = '';
@@ -121,32 +134,13 @@ export default function CsvImportSection() {
           />
         </div>
         
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <SmallButton 
-              onClick={() => handleUpload(forceImport)} 
-              disabled={!file || uploading}
-              className={`flex-1 ${forceImport ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}`}
-            >
-              {uploading ? 'Uploading...' : forceImport ? '⚠️ Force Import CSV' : 'Import CSV'}
-            </SmallButton>
-          </div>
-          
-          <label className="flex items-center gap-2 px-3 py-2 bg-orange-900/20 border border-orange-500/30 rounded-lg cursor-pointer hover:bg-orange-900/30 transition-all">
-            <input
-              type="checkbox"
-              checked={forceImport}
-              onChange={(e) => setForceImport(e.target.checked)}
-              className="w-4 h-4"
-            />
-            <div className="flex-1">
-              <span className="text-sm text-orange-200 font-medium">Force import duplicates</span>
-              <p className="text-xs text-orange-300/70 mt-0.5">
-                Import all rows even if order numbers already exist in the system
-              </p>
-            </div>
-          </label>
-        </div>
+        <SmallButton 
+          onClick={() => handleUpload()} 
+          disabled={!file || uploading}
+          className="w-full bg-blue-600 hover:bg-blue-700"
+        >
+          {uploading ? 'Uploading...' : 'Import CSV'}
+        </SmallButton>
         
         {result && (
           <div className="mt-4 space-y-4">
@@ -168,26 +162,15 @@ export default function CsvImportSection() {
                   <h3 className="font-semibold text-purple-200">
                     🔄 Duplicate Orders Found ({result.results.duplicateDetails.length})
                   </h3>
-                  <div className="flex gap-2">
-                    <SmallButton 
-                      onClick={exportDuplicates}
-                      className="bg-green-600 hover:bg-green-700 text-xs"
-                    >
-                      📥 Export CSV
-                    </SmallButton>
-                    {!forceImport && (
-                      <SmallButton 
-                        onClick={() => handleUpload(true)}
-                        disabled={uploading}
-                        className="bg-orange-600 hover:bg-orange-700 text-xs"
-                      >
-                        ⚠️ Force Import All
-                      </SmallButton>
-                    )}
-                  </div>
+                  <SmallButton 
+                    onClick={exportDuplicates}
+                    className="bg-green-600 hover:bg-green-700 text-xs"
+                  >
+                    📥 Export CSV
+                  </SmallButton>
                 </div>
                 <p className="text-xs text-white/60 mb-3">
-                  These orders already exist in the system. View details below or force import to create duplicates anyway.
+                  These orders already exist and have been <strong className="text-purple-300">moved to Duplicates queue</strong> for manager review.
                 </p>
                 <div className="max-h-96 overflow-y-auto space-y-3">
                   {result.results.duplicateDetails.map((dup: any, idx: number) => (
@@ -237,11 +220,31 @@ export default function CsvImportSection() {
                                   {jIdx + 1}. {entry.queue} 
                                   {entry.movedBy && ` (by ${entry.movedBy})`}
                                   {entry.disposition && ` - ${entry.disposition}`}
+                                  {entry.source && (
+                                    <span className={`ml-2 px-1 py-0.5 rounded text-xs ${
+                                      entry.source === 'Auto-Import' 
+                                        ? 'bg-purple-500/20 text-purple-300'
+                                        : 'bg-blue-500/20 text-blue-300'
+                                    }`}>
+                                      {entry.source}
+                                    </span>
+                                  )}
                                 </div>
                               ))}
                             </div>
                           </div>
                         )}
+                      </div>
+                      
+                      {/* Force Import Button for Individual Order */}
+                      <div className="mt-2 pt-2 border-t border-white/10">
+                        <SmallButton 
+                          onClick={() => handleUpload(dup.orderNumber)}
+                          disabled={uploading}
+                          className="w-full bg-orange-600 hover:bg-orange-700 text-xs"
+                        >
+                          ⚠️ Force Import This Order
+                        </SmallButton>
                       </div>
                     </div>
                   ))}

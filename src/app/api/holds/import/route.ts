@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const forceImport = formData.get('forceImport') === 'true';
+    const forceImportOrderNumber = formData.get('forceImportOrderNumber') as string | null;
 
     if (!file) {
       return NextResponse.json({ 
@@ -15,8 +15,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    if (forceImport) {
-      console.log('⚠️ FORCE IMPORT enabled - duplicates will be imported');
+    if (forceImportOrderNumber) {
+      console.log(`⚠️ FORCE IMPORT enabled for order: ${forceImportOrderNumber}`);
     }
 
     const csvText = await file.text();
@@ -166,8 +166,8 @@ export async function POST(request: NextRequest) {
           initialQueue = 'Escalated Call 4+ Day'; // 4+ days = escalated
         }
 
-        if (existingTask && !forceImport) {
-          // DUPLICATE FOUND - Skip unless force import is enabled
+        if (existingTask && orderNumber !== forceImportOrderNumber) {
+          // DUPLICATE FOUND - Move to Duplicates queue for manager review
           results.duplicates++;
           results.duplicateDetails.push({
             row: index + 1,
@@ -181,10 +181,40 @@ export async function POST(request: NextRequest) {
             assignedTo: existingTask.assignedTo?.name || 'Unassigned',
             queueJourney: existingTask.holdsQueueHistory || []
           });
-          console.log(`Duplicate found: Order ${orderNumber} already exists (${existingTask.status})`);
+          
+          // Move existing task to Duplicates queue if not already there
+          if (existingTask.holdsStatus !== 'Duplicates') {
+            const history = Array.isArray(existingTask.holdsQueueHistory) ? [...existingTask.holdsQueueHistory] : [];
+            
+            // Close out current queue
+            if (history.length > 0 && !history[history.length - 1].exitedAt) {
+              history[history.length - 1].exitedAt = new Date().toISOString();
+            }
+            
+            // Add Duplicates queue entry
+            history.push({
+              queue: 'Duplicates',
+              enteredAt: new Date().toISOString(),
+              exitedAt: null,
+              movedBy: 'System (Duplicate Import)',
+              note: `Duplicate detected during CSV import (Row ${index + 1})`,
+              source: 'Auto-Import'
+            });
+            
+            await prisma.task.update({
+              where: { id: existingTask.id },
+              data: {
+                holdsStatus: 'Duplicates',
+                holdsQueueHistory: history,
+                updatedAt: new Date()
+              }
+            });
+            
+            console.log(`Moved duplicate to Duplicates queue: Order ${orderNumber}`);
+          }
         } else {
-          // Create new task (either no duplicate found OR force import enabled)
-          if (existingTask && forceImport) {
+          // Create new task (either no duplicate found OR this specific order is force imported)
+          if (existingTask && orderNumber === forceImportOrderNumber) {
             console.log(`⚠️ Force importing duplicate: ${orderNumber}`);
           }
           // Create new task
