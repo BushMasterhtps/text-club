@@ -15,8 +15,7 @@ import HoldsAnalytics from './_components/HoldsAnalytics';
 import HoldsOverview from './_components/HoldsOverview';
 
 export default function HoldsPage() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'assignment' | 'assistance' | 'agents' | 'analytics'>('overview');
-  const [activeSubSection, setActiveSubSection] = useState<'overview' | 'import' | 'queues' | 'assignment' | 'analytics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'assistance' | 'agents' | 'analytics'>('overview');
   
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -189,77 +188,30 @@ export default function HoldsPage() {
       </div>
 
       {/* Main content */}
-      <div className="container mx-auto p-6">
-        {/* Overview Tab - Show Holds subsections */}
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Overview Tab */}
         {activeTab === 'overview' && (
-          <>
-            {/* Sub-navigation for Holds sections */}
-            <div className="flex flex-wrap gap-2 mb-6">
-              <button
-                onClick={() => setActiveSubSection('overview')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  activeSubSection === 'overview'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white/10 text-white/70 hover:bg-white/20'
-                }`}
-              >
-                📊 Overview
-              </button>
-              <button
-                onClick={() => setActiveSubSection('import')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  activeSubSection === 'import'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white/10 text-white/70 hover:bg-white/20'
-                }`}
-              >
-                📁 CSV Import
-              </button>
-              <button
-                onClick={() => setActiveSubSection('queues')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  activeSubSection === 'queues'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white/10 text-white/70 hover:bg-white/20'
-                }`}
-              >
-                🏭 Workflow Queues
-              </button>
-              <button
-                onClick={() => setActiveSubSection('assignment')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  activeSubSection === 'assignment'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white/10 text-white/70 hover:bg-white/20'
-                }`}
-              >
-                👥 Agent Assignment
-              </button>
-              <button
-                onClick={() => setActiveSubSection('analytics')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  activeSubSection === 'analytics'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white/10 text-white/70 hover:bg-white/20'
-                }`}
-              >
-                📈 Analytics & Reports
-              </button>
+          <div className="space-y-6">
+            <HoldsOverview />
+            
+            <div className="pt-6">
+              <CsvImportSection />
             </div>
-
-            {/* Content Sections */}
-            {activeSubSection === 'overview' && <HoldsOverview />}
-            {activeSubSection === 'import' && <CsvImportSection />}
-            {activeSubSection === 'queues' && <AssemblyLineQueues />}
-            {activeSubSection === 'assignment' && <AgentAssignmentSection />}
-            {activeSubSection === 'analytics' && <HoldsAnalytics />}
-          </>
+            
+            <div className="pt-6">
+              <AssemblyLineQueues />
+            </div>
+            
+            <div className="pt-6">
+              <AgentAssignmentSection />
+            </div>
+          </div>
         )}
 
         {/* Task Management Tab */}
         {activeTab === 'tasks' && (
-          <div className="text-center py-12 text-white/60">
-            <p>Task management features coming soon...</p>
+          <div className="space-y-6">
+            <HoldsAnalytics />
           </div>
         )}
 
