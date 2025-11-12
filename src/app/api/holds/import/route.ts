@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
           }
         });
 
-        // Calculate 5-day aging from order date
+        // Calculate aging from order date (4+ days = escalated)
         const currentDate = new Date();
         const daysSinceOrder = orderDate ? Math.floor((currentDate.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
         
