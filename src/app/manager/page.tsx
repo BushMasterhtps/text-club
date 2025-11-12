@@ -508,10 +508,10 @@ function AssistanceRequestsSection({
                       )}
                     </div>
                   ) : (
-                    <div className="mt-3">
-                      <div className="text-sm text-neutral-400 mb-1">Message</div>
-                      <div className="text-white bg-neutral-800 p-3 rounded">{request.text}</div>
-                    </div>
+                  <div className="mt-3">
+                    <div className="text-sm text-neutral-400 mb-1">Message</div>
+                    <div className="text-white bg-neutral-800 p-3 rounded">{request.text}</div>
+                  </div>
                   )}
                   
                   <div className="mt-3">
@@ -631,10 +631,10 @@ function AssistanceRequestsSection({
                       )}
                     </div>
                   ) : (
-                    <div className="mt-3">
-                      <div className="text-sm text-neutral-400 mb-1">Message</div>
-                      <div className="text-white bg-neutral-800 p-3 rounded">{request.text}</div>
-                    </div>
+                  <div className="mt-3">
+                    <div className="text-sm text-neutral-400 mb-1">Message</div>
+                    <div className="text-white bg-neutral-800 p-3 rounded">{request.text}</div>
+                  </div>
                   )}
                   
                   <div className="mt-3">
