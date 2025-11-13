@@ -13,6 +13,7 @@ export async function POST(
     const disposition = body.disposition;
     const sfCaseNumber = body.sfCaseNumber;
     const orderAmount = body.orderAmount;
+    const dispositionNote = body.dispositionNote;
 
     if (!email || !disposition) {
       return NextResponse.json({ success: false, error: "Email and disposition required" }, { status: 400 });
@@ -88,10 +89,10 @@ export async function POST(
         "Refunded & Closed - Customer Requested Cancelation",
         "Refunded & Closed - No Contact",
         "Refunded & Closed - Comma Issue",
-        "Resolved - fixed format",
-        "Resolved - fixed address from prev. order/account",
+        "Resolved - fixed format / fixed address",
         "Resolved - Customer Clarified",
         "Resolved - FRT Released",
+        "Resolved - other",
         "Resolved - Other"
       ];
       
@@ -100,7 +101,7 @@ export async function POST(
         newStatus = "COMPLETED"; // Count towards agent's completion stats
         newHoldsQueue = "Duplicates";
         shouldUnassign = true; // Unassign for manager review
-      } else if (disposition === "Unable to Resolve") {
+      } else if (disposition === "Unable to Resolve" || disposition === "International Order - Unable to Call/ Sent Email") {
         // Move to Customer Contact queue - Complete for agent, PENDING for reassignment
         newStatus = "COMPLETED"; // Task is complete for THIS agent (counts towards their stats)
         newHoldsQueue = "Customer Contact";
@@ -118,13 +119,14 @@ export async function POST(
         if (history.length > 0) {
           history[history.length - 1].exitedAt = new Date().toISOString();
         }
-        // Add new queue entry
+        // Add new queue entry with disposition note if provided
         history.push({
           queue: newHoldsQueue,
           enteredAt: new Date().toISOString(),
           exitedAt: null,
           movedBy: `Agent (${disposition})`,
           disposition: disposition,
+          note: dispositionNote || undefined, // Add the disposition note here
           source: disposition === 'Duplicate' ? 'Agent-Disposition' : undefined // Mark agent-moved duplicates
         });
         newQueueHistory = history;
@@ -146,7 +148,8 @@ export async function POST(
         ...(task.taskType === "HOLDS" && {
           holdsStatus: newHoldsQueue,
           holdsQueueHistory: newQueueHistory,
-          holdsOrderAmount: orderAmount ? parseFloat(orderAmount) : null
+          holdsOrderAmount: orderAmount ? parseFloat(orderAmount) : null,
+          holdsNotes: dispositionNote || null // Store disposition note in holdsNotes for agent visibility
         }),
         // Add send-back tracking fields for WOD/IVCS
         ...(isSendBack && {

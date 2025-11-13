@@ -142,6 +142,7 @@ interface Task {
   holdsStatus?: string;
   holdsDaysInSystem?: number;
   holdsOrderAmount?: number;
+  holdsNotes?: string;
 }
 
 interface AgentStats {
@@ -738,7 +739,7 @@ export default function AgentPage() {
     }
   };
 
-  const completeTask = async (taskId: string, disposition: string, sfCaseNumberOrOrderAmount?: string) => {
+  const completeTask = async (taskId: string, disposition: string, sfCaseNumberOrOrderAmount?: string, dispositionNote?: string) => {
     if (!disposition) {
       alert("Please select a disposition.");
       return;
@@ -751,7 +752,8 @@ export default function AgentPage() {
           email, 
           disposition, 
           sfCaseNumber: sfCaseNumberOrOrderAmount, 
-          orderAmount: sfCaseNumberOrOrderAmount 
+          orderAmount: sfCaseNumberOrOrderAmount,
+          dispositionNote: dispositionNote 
         }),
       });
       if (res.ok) {
@@ -2210,7 +2212,7 @@ function TaskCard({
   task: Task;
   startedTasks: Set<string>;
   onStart: () => void;
-  onComplete: (taskId: string, disposition: string, sfCaseNumber?: string) => void;
+  onComplete: (taskId: string, disposition: string, sfCaseNumber?: string, dispositionNote?: string) => void;
   onAssistance: (taskId: string, message: string) => void;
 }) {
   const [disposition, setDisposition] = useState("");
@@ -2218,6 +2220,7 @@ function TaskCard({
   const [assistanceMsg, setAssistanceMsg] = useState("");
   const [sfCaseNumber, setSfCaseNumber] = useState("");
   const [orderAmount, setOrderAmount] = useState("");
+  const [dispositionNote, setDispositionNote] = useState("");
 
   // Clear form fields after successful actions
   const handleComplete = () => {
@@ -2291,31 +2294,38 @@ function TaskCard({
         return;
       }
       
+      // MANDATORY: Note required for specific dispositions
+      const noteRequiredDispositions = ["Unable to Resolve", "Resolved - other", "Resolved - Other"];
+      if (noteRequiredDispositions.includes(disposition) && !dispositionNote.trim()) {
+        alert("Please enter a note/reason for this disposition.");
+        return;
+      }
+      
       // Determine if this completes the task or moves to another queue
       const completionDispositions = [
         "Refunded & Closed",
         "Refunded & Closed - Customer Requested Cancelation",
         "Refunded & Closed - No Contact",
         "Refunded & Closed - Comma Issue",
-        "Resolved - fixed format",
-        "Resolved - fixed address from prev. order/account",
+        "Resolved - fixed format / fixed address",
         "Resolved - Customer Clarified",
         "Resolved - FRT Released",
+        "Resolved - other",
         "Resolved - Other"
       ];
       
       const movesToDuplicates = disposition === "Duplicate";
-      const movesToCustomerContact = disposition === "Unable to Resolve";
+      const movesToCustomerContact = disposition === "Unable to Resolve" || disposition === "International Order - Unable to Call/ Sent Email";
       
       if (movesToDuplicates || movesToCustomerContact) {
         // Queue movement only - task stays PENDING
         // The API will handle queue movement
-        onComplete(task.id, disposition, orderAmount);
+        onComplete(task.id, disposition, orderAmount, dispositionNote.trim() || undefined);
       } else if (completionDispositions.includes(disposition)) {
         // Task completion - status becomes COMPLETED
-        onComplete(task.id, disposition, orderAmount);
+        onComplete(task.id, disposition, orderAmount, dispositionNote.trim() || undefined);
       } else {
-        onComplete(task.id, disposition, orderAmount);
+        onComplete(task.id, disposition, orderAmount, dispositionNote.trim() || undefined);
       }
     } else {
       onComplete(task.id, disposition);
@@ -2326,6 +2336,7 @@ function TaskCard({
     setSubDisposition("");
     setSfCaseNumber("");
     setOrderAmount("");
+    setDispositionNote("");
   };
 
   const handleAssistance = () => {
@@ -2710,6 +2721,21 @@ function TaskCard({
                 <span className="text-white/40 italic">[hidden until Start]</span>
               )}
             </div>
+            
+            {/* Previous Agent Notes - Show if exists */}
+            {isTaskStarted && task.holdsNotes && (
+              <div className="col-span-2 mt-2 pt-2 border-t border-white/10">
+                <div className="flex items-start gap-2">
+                  <span className="text-yellow-300 mt-1">📝</span>
+                  <div className="flex-1">
+                    <span className="text-white/60 text-sm font-medium block mb-1">Previous Agent Notes:</span>
+                    <div className="text-sm leading-relaxed bg-blue-900/20 rounded p-3 border border-blue-500/30 text-white/90">
+                      {task.holdsNotes}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </>
       ) : (
@@ -2878,9 +2904,10 @@ function TaskCard({
                       <option value="Duplicate">🔄 Duplicate</option>
                       <option value="Refunded & Closed">💰 Refunded & Closed</option>
                       <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
-                      <option value="Resolved - fixed format">✅ Resolved - fixed format</option>
-                      <option value="Resolved - fixed address from prev. order/account">✅ Resolved - fixed address</option>
-                      <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Customer Contact)</option>
+                      <option value="Resolved - fixed format / fixed address">✅ Resolved - fixed format / fixed address</option>
+                      <option value="Resolved - other">✅ Resolved - other (requires note)</option>
+                      <option value="International Order - Unable to Call/ Sent Email">🌍 International Order - Unable to Call/ Sent Email (→ Customer Contact)</option>
+                      <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Customer Contact) (requires note)</option>
                     </>
                   ) : task.holdsStatus === "Customer Contact" ? (
                     <>
@@ -2889,15 +2916,16 @@ function TaskCard({
                       <option value="Refunded & Closed - Comma Issue">🔧 Refunded & Closed - Comma Issue</option>
                       <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
                       <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
+                      <option value="Resolved - Other">✅ Resolved - Other (requires note)</option>
                     </>
                   ) : task.holdsStatus === "Escalated Call 4+ Day" ? (
                     <>
-                      <option value="International Order - Unable to Call / Sent Email">🌍 International Order - Unable to Call / Sent Email</option>
+                      <option value="International Order - Unable to Call / Sent Email">🌍 International Order - Unable to Call / Sent Email (→ Customer Contact)</option>
                       <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
                       <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
                       <option value="Refunded & Closed - No Contact">💰 Refunded & Closed - No Contact</option>
                       <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
-                      <option value="Resolved - Other">✅ Resolved - Other</option>
+                      <option value="Resolved - Other">✅ Resolved - Other (requires note)</option>
                     </>
                   ) : (
                     <>
@@ -2905,9 +2933,9 @@ function TaskCard({
                       <option value="Duplicate">🔄 Duplicate</option>
                       <option value="Refunded & Closed">💰 Refunded & Closed</option>
                       <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
-                      <option value="Resolved - fixed format">✅ Resolved - fixed format</option>
-                      <option value="Resolved - fixed address from prev. order/account">✅ Resolved - fixed address</option>
-                      <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Customer Contact)</option>
+                      <option value="Resolved - fixed format / fixed address">✅ Resolved - fixed format / fixed address</option>
+                      <option value="Resolved - other">✅ Resolved - other (requires note)</option>
+                      <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Customer Contact) (requires note)</option>
                     </>
                   )}
                 </>
@@ -3053,6 +3081,36 @@ function TaskCard({
                 />
               </div>
             )}
+
+            {/* Disposition Notes field for Holds tasks (required for specific dispositions) */}
+            {task.taskType === "HOLDS" && disposition && (() => {
+              // Dispositions that REQUIRE a note
+              const requiresNote = [
+                "Unable to Resolve",
+                "Resolved - other",
+                "Resolved - Other"
+              ];
+              
+              return requiresNote.includes(disposition);
+            })() && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/80">
+                  Reason / Notes: <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={dispositionNote}
+                  onChange={(e) => setDispositionNote(e.target.value)}
+                  placeholder="Explain why this order cannot be resolved or provide additional details..."
+                  rows={3}
+                  className="w-full rounded-md bg-white/10 text-white placeholder-white/40 px-3 py-2 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  required
+                />
+                <p className="text-xs text-white/50">
+                  This note will be visible in the Queue Journey and to the next assigned agent
+                </p>
+              </div>
+            )}
+
             <PrimaryButton 
               onClick={handleComplete}
               disabled={!disposition || 
@@ -3061,6 +3119,7 @@ function TaskCard({
                 (task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete" && !subDisposition) ||
                 (task.taskType === "WOD_IVCS" && (disposition === "Completed" || disposition === "Unable to Complete") && !subDisposition) ||
                 (task.taskType === "HOLDS" && (!orderAmount || parseFloat(orderAmount) <= 0)) ||
+                (task.taskType === "HOLDS" && ["Unable to Resolve", "Resolved - other", "Resolved - Other"].includes(disposition) && !dispositionNote.trim()) ||
                 (task.taskType === "YOTPO" && (() => {
                   // Yotpo: SF Case Number required for all dispositions EXCEPT these 4
                   const noSfRequired = [
