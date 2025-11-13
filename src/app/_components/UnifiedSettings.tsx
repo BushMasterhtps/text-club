@@ -650,6 +650,11 @@ function AgentSpecializationsSection() {
 
       console.log('New types will be:', newTypes);
 
+      // Optimistically update UI immediately
+      setAgents(prev => prev.map(a => 
+        a.id === agentId ? { ...a, agentTypes: newTypes } : a
+      ));
+
       const res = await fetch('/api/manager/agents/update-types', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -661,13 +666,18 @@ function AgentSpecializationsSection() {
       console.log('API response data:', data);
       
       if (data.success) {
+        // Reload to confirm from server
         await loadAgents();
         console.log('✅ Agent types updated successfully');
       } else {
+        // Revert optimistic update on error
+        await loadAgents();
         console.error('API error:', data.error);
         alert(data.error || 'Failed to update agent types');
       }
     } catch (error) {
+      // Revert optimistic update on error
+      await loadAgents();
       console.error('Error updating agent types:', error);
       alert('Failed to update agent types: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
