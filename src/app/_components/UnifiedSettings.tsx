@@ -641,11 +641,14 @@ function AgentSpecializationsSection() {
   }, []);
 
   const toggleAgentType = async (agentId: string, agentType: string, currentTypes: string[]) => {
+    console.log('Toggle agent type:', { agentId, agentType, currentTypes });
     setBusy(`${agentId}-${agentType}`);
     try {
       const newTypes = currentTypes.includes(agentType)
         ? currentTypes.filter(t => t !== agentType)
         : [...currentTypes, agentType];
+
+      console.log('New types will be:', newTypes);
 
       const res = await fetch('/api/manager/agents/update-types', {
         method: 'POST',
@@ -653,15 +656,20 @@ function AgentSpecializationsSection() {
         body: JSON.stringify({ agentId, agentTypes: newTypes })
       });
 
+      console.log('API response status:', res.status);
       const data = await res.json();
+      console.log('API response data:', data);
+      
       if (data.success) {
         await loadAgents();
+        console.log('✅ Agent types updated successfully');
       } else {
+        console.error('API error:', data.error);
         alert(data.error || 'Failed to update agent types');
       }
     } catch (error) {
       console.error('Error updating agent types:', error);
-      alert('Failed to update agent types');
+      alert('Failed to update agent types: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setBusy(null);
     }
