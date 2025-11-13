@@ -93,6 +93,7 @@ export async function GET(request: Request) {
         holdsCount,
         isLive: a.isLive ?? false,
         lastSeen: a.lastSeen ?? null,
+        agentTypes: a.agentTypes ?? [],
       };
     });
 
