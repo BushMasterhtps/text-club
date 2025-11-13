@@ -3113,24 +3113,49 @@ function TaskCard({
 
             <PrimaryButton 
               onClick={handleComplete}
-              disabled={!disposition || 
-                (disposition === "Answered in SF" && !sfCaseNumber.trim()) ||
-                (task.taskType === "EMAIL_REQUESTS" && disposition === "Completed" && !sfCaseNumber.trim()) ||
-                (task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete" && !subDisposition) ||
-                (task.taskType === "WOD_IVCS" && (disposition === "Completed" || disposition === "Unable to Complete") && !subDisposition) ||
-                (task.taskType === "HOLDS" && (!orderAmount || parseFloat(orderAmount) <= 0)) ||
-                (task.taskType === "HOLDS" && ["Unable to Resolve", "Resolved - other", "Resolved - Other"].includes(disposition) && !dispositionNote.trim()) ||
-                (task.taskType === "YOTPO" && (() => {
-                  // Yotpo: SF Case Number required for all dispositions EXCEPT these 4
+              disabled={(() => {
+                // No disposition selected
+                if (!disposition) return true;
+                
+                // Text Club: SF Case # required for "Answered in SF"
+                if (disposition === "Answered in SF" && !sfCaseNumber.trim()) return true;
+                
+                // Email Requests validations
+                if (task.taskType === "EMAIL_REQUESTS") {
+                  if (disposition === "Completed" && !sfCaseNumber.trim()) return true;
+                  if (disposition === "Unable to Complete" && !subDisposition) return true;
+                }
+                
+                // WOD/IVCS validations
+                if (task.taskType === "WOD_IVCS") {
+                  if ((disposition === "Completed" || disposition === "Unable to Complete") && !subDisposition) return true;
+                }
+                
+                // Holds validations
+                if (task.taskType === "HOLDS") {
+                  // Order amount ALWAYS required
+                  const orderAmountValid = orderAmount && parseFloat(orderAmount) > 0;
+                  if (!orderAmountValid) return true;
+                  
+                  // Note required for specific dispositions
+                  const noteRequiredDispositions = ["Unable to Resolve", "Resolved - other", "Resolved - Other"];
+                  if (noteRequiredDispositions.includes(disposition) && !dispositionNote.trim()) return true;
+                }
+                
+                // Yotpo: SF Case # required except for 4 dispositions
+                if (task.taskType === "YOTPO" && disposition) {
                   const noSfRequired = [
                     "Information – Unfeasible request or information not available",
                     "Duplicate Request – No new action required",
                     "Previously Assisted – Issue already resolved or refund previously issued",
                     "No Match – No valid account or order located"
                   ];
-                  return !noSfRequired.includes(disposition) && !sfCaseNumber.trim();
-                })())
-              }
+                  if (!noSfRequired.includes(disposition) && !sfCaseNumber.trim()) return true;
+                }
+                
+                // All validations passed
+                return false;
+              })()}
               className="w-full"
             >
               Complete Task
