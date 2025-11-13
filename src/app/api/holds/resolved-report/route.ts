@@ -74,7 +74,6 @@ export async function GET(request: NextRequest) {
         id: true,
         holdsOrderNumber: true,
         holdsCustomerEmail: true,
-        holdsDateSubmitted: true,
         holdsOrderDate: true,
         holdsPriority: true,
         holdsStatus: true,
@@ -118,7 +117,6 @@ export async function GET(request: NextRequest) {
         id: task.id,
         orderNumber: task.holdsOrderNumber,
         customerEmail: task.holdsCustomerEmail,
-        dateSubmitted: task.holdsDateSubmitted,
         orderDate: task.holdsOrderDate,
         priority: task.holdsPriority,
         finalQueue: task.holdsStatus,
@@ -137,15 +135,14 @@ export async function GET(request: NextRequest) {
     if (exportCsv) {
       const csvRows = [
         // Header row
-        ['Date Submitted', 'Order Date', 'Order Number', 'Customer Email', 'Priority', 'Final Queue', 'Disposition', 'Agent Name', 'Completed Date', 'Duration (sec)', 'Agent Research Time', 'Customer Contact Time', 'Escalated Call Time'].join(',')
+        ['Order Number', 'Customer Email', 'Order Date', 'Priority', 'Final Queue', 'Disposition', 'Agent Name', 'Completed Date', 'Duration (sec)', 'Agent Research Time', 'Customer Contact Time', 'Escalated Call Time'].join(',')
       ];
       
       tasksWithMetrics.forEach(task => {
         const row = [
-          task.dateSubmitted ? new Date(task.dateSubmitted).toLocaleString() : '',
-          task.orderDate ? new Date(task.orderDate).toLocaleString() : '',
           task.orderNumber || '',
           task.customerEmail || '',
+          task.orderDate ? new Date(task.orderDate).toLocaleString() : '',
           task.priority || '',
           task.finalQueue || '',
           task.disposition || '',

@@ -8,7 +8,6 @@ interface ResolvedTask {
   id: string;
   orderNumber: string;
   customerEmail: string;
-  dateSubmitted: string;
   orderDate: string;
   priority: number;
   finalQueue: string;
@@ -239,8 +238,6 @@ export default function ResolvedOrdersReport() {
           <table className="w-full text-sm">
             <thead className="bg-white/5">
               <tr className="text-left text-white/60">
-                <th className="px-3 py-2">Date Submitted</th>
-                <th className="px-3 py-2">Order Date</th>
                 <th className="px-3 py-2">Order #</th>
                 <th className="px-3 py-2">Customer Email</th>
                 <th className="px-3 py-2">Disposition</th>
@@ -253,12 +250,6 @@ export default function ResolvedOrdersReport() {
             <tbody className="divide-y divide-white/5">
               {tasks.map(task => (
                 <tr key={task.id} className="hover:bg-white/5">
-                  <td className="px-3 py-2 text-white/80 text-xs">
-                    {task.dateSubmitted ? new Date(task.dateSubmitted).toLocaleString() : 'N/A'}
-                  </td>
-                  <td className="px-3 py-2 text-white/80 text-xs">
-                    {task.orderDate ? new Date(task.orderDate).toLocaleString() : 'N/A'}
-                  </td>
                   <td className="px-3 py-2 text-white font-mono text-xs">
                     {task.orderNumber || 'N/A'}
                   </td>
