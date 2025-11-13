@@ -82,6 +82,12 @@ export async function POST(request: NextRequest) {
         // Get all keys from the record to understand the structure
         const keys = Object.keys(record);
         
+        // Column A: Date Submitted (1st column, index 0) - for reporting only
+        const dateSubmitted = parseDate(
+          record[keys[0]] || record['A'] || record['Date Submitted'] || record['date_submitted'] || 
+          record['DateSubmitted'] || ''
+        );
+        
         // Column B: Order Date (2nd column, index 1)
         const orderDate = parseDate(
           record[keys[1]] || record['B'] || record['Order Date'] || record['order_date'] || 
@@ -198,6 +204,7 @@ export async function POST(request: NextRequest) {
             data: {
               taskType: 'HOLDS' as const,
               status: 'PENDING' as const,
+              holdsDateSubmitted: dateSubmitted,
               holdsOrderDate: orderDate,
               holdsOrderNumber: `${orderNumber} (DUPLICATE)`, // Mark as duplicate
               holdsCustomerEmail: customerEmail,
@@ -229,6 +236,7 @@ export async function POST(request: NextRequest) {
           const taskData = {
             taskType: 'HOLDS' as const,
             status: 'PENDING' as const,
+            holdsDateSubmitted: dateSubmitted,
             holdsOrderDate: orderDate,
             holdsOrderNumber: orderNumber,
             holdsCustomerEmail: customerEmail,

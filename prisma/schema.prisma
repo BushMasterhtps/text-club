@@ -165,6 +165,7 @@ model Task {
   refundAmount         Decimal?
 
   // 🆕 Holds specific fields (all nullable - no existing data affected)
+  holdsDateSubmitted   DateTime?  // From CSV column A - date task was submitted (for reporting only)
   holdsOrderDate       DateTime?  // From CSV column B - for aging calculation
   holdsOrderNumber     String?    // From CSV column C - unique identifier
   holdsCustomerEmail   String?    // From CSV column D - customer email
