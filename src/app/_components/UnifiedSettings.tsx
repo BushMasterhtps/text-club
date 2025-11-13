@@ -615,9 +615,170 @@ function TrelloImportSectionWrapper() {
   );
 }
 
+// Agent Specializations Section
+function AgentSpecializationsSection() {
+  const [agents, setAgents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const loadAgents = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/manager/agents', { cache: 'no-store' });
+      const data = await res.json();
+      if (data.success && data.agents) {
+        setAgents(data.agents);
+      }
+    } catch (error) {
+      console.error('Error loading agents:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAgents();
+  }, []);
+
+  const toggleAgentType = async (agentId: string, agentType: string, currentTypes: string[]) => {
+    setBusy(`${agentId}-${agentType}`);
+    try {
+      const newTypes = currentTypes.includes(agentType)
+        ? currentTypes.filter(t => t !== agentType)
+        : [...currentTypes, agentType];
+
+      const res = await fetch('/api/manager/agents/update-types', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId, agentTypes: newTypes })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await loadAgents();
+      } else {
+        alert(data.error || 'Failed to update agent types');
+      }
+    } catch (error) {
+      console.error('Error updating agent types:', error);
+      alert('Failed to update agent types');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card className="p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">🎯 Agent Specializations</h2>
+          <p className="text-sm text-white/60 mt-1">
+            Assign agents to specific task types. Holds agents appear in Holds dashboard, Customer Account agents handle all other tasks.
+          </p>
+        </div>
+        <SmallButton onClick={loadAgents} disabled={loading}>
+          {loading ? "Loading..." : "🔄 Refresh"}
+        </SmallButton>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-white/5">
+            <tr className="text-left text-white/60">
+              <th className="px-3 py-2">Agent Name</th>
+              <th className="px-3 py-2">Email</th>
+              <th className="px-3 py-2 text-center">🚧 Holds</th>
+              <th className="px-3 py-2 text-center">💬 Text Club</th>
+              <th className="px-3 py-2 text-center">📦 WOD/IVCS</th>
+              <th className="px-3 py-2 text-center">📧 Email Requests</th>
+              <th className="px-3 py-2 text-center">⭐ Yotpo</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {loading && (
+              <tr>
+                <td colSpan={7} className="px-3 py-3 text-center text-white/60">
+                  Loading agents...
+                </td>
+              </tr>
+            )}
+            {!loading && agents.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-3 py-3 text-center text-white/60">
+                  No agents found
+                </td>
+              </tr>
+            )}
+            {agents.map((agent) => {
+              const agentTypes = agent.agentTypes || [];
+              return (
+                <tr key={agent.id} className="hover:bg-white/5">
+                  <td className="px-3 py-2 text-white">{agent.name || 'N/A'}</td>
+                  <td className="px-3 py-2 text-white/70">{agent.email}</td>
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={agentTypes.includes('HOLDS')}
+                      onChange={() => toggleAgentType(agent.id, 'HOLDS', agentTypes)}
+                      disabled={busy === `${agent.id}-HOLDS`}
+                      className="w-4 h-4 rounded accent-orange-500"
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={agentTypes.includes('TEXT_CLUB')}
+                      onChange={() => toggleAgentType(agent.id, 'TEXT_CLUB', agentTypes)}
+                      disabled={busy === `${agent.id}-TEXT_CLUB`}
+                      className="w-4 h-4 rounded accent-blue-500"
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={agentTypes.includes('WOD_IVCS')}
+                      onChange={() => toggleAgentType(agent.id, 'WOD_IVCS', agentTypes)}
+                      disabled={busy === `${agent.id}-WOD_IVCS`}
+                      className="w-4 h-4 rounded accent-red-500"
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={agentTypes.includes('EMAIL_REQUESTS')}
+                      onChange={() => toggleAgentType(agent.id, 'EMAIL_REQUESTS', agentTypes)}
+                      disabled={busy === `${agent.id}-EMAIL_REQUESTS`}
+                      className="w-4 h-4 rounded accent-green-500"
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={agentTypes.includes('YOTPO')}
+                      onChange={() => toggleAgentType(agent.id, 'YOTPO', agentTypes)}
+                      disabled={busy === `${agent.id}-YOTPO`}
+                      className="w-4 h-4 rounded accent-yellow-500"
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+        <p className="text-sm text-blue-200">
+          💡 <strong>Tip:</strong> Holds agents appear only in Holds dashboard. Customer Account agents (Text Club, WOD/IVCS, Email Requests, Yotpo) appear in Text Club dashboard.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 // Main Unified Settings Component
 export default function UnifiedSettings() {
-  const [activeTab, setActiveTab] = useState<"users" | "blocked" | "spam" | "import" | "trello">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "blocked" | "spam" | "import" | "trello" | "specializations">("users");
 
   return (
     <div className="space-y-6">
@@ -673,6 +834,16 @@ export default function UnifiedSettings() {
         >
           📊 Trello Imports
         </button>
+        <button
+          onClick={() => setActiveTab("specializations")}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "specializations"
+              ? "bg-white/10 text-white"
+              : "text-white/60 hover:text-white/80"
+          }`}
+        >
+          🎯 Agent Specializations
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -681,6 +852,7 @@ export default function UnifiedSettings() {
       {activeTab === "spam" && <SpamRulesSection />}
       {activeTab === "import" && <BulkImportSection />}
       {activeTab === "trello" && <TrelloImportSectionWrapper />}
+      {activeTab === "specializations" && <AgentSpecializationsSection />}
     </div>
   );
 }
