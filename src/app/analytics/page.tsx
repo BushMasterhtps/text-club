@@ -304,7 +304,11 @@ export default function AnalyticsPage() {
     setLoadingTeamPerformance(true);
     try {
       const dateRange = getDateRange(selectedDateRange);
-      const response = await fetch(`/api/analytics/team-performance?startDate=${dateRange.start}&endDate=${dateRange.end}`);
+      // Add cache-busting and timestamp to ensure fresh data
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/analytics/team-performance?startDate=${dateRange.start}&endDate=${dateRange.end}&_t=${timestamp}`, {
+        cache: 'no-store' // Prevent caching
+      });
       const data = await response.json();
       
       if (data.success) {
@@ -369,6 +373,19 @@ export default function AnalyticsPage() {
       loadScorecardData();
     }
   }, [customStartDate, customEndDate]);
+
+  // Auto-refresh Team Performance and Scorecard data every 30 seconds (for real-time updates)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Only auto-refresh if viewing "today" to avoid unnecessary API calls
+      if (selectedDateRange === 'today') {
+        loadTeamPerformanceData();
+        loadScorecardData();
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [selectedDateRange]);
 
   // Format duration helper
   const formatDuration = (seconds: number) => {
