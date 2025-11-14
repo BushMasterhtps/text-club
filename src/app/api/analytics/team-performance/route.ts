@@ -47,7 +47,25 @@ export async function GET(request: NextRequest) {
     const teamPerformanceData = [];
 
     for (const agent of agents) {
-      // Get completed tasks for each task type
+      // First, get TOTAL count (matching Agent Status API exactly - no taskType filter)
+      const totalCompletedTasks = await prisma.task.count({
+        where: {
+          OR: [
+            {
+              assignedToId: agent.id,
+              status: "COMPLETED",
+              endTime: { gte: start, lte: end }
+            },
+            {
+              sentBackBy: agent.id,
+              status: "PENDING",
+              endTime: { gte: start, lte: end }
+            }
+          ]
+        }
+      });
+
+      // Get completed tasks for each task type (for breakdown)
       const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'YOTPO', 'HOLDS', 'STANDALONE_REFUNDS'];
       
       for (const taskType of taskTypes) {
@@ -86,7 +104,27 @@ export async function GET(request: NextRequest) {
             taskType: taskType,
             completedCount: completedTasks.length,
             avgHandleTime: Math.round(avgHandleTime),
-            totalDuration: totalDuration
+            totalDuration: totalDuration,
+            totalCompleted: totalCompletedTasks // Add total count matching Agent Status
+          });
+        }
+      }
+
+      // If agent has tasks but none match the known task types, still include them with total
+      if (totalCompletedTasks > 0) {
+        // Check if we already added this agent (has at least one task type)
+        const agentHasTaskType = teamPerformanceData.some(item => item.agentId === agent.id);
+        if (!agentHasTaskType) {
+          // Agent has tasks but they're all NULL or unknown taskType - add a placeholder
+          teamPerformanceData.push({
+            agentId: agent.id,
+            agentName: agent.name || 'Unknown',
+            agentEmail: agent.email,
+            taskType: 'OTHER',
+            completedCount: totalCompletedTasks,
+            avgHandleTime: 0,
+            totalDuration: 0,
+            totalCompleted: totalCompletedTasks
           });
         }
       }

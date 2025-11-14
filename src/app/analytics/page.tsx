@@ -124,6 +124,7 @@ interface TeamPerformanceData {
   completedCount: number;
   avgHandleTime: number;
   totalDuration: number;
+  totalCompleted?: number; // Total count matching Agent Status API (all tasks, no taskType filter)
 }
 
 interface DailyTrend {
@@ -933,21 +934,37 @@ export default function AnalyticsPage() {
                     acc[item.agentId] = {
                       agentName: item.agentName,
                       agentEmail: item.agentEmail,
-                      tasks: []
+                      tasks: [],
+                      totalCompleted: item.totalCompleted || 0 // Use totalCompleted if available
                     };
                   }
                   acc[item.agentId].tasks.push(item);
+                  // Update totalCompleted from any task entry (they should all be the same)
+                  if (item.totalCompleted) {
+                    acc[item.agentId].totalCompleted = item.totalCompleted;
+                  }
                   return acc;
-                }, {} as Record<string, { agentName: string; agentEmail: string; tasks: TeamPerformanceData[] }>);
+                }, {} as Record<string, { agentName: string; agentEmail: string; tasks: TeamPerformanceData[]; totalCompleted: number }>);
 
                 // Sort agents by total completed tasks (highest to lowest)
                 const sortedAgents = Object.entries(groupedByAgent).sort(([, agentA], [, agentB]) => {
-                  const totalA = agentA.tasks.reduce((sum, task) => sum + task.completedCount, 0);
-                  const totalB = agentB.tasks.reduce((sum, task) => sum + task.completedCount, 0);
+                  // Use totalCompleted if available, otherwise sum task counts
+                  const totalA = agentA.totalCompleted > 0 
+                    ? agentA.totalCompleted 
+                    : agentA.tasks.reduce((sum, task) => sum + task.completedCount, 0);
+                  const totalB = agentB.totalCompleted > 0 
+                    ? agentB.totalCompleted 
+                    : agentB.tasks.reduce((sum, task) => sum + task.completedCount, 0);
                   return totalB - totalA;
                 });
 
-                return sortedAgents.map(([agentId, agentData]) => (
+                return sortedAgents.map(([agentId, agentData]) => {
+                  // Use totalCompleted if available (matches Agent Status API), otherwise sum
+                  const totalCount = agentData.totalCompleted > 0
+                    ? agentData.totalCompleted
+                    : agentData.tasks.reduce((sum, task) => sum + task.completedCount, 0);
+                  
+                  return (
                   <div key={agentId} className="bg-gray-800/50 rounded-lg p-4 border border-white/10">
                     <div className="flex items-center justify-between mb-4">
                       <div>
@@ -956,7 +973,7 @@ export default function AnalyticsPage() {
                       </div>
                       <div className="text-right">
                         <div className="text-2xl font-bold text-green-400">
-                          {agentData.tasks.reduce((sum, task) => sum + task.completedCount, 0)}
+                          {totalCount}
                         </div>
                         <div className="text-sm text-white/60">Total Completed</div>
                       </div>
@@ -983,7 +1000,8 @@ export default function AnalyticsPage() {
                       ))}
                     </div>
                   </div>
-                ));
+                  );
+                });
               })()}
               
               {teamPerformanceData.length === 0 && !loadingTeamPerformance && (
