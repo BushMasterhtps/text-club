@@ -17,14 +17,19 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get today's date range
-    const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-
-    // Use local dates directly - no UTC conversion needed
-    const utcStartOfToday = startOfToday;
-    const utcEndOfToday = endOfToday;
+    // Get today's date range in PST timezone (matching other APIs)
+    // PST = UTC - 8 hours
+    const now = new Date();
+    const pstOffset = -8 * 60 * 60 * 1000; // PST = UTC - 8 hours
+    const nowPST = new Date(now.getTime() + pstOffset);
+    const year = nowPST.getUTCFullYear();
+    const month = nowPST.getUTCMonth();
+    const day = nowPST.getUTCDate();
+    
+    // Create UTC dates for PST day boundaries
+    // 8 AM UTC = 12 AM PST
+    const utcStartOfToday = new Date(Date.UTC(year, month, day, 8, 0, 0, 0));
+    const utcEndOfToday = new Date(Date.UTC(year, month, day + 1, 7, 59, 59, 999));
 
     // Get tasks completed today for each agent
     const agentStats = await Promise.all(
