@@ -18,20 +18,38 @@ export async function GET(req: NextRequest) {
     const dateEndStr = url.searchParams.get("dateEnd");
     const agentId = url.searchParams.get("agentId");
 
-    // Default to last 30 days if no dates provided
-    const now = new Date();
-    const defaultEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-    const defaultStart = new Date(defaultEnd);
-    defaultStart.setDate(defaultStart.getDate() - 30);
-    defaultStart.setHours(0, 0, 0, 0);
+    // Parse dates with PST timezone boundaries (matching Agent Status API)
+    // PST = UTC - 8 hours, so PST day boundaries are:
+    // Start: 8:00 AM UTC on the given date (12:00 AM PST)
+    // End: 7:59 AM UTC on the next day (11:59 PM PST)
+    const parsePSTDate = (dateStr: string) => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return { year, month: month - 1, day }; // month is 0-indexed
+    };
 
-    const dateEnd = dateEndStr ? new Date(dateEndStr) : defaultEnd;
-    const dateStart = dateStartStr ? new Date(dateStartStr) : defaultStart;
+    let dateStart: Date;
+    let dateEnd: Date;
 
-    // Set end of day for dateEnd
-    dateEnd.setHours(23, 59, 59, 999);
-    // Set start of day for dateStart
-    dateStart.setHours(0, 0, 0, 0);
+    if (dateStartStr && dateEndStr) {
+      // Parse provided dates as PST days
+      const startParts = parsePSTDate(dateStartStr);
+      const endParts = parsePSTDate(dateEndStr);
+      dateStart = new Date(Date.UTC(startParts.year, startParts.month, startParts.day, 8, 0, 0, 0));
+      dateEnd = new Date(Date.UTC(endParts.year, endParts.month, endParts.day + 1, 7, 59, 59, 999));
+    } else {
+      // Default to last 30 days in PST
+      const now = new Date();
+      const pstOffset = -8 * 60 * 60 * 1000; // PST = UTC - 8 hours
+      const nowPST = new Date(now.getTime() + pstOffset);
+      const year = nowPST.getUTCFullYear();
+      const month = nowPST.getUTCMonth();
+      const day = nowPST.getUTCDate();
+      
+      // End: 7:59 AM UTC on next day (11:59 PM PST today)
+      dateEnd = new Date(Date.UTC(year, month, day + 1, 7, 59, 59, 999));
+      // Start: 8:00 AM UTC 30 days ago (12:00 AM PST 30 days ago)
+      dateStart = new Date(Date.UTC(year, month, day - 29, 8, 0, 0, 0)); // -29 because we include today
+    }
 
     const daysDiff = Math.ceil((dateEnd.getTime() - dateStart.getTime()) / (1000 * 60 * 60 * 24));
 

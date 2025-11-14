@@ -14,9 +14,22 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Parse dates and create date range
-    const start = new Date(startDate + 'T00:00:00.000Z');
-    const end = new Date(endDate + 'T23:59:59.999Z');
+    // Parse dates and create date range in PST timezone (matching Agent Status API)
+    // PST = UTC - 8 hours, so PST day boundaries are:
+    // Start: 8:00 AM UTC on the given date (12:00 AM PST)
+    // End: 7:59 AM UTC on the next day (11:59 PM PST)
+    const parsePSTDate = (dateStr: string) => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return { year, month: month - 1, day }; // month is 0-indexed
+    };
+    
+    const startDateParts = parsePSTDate(startDate);
+    const endDateParts = parsePSTDate(endDate);
+    
+    // Start: 8 AM UTC on start date (12 AM PST)
+    const start = new Date(Date.UTC(startDateParts.year, startDateParts.month, startDateParts.day, 8, 0, 0, 0));
+    // End: 7:59 AM UTC on day after end date (11:59 PM PST on end date)
+    const end = new Date(Date.UTC(endDateParts.year, endDateParts.month, endDateParts.day + 1, 7, 59, 59, 999));
 
     // Get all agents (including manager-agents)
     const agents = await prisma.user.findMany({
