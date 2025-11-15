@@ -374,19 +374,6 @@ export default function AnalyticsPage() {
     }
   }, [customStartDate, customEndDate]);
 
-  // Auto-refresh Team Performance and Scorecard data every 30 seconds (for real-time updates)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Only auto-refresh if viewing "today" to avoid unnecessary API calls
-      if (selectedDateRange === 'today') {
-        loadTeamPerformanceData();
-        loadScorecardData();
-      }
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(interval);
-  }, [selectedDateRange]);
-
   // Format duration helper
   const formatDuration = (seconds: number) => {
     if (!seconds) return "0m";
@@ -899,6 +886,21 @@ export default function AnalyticsPage() {
           <div className="flex items-center justify-between mb-6">
             <H3>👥 Team Performance Metrics</H3>
             <div className="flex items-center gap-4">
+              <button
+                onClick={() => {
+                  loadTeamPerformanceData();
+                  loadScorecardData();
+                }}
+                disabled={loadingTeamPerformance || loadingScorecard}
+                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white text-sm font-medium transition-colors flex items-center gap-2"
+                title="Refresh team performance data"
+              >
+                {loadingTeamPerformance || loadingScorecard ? (
+                  <>⏳ Refreshing...</>
+                ) : (
+                  <>🔄 Refresh</>
+                )}
+              </button>
               <select
                 value={selectedAgentFilter}
                 onChange={(e) => setSelectedAgentFilter(e.target.value)}
