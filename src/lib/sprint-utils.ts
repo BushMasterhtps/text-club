@@ -112,18 +112,33 @@ export function getSprintsBetween(startDate: Date, endDate: Date): number[] {
 }
 
 /**
- * Format sprint for display
+ * Format sprint for display (converts UTC dates to PST for display)
  */
 export function formatSprintPeriod(sprintNumber: number): string {
   const { start, end } = getSprintDates(sprintNumber);
   
+  // Format dates in PST timezone for display
+  // The dates are stored as UTC internally (Nov 15 7:59 AM UTC = Nov 14 11:59 PM PST)
+  // We need to display them as PST dates (Nov 14)
   const formatDate = (d: Date) => {
-    const month = d.toLocaleDateString('en-US', { month: 'short' });
-    const day = d.getDate();
-    return `${month} ${day}`;
+    // Use toLocaleDateString with PST timezone to get the correct date
+    const parts = d.toLocaleDateString('en-US', { 
+      timeZone: 'America/Los_Angeles',
+      month: 'short',
+      day: 'numeric'
+    }).split(' ');
+    // Returns format like "Nov 14"
+    return parts.join(' ');
   };
   
-  return `${formatDate(start)} - ${formatDate(end)}, ${start.getFullYear()}`;
+  const startFormatted = formatDate(start);
+  const endFormatted = formatDate(end);
+  const year = parseInt(start.toLocaleDateString('en-US', { 
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric'
+  }));
+  
+  return `${startFormatted} - ${endFormatted}, ${year}`;
 }
 
 /**
