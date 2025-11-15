@@ -10,12 +10,12 @@ import { formatSprintPeriod, getSprintDates, getCurrentSprint } from '@/lib/spri
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '10', 10);
+    const limit = parseInt(searchParams.get('limit') || '20', 20);
     
     const currentSprintNum = getCurrentSprint().number;
 
     // Get all sprints from database (most recent first)
-    const sprints = await prisma.sprintRanking.groupBy({
+    const dbSprints = await prisma.sprintRanking.groupBy({
       by: ['sprintNumber'],
       orderBy: {
         sprintNumber: 'desc'
@@ -23,7 +23,16 @@ export async function GET(request: NextRequest) {
       take: limit
     });
 
-    const sprintNumbers = sprints.map(s => s.sprintNumber);
+    const dbSprintNumbers = new Set(dbSprints.map(s => s.sprintNumber));
+    
+    // Include all sprints from #1 to current (to show Sprint #1 even if not saved yet)
+    const allSprintNumbers: number[] = [];
+    for (let i = currentSprintNum; i >= 1 && allSprintNumbers.length < limit; i--) {
+      allSprintNumbers.push(i);
+    }
+    
+    // Use all sprint numbers (database + current range)
+    const sprintNumbers = Array.from(new Set([...allSprintNumbers, ...dbSprintNumbers])).sort((a, b) => b - a).slice(0, limit);
 
     // Get detailed results for each sprint
     const sprintHistory = await Promise.all(

@@ -1,11 +1,12 @@
 /**
  * Sprint Ranking System Utilities
  * 
- * Handles 14-day sprint cycles starting Nov 1, 2025
+ * Handles 14-day sprint cycles starting Nov 1, 2025 at 12:00 AM PST
+ * PST = UTC - 8 hours, so Nov 1, 2025 12:00 AM PST = Nov 1, 2025 8:00 AM UTC
  */
 
-// Sprint system starts Nov 1, 2025 at 00:00:00
-const SPRINT_START_DATE = new Date('2025-11-01T00:00:00.000Z');
+// Sprint system starts Nov 1, 2025 at 12:00 AM PST (8:00 AM UTC)
+const SPRINT_START_DATE = new Date(Date.UTC(2025, 10, 1, 8, 0, 0, 0)); // Nov 1, 2025 8 AM UTC = Nov 1, 2025 12 AM PST
 const SPRINT_DURATION_DAYS = 14;
 const SPRINT_DURATION_MS = SPRINT_DURATION_DAYS * 24 * 60 * 60 * 1000;
 
@@ -24,15 +25,27 @@ export function getSprintNumber(date: Date = new Date()): number {
 }
 
 /**
- * Get the start and end dates for a specific sprint number
+ * Get the start and end dates for a specific sprint number (in PST timezone)
+ * Sprint #1: Nov 1, 2025 12:00 AM PST (Nov 1, 2025 8:00 AM UTC) to Nov 14, 2025 11:59:59 PM PST (Nov 15, 2025 7:59:59 AM UTC)
  */
 export function getSprintDates(sprintNumber: number): { start: Date; end: Date } {
   if (sprintNumber < 1) {
     throw new Error('Sprint number must be >= 1');
   }
   
+  // Calculate sprint start (PST midnight = 8 AM UTC)
   const startMs = SPRINT_START_DATE.getTime() + (sprintNumber - 1) * SPRINT_DURATION_MS;
-  const endMs = startMs + SPRINT_DURATION_MS - 1; // -1ms to end at 23:59:59.999
+  
+  // Sprint runs for 14 days in PST
+  // Start: Nov 1 12:00 AM PST (Nov 1 8:00 AM UTC)
+  // End: Nov 14 11:59:59 PM PST (Nov 15 7:59:59 AM UTC)
+  // So end = start + 13 days + 23 hours + 59 minutes + 59 seconds + 999 milliseconds
+  const endMs = startMs + 
+    (13 * 24 * 60 * 60 * 1000) +  // 13 full days
+    (23 * 60 * 60 * 1000) +        // 23 hours
+    (59 * 60 * 1000) +             // 59 minutes
+    (59 * 1000) +                  // 59 seconds
+    999;                           // 999 milliseconds
   
   return {
     start: new Date(startMs),
@@ -41,15 +54,28 @@ export function getSprintDates(sprintNumber: number): { start: Date; end: Date }
 }
 
 /**
- * Get the current sprint number and dates
+ * Get current time in PST
+ */
+function getNowInPST(): Date {
+  const now = new Date();
+  // Convert UTC to PST: PST = UTC - 8 hours
+  const pstOffset = -8 * 60 * 60 * 1000;
+  return new Date(now.getTime() + pstOffset);
+}
+
+/**
+ * Get the current sprint number and dates (using PST timezone)
  */
 export function getCurrentSprint(): { number: number; start: Date; end: Date; daysRemaining: number; daysElapsed: number } {
-  const now = new Date();
-  const sprintNumber = getSprintNumber(now);
+  // Use PST time for all calculations
+  const nowPST = getNowInPST();
+  const nowUTC = new Date(); // Keep UTC for date comparisons
+  
+  const sprintNumber = getSprintNumber(nowUTC);
   const { start, end } = getSprintDates(sprintNumber);
   
   const totalDays = SPRINT_DURATION_DAYS;
-  const msElapsed = now.getTime() - start.getTime();
+  const msElapsed = nowUTC.getTime() - start.getTime();
   const daysElapsed = Math.floor(msElapsed / (24 * 60 * 60 * 1000)) + 1; // +1 to count today
   const daysRemaining = totalDays - daysElapsed;
   

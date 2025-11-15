@@ -24,6 +24,7 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
   const [sprintLoading, setSprintLoading] = useState(false);
   const [sprintHistory, setSprintHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | 'current'>('current'); // Track selected sprint
   
   // NEW: Productivity charts toggle
   const [showProductivityCharts, setShowProductivityCharts] = useState<string | null>(null); // agentId whose charts are shown
@@ -39,7 +40,14 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
     if (expanded) {
       loadSprintHistory();
     }
-  }, [expanded, rankingMode, dateRange?.start, dateRange?.end]);
+  }, [expanded, rankingMode, dateRange?.start, dateRange?.end, selectedSprintNumber]);
+  
+  // Reset to current sprint when switching to sprint mode
+  useEffect(() => {
+    if (rankingMode === 'sprint' && selectedSprintNumber !== 'current') {
+      setSelectedSprintNumber('current');
+    }
+  }, [rankingMode]);
 
   const loadSprintData = async () => {
     setSprintLoading(true);
@@ -50,7 +58,12 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
       if (rankingMode === 'lifetime-points') {
         url += '?mode=lifetime';
       } else if (rankingMode === 'sprint') {
-        url += '?mode=current';
+        // Use selected sprint number, or 'current' if viewing current sprint
+        if (selectedSprintNumber === 'current') {
+          url += '?mode=current';
+        } else {
+          url += `?mode=sprint-${selectedSprintNumber}`;
+        }
       } else if (dateRange?.start && dateRange?.end) {
         // Use custom date range for hybrid and task-day modes
         url += `?mode=custom&startDate=${dateRange.start}&endDate=${dateRange.end}`;
@@ -142,6 +155,22 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
             >
               🔥 Current Sprint
             </button>
+            
+            {/* Sprint Selector (only show when in sprint mode) */}
+            {rankingMode === 'sprint' && sprintHistory.length > 0 && (
+              <select
+                value={selectedSprintNumber}
+                onChange={(e) => setSelectedSprintNumber(e.target.value === 'current' ? 'current' : parseInt(e.target.value))}
+                className="px-3 py-2 rounded-md text-sm font-medium bg-gray-800/50 text-white border border-white/20 hover:bg-gray-700/50 transition-colors"
+              >
+                <option value="current">Current Sprint</option>
+                {sprintHistory.map((sprint) => (
+                  <option key={sprint.sprintNumber} value={sprint.sprintNumber}>
+                    Sprint #{sprint.sprintNumber} - {sprint.period}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               onClick={() => setRankingMode('lifetime-points')}
               className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
