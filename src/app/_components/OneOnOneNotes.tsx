@@ -43,6 +43,144 @@ interface OneOnOneNotesProps {
   agents: Agent[];
 }
 
+// Component to display notes grouped by agent
+function NotesGroupedByAgent({ 
+  notes, 
+  onNoteClick,
+  expandedAgents,
+  setExpandedAgents
+}: { 
+  notes: OneOnOneNote[];
+  onNoteClick: (note: OneOnOneNote) => void;
+  expandedAgents: Set<string>;
+  setExpandedAgents: (setter: (prev: Set<string>) => Set<string>) => void;
+}) {
+  // Group notes by agent
+  const notesByAgent = notes.reduce((acc, note) => {
+    const key = note.agentId;
+    if (!acc[key]) {
+      acc[key] = {
+        agentId: note.agentId,
+        agentName: note.agentName,
+        agentEmail: note.agentEmail,
+        notes: []
+      };
+    }
+    acc[key].notes.push(note);
+    return acc;
+  }, {} as Record<string, { agentId: string; agentName: string; agentEmail: string; notes: OneOnOneNote[] }>);
+
+  const toggleAgent = (agentId: string) => {
+    setExpandedAgents(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(agentId)) {
+        newSet.delete(agentId);
+      } else {
+        newSet.add(agentId);
+      }
+      return newSet;
+    });
+  };
+
+  return (
+    <div className="space-y-3">
+      {Object.values(notesByAgent)
+        .sort((a, b) => {
+          // Sort by most recent note date
+          const aLatest = a.notes[0]?.meetingDate || '';
+          const bLatest = b.notes[0]?.meetingDate || '';
+          return bLatest.localeCompare(aLatest);
+        })
+        .map((agentGroup) => {
+          const isExpanded = expandedAgents.has(agentGroup.agentId);
+          const latestNote = agentGroup.notes[0];
+          
+          return (
+            <div
+              key={agentGroup.agentId}
+              className="bg-white/5 rounded-lg border border-white/10 overflow-hidden"
+            >
+              {/* Agent Header - Clickable */}
+              <div
+                className="p-4 cursor-pointer hover:bg-white/10 transition-all flex items-center justify-between"
+                onClick={() => toggleAgent(agentGroup.agentId)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="text-lg">{isExpanded ? '▼' : '▶'}</div>
+                  <div>
+                    <div className="font-semibold text-white">{agentGroup.agentName}</div>
+                    <div className="text-white/60 text-sm">{agentGroup.agentEmail}</div>
+                  </div>
+                </div>
+                <div className="text-white/60 text-sm">
+                  {agentGroup.notes.length} note{agentGroup.notes.length !== 1 ? 's' : ''} • 
+                  Most recent: {latestNote ? new Date(latestNote.meetingDate).toLocaleDateString() : 'N/A'}
+                </div>
+              </div>
+
+              {/* Expanded Notes List */}
+              {isExpanded && (
+                <div className="border-t border-white/10 p-4 space-y-3">
+                  {agentGroup.notes.map((note) => (
+                    <div
+                      key={note.id}
+                      className="p-4 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 cursor-pointer transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNoteClick(note);
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-white/80 font-medium">
+                          {new Date(note.meetingDate).toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </div>
+                        <div className="text-white/60 text-xs">
+                          {new Date(note.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      {note.discussionPoints && (
+                        <p className="text-white/70 text-sm line-clamp-2 mb-2">
+                          {note.discussionPoints}
+                        </p>
+                      )}
+                      <div className="flex gap-2 flex-wrap">
+                        {note.emailSent && (
+                          <span className="px-2 py-1 bg-green-500/20 text-green-300 text-xs rounded">
+                            ✓ Email Sent
+                          </span>
+                        )}
+                        {note.followUpRequired && (
+                          <span className="px-2 py-1 bg-amber-500/20 text-amber-300 text-xs rounded">
+                            ⚠ Follow-up Required
+                          </span>
+                        )}
+                        {note.actionItems && Array.isArray(note.actionItems) && note.actionItems.length > 0 && (
+                          <span className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded">
+                            {note.actionItems.length} Action Item{note.actionItems.length !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {note.nextMeetingDate && (
+                          <span className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded">
+                            Next: {new Date(note.nextMeetingDate).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+    </div>
+  );
+}
+
 export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
   const [notes, setNotes] = useState<OneOnOneNote[]>([]);
   const [loading, setLoading] = useState(false);
@@ -52,6 +190,7 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
   const [previousActionItems, setPreviousActionItems] = useState<ActionItem[]>([]);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [generatedEmail, setGeneratedEmail] = useState('');
+  const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
   
   // Form state
   const [formData, setFormData] = useState({
@@ -518,7 +657,7 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
         </Card>
       )}
 
-      {/* Notes History */}
+      {/* Notes History - Grouped by Agent */}
       <Card className="p-6">
         <h4 className="text-lg font-semibold text-white mb-4">📚 Recent One-on-One Notes</h4>
         {loading && !showForm ? (
@@ -528,47 +667,12 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
             No one-on-one notes yet. Click "New One-on-One" to get started!
           </div>
         ) : (
-          <div className="space-y-3">
-            {notes.map((note) => (
-              <div
-                key={note.id}
-                className="p-4 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 cursor-pointer transition-all"
-                onClick={() => viewNoteDetails(note)}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <span className="font-semibold text-white">{note.agentName}</span>
-                    <span className="text-white/60 text-sm ml-2">({note.agentEmail})</span>
-                  </div>
-                  <div className="text-white/60 text-sm">
-                    {new Date(note.meetingDate).toLocaleDateString()}
-                  </div>
-                </div>
-                {note.discussionPoints && (
-                  <p className="text-white/70 text-sm line-clamp-2">
-                    {note.discussionPoints}
-                  </p>
-                )}
-                <div className="flex gap-2 mt-2">
-                  {note.emailSent && (
-                    <span className="px-2 py-1 bg-green-500/20 text-green-300 text-xs rounded">
-                      ✓ Email Sent
-                    </span>
-                  )}
-                  {note.followUpRequired && (
-                    <span className="px-2 py-1 bg-amber-500/20 text-amber-300 text-xs rounded">
-                      ⚠ Follow-up Required
-                    </span>
-                  )}
-                  {note.actionItems && Array.isArray(note.actionItems) && note.actionItems.length > 0 && (
-                    <span className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded">
-                      {note.actionItems.length} Action Item(s)
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          <NotesGroupedByAgent 
+            notes={notes} 
+            onNoteClick={viewNoteDetails}
+            expandedAgents={expandedAgents}
+            setExpandedAgents={setExpandedAgents}
+          />
         )}
       </Card>
 

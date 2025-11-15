@@ -35,7 +35,11 @@ interface AgentOneOnOneNotesProps {
 export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesProps) {
   const [notes, setNotes] = useState<OneOnOneNote[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedNote, setSelectedNote] = useState<OneOnOneNote | null>(null);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  
+  // Get most recent note as default
+  const mostRecentNote = notes.length > 0 ? notes[0] : null;
+  const selectedNote = notes.find(n => n.id === selectedNoteId) || mostRecentNote;
 
   // Load notes for this agent
   const loadNotes = async () => {
@@ -68,14 +72,14 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
     loadNotes();
   }, [agentEmail]);
 
-  // View note details
-  const viewNoteDetails = (note: OneOnOneNote) => {
-    setSelectedNote(note);
+  // Handle note selection from dropdown
+  const handleNoteSelect = (noteId: string) => {
+    setSelectedNoteId(noteId === 'most-recent' ? null : noteId);
   };
 
-  // Close note details
+  // Close note details (will revert to most recent)
   const closeNoteDetails = () => {
-    setSelectedNote(null);
+    setSelectedNoteId(null);
   };
 
   if (loading) {
@@ -111,14 +115,39 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            {notes.map((note) => (
-              <div
-                key={note.id}
-                className="p-4 bg-white/5 dark:bg-white/5 light:bg-gray-50 hover:bg-white/10 dark:hover:bg-white/10 light:hover:bg-gray-100 rounded-lg border border-white/10 dark:border-white/10 light:border-gray-200 cursor-pointer transition-all"
-                onClick={() => viewNoteDetails(note)}
-              >
-                <div className="flex items-center justify-between mb-2">
+          <div className="space-y-4">
+            {/* Note Selector Dropdown */}
+            {notes.length > 1 && (
+              <div>
+                <label className="block text-white/80 dark:text-white/80 light:text-gray-700 text-sm font-medium mb-2">
+                  View Previous Notes:
+                </label>
+                <select
+                  value={selectedNoteId || 'most-recent'}
+                  onChange={(e) => handleNoteSelect(e.target.value)}
+                  className="w-full px-3 py-2 bg-white/5 dark:bg-white/5 light:bg-gray-50 border border-white/10 dark:border-white/10 light:border-gray-200 rounded-lg text-white dark:text-white light:text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="most-recent">
+                    Most Recent: {mostRecentNote ? new Date(mostRecentNote.meetingDate).toLocaleDateString() : 'N/A'}
+                  </option>
+                  {notes.slice(1).map((note) => (
+                    <option key={note.id} value={note.id}>
+                      {new Date(note.meetingDate).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Selected Note Display */}
+            {selectedNote && (
+              <div className="p-4 bg-white/5 dark:bg-white/5 light:bg-gray-50 rounded-lg border border-white/10 dark:border-white/10 light:border-gray-200">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="text-2xl">📝</div>
                     <div>
@@ -126,40 +155,52 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
                         One-on-One Meeting
                       </div>
                       <div className="text-white/60 dark:text-white/60 light:text-gray-600 text-sm">
-                        with {note.managerName || 'Manager'}
+                        with {selectedNote.managerName || 'Manager'}
                       </div>
                     </div>
                   </div>
                   <div className="text-white/60 dark:text-white/60 light:text-gray-600 text-sm">
-                    {new Date(note.meetingDate).toLocaleDateString()}
+                    {new Date(selectedNote.meetingDate).toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
                   </div>
                 </div>
 
-                {note.discussionPoints && (
-                  <p className="text-white/70 dark:text-white/70 light:text-gray-700 text-sm line-clamp-2 mb-2">
-                    {note.discussionPoints}
+                {selectedNote.discussionPoints && (
+                  <p className="text-white/70 dark:text-white/70 light:text-gray-700 text-sm line-clamp-3 mb-3">
+                    {selectedNote.discussionPoints}
                   </p>
                 )}
 
-                <div className="flex gap-2 flex-wrap">
-                  {note.actionItems && Array.isArray(note.actionItems) && note.actionItems.length > 0 && (
+                <div className="flex gap-2 flex-wrap mb-3">
+                  {selectedNote.actionItems && Array.isArray(selectedNote.actionItems) && selectedNote.actionItems.length > 0 && (
                     <span className="px-2 py-1 bg-blue-500/20 text-blue-300 dark:text-blue-300 light:text-blue-600 text-xs rounded">
-                      {note.actionItems.length} Action Item{note.actionItems.length !== 1 ? 's' : ''}
+                      {selectedNote.actionItems.length} Action Item{selectedNote.actionItems.length !== 1 ? 's' : ''}
                     </span>
                   )}
-                  {note.followUpRequired && (
+                  {selectedNote.followUpRequired && (
                     <span className="px-2 py-1 bg-amber-500/20 text-amber-300 dark:text-amber-300 light:text-amber-600 text-xs rounded">
                       ⚠ Follow-up Required
                     </span>
                   )}
-                  {note.nextMeetingDate && (
+                  {selectedNote.nextMeetingDate && (
                     <span className="px-2 py-1 bg-purple-500/20 text-purple-300 dark:text-purple-300 light:text-purple-600 text-xs rounded">
-                      Next: {new Date(note.nextMeetingDate).toLocaleDateString()}
+                      Next: {new Date(selectedNote.nextMeetingDate).toLocaleDateString()}
                     </span>
                   )}
                 </div>
+
+                <button
+                  onClick={() => setSelectedNoteId(selectedNote.id)}
+                  className="text-blue-400 dark:text-blue-400 light:text-blue-600 hover:text-blue-300 dark:hover:text-blue-300 light:hover:text-blue-700 text-sm font-medium"
+                >
+                  View Full Details →
+                </button>
               </div>
-            ))}
+            )}
           </div>
         )}
       </Card>
