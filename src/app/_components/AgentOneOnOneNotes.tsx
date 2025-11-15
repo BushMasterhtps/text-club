@@ -36,10 +36,12 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
   const [notes, setNotes] = useState<OneOnOneNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
   
   // Get most recent note as default
   const mostRecentNote = notes.length > 0 ? notes[0] : null;
-  const selectedNote = notes.find(n => n.id === selectedNoteId) || mostRecentNote;
+  const displayedNote = notes.find(n => n.id === selectedNoteId) || mostRecentNote;
+  const modalNote = showModal ? displayedNote : null;
 
   // Load notes for this agent
   const loadNotes = async () => {
@@ -59,7 +61,11 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
       const data = await response.json();
       
       if (data.success) {
-        setNotes(data.notes);
+        // Sort notes by meeting date (most recent first)
+        const sortedNotes = [...data.notes].sort((a, b) => 
+          new Date(b.meetingDate).getTime() - new Date(a.meetingDate).getTime()
+        );
+        setNotes(sortedNotes);
       }
     } catch (error) {
       console.error('Error loading one-on-one notes:', error);
@@ -75,11 +81,17 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
   // Handle note selection from dropdown
   const handleNoteSelect = (noteId: string) => {
     setSelectedNoteId(noteId === 'most-recent' ? null : noteId);
+    setShowModal(false); // Close modal when changing notes
+  };
+
+  // Open modal to view full details
+  const openModal = () => {
+    setShowModal(true);
   };
 
   // Close note details (will revert to most recent)
   const closeNoteDetails = () => {
-    setSelectedNoteId(null);
+    setShowModal(false);
   };
 
   if (loading) {
@@ -145,7 +157,7 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
             )}
 
             {/* Selected Note Display */}
-            {selectedNote && (
+            {displayedNote && (
               <div className="p-4 bg-white/5 dark:bg-white/5 light:bg-gray-50 rounded-lg border border-white/10 dark:border-white/10 light:border-gray-200">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
@@ -155,12 +167,12 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
                         One-on-One Meeting
                       </div>
                       <div className="text-white/60 dark:text-white/60 light:text-gray-600 text-sm">
-                        with {selectedNote.managerName || 'Manager'}
+                        with {displayedNote.managerName || 'Manager'}
                       </div>
                     </div>
                   </div>
                   <div className="text-white/60 dark:text-white/60 light:text-gray-600 text-sm">
-                    {new Date(selectedNote.meetingDate).toLocaleDateString('en-US', {
+                    {new Date(displayedNote.meetingDate).toLocaleDateString('en-US', {
                       weekday: 'short',
                       year: 'numeric',
                       month: 'short',
@@ -169,32 +181,32 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
                   </div>
                 </div>
 
-                {selectedNote.discussionPoints && (
+                {displayedNote.discussionPoints && (
                   <p className="text-white/70 dark:text-white/70 light:text-gray-700 text-sm line-clamp-3 mb-3">
-                    {selectedNote.discussionPoints}
+                    {displayedNote.discussionPoints}
                   </p>
                 )}
 
                 <div className="flex gap-2 flex-wrap mb-3">
-                  {selectedNote.actionItems && Array.isArray(selectedNote.actionItems) && selectedNote.actionItems.length > 0 && (
+                  {displayedNote.actionItems && Array.isArray(displayedNote.actionItems) && displayedNote.actionItems.length > 0 && (
                     <span className="px-2 py-1 bg-blue-500/20 text-blue-300 dark:text-blue-300 light:text-blue-600 text-xs rounded">
-                      {selectedNote.actionItems.length} Action Item{selectedNote.actionItems.length !== 1 ? 's' : ''}
+                      {displayedNote.actionItems.length} Action Item{displayedNote.actionItems.length !== 1 ? 's' : ''}
                     </span>
                   )}
-                  {selectedNote.followUpRequired && (
+                  {displayedNote.followUpRequired && (
                     <span className="px-2 py-1 bg-amber-500/20 text-amber-300 dark:text-amber-300 light:text-amber-600 text-xs rounded">
                       ⚠ Follow-up Required
                     </span>
                   )}
-                  {selectedNote.nextMeetingDate && (
+                  {displayedNote.nextMeetingDate && (
                     <span className="px-2 py-1 bg-purple-500/20 text-purple-300 dark:text-purple-300 light:text-purple-600 text-xs rounded">
-                      Next: {new Date(selectedNote.nextMeetingDate).toLocaleDateString()}
+                      Next: {new Date(displayedNote.nextMeetingDate).toLocaleDateString()}
                     </span>
                   )}
                 </div>
 
                 <button
-                  onClick={() => setSelectedNoteId(selectedNote.id)}
+                  onClick={openModal}
                   className="text-blue-400 dark:text-blue-400 light:text-blue-600 hover:text-blue-300 dark:hover:text-blue-300 light:hover:text-blue-700 text-sm font-medium"
                 >
                   View Full Details →
@@ -206,7 +218,7 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
       </Card>
 
       {/* Note Details Modal */}
-      {selectedNote && (
+      {modalNote && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 dark:bg-gray-900 light:bg-white rounded-lg border border-white/20 dark:border-white/20 light:border-gray-300 max-w-4xl w-full max-h-[80vh] overflow-hidden">
             <div className="p-6 border-b border-white/10 dark:border-white/10 light:border-gray-200">
@@ -216,8 +228,8 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
                     One-on-One Meeting Details
                   </h3>
                   <p className="text-white/60 dark:text-white/60 light:text-gray-600 text-sm">
-                    {new Date(selectedNote.meetingDate).toLocaleDateString()} • 
-                    Manager: {selectedNote.managerName || 'Unknown'}
+                    {new Date(modalNote.meetingDate).toLocaleDateString()} • 
+                    Manager: {modalNote.managerName || 'Unknown'}
                   </p>
                 </div>
                 <button
@@ -229,40 +241,40 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
               </div>
             </div>
             <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4">
-              {selectedNote.discussionPoints && (
+              {modalNote.discussionPoints && (
                 <div className="p-4 bg-white/5 dark:bg-white/5 light:bg-gray-50 rounded-lg border border-white/10 dark:border-white/10 light:border-gray-200">
                   <h4 className="font-semibold text-white dark:text-white light:text-gray-800 mb-2 flex items-center gap-2">
                     <span>💬</span> Discussion Points:
                   </h4>
-                  <p className="text-white/80 dark:text-white/80 light:text-gray-700 whitespace-pre-wrap">{selectedNote.discussionPoints}</p>
+                  <p className="text-white/80 dark:text-white/80 light:text-gray-700 whitespace-pre-wrap">{modalNote.discussionPoints}</p>
                 </div>
               )}
               
-              {selectedNote.strengths && (
+              {modalNote.strengths && (
                 <div className="p-4 bg-green-500/10 dark:bg-green-500/10 light:bg-green-50 rounded-lg border border-green-500/20 dark:border-green-500/20 light:border-green-200">
                   <h4 className="font-semibold text-green-400 dark:text-green-400 light:text-green-700 mb-2 flex items-center gap-2">
                     <span>💪</span> Strengths & Wins:
                   </h4>
-                  <p className="text-white/80 dark:text-white/80 light:text-gray-700 whitespace-pre-wrap">{selectedNote.strengths}</p>
+                  <p className="text-white/80 dark:text-white/80 light:text-gray-700 whitespace-pre-wrap">{modalNote.strengths}</p>
                 </div>
               )}
               
-              {selectedNote.areasForImprovement && (
+              {modalNote.areasForImprovement && (
                 <div className="p-4 bg-amber-500/10 dark:bg-amber-500/10 light:bg-amber-50 rounded-lg border border-amber-500/20 dark:border-amber-500/20 light:border-amber-200">
                   <h4 className="font-semibold text-amber-400 dark:text-amber-400 light:text-amber-700 mb-2 flex items-center gap-2">
                     <span>🎯</span> Areas for Growth:
                   </h4>
-                  <p className="text-white/80 dark:text-white/80 light:text-gray-700 whitespace-pre-wrap">{selectedNote.areasForImprovement}</p>
+                  <p className="text-white/80 dark:text-white/80 light:text-gray-700 whitespace-pre-wrap">{modalNote.areasForImprovement}</p>
                 </div>
               )}
               
-              {selectedNote.actionItems && Array.isArray(selectedNote.actionItems) && selectedNote.actionItems.length > 0 && (
+              {modalNote.actionItems && Array.isArray(modalNote.actionItems) && modalNote.actionItems.length > 0 && (
                 <div className="p-4 bg-blue-500/10 dark:bg-blue-500/10 light:bg-blue-50 rounded-lg border border-blue-500/20 dark:border-blue-500/20 light:border-blue-200">
                   <h4 className="font-semibold text-blue-400 dark:text-blue-400 light:text-blue-700 mb-3 flex items-center gap-2">
                     <span>📋</span> Action Items & Goals:
                   </h4>
                   <div className="space-y-3">
-                    {selectedNote.actionItems.map((item: ActionItem, index: number) => (
+                    {modalNote.actionItems.map((item: ActionItem, index: number) => (
                       <div key={item.id} className="flex items-start gap-3 p-3 bg-white/5 dark:bg-white/5 light:bg-white rounded border border-white/10 dark:border-white/10 light:border-gray-200">
                         <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/20 dark:bg-blue-500/20 light:bg-blue-100 flex items-center justify-center text-blue-400 dark:text-blue-400 light:text-blue-600 text-xs font-bold">
                           {index + 1}
@@ -297,19 +309,19 @@ export default function AgentOneOnOneNotes({ agentEmail }: AgentOneOnOneNotesPro
                 </div>
               )}
               
-              {selectedNote.nextMeetingDate && (
+              {modalNote.nextMeetingDate && (
                 <div className="p-4 bg-purple-500/10 dark:bg-purple-500/10 light:bg-purple-50 rounded-lg border border-purple-500/20 dark:border-purple-500/20 light:border-purple-200">
                   <h4 className="font-semibold text-purple-400 dark:text-purple-400 light:text-purple-700 mb-2 flex items-center gap-2">
                     <span>📅</span> Next Meeting:
                   </h4>
                   <p className="text-white/80 dark:text-white/80 light:text-gray-700">
-                    {new Date(selectedNote.nextMeetingDate).toLocaleDateString()}
+                    {new Date(modalNote.nextMeetingDate).toLocaleDateString()}
                   </p>
                 </div>
               )}
 
               <div className="text-white/50 dark:text-white/50 light:text-gray-500 text-xs text-center pt-4 border-t border-white/10 dark:border-white/10 light:border-gray-200">
-                Created {new Date(selectedNote.createdAt).toLocaleString()}
+                Created {new Date(modalNote.createdAt).toLocaleString()}
               </div>
             </div>
           </div>
