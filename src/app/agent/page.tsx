@@ -214,6 +214,9 @@ export default function AgentPage() {
   const [loadingScorecard, setLoadingScorecard] = useState(false);
   const [showScorecard, setShowScorecard] = useState(true); // Expanded by default
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [selectedSprint, setSelectedSprint] = useState<'current' | number>('current');
+  const [sprintHistory, setSprintHistory] = useState<any[]>([]);
+  const [loadingSprintHistory, setLoadingSprintHistory] = useState(false);
 
   // One-on-One Notes
   const [showOneOnOneNotes, setShowOneOnOneNotes] = useState(false);
@@ -654,6 +657,55 @@ export default function AgentPage() {
     }
   };
 
+  const loadSprintHistory = async () => {
+    setLoadingSprintHistory(true);
+    try {
+      const res = await fetch('/api/manager/analytics/sprint-history?limit=20');
+      const data = await res.json();
+      if (data.success) {
+        setSprintHistory(data.history || []);
+      }
+    } catch (error) {
+      console.error('Error loading sprint history:', error);
+    } finally {
+      setLoadingSprintHistory(false);
+    }
+  };
+
+  const loadHistoricalSprintData = async (sprintNumber: number) => {
+    if (!email) return;
+    
+    setLoadingScorecard(true);
+    try {
+      // Fetch sprint rankings for the specific sprint
+      const res = await fetch(`/api/manager/analytics/sprint-rankings?mode=sprint-${sprintNumber}`);
+      const data = await res.json();
+      
+      if (data.success && data.rankings) {
+        // Find the agent's data in the rankings
+        const myData = [...data.rankings.competitive, ...data.rankings.unqualified, ...data.rankings.seniors]
+          .find((agent: any) => agent.email === email);
+        
+        if (myData) {
+          // Update scorecard data with historical sprint data
+          setScorecardData((prev: any) => ({
+            ...prev,
+            sprint: {
+              my: myData,
+              teamAverages: data.teamAverages,
+              totalCompetitors: data.rankings.competitive.length,
+              nextRankAgent: data.rankings.competitive.find((a: any) => a.rankByHybrid === (myData.rankByHybrid || 0) - 1)
+            }
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading historical sprint data:', error);
+    } finally {
+      setLoadingScorecard(false);
+    }
+  };
+
   const loadScorecard = async (emailToUse?: string) => {
     const currentEmail = emailToUse || email;
     if (!currentEmail) {
@@ -672,6 +724,8 @@ export default function AgentPage() {
       if (data.success) {
         console.log("✅ Scorecard loaded successfully:", data.agent?.name);
         setScorecardData(data);
+        // Load sprint history when scorecard loads
+        loadSprintHistory();
       } else {
         console.error('❌ Failed to load scorecard:', data.error);
       }
@@ -1483,36 +1537,116 @@ export default function AgentPage() {
                 </div>
               )}
 
+              {/* Sprint Selector */}
+              {scorecardData.currentSprint && sprintHistory.length > 0 && (
+                <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <label className="block text-xs text-white/70 mb-2">View Sprint:</label>
+                  <select
+                    value={selectedSprint}
+                    onChange={async (e) => {
+                      const value = e.target.value;
+                      const newSprint = value === 'current' ? 'current' : parseInt(value);
+                      setSelectedSprint(newSprint);
+                      
+                      // If selecting a historical sprint, load its data
+                      if (newSprint !== 'current' && typeof newSprint === 'number') {
+                        await loadHistoricalSprintData(newSprint);
+                      } else if (newSprint === 'current') {
+                        // Reload current sprint data
+                        await loadScorecard();
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-md text-sm font-medium bg-gray-800/50 text-white border border-white/20 hover:bg-gray-700/50 transition-colors"
+                  >
+                    <option value="current">Current Sprint #{scorecardData.currentSprint.number}</option>
+                    {sprintHistory
+                      .filter(s => !s.isCurrent)
+                      .map((sprint) => (
+                        <option key={sprint.sprintNumber} value={sprint.sprintNumber}>
+                          Sprint #{sprint.sprintNumber} - {sprint.period}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
               {/* Detailed Rankings */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Current Sprint Rankings */}
-                {scorecardData.sprint && scorecardData.sprint.my && scorecardData.sprint.my.qualified && !scorecardData.agent.isSenior && (
+                {/* Current Sprint Rankings - ALWAYS SHOW (even if unranked) */}
+                {scorecardData.sprint && scorecardData.sprint.my && !scorecardData.agent.isSenior && (
                   <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg p-4">
-                    <div className="text-sm font-semibold text-purple-300 mb-2">🏆 Current Sprint</div>
-                    <div className="flex items-end gap-2">
-                      <div className="text-3xl font-bold text-white">#{scorecardData.sprint.my.rankByHybrid}</div>
-                      <div className="text-sm text-white/60 mb-1">of {scorecardData.sprint.totalCompetitors}</div>
+                    <div className="text-sm font-semibold text-purple-300 mb-2">
+                      {selectedSprint === 'current' ? '🔥 Current Sprint' : `📜 Sprint #${selectedSprint}`}
                     </div>
-                    <div className="mt-2">
-                      <Badge tone={
-                        scorecardData.sprint.my.tier === 'Elite' ? 'success' :
-                        scorecardData.sprint.my.tier === 'High Performer' ? 'default' :
-                        scorecardData.sprint.my.tier === 'Solid Contributor' ? 'muted' :
-                        scorecardData.sprint.my.tier === 'Developing' ? 'warning' :
-                        'danger'
-                      }>
-                        {scorecardData.sprint.my.tier}
-                      </Badge>
-                      <div className="text-xs text-white/50 mt-1">Top {100 - scorecardData.sprint.my.percentile}%</div>
-                    </div>
-                    {scorecardData.sprint.nextRankAgent && (
-                      <div className="mt-3 pt-3 border-t border-white/10">
-                        <div className="text-xs text-white/60">Gap to #{scorecardData.sprint.my.rankByHybrid - 1}:</div>
-                        <div className="text-sm font-semibold text-orange-300">
-                          +{(scorecardData.sprint.nextRankAgent.hybridScore - scorecardData.sprint.my.hybridScore).toFixed(1)} pts needed
+                    
+                    {scorecardData.sprint.my.qualified ? (
+                      // QUALIFIED - Show Rankings
+                      <>
+                        <div className="flex items-end gap-2">
+                          <div className="text-3xl font-bold text-white">#{scorecardData.sprint.my.rankByHybrid}</div>
+                          <div className="text-sm text-white/60 mb-1">of {scorecardData.sprint.totalCompetitors}</div>
                         </div>
-                      </div>
+                        <div className="mt-2">
+                          <Badge tone={
+                            scorecardData.sprint.my.tier === 'Elite' ? 'success' :
+                            scorecardData.sprint.my.tier === 'High Performer' ? 'default' :
+                            scorecardData.sprint.my.tier === 'Solid Contributor' ? 'muted' :
+                            scorecardData.sprint.my.tier === 'Developing' ? 'warning' :
+                            'danger'
+                          }>
+                            {scorecardData.sprint.my.tier}
+                          </Badge>
+                          <div className="text-xs text-white/50 mt-1">Top {100 - scorecardData.sprint.my.percentile}%</div>
+                        </div>
+                        {scorecardData.sprint.nextRankAgent && (
+                          <div className="mt-3 pt-3 border-t border-white/10">
+                            <div className="text-xs text-white/60">Gap to #{scorecardData.sprint.my.rankByHybrid - 1}:</div>
+                            <div className="text-sm font-semibold text-orange-300">
+                              +{(scorecardData.sprint.nextRankAgent.hybridScore - scorecardData.sprint.my.hybridScore).toFixed(1)} pts needed
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      // UNRANKED - Show Progress
+                      <>
+                        <div className="text-lg font-bold text-yellow-300 mb-2">Not Yet Ranked</div>
+                        <div className="space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-white/70">Days Worked:</span>
+                            <span className="text-white font-semibold">{scorecardData.sprint.my.daysWorked}/3</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-white/70">Total Points:</span>
+                            <span className="text-yellow-300 font-semibold">{scorecardData.sprint.my.weightedPoints?.toFixed(1) || '0.0'} pts</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-white/70">Points Today:</span>
+                            <span className="text-blue-300 font-semibold">{scorecardData.today?.my?.weightedPoints?.toFixed(1) || '0.0'} pts</span>
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-white/10">
+                            <div className="text-yellow-300 font-semibold">
+                              Need {Math.max(0, 3 - scorecardData.sprint.my.daysWorked)} more day{Math.max(0, 3 - scorecardData.sprint.my.daysWorked) !== 1 ? 's' : ''} to qualify
+                            </div>
+                            <div className="text-white/50 mt-1">
+                              Keep working! Your progress is being tracked.
+                            </div>
+                          </div>
+                        </div>
+                      </>
                     )}
+                    
+                    {/* Always show sprint stats */}
+                    <div className="mt-3 pt-3 border-t border-white/10 space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/60">Total Completed:</span>
+                        <span className="text-white">{scorecardData.sprint.my.totalCompleted || 0} tasks</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/60">Points/Day:</span>
+                        <span className="text-yellow-300">{scorecardData.sprint.my.weightedDailyAvg?.toFixed(1) || '0.0'} pts/day</span>
+                      </div>
+                    </div>
                   </div>
                 )}
 

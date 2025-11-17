@@ -8,6 +8,8 @@ import {
 } from '@/lib/sprint-utils';
 import { getTaskWeight } from '@/lib/task-weights';
 
+const SPRINT_DURATION_DAYS = 14;
+
 /**
  * Sprint Rankings API
  * Calculates and returns rankings for all 4 systems:

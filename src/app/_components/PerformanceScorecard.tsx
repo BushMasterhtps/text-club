@@ -42,12 +42,16 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
     }
   }, [expanded, rankingMode, dateRange?.start, dateRange?.end, selectedSprintNumber]);
   
-  // Reset to current sprint when switching to sprint mode
+  // Reset to current sprint only when first switching TO sprint mode from another mode
+  // But preserve user's manual selection if they've already selected a sprint
+  const [hasManuallySelectedSprint, setHasManuallySelectedSprint] = useState(false);
+  
   useEffect(() => {
-    if (rankingMode === 'sprint' && selectedSprintNumber !== 'current') {
+    if (rankingMode === 'sprint' && !hasManuallySelectedSprint) {
+      // Only set to 'current' if user hasn't manually selected a sprint yet
       setSelectedSprintNumber('current');
     }
-  }, [rankingMode]);
+  }, [rankingMode, hasManuallySelectedSprint]);
 
   const loadSprintData = async () => {
     setSprintLoading(true);
@@ -160,7 +164,11 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
             {rankingMode === 'sprint' && sprintHistory.length > 0 && (
               <select
                 value={selectedSprintNumber}
-                onChange={(e) => setSelectedSprintNumber(e.target.value === 'current' ? 'current' : parseInt(e.target.value))}
+                onChange={(e) => {
+                  const newValue = e.target.value === 'current' ? 'current' : parseInt(e.target.value);
+                  setSelectedSprintNumber(newValue);
+                  setHasManuallySelectedSprint(true); // Mark that user has manually selected
+                }}
                 className="px-3 py-2 rounded-md text-sm font-medium bg-gray-800/50 text-white border border-white/20 hover:bg-gray-700/50 transition-colors"
               >
                 <option value="current">Current Sprint</option>
