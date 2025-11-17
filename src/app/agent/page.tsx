@@ -682,11 +682,22 @@ export default function AgentPage() {
       const data = await res.json();
       
       if (data.success && data.rankings) {
-        // Find the agent's data in the rankings
-        const myData = [...data.rankings.competitive, ...data.rankings.unqualified, ...data.rankings.seniors]
-          .find((agent: any) => agent.email === email);
+        // Find the agent's data in the rankings - check competitive first (ranked agents)
+        // then unqualified, then seniors
+        let myData = data.rankings.competitive.find((agent: any) => agent.email === email);
+        if (!myData) {
+          myData = data.rankings.unqualified.find((agent: any) => agent.email === email);
+        }
+        if (!myData) {
+          myData = data.rankings.seniors.find((agent: any) => agent.email === email);
+        }
         
         if (myData) {
+          // Find next rank agent (one rank above)
+          const nextRankAgent = myData.rankByHybrid && myData.rankByHybrid > 1
+            ? data.rankings.competitive.find((a: any) => a.rankByHybrid === myData.rankByHybrid - 1)
+            : null;
+          
           // Update scorecard data with historical sprint data
           setScorecardData((prev: any) => ({
             ...prev,
@@ -694,9 +705,11 @@ export default function AgentPage() {
               my: myData,
               teamAverages: data.teamAverages,
               totalCompetitors: data.rankings.competitive.length,
-              nextRankAgent: data.rankings.competitive.find((a: any) => a.rankByHybrid === (myData.rankByHybrid || 0) - 1)
+              nextRankAgent: nextRankAgent
             }
           }));
+        } else {
+          console.warn(`Agent ${email} not found in sprint ${sprintNumber} rankings`);
         }
       }
     } catch (error) {
@@ -1608,7 +1621,7 @@ export default function AgentPage() {
                         )}
                       </>
                     ) : (
-                      // UNRANKED - Show Progress
+                      // UNRANKED - Show Progress (only for current sprint)
                       <>
                         <div className="text-lg font-bold text-yellow-300 mb-2">Not Yet Ranked</div>
                         <div className="space-y-2 text-xs">
@@ -1620,10 +1633,13 @@ export default function AgentPage() {
                             <span className="text-white/70">Total Points:</span>
                             <span className="text-yellow-300 font-semibold">{scorecardData.sprint.my.weightedPoints?.toFixed(1) || '0.0'} pts</span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-white/70">Points Today:</span>
-                            <span className="text-blue-300 font-semibold">{scorecardData.today?.my?.weightedPoints?.toFixed(1) || '0.0'} pts</span>
-                          </div>
+                          {/* Only show "Points Today" for current sprint */}
+                          {selectedSprint === 'current' && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-white/70">Points Today:</span>
+                              <span className="text-blue-300 font-semibold">{scorecardData.today?.my?.weightedPoints?.toFixed(1) || '0.0'} pts</span>
+                            </div>
+                          )}
                           <div className="mt-3 pt-2 border-t border-white/10">
                             <div className="text-yellow-300 font-semibold">
                               Need {Math.max(0, 3 - scorecardData.sprint.my.daysWorked)} more day{Math.max(0, 3 - scorecardData.sprint.my.daysWorked) !== 1 ? 's' : ''} to qualify
