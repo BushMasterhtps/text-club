@@ -208,10 +208,6 @@ export default function AgentPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const sortOrderRef = useRef<'asc' | 'desc'>(sortOrder);
   useEffect(() => { sortOrderRef.current = sortOrder; }, [sortOrder]);
-  
-  // Track selected sprint in a ref so polling can access current value
-  const selectedSprintRef = useRef<'current' | number>('current');
-  useEffect(() => { selectedSprintRef.current = selectedSprint; }, [selectedSprint]);
 
   // Personal Scorecard state
   const [scorecardData, setScorecardData] = useState<any>(null);
@@ -219,6 +215,10 @@ export default function AgentPage() {
   const [showScorecard, setShowScorecard] = useState(true); // Expanded by default
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [selectedSprint, setSelectedSprint] = useState<'current' | number>('current');
+  
+  // Track selected sprint in a ref so polling can access current value
+  const selectedSprintRef = useRef<'current' | number>(selectedSprint);
+  useEffect(() => { selectedSprintRef.current = selectedSprint; }, [selectedSprint]);
   const [sprintHistory, setSprintHistory] = useState<any[]>([]);
   const [loadingSprintHistory, setLoadingSprintHistory] = useState(false);
 
