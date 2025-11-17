@@ -208,6 +208,10 @@ export default function AgentPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const sortOrderRef = useRef<'asc' | 'desc'>(sortOrder);
   useEffect(() => { sortOrderRef.current = sortOrder; }, [sortOrder]);
+  
+  // Track selected sprint in a ref so polling can access current value
+  const selectedSprintRef = useRef<'current' | number>('current');
+  useEffect(() => { selectedSprintRef.current = selectedSprint; }, [selectedSprint]);
 
   // Personal Scorecard state
   const [scorecardData, setScorecardData] = useState<any>(null);
@@ -493,10 +497,18 @@ export default function AgentPage() {
         }
         
         // Refresh scorecard every 30 seconds (15 polling cycles)
+        // BUT only if viewing current sprint (historical sprints don't need auto-refresh)
         scorecardPollCount++;
         if (scorecardPollCount >= 15) {
-          console.log("📊 Auto-refreshing scorecard...");
-          loadScorecard(currentEmail).catch(err => console.error("Failed to refresh scorecard:", err));
+          // Only auto-refresh if viewing current sprint
+          // Historical sprints don't change, so no need to refresh them
+          // Use ref to get current value (closure-safe)
+          if (selectedSprintRef.current === 'current') {
+            console.log("📊 Auto-refreshing scorecard (current sprint)...");
+            loadScorecard(currentEmail).catch(err => console.error("Failed to refresh scorecard:", err));
+          } else {
+            console.log("📊 Skipping scorecard auto-refresh (viewing historical sprint)");
+          }
           scorecardPollCount = 0; // Reset counter
         }
       } else {
