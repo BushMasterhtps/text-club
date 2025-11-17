@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
         duration: task.durationSec,
         queueTimes,
         queueHistory,
-        orderAmount: task.holdsOrderAmount || 0,
+        orderAmount: typeof task.holdsOrderAmount === 'number' ? task.holdsOrderAmount : (task.holdsOrderAmount ? parseFloat(String(task.holdsOrderAmount)) : 0) || 0,
         notes: task.holdsNotes || '',
         createdAt: task.createdAt
       };

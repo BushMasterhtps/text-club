@@ -171,14 +171,16 @@ export default function ResolvedOrdersReportWithComments() {
         acc[disp] = { count: 0, totalAmount: 0 };
       }
       acc[disp].count++;
-      acc[disp].totalAmount += task.orderAmount || 0;
+      // Ensure orderAmount is parsed as a number
+      const amount = typeof task.orderAmount === 'number' ? task.orderAmount : parseFloat(String(task.orderAmount || 0)) || 0;
+      acc[disp].totalAmount += amount;
       return acc;
     }, {} as Record<string, { count: number; totalAmount: number }>)
   ).map(([disposition, data]) => ({
     disposition,
     count: data.count,
     totalAmount: data.totalAmount,
-    avgAmount: data.totalAmount / data.count
+    avgAmount: data.count > 0 ? data.totalAmount / data.count : 0
   })).sort((a, b) => b.totalAmount - a.totalAmount);
 
   // Calculate agent stats
@@ -196,15 +198,17 @@ export default function ResolvedOrdersReportWithComments() {
         };
       }
       acc[agentKey].totalResolved++;
-      acc[agentKey].totalAmountSaved += task.orderAmount || 0;
-      acc[agentKey].totalDuration += task.duration || 0;
+      // Ensure orderAmount is parsed as a number
+      const amount = typeof task.orderAmount === 'number' ? task.orderAmount : parseFloat(String(task.orderAmount || 0)) || 0;
+      acc[agentKey].totalAmountSaved += amount;
+      acc[agentKey].totalDuration += typeof task.duration === 'number' ? task.duration : parseFloat(String(task.duration || 0)) || 0;
       
       const disp = task.disposition || 'Unknown';
       if (!acc[agentKey].dispositions[disp]) {
         acc[agentKey].dispositions[disp] = { count: 0, amount: 0 };
       }
       acc[agentKey].dispositions[disp].count++;
-      acc[agentKey].dispositions[disp].amount += task.orderAmount || 0;
+      acc[agentKey].dispositions[disp].amount += amount;
       
       return acc;
     }, {} as Record<string, any>)
@@ -213,7 +217,7 @@ export default function ResolvedOrdersReportWithComments() {
     agentEmail: data.agentEmail,
     totalResolved: data.totalResolved,
     totalAmountSaved: data.totalAmountSaved,
-    avgResolutionTime: data.totalDuration / data.totalResolved,
+    avgResolutionTime: data.totalResolved > 0 ? data.totalDuration / data.totalResolved : 0,
     dispositions: data.dispositions
   })).sort((a, b) => b.totalResolved - a.totalResolved);
 
@@ -319,13 +323,19 @@ export default function ResolvedOrdersReportWithComments() {
         <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
           <h3 className="text-sm font-medium text-green-200 mb-1">Total Amount Saved</h3>
           <p className="text-2xl font-bold text-white">
-            ${tasks.reduce((sum, t) => sum + (t.orderAmount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ${tasks.reduce((sum, t) => {
+              const amount = typeof t.orderAmount === 'number' ? t.orderAmount : parseFloat(String(t.orderAmount || 0)) || 0;
+              return sum + amount;
+            }, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>
         <div className="p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
           <h3 className="text-sm font-medium text-purple-200 mb-1">Avg Resolution Time</h3>
           <p className="text-2xl font-bold text-white">
-            {formatDuration(Math.round(tasks.reduce((sum, t) => sum + (t.duration || 0), 0) / (tasks.length || 1)))}
+            {formatDuration(Math.round(tasks.reduce((sum, t) => {
+              const duration = typeof t.duration === 'number' ? t.duration : parseFloat(String(t.duration || 0)) || 0;
+              return sum + duration;
+            }, 0) / (tasks.length || 1)))}
           </p>
         </div>
       </div>
@@ -443,7 +453,7 @@ export default function ResolvedOrdersReportWithComments() {
                       {task.agentName}
                     </td>
                     <td className="px-3 py-2 text-green-300 font-semibold text-xs">
-                      ${(task.orderAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ${(typeof task.orderAmount === 'number' ? task.orderAmount : parseFloat(String(task.orderAmount || 0)) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-3 py-2 text-white/80 text-xs">
                       {task.completedDate ? new Date(task.completedDate).toLocaleString() : 'N/A'}
@@ -525,7 +535,7 @@ export default function ResolvedOrdersReportWithComments() {
               <div>
                 <span className="text-white/60">Order Amount:</span>
                 <span className="text-green-300 ml-2 font-semibold">
-                  ${(selectedTask.orderAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${(typeof selectedTask.orderAmount === 'number' ? selectedTask.orderAmount : parseFloat(String(selectedTask.orderAmount || 0)) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
               <div>
