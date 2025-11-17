@@ -60,6 +60,7 @@ export async function GET(req: Request) {
         holdsDaysInSystem: true,
         holdsStatus: true,
         holdsNotes: true,
+        holdsQueueHistory: true,
         // WOD/IVCS specific fields
         wodIvcsSource: true,
         documentNumber: true,

@@ -142,6 +142,7 @@ interface Task {
   holdsStatus?: string;
   holdsDaysInSystem?: number;
   holdsOrderAmount?: number;
+  holdsQueueHistory?: any;
   holdsNotes?: string;
 }
 
@@ -2013,17 +2014,37 @@ export default function AgentPage() {
 
             {/* Task Cards */}
             <div className="space-y-4">
-              {filteredTasks.map((task, index) => (
-                <div id={`task-${task.id}`} key={task.id}>
-                  <TaskCard
-                    task={task}
-                    startedTasks={startedTasks}
-                    onStart={() => startTask(task.id)}
-                    onComplete={completeTask}
-                    onAssistance={requestAssistance}
-                  />
-                </div>
-              ))}
+              {filteredTasks.map((task, index) => {
+                // Check if this is an escalated call task
+                const isEscalatedCall = task.taskType === "HOLDS" && task.holdsStatus === "Escalated Call 4+ Day";
+                
+                return (
+                  <div 
+                    id={`task-${task.id}`} 
+                    key={task.id}
+                    className={isEscalatedCall ? "border-2 border-red-500/50 rounded-lg bg-red-900/10" : ""}
+                  >
+                    {/* Queue Status Badge for Holds tasks (visible before starting) */}
+                    {task.taskType === "HOLDS" && !startedTasks.has(task.id) && task.holdsStatus && (
+                      <div className={`mb-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                        isEscalatedCall 
+                          ? "bg-red-500/20 text-red-300 border border-red-500/50" 
+                          : "bg-orange-500/20 text-orange-300 border border-orange-500/30"
+                      }`}>
+                        <span className="mr-2">🏷️</span>
+                        <span>Queue: {task.holdsStatus}</span>
+                      </div>
+                    )}
+                    <TaskCard
+                      task={task}
+                      startedTasks={startedTasks}
+                      onStart={() => startTask(task.id)}
+                      onComplete={completeTask}
+                      onAssistance={requestAssistance}
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -2551,10 +2572,15 @@ function TaskCard({
 
   const taskTypeInfo = getTaskTypeInfo(task.taskType || "TEXT_CLUB");
 
+  // Check if this is an escalated call task for highlighting
+  const isEscalatedCall = task.taskType === "HOLDS" && task.holdsStatus === "Escalated Call 4+ Day";
+
   return (
     <div className={`bg-white/5 rounded-lg p-4 space-y-3 border ${
       task.managerResponse 
         ? "border-green-500/50 bg-green-900/10" 
+        : isEscalatedCall
+        ? "border-red-500/50 bg-red-900/10"
         : "border-white/10"
     }`}>
       {/* Task Type & Brand */}
@@ -2817,17 +2843,52 @@ function TaskCard({
         </>
       ) : task.taskType === "HOLDS" ? (
         <>
-          {/* Holds specific data - Hidden until started */}
+          {/* Holds specific data - Queue status visible, other info hidden until started */}
           <div className="space-y-2 text-sm">
+            {/* Queue Status - ALWAYS VISIBLE (even before starting) */}
             <div className="flex items-center gap-2">
               <span className="text-yellow-300">🏷️</span>
               <span className="text-white/60">Queue:</span>
-              {isTaskStarted ? (
-                <span className="font-mono">{task.holdsStatus || "N/A"}</span>
-              ) : (
-                <span className="text-white/40 italic">[hidden until Start]</span>
+              <span className={`font-mono font-semibold ${
+                task.holdsStatus === "Escalated Call 4+ Day" 
+                  ? "text-red-400" 
+                  : "text-orange-300"
+              }`}>
+                {task.holdsStatus || "N/A"}
+              </span>
+              {task.holdsStatus === "Escalated Call 4+ Day" && (
+                <span className="px-2 py-0.5 bg-red-500/20 text-red-300 rounded text-xs font-medium border border-red-500/50">
+                  ⚠️ Escalated
+                </span>
               )}
             </div>
+            
+            {/* Queue History Timeline - ALWAYS VISIBLE (even before starting) */}
+            {task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-white/10">
+                <div className="text-xs text-white/60 mb-1">Queue Journey:</div>
+                <div className="space-y-1">
+                  {task.holdsQueueHistory.slice(0, 3).map((entry: any, idx: number) => (
+                    <div key={idx} className="text-xs text-white/70 flex items-center gap-2">
+                      <span className="text-white/40">•</span>
+                      <span>{entry.queue || 'Unknown'}</span>
+                      {entry.enteredAt && (
+                        <span className="text-white/40">
+                          ({new Date(entry.enteredAt).toLocaleDateString()})
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                  {task.holdsQueueHistory.length > 3 && (
+                    <div className="text-xs text-white/40 italic">
+                      +{task.holdsQueueHistory.length - 3} more queue movements
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {/* Other Holds fields - Hidden until started */}
             <div className="flex items-center gap-2">
               <span className="text-yellow-300">📅</span>
               <span className="text-white/60">Order Date:</span>
@@ -3244,16 +3305,22 @@ function TaskCard({
               </div>
             )}
 
-            {/* Disposition Notes field for Holds tasks (required for specific dispositions) */}
+            {/* Disposition Notes field for Holds tasks (required for ALL Resolved dispositions) */}
             {task.taskType === "HOLDS" && disposition && (() => {
-              // Dispositions that REQUIRE a note
+              // ALL "Resolved" dispositions require a note
               const requiresNote = [
                 "Unable to Resolve",
                 "Resolved - other",
-                "Resolved - Other"
+                "Resolved - Other",
+                "Resolved - fixed format / fixed address",
+                "Resolved - Customer Clarified",
+                "Resolved - FRT Released"
               ];
               
-              return requiresNote.includes(disposition);
+              // Check if disposition starts with "Resolved"
+              const isResolved = disposition.toLowerCase().startsWith("resolved");
+              
+              return requiresNote.includes(disposition) || isResolved;
             })() && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/80">
@@ -3262,13 +3329,15 @@ function TaskCard({
                 <textarea
                   value={dispositionNote}
                   onChange={(e) => setDispositionNote(e.target.value)}
-                  placeholder="Explain why this order cannot be resolved or provide additional details..."
+                  placeholder={disposition.toLowerCase().startsWith("resolved") 
+                    ? "Provide details about how this order was resolved (required for all Resolved dispositions)..."
+                    : "Explain why this order cannot be resolved or provide additional details..."}
                   rows={3}
                   className="w-full rounded-md bg-white/10 text-white placeholder-white/40 px-3 py-2 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   required
                 />
                 <p className="text-xs text-white/50">
-                  This note will be visible in the Queue Journey and to the next assigned agent
+                  This note will be visible in the Queue Journey, Resolved Orders Report, and to assigned agents
                 </p>
               </div>
             )}
@@ -3299,9 +3368,10 @@ function TaskCard({
                   const orderAmountValid = orderAmount && parseFloat(orderAmount) > 0;
                   if (!orderAmountValid) return true;
                   
-                  // Note required for specific dispositions
-                  const noteRequiredDispositions = ["Unable to Resolve", "Resolved - other", "Resolved - Other"];
-                  if (noteRequiredDispositions.includes(disposition) && !dispositionNote.trim()) return true;
+                  // Note required for ALL "Resolved" dispositions
+                  const isResolved = disposition.toLowerCase().startsWith("resolved");
+                  const noteRequiredDispositions = ["Unable to Resolve", "Resolved - other", "Resolved - Other", "Resolved - fixed format / fixed address", "Resolved - Customer Clarified", "Resolved - FRT Released"];
+                  if ((noteRequiredDispositions.includes(disposition) || isResolved) && !dispositionNote.trim()) return true;
                 }
                 
                 // Yotpo: SF Case # required except for 4 dispositions

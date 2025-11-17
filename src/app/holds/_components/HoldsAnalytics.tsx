@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 import ResolvedOrdersReport from "./ResolvedOrdersReport";
+import ResolvedOrdersReportWithComments from "./ResolvedOrdersReportWithComments";
 
 interface AnalyticsData {
   overview: {
@@ -28,7 +29,7 @@ export default function HoldsAnalytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [agingReport, setAgingReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'aging' | 'resolved'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'aging' | 'resolved' | 'resolved-comments'>('overview');
 
   useEffect(() => {
     fetchAnalytics();
@@ -103,6 +104,16 @@ export default function HoldsAnalytics() {
             }`}
           >
             📊 Resolved Orders
+          </button>
+          <button
+            onClick={() => setActiveTab('resolved-comments')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              activeTab === 'resolved-comments'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white/10 text-white/70 hover:bg-white/20'
+            }`}
+          >
+            📊 Resolved Orders with Comments
           </button>
         </div>
 
@@ -253,6 +264,13 @@ export default function HoldsAnalytics() {
       {activeTab === 'resolved' && (
         <div className="mt-6">
           <ResolvedOrdersReport />
+        </div>
+      )}
+      
+      {/* Resolved Orders Report with Comments (separate card below) */}
+      {activeTab === 'resolved-comments' && (
+        <div className="mt-6">
+          <ResolvedOrdersReportWithComments />
         </div>
       )}
     </div>

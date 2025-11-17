@@ -78,6 +78,8 @@ export async function GET(request: NextRequest) {
         holdsPriority: true,
         holdsStatus: true,
         holdsQueueHistory: true,
+        holdsOrderAmount: true,
+        holdsNotes: true,
         disposition: true,
         startTime: true,
         endTime: true,
@@ -127,15 +129,22 @@ export async function GET(request: NextRequest) {
         duration: task.durationSec,
         queueTimes,
         queueHistory,
+        orderAmount: task.holdsOrderAmount || 0,
+        notes: task.holdsNotes || '',
         createdAt: task.createdAt
       };
     });
     
     // If CSV export requested
     if (exportCsv) {
+      const includeComments = searchParams.get('includeComments') === 'true';
+      const headers = ['Order Number', 'Customer Email', 'Order Date', 'Priority', 'Final Queue', 'Disposition', 'Agent Name', 'Order Amount', 'Completed Date', 'Duration (sec)', 'Agent Research Time', 'Customer Contact Time', 'Escalated Call Time'];
+      if (includeComments) {
+        headers.push('Comments');
+      }
+      
       const csvRows = [
-        // Header row
-        ['Order Number', 'Customer Email', 'Order Date', 'Priority', 'Final Queue', 'Disposition', 'Agent Name', 'Completed Date', 'Duration (sec)', 'Agent Research Time', 'Customer Contact Time', 'Escalated Call Time'].join(',')
+        headers.join(',')
       ];
       
       tasksWithMetrics.forEach(task => {
@@ -147,14 +156,19 @@ export async function GET(request: NextRequest) {
           task.finalQueue || '',
           task.disposition || '',
           task.agentName || '',
+          task.orderAmount || '0',
           task.completedDate ? new Date(task.completedDate).toLocaleString() : '',
           task.duration || '',
           task.queueTimes['Agent Research'] || '0',
           task.queueTimes['Customer Contact'] || '0',
           task.queueTimes['Escalated Call 4+ Day'] || '0'
-        ].map(field => `"${String(field).replace(/"/g, '""')}"`);
+        ];
         
-        csvRows.push(row.join(','));
+        if (includeComments) {
+          row.push(task.notes || '');
+        }
+        
+        csvRows.push(row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(','));
       });
       
       const csvContent = csvRows.join('\n');
