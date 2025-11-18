@@ -39,14 +39,39 @@ export async function POST(request: NextRequest) {
     
     if (file) {
       // CSV Import
-      const csvText = await file.text();
-      const records = parse(csvText, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true
-      });
-      
-      // Prepare data for batch insert
+      try {
+        const csvText = await file.text();
+        
+        if (!csvText || csvText.trim().length === 0) {
+          return NextResponse.json(
+            { success: false, error: 'CSV file is empty' },
+            { status: 400 }
+          );
+        }
+        
+        let records;
+        try {
+          records = parse(csvText, {
+            columns: true,
+            skip_empty_lines: true,
+            trim: true
+          });
+        } catch (parseError: any) {
+          console.error('CSV parse error:', parseError);
+          return NextResponse.json(
+            { success: false, error: `Failed to parse CSV: ${parseError.message || 'Invalid CSV format'}` },
+            { status: 400 }
+          );
+        }
+        
+        if (!records || records.length === 0) {
+          return NextResponse.json(
+            { success: false, error: 'CSV file contains no valid records' },
+            { status: 400 }
+          );
+        }
+        
+        // Prepare data for batch insert
       const dataToInsert: Array<{
         macroName: string;
         macroDetails: string;
@@ -105,15 +130,21 @@ export async function POST(request: NextRequest) {
             }
           }
         }
+        
+        return NextResponse.json({
+          success: true,
+          imported,
+          errors,
+          total: records.length,
+          errorDetails: errorDetails.length > 0 ? errorDetails.slice(0, 10) : undefined
+        });
+      } catch (fileError: any) {
+        console.error('File processing error:', fileError);
+        return NextResponse.json(
+          { success: false, error: `Failed to process file: ${fileError.message || 'Unknown error'}` },
+          { status: 500 }
+        );
       }
-      
-      return NextResponse.json({
-        success: true,
-        imported,
-        errors,
-        total: records.length,
-        errorDetails: errorDetails.length > 0 ? errorDetails.slice(0, 10) : undefined
-      });
     } else {
       // Manual create
       const body = await request.json();
@@ -135,10 +166,10 @@ export async function POST(request: NextRequest) {
       
       return NextResponse.json({ success: true, data: newMacro });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating/importing text club macro:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to create/import text club macro' },
+      { success: false, error: error.message || 'Failed to create/import text club macro' },
       { status: 500 }
     );
   }
