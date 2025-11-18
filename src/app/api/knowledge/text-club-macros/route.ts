@@ -72,16 +72,16 @@ export async function POST(request: NextRequest) {
         }
         
         // Prepare data for batch insert
-      const dataToInsert: Array<{
-        macroName: string;
-        macroDetails: string;
-      }> = [];
-      
-      let errors = 0;
-      const errorDetails: string[] = [];
-      
-      // Process records and prepare data
-      for (let i = 0; i < records.length; i++) {
+        const dataToInsert: Array<{
+          macroName: string;
+          macroDetails: string;
+        }> = [];
+        
+        let errors = 0;
+        const errorDetails: string[] = [];
+        
+        // Process records and prepare data
+        for (let i = 0; i < records.length; i++) {
         const record = records[i];
         try {
           // Flexible column matching

@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         }
         
         // Prepare data for batch insert
-      const dataToInsert: Array<{
+        const dataToInsert: Array<{
         brand: string;
         product: string;
         question: string;
