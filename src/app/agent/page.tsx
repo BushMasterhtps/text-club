@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import ThemeToggle from '@/app/_components/ThemeToggle';
 import AgentOneOnOneNotes from '@/app/_components/AgentOneOnOneNotes';
+import KnowledgeSection from '@/app/_components/KnowledgeSection';
 
 /* ========== Tiny UI atoms (iOS-ish) ========== */
 function Card({
@@ -2380,6 +2381,9 @@ export default function AgentPage() {
           </div>
         </div>
       )}
+
+      {/* Knowledge Section - Floating Button */}
+      <KnowledgeSection />
     </main>
   );
 }

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 import TrelloImportSection from "@/app/_components/TrelloImportSection";
+import KnowledgeBaseSection from "@/app/_components/KnowledgeBaseSection";
 // Badge component
 function Badge({
   children,
@@ -796,7 +797,7 @@ function AgentSpecializationsSection() {
 
 // Main Unified Settings Component
 export default function UnifiedSettings() {
-  const [activeTab, setActiveTab] = useState<"users" | "blocked" | "spam" | "import" | "trello" | "specializations">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "blocked" | "spam" | "import" | "trello" | "specializations" | "knowledge">("users");
 
   return (
     <div className="space-y-6">
@@ -862,6 +863,16 @@ export default function UnifiedSettings() {
         >
           🎯 Agent Specializations
         </button>
+        <button
+          onClick={() => setActiveTab("knowledge")}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "knowledge"
+              ? "bg-white/10 text-white"
+              : "text-white/60 hover:text-white/80"
+          }`}
+        >
+          📚 Knowledge Base
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -871,6 +882,7 @@ export default function UnifiedSettings() {
       {activeTab === "import" && <BulkImportSection />}
       {activeTab === "trello" && <TrelloImportSectionWrapper />}
       {activeTab === "specializations" && <AgentSpecializationsSection />}
+      {activeTab === "knowledge" && <KnowledgeBaseSection />}
     </div>
   );
 }

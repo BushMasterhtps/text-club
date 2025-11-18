@@ -67,25 +67,25 @@ enum WodIvcsSource {
 /////////////////////////////////////
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  password  String
-  role      Role     @default(AGENT)
-  isActive  Boolean  @default(true)
-  mustChangePassword Boolean @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  name               String?
+  password           String
+  role               Role     @default(AGENT)
+  isActive           Boolean  @default(true)
+  mustChangePassword Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  isLive   Boolean   @default(false)
-  agentTypes String[] @default([]) // Agent specializations: ["TEXT_CLUB", "HOLDS", "WOD_IVCS", "EMAIL_REQUESTS", "YOTPO"]
-  lastSeen DateTime?
-  maxOpen  Int       @default(200)
+  isLive     Boolean   @default(false)
+  agentTypes String[]  @default([]) // Agent specializations: ["TEXT_CLUB", "HOLDS", "WOD_IVCS", "EMAIL_REQUESTS", "YOTPO"]
+  lastSeen   DateTime?
+  maxOpen    Int       @default(200)
 
-  tasks      Task[]              @relation("UserTasks")
-  sentBackTasks Task[]           @relation("SentBackTasks")
-  assistance AssistanceRequest[]
-  histories  TaskHistory[]       @relation("UserHistory")
+  tasks             Task[]              @relation("UserTasks")
+  sentBackTasks     Task[]              @relation("SentBackTasks")
+  assistance        AssistanceRequest[]
+  histories         TaskHistory[]       @relation("UserHistory")
   trelloCompletions TrelloCompletion[]
 
   @@index([isLive, lastSeen])
@@ -123,27 +123,27 @@ model Task {
   sentBackBy          String?
   sentBackAt          DateTime?
   sentBackDisposition String?
-  sentBackByUser      User?   @relation("SentBackTasks", fields: [sentBackBy], references: [id])
+  sentBackByUser      User?     @relation("SentBackTasks", fields: [sentBackBy], references: [id])
 
   // 🆕 WOD/IVCS specific fields
-  wodIvcsSource        WodIvcsSource?
-  documentNumber       String?
-  warehouseEdgeStatus  String?
-  amount               Decimal?
-  webOrderDifference   Decimal?
-  webOrder             String?
-  webOrderSubtotal     Decimal?
-  webOrderTotal        Decimal?
-  nsVsWebDiscrepancy   Decimal?
-  customerName         String?
-  netSuiteTotal        Decimal?
-  webTotal             Decimal?
-  webVsNsDifference    Decimal?
-  shippingCountry      String?
-  shippingState        String?
-  
+  wodIvcsSource       WodIvcsSource?
+  documentNumber      String?
+  warehouseEdgeStatus String?
+  amount              Decimal?
+  webOrderDifference  Decimal?
+  webOrder            String?
+  webOrderSubtotal    Decimal?
+  webOrderTotal       Decimal?
+  nsVsWebDiscrepancy  Decimal?
+  customerName        String?
+  netSuiteTotal       Decimal?
+  webTotal            Decimal?
+  webVsNsDifference   Decimal?
+  shippingCountry     String?
+  shippingState       String?
+
   // 🆕 Order date fields for age calculation
-  purchaseDate         DateTime?  // For SO vs Web Order Difference
+  purchaseDate DateTime? // For SO vs Web Order Difference
 
   // 🆕 Email Requests specific fields
   completionTime       DateTime?
@@ -152,43 +152,43 @@ model Task {
   details              String?
 
   // 🆕 Standalone Refunds specific fields
-  timestamp            DateTime?
-  customerNameNumber   String?
-  salesOrderId         String?
-  orderDate            DateTime?
-  amountToBeRefunded   Decimal?
-  verifiedRefund       String?
-  paymentMethod        String?
-  refundReason         String?
-  productSku           String?
-  quantity             Int?
-  refundAmount         Decimal?
+  timestamp          DateTime?
+  customerNameNumber String?
+  salesOrderId       String?
+  orderDate          DateTime?
+  amountToBeRefunded Decimal?
+  verifiedRefund     String?
+  paymentMethod      String?
+  refundReason       String?
+  productSku         String?
+  quantity           Int?
+  refundAmount       Decimal?
 
   // 🆕 Holds specific fields (all nullable - no existing data affected)
-  holdsOrderDate       DateTime?  // From CSV column B - for aging calculation
-  holdsOrderNumber     String?    // From CSV column C - unique identifier
-  holdsCustomerEmail   String?    // From CSV column D - customer email
-  holdsPriority        Int?       // From CSV column E (1-2: White Glove, 4-5: Normal)
-  holdsDaysInSystem    Int?       // From CSV column F (calculated field)
-  holdsStatus          String?    // Assembly line queue: "Agent Research", "Customer Contact", "Escalated Call 4+ Day", "Duplicates"
-  holdsPhoneNumber     String?    // Customer phone number (for Escalated Call)
-  holdsOrderAmount     Decimal?   // Order dollar amount (required to complete task) - for financial impact tracking
-  holdsNotes           String?    @db.Text // Agent notes and tracking information
-  holdsQueueHistory    Json?      // Timeline of queue movements: [{ queue: string, enteredAt: DateTime, exitedAt?: DateTime, movedBy?: string }]
+  holdsOrderDate     DateTime? // From CSV column B - for aging calculation
+  holdsOrderNumber   String? // From CSV column C - unique identifier
+  holdsCustomerEmail String? // From CSV column D - customer email
+  holdsPriority      Int? // From CSV column E (1-2: White Glove, 4-5: Normal)
+  holdsDaysInSystem  Int? // From CSV column F (calculated field)
+  holdsStatus        String? // Assembly line queue: "Agent Research", "Customer Contact", "Escalated Call 4+ Day", "Duplicates"
+  holdsPhoneNumber   String? // Customer phone number (for Escalated Call)
+  holdsOrderAmount   Decimal? // Order dollar amount (required to complete task) - for financial impact tracking
+  holdsNotes         String?   @db.Text // Agent notes and tracking information
+  holdsQueueHistory  Json? // Timeline of queue movements: [{ queue: string, enteredAt: DateTime, exitedAt?: DateTime, movedBy?: string }]
 
   // 🆕 Yotpo specific fields (all nullable - no existing data affected)
-  yotpoDateSubmitted   DateTime?  // From CSV column A - when customer submitted review/request
-  yotpoPrOrYotpo       String?    // From CSV column B - "PRs" or "Yotpo" (display only)
-  yotpoCustomerName    String?    // From CSV column C
-  yotpoEmail           String?    // From CSV column D
-  yotpoOrderDate       DateTime?  // From CSV column E - original order date
-  yotpoProduct         String?    // From CSV column F - product name
-  yotpoIssueTopic      String?    // From CSV column G - issue category (for analytics breakdown)
-  yotpoReviewDate      DateTime?  // From CSV column H - when review was posted
-  yotpoReview          String?    // From CSV column I - full review text (can be long)
-  yotpoSfOrderLink     String?    // From CSV column J - Salesforce order URL/reference
-  yotpoImportSource    String?    // Import source: "Form" or "CSV" - for tracking/display only
-  yotpoSubmittedBy     String?    // Name of person who submitted via form (if applicable)
+  yotpoDateSubmitted DateTime? // From CSV column A - when customer submitted review/request
+  yotpoPrOrYotpo     String? // From CSV column B - "PRs" or "Yotpo" (display only)
+  yotpoCustomerName  String? // From CSV column C
+  yotpoEmail         String? // From CSV column D
+  yotpoOrderDate     DateTime? // From CSV column E - original order date
+  yotpoProduct       String? // From CSV column F - product name
+  yotpoIssueTopic    String? // From CSV column G - issue category (for analytics breakdown)
+  yotpoReviewDate    DateTime? // From CSV column H - when review was posted
+  yotpoReview        String? // From CSV column I - full review text (can be long)
+  yotpoSfOrderLink   String? // From CSV column J - Salesforce order URL/reference
+  yotpoImportSource  String? // Import source: "Form" or "CSV" - for tracking/display only
+  yotpoSubmittedBy   String? // Name of person who submitted via form (if applicable)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -286,15 +286,15 @@ model RawMessage {
 /////////////////////////////////////
 
 model SpamRule {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   pattern     String
-  patternNorm String    @default("")
-  mode        SpamMode  @default(CONTAINS)  // NEW
-  brand       String?                     // NEW: scope rule to a brand (optional)
-  enabled     Boolean   @default(true)
-  note        String?                      // NEW: optional admin note
-  updatedAt   DateTime  @updatedAt
-  createdAt   DateTime  @default(now())
+  patternNorm String   @default("")
+  mode        SpamMode @default(CONTAINS) // NEW
+  brand       String? // NEW: scope rule to a brand (optional)
+  enabled     Boolean  @default(true)
+  note        String? // NEW: optional admin note
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
 
   labels SpamLabel[]
 
@@ -341,13 +341,13 @@ model SpamArchive {
 
 model SpamLearning {
   id        String   @id @default(cuid())
-  text      String   // The message text (truncated)
-  brand     String?  // Brand context
-  isSpam    Boolean  // Manual decision (true = spam, false = not spam)
-  score     Int      // Calculated spam score (0-100)
+  text      String // The message text (truncated)
+  brand     String? // Brand context
+  isSpam    Boolean // Manual decision (true = spam, false = not spam)
+  score     Int // Calculated spam score (0-100)
   reasons   String[] // Array of reasons for the score
-  patterns  String   // JSON string of detected patterns
-  source    String?  // Source of the decision: 'manual', 'automatic', 'learning', 'agent'
+  patterns  String // JSON string of detected patterns
+  source    String? // Source of the decision: 'manual', 'automatic', 'learning', 'agent'
   createdAt DateTime @default(now())
 
   @@index([brand])
@@ -361,15 +361,15 @@ model SpamLearning {
 /////////////////////////////////////
 
 model BlockedPhone {
-  id          String   @id @default(cuid())
-  phone       String   @unique
-  brand       String?
-  reason      String?
-  blockedAt   DateTime @default(now())
-  blockedBy   String?  // User ID who blocked it
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  brand     String?
+  reason    String?
+  blockedAt DateTime @default(now())
+  blockedBy String? // User ID who blocked it
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("BlockedPhone")
 }
@@ -379,28 +379,28 @@ model BlockedPhone {
 /////////////////////////////////////
 
 model ImportSession {
-  id          String   @id @default(cuid())
-  source      String   // NetSuite report source
-  fileName    String   // Original CSV filename
-  importedAt  DateTime @default(now())
-  importedBy  String?  // User ID who imported
-  taskType    String?  // Task type for filtering (WOD_IVCS, EMAIL_REQUESTS, etc.)
-  
+  id         String   @id @default(cuid())
+  source     String // NetSuite report source
+  fileName   String // Original CSV filename
+  importedAt DateTime @default(now())
+  importedBy String? // User ID who imported
+  taskType   String? // Task type for filtering (WOD_IVCS, EMAIL_REQUESTS, etc.)
+
   // Import results
-  totalRows   Int      @default(0)
-  imported    Int      @default(0)
-  duplicates  Int      @default(0)
-  filtered    Int      @default(0)
-  errors      Int      @default(0)
-  
+  totalRows  Int @default(0)
+  imported   Int @default(0)
+  duplicates Int @default(0)
+  filtered   Int @default(0)
+  errors     Int @default(0)
+
   // Store duplicate details as JSON
   duplicateDetails Json? // Array of duplicate information
-  
+
   // Relations
   duplicateRecords ImportDuplicate[]
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([source])
   @@index([importedAt])
@@ -408,27 +408,27 @@ model ImportSession {
 }
 
 model ImportDuplicate {
-  id              String   @id @default(cuid())
+  id              String        @id @default(cuid())
   importSessionId String
   importSession   ImportSession @relation(fields: [importSessionId], references: [id], onDelete: Cascade)
-  
+
   // Duplicate task info
-  rowNumber       Int      // Row number in CSV
-  documentNumber  String?  // Document number
-  webOrder        String?  // Web order number
-  customerName    String   // Customer name
-  source          String   // Task source
-  
+  rowNumber      Int // Row number in CSV
+  documentNumber String? // Document number
+  webOrder       String? // Web order number
+  customerName   String // Customer name
+  source         String // Task source
+
   // Original task info
-  originalTaskId  String?  // ID of the original task
-  originalCreatedAt DateTime? // When original was created
+  originalTaskId      String? // ID of the original task
+  originalCreatedAt   DateTime? // When original was created
   originalCompletedAt DateTime? // When original was completed
   originalDisposition String? // Original disposition
   originalCompletedBy String? // Who completed the original
-  
-  ageInDays       Int      // Age difference in days
-  
-  createdAt       DateTime @default(now())
+
+  ageInDays Int // Age difference in days
+
+  createdAt DateTime @default(now())
 
   @@index([importSessionId])
   @@index([originalTaskId])
@@ -436,64 +436,64 @@ model ImportDuplicate {
 }
 
 model TrelloCompletion {
-  id          String   @id @default(cuid())
-  date        DateTime // Date these completions were for (stored as start of day UTC)
-  agentId     String
-  agent       User     @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  cardsCount  Int      // Number of Trello cards completed
-  
-  createdAt   DateTime @default(now())
-  createdBy   String?  // Manager email who entered it
-  
+  id         String   @id @default(cuid())
+  date       DateTime // Date these completions were for (stored as start of day UTC)
+  agentId    String
+  agent      User     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  cardsCount Int // Number of Trello cards completed
+
+  createdAt DateTime @default(now())
+  createdBy String? // Manager email who entered it
+
   @@unique([date, agentId]) // One entry per agent per day
   @@index([date])
   @@index([agentId])
 }
 
 model SprintRanking {
-  id              String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Sprint identification
-  sprintNumber    Int      // Sequential sprint number (1, 2, 3...)
-  sprintStart     DateTime // Start date of sprint (00:00:00)
-  sprintEnd       DateTime // End date of sprint (23:59:59)
-  
+  sprintNumber Int // Sequential sprint number (1, 2, 3...)
+  sprintStart  DateTime // Start date of sprint (00:00:00)
+  sprintEnd    DateTime // End date of sprint (23:59:59)
+
   // Agent info
-  agentId         String
-  agentName       String
-  agentEmail      String
-  
+  agentId    String
+  agentName  String
+  agentEmail String
+
   // Sprint performance
-  tasksCompleted  Int      // Portal tasks completed in sprint
-  trelloCompleted Int      // Trello cards completed in sprint
-  totalCompleted  Int      // Total = portal + trello
-  daysWorked      Int      // Days agent worked in sprint
-  
+  tasksCompleted  Int // Portal tasks completed in sprint
+  trelloCompleted Int // Trello cards completed in sprint
+  totalCompleted  Int // Total = portal + trello
+  daysWorked      Int // Days agent worked in sprint
+
   // Points and rankings (all 4 systems)
-  weightedPoints  Float    // Total weighted points in sprint
-  ptsPerDay       Float    // weightedPoints ÷ daysWorked
-  tasksPerDay     Float    // totalCompleted ÷ daysWorked
-  hybridScore     Float    // 30% tasksPerDay + 70% ptsPerDay (normalized)
-  
+  weightedPoints Float // Total weighted points in sprint
+  ptsPerDay      Float // weightedPoints ÷ daysWorked
+  tasksPerDay    Float // totalCompleted ÷ daysWorked
+  hybridScore    Float // 30% tasksPerDay + 70% ptsPerDay (normalized)
+
   // Rankings (1 = best)
-  rankByPtsPerDay      Int  // Rank by weighted points/day
-  rankByTasksPerDay    Int  // Rank by tasks/day
-  rankByHybrid         Int  // Rank by hybrid score
-  
+  rankByPtsPerDay   Int // Rank by weighted points/day
+  rankByTasksPerDay Int // Rank by tasks/day
+  rankByHybrid      Int // Rank by hybrid score
+
   // Metadata
-  tier            String   // Elite, High Performer, etc.
-  percentile      Int      // 0-100 (92 = top 92%)
-  isChampion      Boolean  @default(false) // True if #1 in sprint
-  isTopThree      Boolean  @default(false) // True if top 3
-  isSenior        Boolean  @default(false) // True if senior agent (non-competitive)
-  
+  tier       String // Elite, High Performer, etc.
+  percentile Int // 0-100 (92 = top 92%)
+  isChampion Boolean @default(false) // True if #1 in sprint
+  isTopThree Boolean @default(false) // True if top 3
+  isSenior   Boolean @default(false) // True if senior agent (non-competitive)
+
   // Stats
-  avgHandleTimeSec Int     // Average handle time
-  totalTimeSec     Int     // Total time spent
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  avgHandleTimeSec Int // Average handle time
+  totalTimeSec     Int // Total time spent
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([sprintNumber, agentId]) // One record per agent per sprint
   @@index([sprintNumber])
   @@index([agentId])
@@ -507,40 +507,85 @@ model SprintRanking {
 /////////////////////////////////////
 
 model OneOnOneNote {
-  id          String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Meeting info
   meetingDate DateTime // Date of the one-on-one meeting
-  agentId     String   // Agent this meeting is about
-  agentName   String   // Agent name (denormalized for easy display)
-  agentEmail  String   // Agent email (denormalized)
-  managerId   String   // Manager who conducted the meeting
-  managerName String?  // Manager name
-  
+  agentId     String // Agent this meeting is about
+  agentName   String // Agent name (denormalized for easy display)
+  agentEmail  String // Agent email (denormalized)
+  managerId   String // Manager who conducted the meeting
+  managerName String? // Manager name
+
   // Meeting content
-  discussionPoints String?  @db.Text // Key discussion points from the meeting
-  strengths        String?  @db.Text // Strengths highlighted during meeting
+  discussionPoints    String? @db.Text // Key discussion points from the meeting
+  strengths           String? @db.Text // Strengths highlighted during meeting
   areasForImprovement String? @db.Text // Areas identified for improvement
-  notes            String?  @db.Text // General manager notes (private)
-  
+  notes               String? @db.Text // General manager notes (private)
+
   // Action items tracking
-  actionItems      Json?    // Array of action items/goals set during meeting
+  actionItems Json? // Array of action items/goals set during meeting
   // Format: [{ id: string, description: string, status: 'pending'|'in_progress'|'completed', dueDate?: string }]
-  
+
   // Follow-up info
   nextMeetingDate  DateTime? // Scheduled date for next one-on-one
   followUpRequired Boolean   @default(false) // Flag if follow-up needed
-  
+
   // Email template
-  emailTemplate    String?   @db.Text // Generated email template for recap
-  emailSent        Boolean   @default(false) // Whether recap email was sent
-  emailSentAt      DateTime? // When email was sent
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  emailTemplate String?   @db.Text // Generated email template for recap
+  emailSent     Boolean   @default(false) // Whether recap email was sent
+  emailSentAt   DateTime? // When email was sent
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([agentId])
   @@index([meetingDate])
   @@index([managerId])
   @@index([agentId, meetingDate])
+}
+
+/////////////////////////////////////
+// Knowledge Base Resources
+/////////////////////////////////////
+
+model EmailMacro {
+  id          String   @id @default(cuid())
+  macroName   String
+  macro       String   @db.Text
+  caseType    String? // Case Type/Subcategory
+  brand       String?
+  description String?  @db.Text // What the macro is for
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String? // User ID who created/imported
+
+  @@index([macroName])
+  @@index([brand])
+  @@index([caseType])
+}
+
+model TextClubMacro {
+  id           String   @id @default(cuid())
+  macroName    String
+  macroDetails String   @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    String? // User ID who created/imported
+
+  @@index([macroName])
+}
+
+model ProductInquiryQA {
+  id        String   @id @default(cuid())
+  brand     String
+  product   String
+  question  String   @db.Text
+  answer    String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // User ID who created/imported
+
+  @@index([brand])
+  @@index([product])
 }
