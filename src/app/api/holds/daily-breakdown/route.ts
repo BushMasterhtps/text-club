@@ -24,15 +24,16 @@ function getEndOfDayPST(date: Date, useCurrentTimeIfToday: boolean = true): Date
   
   if (isToday && useCurrentTimeIfToday) {
     // For today, check if it's before 5 PM PST
-    // Get current time and convert to PST
-    const pstOffset = -8 * 60 * 60 * 1000; // PST offset in milliseconds
-    const nowPST = new Date(now.getTime() + pstOffset);
-    const hourPST = nowPST.getUTCHours();
-    const minutePST = nowPST.getUTCMinutes();
+    // PST is UTC-8, so to get PST time from UTC, we subtract 8 hours
+    // But JavaScript Date is in UTC, so we need to check UTC time
+    // 5 PM PST = 1 AM UTC next day
+    // So if current UTC time is before 1 AM UTC on the next day, it's before 5 PM PST today
     
-    // If it's before 5 PM PST (17:00), use current time
-    if (hourPST < 17 || (hourPST === 17 && minutePST === 0)) {
-      return now; // Use current time for "end of day" if it's before 5 PM
+    const tomorrow5PM = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 1, 0, 0, 0));
+    
+    // If current time is before 5 PM PST today, use current time
+    if (now < tomorrow5PM) {
+      return now; // Use current time for "end of day" if it's before 5 PM PST
     }
   }
   
