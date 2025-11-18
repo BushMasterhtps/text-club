@@ -76,6 +76,28 @@ function H2({ children }: { children: React.ReactNode }) {
   );
 }
 
+function PrimaryButton({ 
+  children, 
+  disabled = false, 
+  className = "",
+  onClick 
+}: { 
+  children: React.ReactNode; 
+  disabled?: boolean;
+  className?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:opacity-50 text-white rounded-lg font-medium transition-colors ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 /* ========================================================================== */
 /*  CSV Import Section                                                        */
 /* ========================================================================== */
@@ -769,140 +791,197 @@ function PendingTasksSection() {
 /* ========================================================================== */
 function AssignTasksSection() {
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [perAgentCap, setPerAgentCap] = useState(50);
   const [loading, setLoading] = useState(false);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [agentWorkloads, setAgentWorkloads] = useState<Record<string, any>>({});
 
   const loadAgents = async () => {
+    setAgentsLoading(true);
     try {
-      const res = await fetch('/api/manager/agents');
+      const res = await fetch('/api/manager/agents', { cache: 'no-store' });
       const data = await res.json();
       if (data.success && data.agents) {
         setAgents(data.agents);
+        setSelectedAgents((prev) => prev.filter((e) => data.agents.some((a: any) => a.email === e)));
       }
     } catch (error) {
       console.error('Error loading agents:', error);
+    } finally {
+      setAgentsLoading(false);
+    }
+  };
+
+  const loadAgentWorkloads = async () => {
+    try {
+      const response = await fetch('/api/manager/agents/workload');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          const workloadMap: Record<string, any> = {};
+          data.data.forEach((item: any) => {
+            workloadMap[item.agentId] = item.workload;
+          });
+          setAgentWorkloads(workloadMap);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading agent workloads:', error);
     }
   };
 
   useEffect(() => {
     loadAgents();
+    loadAgentWorkloads();
   }, []);
 
-  const handleSelectAll = () => {
-    setSelectedAgents(new Set(agents.map(a => a.id)));
+  const toggleSelectAll = () => {
+    const allSelected = selectedAgents.length === agents.length;
+    setSelectedAgents(allSelected ? [] : agents.map(agent => agent.email));
   };
 
-  const handleSelectNone = () => {
-    setSelectedAgents(new Set());
-  };
-
-  const toggleAgent = (agentId: string) => {
-    const newSet = new Set(selectedAgents);
-    if (newSet.has(agentId)) {
-      newSet.delete(agentId);
-    } else {
-      newSet.add(agentId);
-    }
-    setSelectedAgents(newSet);
+  const toggleAgent = (agentEmail: string) => {
+    setSelectedAgents((prev) =>
+      prev.includes(agentEmail) ? prev.filter((e) => e !== agentEmail) : [...prev, agentEmail]
+    );
   };
 
   return (
     <Card className="p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <H2>✅ Assign Yotpo Tasks</H2>
-        <SmallButton onClick={loadAgents} className="bg-blue-600 hover:bg-blue-700">Refresh</SmallButton>
+        <H2>🎯 Assign Yotpo Tasks</H2>
+        <SmallButton onClick={() => { loadAgents(); loadAgentWorkloads(); }} disabled={agentsLoading || loading} className="bg-blue-600 hover:bg-blue-700">
+          {loading || agentsLoading ? "Loading..." : "🔄 Refresh"}
+        </SmallButton>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-white/70">
-          Choose agents ({selectedAgents.size}/{agents.length} selected)
-        </div>
-        <div className="flex gap-2">
-          <SmallButton onClick={handleSelectAll} className="bg-blue-600 hover:bg-blue-700">
-            Select all
-          </SmallButton>
-          <SmallButton onClick={handleSelectNone} className="bg-white/10 hover:bg-white/20">
-            Select none
-          </SmallButton>
-        </div>
-      </div>
-
-      {/* Agent Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
-        {agents.map(agent => (
-          <div
-            key={agent.id}
-            onClick={() => toggleAgent(agent.id)}
-            className={`p-3 rounded-lg border cursor-pointer transition-all ${
-              selectedAgents.has(agent.id)
-                ? 'bg-blue-500/20 border-blue-500/50'
-                : 'bg-white/5 border-white/10 hover:bg-white/10'
-            }`}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <input
-                type="checkbox"
-                checked={selectedAgents.has(agent.id)}
-                readOnly
-                className="cursor-pointer"
-              />
-              <div className="flex-1">
-                <div className="font-medium text-white text-sm">{agent.name}</div>
-                <div className="text-xs text-white/50">{agent.email}</div>
-              </div>
-            </div>
-            <div className="text-xs text-white/60 flex flex-wrap gap-2">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                Text Club: {agent.textClubCount || 0}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-red-400"></span>
-                WOD/IVCS: {agent.wodIvcsCount || 0}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-400"></span>
-                Email: {agent.emailRequestCount || 0}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
-                Yotpo: {agent.yotpoCount || 0}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-orange-400"></span>
-                Holds: {agent.holdsCount || 0}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-purple-400"></span>
-                Refunds: {agent.refundCount || 0}
-              </span>
-              <span className="font-semibold">Total: {agent.openCount || 0}</span>
-            </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-white/60">
+            Choose agents ({selectedAgents.length}/{agents.length} selected)
           </div>
-        ))}
+          <SmallButton onClick={toggleSelectAll} disabled={agentsLoading || agents.length === 0}>
+            {selectedAgents.length === agents.length ? "Clear all" : "Select all"}
+          </SmallButton>
+        </div>
+
+        <div className="max-h-56 overflow-auto rounded-lg bg-white/[0.03] ring-1 ring-white/10 p-2 space-y-1">
+          {agentsLoading && <div className="text-sm text-white/60 p-1">Loading agents…</div>}
+          {!agentsLoading && agents.length === 0 && (
+            <div className="text-sm text-white/60 p-1">No agents found.</div>
+          )}
+          {agents.map((a) => {
+            const workload = agentWorkloads[a.id] || { wodIvcs: 0, textClub: 0, emailRequests: 0, standaloneRefunds: 0, yotpo: 0, holds: 0, total: 0 };
+            return (
+              <label key={a.email} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-sky-500"
+                  checked={selectedAgents.includes(a.email)}
+                  onChange={() =>
+                    setSelectedAgents((prev) =>
+                      prev.includes(a.email) ? prev.filter((e) => e !== a.email) : [...prev, a.email]
+                    )
+                  }
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="truncate">
+                    {a.name || a.email} — <span className="text-white/60">{a.email}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-white/50 mt-1 flex-wrap">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                      WOD/IVCS: {workload.wodIvcs}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                      Text Club: {workload.textClub}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                      Email: {workload.emailRequests}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
+                      Yotpo: {workload.yotpo}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                      Holds: {workload.holds}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                      Refunds: {workload.standaloneRefunds}
+                    </span>
+                    <span className="text-white/70 font-medium">
+                      Total: {workload.total}
+                    </span>
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Assignment Controls */}
-      <div className="flex items-center gap-4 bg-white/5 rounded-lg p-4 border border-white/10">
-        <div className="flex-1">
-          <label className="block text-sm text-white/60 mb-1">Per-agent cap (this run)</label>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <label>
+          <div className="text-sm text-white/60 mb-1">Per-agent cap (this run)</div>
           <input
             type="number"
-            min="1"
-            max="200"
+            min={1}
             value={perAgentCap}
-            onChange={(e) => setPerAgentCap(parseInt(e.target.value) || 50)}
-            className="w-32 px-3 py-2 bg-white/10 rounded-md text-white text-sm ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => setPerAgentCap(Math.min(200, Math.max(1, parseInt(e.target.value) || 1)))}
+            className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10 focus:outline-none"
           />
-          <p className="text-xs text-white/50 mt-1">Absolute hard cap is 200 per agent</p>
-        </div>
-        <button
-          disabled={selectedAgents.size === 0 || loading}
-          className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-semibold transition-colors"
+          <div className="text-xs text-white/50 mt-1">Absolute hard cap is 200 per agent.</div>
+        </label>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <PrimaryButton 
+          onClick={async () => {
+            if (selectedAgents.length === 0) return;
+            setLoading(true);
+            try {
+              // Map agent emails to agent IDs
+              const agentIdMap = new Map(agents.map(a => [a.email, a.id]));
+              const agentIds = selectedAgents.map(email => agentIdMap.get(email)).filter(Boolean) as string[];
+              
+              if (agentIds.length === 0) {
+                alert('No valid agents selected');
+                return;
+              }
+
+              const res = await fetch('/api/yotpo/assign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  agentIds: agentIds,
+                  perAgentCap
+                })
+              });
+              const data = await res.json();
+              if (res.ok && data.success) {
+                alert(`Successfully assigned ${data.assigned || data.message} Yotpo tasks!`);
+                setSelectedAgents([]);
+                loadAgents();
+                loadAgentWorkloads();
+              } else {
+                alert(`Assignment failed: ${data.error || data.message || 'Unknown error'}`);
+              }
+            } catch (error) {
+              console.error('Failed to assign tasks:', error);
+              alert('Failed to assign tasks');
+            } finally {
+              setLoading(false);
+            }
+          }}
+          disabled={loading || selectedAgents.length === 0 || perAgentCap <= 0}
         >
-          {loading ? '⏳ Assigning...' : `Assign Now`}
-        </button>
+          {loading ? "Assigning…" : "Assign Now"}
+        </PrimaryButton>
       </div>
     </Card>
   );

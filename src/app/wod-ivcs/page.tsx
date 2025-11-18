@@ -1199,7 +1199,7 @@ export default function WodIvcsDashboard() {
                     <div className="text-sm text-white/60 p-1">No agents found.</div>
                   )}
                   {agents.map((a) => {
-                    const workload = agentWorkloads[a.id] || { wodIvcs: 0, textClub: 0, emailRequests: 0, standaloneRefunds: 0, total: 0 };
+                    const workload = agentWorkloads[a.id] || { wodIvcs: 0, textClub: 0, emailRequests: 0, standaloneRefunds: 0, yotpo: 0, holds: 0, total: 0 };
                     return (
                       <label key={a.email} className="flex items-center gap-2 text-sm">
                         <input
@@ -1216,7 +1216,7 @@ export default function WodIvcsDashboard() {
                           <div className="truncate">
                             {a.name || a.email} — <span className="text-white/60">{a.email}</span>
                           </div>
-                          <div className="flex items-center gap-3 text-xs text-white/50 mt-1">
+                          <div className="flex items-center gap-3 text-xs text-white/50 mt-1 flex-wrap">
                             <span className="flex items-center gap-1">
                               <span className="w-2 h-2 bg-red-500 rounded-full"></span>
                               WOD/IVCS: {workload.wodIvcs}
@@ -1228,6 +1228,14 @@ export default function WodIvcsDashboard() {
                             <span className="flex items-center gap-1">
                               <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                               Email: {workload.emailRequests}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
+                              Yotpo: {workload.yotpo}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                              Holds: {workload.holds}
                             </span>
                             <span className="flex items-center gap-1">
                               <span className="w-2 h-2 bg-purple-500 rounded-full"></span>

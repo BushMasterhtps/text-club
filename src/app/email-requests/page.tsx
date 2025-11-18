@@ -1114,19 +1114,40 @@ function AssignEmailRequestTasksSection() {
   const [perAgentCap, setPerAgentCap] = useState(50);
   const [loading, setLoading] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [agentWorkloads, setAgentWorkloads] = useState<Record<string, any>>({});
 
   const loadAgents = async () => {
-    setLoading(true);
+    setAgentsLoading(true);
     try {
       const res = await fetch('/api/manager/agents', { cache: 'no-store' });
       const data = await res.json();
       if (res.ok && data.success) {
         setAgents(data.agents);
+        setSelectedAgents((prev) => prev.filter((e) => data.agents.some((a: any) => a.email === e)));
       }
     } catch (error) {
       console.error('Failed to load agents:', error);
     } finally {
-      setLoading(false);
+      setAgentsLoading(false);
+    }
+  };
+
+  const loadAgentWorkloads = async () => {
+    try {
+      const response = await fetch('/api/manager/agents/workload');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          const workloadMap: Record<string, any> = {};
+          data.data.forEach((item: any) => {
+            workloadMap[item.agentId] = item.workload;
+          });
+          setAgentWorkloads(workloadMap);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading agent workloads:', error);
     }
   };
 
@@ -1135,11 +1156,20 @@ function AssignEmailRequestTasksSection() {
     
     setAssigning(true);
     try {
+      // Map agent emails to agent IDs
+      const agentIdMap = new Map(agents.map(a => [a.email, a.id]));
+      const agentIds = selectedAgents.map(email => agentIdMap.get(email)).filter(Boolean) as string[];
+      
+      if (agentIds.length === 0) {
+        alert('No valid agents selected');
+        return;
+      }
+
       const res = await fetch('/api/manager/assign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          agentIds: selectedAgents,
+          agentIds: agentIds,
           perAgentCap,
           taskType: 'EMAIL_REQUESTS'
         })
@@ -1149,6 +1179,7 @@ function AssignEmailRequestTasksSection() {
         alert(`Successfully assigned ${data.assigned} Email Request tasks!`);
         setSelectedAgents([]);
         loadAgents(); // Refresh to update workload
+        loadAgentWorkloads(); // Refresh workloads
       } else {
         alert(`Assignment failed: ${data.error}`);
       }
@@ -1160,114 +1191,123 @@ function AssignEmailRequestTasksSection() {
     }
   };
 
-  const toggleAgent = (agentId: string) => {
+  const toggleAgent = (agentEmail: string) => {
     setSelectedAgents(prev => 
-      prev.includes(agentId) 
-        ? prev.filter(id => id !== agentId)
-        : [...prev, agentId]
+      prev.includes(agentEmail) 
+        ? prev.filter(email => email !== agentEmail)
+        : [...prev, agentEmail]
     );
   };
 
-  const selectAll = () => {
-    setSelectedAgents(agents.map(agent => agent.id));
-  };
-
-  const selectNone = () => {
-    setSelectedAgents([]);
+  const toggleSelectAll = () => {
+    const allSelected = selectedAgents.length === agents.length;
+    setSelectedAgents(allSelected ? [] : agents.map(agent => agent.email));
   };
 
   useEffect(() => {
     loadAgents();
+    loadAgentWorkloads();
   }, []);
 
   return (
     <Card className="p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <H2>✅ Assign Email Request Tasks</H2>
-        <SmallButton onClick={loadAgents} disabled={loading}>
-          {loading ? "Loading..." : "Refresh"}
+        <H2>🎯 Assign Email Request Tasks</H2>
+        <SmallButton onClick={() => { loadAgents(); loadAgentWorkloads(); }} disabled={agentsLoading || loading}>
+          {loading || agentsLoading ? "Loading..." : "🔄 Refresh"}
         </SmallButton>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Agent Selection */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-white/80">
-              Choose agents ({selectedAgents.length}/{agents.length} selected)
-            </label>
-            <div className="flex gap-2">
-              <SmallButton onClick={selectAll}>Select all</SmallButton>
-              <SmallButton onClick={selectNone}>Select none</SmallButton>
-            </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-white/60">
+            Choose agents ({selectedAgents.length}/{agents.length} selected)
           </div>
-
-                 <div className="space-y-2 max-h-60 overflow-y-auto">
-                   {agents.map((agent) => (
-                     <div key={agent.id} className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg">
-                       <input
-                         type="checkbox"
-                         checked={selectedAgents.includes(agent.id)}
-                         onChange={() => toggleAgent(agent.id)}
-                         className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                       />
-                       <div className="flex-1">
-                         <div className="font-medium text-white">{agent.name}</div>
-                         <div className="text-sm text-white/60">{agent.email}</div>
-                         <div className="text-xs text-white/50 mt-1 flex items-center gap-2">
-                           <span className="flex items-center gap-1">
-                             <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                             Email: {agent.emailRequestCount || 0}
-                           </span>
-                           <span className="flex items-center gap-1">
-                             <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                             Text Club: {agent.textClubCount || 0}
-                           </span>
-                           <span className="flex items-center gap-1">
-                             <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                             WOD/IVCS: {agent.wodIvcsCount || 0}
-                           </span>
-                           <span className="flex items-center gap-1">
-                             <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-                             Refunds: {agent.refundCount || 0}
-                           </span>
-                           <span className="font-medium">
-                             Total: {(agent.emailRequestCount || 0) + (agent.textClubCount || 0) + (agent.wodIvcsCount || 0) + (agent.refundCount || 0)}
-                           </span>
-                         </div>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
+          <SmallButton onClick={toggleSelectAll} disabled={agentsLoading || agents.length === 0}>
+            {selectedAgents.length === agents.length ? "Clear all" : "Select all"}
+          </SmallButton>
         </div>
 
-        {/* Assignment Settings */}
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-white/80 mb-2">
-              Per-agent cap (this run)
-            </label>
-            <input
-              type="number"
-              value={perAgentCap}
-              onChange={(e) => setPerAgentCap(Math.min(200, Math.max(1, parseInt(e.target.value) || 1)))}
-              className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              min="1"
-              max="200"
-            />
-            <div className="text-xs text-white/60 mt-1">
-              Absolute hard cap is 200 per agent.
-            </div>
-          </div>
-
-          <PrimaryButton 
-            onClick={assignTasks}
-            disabled={assigning || selectedAgents.length === 0}
-            className="w-full"
-          >
-            {assigning ? "Assigning..." : "Assign Now"}
-          </PrimaryButton>
+        <div className="max-h-56 overflow-auto rounded-lg bg-white/[0.03] ring-1 ring-white/10 p-2 space-y-1">
+          {agentsLoading && <div className="text-sm text-white/60 p-1">Loading agents…</div>}
+          {!agentsLoading && agents.length === 0 && (
+            <div className="text-sm text-white/60 p-1">No agents found.</div>
+          )}
+          {agents.map((a) => {
+            const workload = agentWorkloads[a.id] || { wodIvcs: 0, textClub: 0, emailRequests: 0, standaloneRefunds: 0, yotpo: 0, holds: 0, total: 0 };
+            return (
+              <label key={a.email} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-sky-500"
+                  checked={selectedAgents.includes(a.email)}
+                  onChange={() =>
+                    setSelectedAgents((prev) =>
+                      prev.includes(a.email) ? prev.filter((e) => e !== a.email) : [...prev, a.email]
+                    )
+                  }
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="truncate">
+                    {a.name || a.email} — <span className="text-white/60">{a.email}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-white/50 mt-1 flex-wrap">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                      WOD/IVCS: {workload.wodIvcs}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                      Text Club: {workload.textClub}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                      Email: {workload.emailRequests}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
+                      Yotpo: {workload.yotpo}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                      Holds: {workload.holds}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                      Refunds: {workload.standaloneRefunds}
+                    </span>
+                    <span className="text-white/70 font-medium">
+                      Total: {workload.total}
+                    </span>
+                  </div>
+                </div>
+              </label>
+            );
+          })}
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <label>
+          <div className="text-sm text-white/60 mb-1">Per-agent cap (this run)</div>
+          <input
+            type="number"
+            min={1}
+            value={perAgentCap}
+            onChange={(e) => setPerAgentCap(Math.min(200, Math.max(1, parseInt(e.target.value) || 1)))}
+            className="w-full rounded-md bg-white/10 text-white px-3 py-2 ring-1 ring-white/10 focus:outline-none"
+          />
+          <div className="text-xs text-white/50 mt-1">Absolute hard cap is 200 per agent.</div>
+        </label>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <PrimaryButton 
+          onClick={assignTasks}
+          disabled={assigning || selectedAgents.length === 0 || perAgentCap <= 0}
+        >
+          {assigning ? "Assigning…" : "Assign Now"}
+        </PrimaryButton>
       </div>
     </Card>
   );
