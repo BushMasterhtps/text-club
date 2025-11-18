@@ -34,10 +34,14 @@ export async function GET(request: NextRequest) {
 // POST - Create new text club macro or import CSV
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File | null;
+    const contentType = request.headers.get('content-type') || '';
     
-    if (file) {
+    // Check if this is a file upload (multipart/form-data)
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      const file = formData.get('file') as File | null;
+      
+      if (file) {
       // CSV Import
       try {
         const csvText = await file.text();
@@ -144,6 +148,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { success: false, error: `Failed to process file: ${fileError.message || 'Unknown error'}` },
           { status: 500 }
+        );
+      }
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'No file provided in form data' },
+          { status: 400 }
         );
       }
     } else {
