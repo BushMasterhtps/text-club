@@ -54,9 +54,23 @@ export default function DailyBreakdown() {
       if (data.success) {
         console.log('Daily Breakdown loaded:', {
           breakdowns: data.data.breakdowns.length,
-          summary: data.data.summary
+          summary: data.data.summary,
+          dateRange: `${startDate} to ${endDate}`
         });
         setBreakdowns(data.data.breakdowns);
+        
+        // If only one day selected and it has data, auto-show details
+        if (data.data.breakdowns.length === 1 && data.data.breakdowns[0].newTasksCount === 0 && 
+            data.data.breakdowns[0].completedTasksCount === 0 && data.data.breakdowns[0].rolloverTasksCount === 0) {
+          // No data for this day, don't auto-show
+        } else if (data.data.breakdowns.length === 1 && !showTaskDetails) {
+          // Auto-load details for single day if it has data
+          const breakdown = data.data.breakdowns[0];
+          if (breakdown.newTasksCount > 0 || breakdown.completedTasksCount > 0 || breakdown.rolloverTasksCount > 0) {
+            setSelectedDayDetails(breakdown);
+            setShowTaskDetails(true);
+          }
+        }
       } else {
         console.error('Failed to load daily breakdown:', data);
       }
@@ -78,7 +92,9 @@ export default function DailyBreakdown() {
       const data = await response.json();
       
       if (data.success && data.data.breakdowns.length > 0) {
-        setSelectedDayDetails(data.data.breakdowns[0]);
+        // Find the breakdown for the exact date requested
+        const breakdown = data.data.breakdowns.find((b: any) => b.date === date) || data.data.breakdowns[0];
+        setSelectedDayDetails(breakdown);
         setShowTaskDetails(true);
       }
     } catch (error) {
@@ -143,8 +159,8 @@ export default function DailyBreakdown() {
         </div>
       </div>
 
-      {/* Summary Stats */}
-      {!loading && breakdowns.length > 0 && (
+      {/* Summary Stats - Only show if more than 1 day */}
+      {!loading && breakdowns.length > 1 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
             <h3 className="text-sm font-medium text-blue-200 mb-1">Total Days</h3>
@@ -171,50 +187,109 @@ export default function DailyBreakdown() {
         </div>
       )}
 
-      {/* Daily Breakdown Table */}
+      {/* Daily Breakdown - Show single day view if only one day selected */}
       {loading ? (
         <div className="text-center py-8 text-white/60">Loading daily breakdown...</div>
       ) : breakdowns.length === 0 ? (
         <div className="text-center py-8 text-white/60">
           No data found for the selected date range
         </div>
+      ) : breakdowns.length === 1 ? (
+        // Single day view - show details directly
+        <div>
+          {(() => {
+            const breakdown = breakdowns[0];
+            return (
+              <div className="space-y-6">
+                {/* Day Summary Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                    <h3 className="text-sm font-medium text-blue-200 mb-1">New Tasks</h3>
+                    <p className="text-2xl font-bold text-white">{breakdown.newTasksCount}</p>
+                  </div>
+                  <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
+                    <h3 className="text-sm font-medium text-green-200 mb-1">Completed</h3>
+                    <p className="text-2xl font-bold text-white">{breakdown.completedTasksCount}</p>
+                  </div>
+                  <div className="p-4 bg-orange-900/20 border border-orange-500/30 rounded-lg">
+                    <h3 className="text-sm font-medium text-orange-200 mb-1">Rollovers</h3>
+                    <p className="text-2xl font-bold text-white">{breakdown.rolloverTasksCount}</p>
+                  </div>
+                  <div className="p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+                    <h3 className="text-sm font-medium text-purple-200 mb-1">Pending at EOD</h3>
+                    <p className="text-2xl font-bold text-white">{breakdown.totalPendingAtEndOfDay}</p>
+                  </div>
+                </div>
+
+                {/* Queue Counts */}
+                {Object.keys(breakdown.queueCountsAtEndOfDay).length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Queue Counts at End of Day (5 PM PST)</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {Object.entries(breakdown.queueCountsAtEndOfDay).map(([queue, count]) => (
+                        <div key={queue} className="p-3 bg-white/5 rounded-lg border border-white/10">
+                          <div className="text-xs text-white/60 mb-1">{queue}</div>
+                          <div className="text-xl font-bold text-white">{count as number}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Auto-load details if tasks exist */}
+                {!showTaskDetails && (breakdown.newTasksCount > 0 || breakdown.completedTasksCount > 0 || breakdown.rolloverTasksCount > 0) && (
+                  <button
+                    onClick={() => {
+                      setSelectedDayDetails(breakdown);
+                      setShowTaskDetails(true);
+                    }}
+                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+                  >
+                    View Full Details
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+        </div>
       ) : (
+        // Multiple days - show table
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-white/5">
               <tr className="text-left text-white/60">
                 <th className="px-3 py-2">Date</th>
-                <th className="px-3 py-2">New Tasks</th>
+                <th className="px-3 py-2">New</th>
                 <th className="px-3 py-2">Completed</th>
                 <th className="px-3 py-2">Rollovers</th>
-                <th className="px-3 py-2">Pending at EOD</th>
-                {allQueues.map(queue => (
-                  <th key={queue} className="px-3 py-2">{queue}</th>
+                <th className="px-3 py-2">Pending</th>
+                {allQueues.slice(0, 3).map(queue => (
+                  <th key={queue} className="px-3 py-2 text-xs">{queue.substring(0, 15)}</th>
                 ))}
-                <th className="px-3 py-2">Actions</th>
+                <th className="px-3 py-2">Details</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {breakdowns.map((breakdown) => (
                 <tr key={breakdown.date} className="hover:bg-white/5">
-                  <td className="px-3 py-2 text-white font-medium">
+                  <td className="px-3 py-2 text-white font-medium text-xs">
                     {formatDate(breakdown.date)}
                   </td>
-                  <td className="px-3 py-2 text-blue-300 font-semibold">
-                    {breakdown.newTasksCount}
+                  <td className="px-3 py-2 text-blue-300 font-semibold text-center">
+                    {breakdown.newTasksCount || '-'}
                   </td>
-                  <td className="px-3 py-2 text-green-300 font-semibold">
-                    {breakdown.completedTasksCount}
+                  <td className="px-3 py-2 text-green-300 font-semibold text-center">
+                    {breakdown.completedTasksCount || '-'}
                   </td>
-                  <td className="px-3 py-2 text-orange-300 font-semibold">
-                    {breakdown.rolloverTasksCount}
+                  <td className="px-3 py-2 text-orange-300 font-semibold text-center">
+                    {breakdown.rolloverTasksCount || '-'}
                   </td>
-                  <td className="px-3 py-2 text-white font-semibold">
-                    {breakdown.totalPendingAtEndOfDay}
+                  <td className="px-3 py-2 text-white font-semibold text-center">
+                    {breakdown.totalPendingAtEndOfDay || '-'}
                   </td>
-                  {allQueues.map(queue => (
-                    <td key={queue} className="px-3 py-2 text-white/80">
-                      {breakdown.queueCountsAtEndOfDay[queue] || 0}
+                  {allQueues.slice(0, 3).map(queue => (
+                    <td key={queue} className="px-3 py-2 text-white/80 text-center text-xs">
+                      {breakdown.queueCountsAtEndOfDay[queue] || '-'}
                     </td>
                   ))}
                   <td className="px-3 py-2">
@@ -223,7 +298,7 @@ export default function DailyBreakdown() {
                       onClick={(e) => handleDateClick(e, breakdown.date)}
                       className="text-blue-400 hover:text-blue-300 text-xs underline"
                     >
-                      View Details
+                      View
                     </button>
                   </td>
                 </tr>

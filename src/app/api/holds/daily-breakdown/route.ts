@@ -46,16 +46,24 @@ export async function GET(request: NextRequest) {
     
     if (specificDate) {
       // View specific date
-      const date = new Date(specificDate);
+      const date = new Date(specificDate + 'T00:00:00');
       startDate = getStartOfDayPST(date);
       endDate = getEndOfDayPST(date);
     } else if (startDateParam && endDateParam) {
-      startDate = getStartOfDayPST(new Date(startDateParam));
-      endDate = getEndOfDayPST(new Date(endDateParam));
+      // If start and end are the same, only show that one day
+      if (startDateParam === endDateParam) {
+        const date = new Date(startDateParam + 'T00:00:00');
+        startDate = getStartOfDayPST(date);
+        endDate = getEndOfDayPST(date);
+      } else {
+        startDate = getStartOfDayPST(new Date(startDateParam + 'T00:00:00'));
+        endDate = getEndOfDayPST(new Date(endDateParam + 'T00:00:00'));
+      }
     } else {
       // Default to last 30 days
-      endDate = getEndOfDayPST(new Date());
-      startDate = new Date(endDate);
+      const today = new Date();
+      endDate = getEndOfDayPST(today);
+      startDate = new Date(today);
       startDate.setDate(startDate.getDate() - 30);
       startDate = getStartOfDayPST(startDate);
     }
@@ -99,10 +107,21 @@ export async function GET(request: NextRequest) {
     const dailyBreakdowns: any[] = [];
     
     // Use calendar dates for iteration (not UTC dates)
-    const startCalendarDate = startDateParam ? new Date(startDateParam + 'T00:00:00') : new Date();
-    startCalendarDate.setDate(startCalendarDate.getDate() - 30); // Default to 30 days ago
+    let startCalendarDate: Date;
+    let endCalendarDate: Date;
     
-    const endCalendarDate = endDateParam ? new Date(endDateParam + 'T00:00:00') : new Date();
+    if (specificDate) {
+      startCalendarDate = new Date(specificDate + 'T00:00:00');
+      endCalendarDate = new Date(specificDate + 'T00:00:00');
+    } else if (startDateParam && endDateParam) {
+      startCalendarDate = new Date(startDateParam + 'T00:00:00');
+      endCalendarDate = new Date(endDateParam + 'T00:00:00');
+    } else {
+      const today = new Date();
+      endCalendarDate = new Date(today);
+      startCalendarDate = new Date(today);
+      startCalendarDate.setDate(startCalendarDate.getDate() - 30);
+    }
     
     // Debug: Log what we're working with
     console.log('Daily Breakdown API:', {
