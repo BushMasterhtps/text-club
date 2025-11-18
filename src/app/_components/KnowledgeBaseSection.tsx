@@ -112,16 +112,36 @@ export default function KnowledgeBaseSection() {
         body: formData
       });
 
+      // Check if response is ok
+      if (!res.ok) {
+        const errorText = await res.text();
+        let errorMessage = `HTTP error! Status: ${res.status}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      // Check content type before parsing JSON
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        throw new Error(`Expected JSON response, but received ${contentType || "no content type"}. Response: ${text.substring(0, 200)}`);
+      }
+
       const data = await res.json();
       if (data.success) {
         alert(`✅ Imported ${data.imported} items${data.errors > 0 ? `, ${data.errors} errors` : ""}`);
         loadData();
       } else {
-        alert(`❌ Import failed: ${data.error}`);
+        alert(`❌ Import failed: ${data.error || "Unknown error"}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Import error:", error);
-      alert("❌ Import failed");
+      alert(`❌ Import failed: ${error.message || error || "Unknown error"}`);
     } finally {
       setLoading(false);
     }

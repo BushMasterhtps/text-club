@@ -42,80 +42,125 @@ export async function POST(request: NextRequest) {
     
     if (file) {
       // CSV Import
-      const csvText = await file.text();
-      const records = parse(csvText, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true
-      });
-      
-      let imported = 0;
-      let errors = 0;
-      
-      for (const record of records) {
-        try {
-          // Flexible column matching
-          const macroName = record['Macro Name'] || record['macroName'] || record['macro_name'] || record['MacroName'] || '';
-          const macro = record['Macro'] || record['macro'] || '';
-          const caseType = record['Case Type/ Subcategory'] || record['Case Type'] || record['caseType'] || record['case_type'] || null;
-          const brand = record['Brand'] || record['brand'] || null;
-          const description = record['What the macro is for'] || record['Description'] || record['description'] || null;
-          
-          if (!macroName || !macro) {
-            errors++;
-            continue;
-          }
-          
-          await prisma.emailMacro.create({
-            data: {
-              macroName,
-              macro,
-              caseType,
-              brand,
-              description
-            }
-          });
-          imported++;
-        } catch (error) {
-          console.error('Error importing email macro:', error);
-          errors++;
+      try {
+        const csvText = await file.text();
+        
+        if (!csvText || csvText.trim().length === 0) {
+          return NextResponse.json(
+            { success: false, error: 'CSV file is empty' },
+            { status: 400 }
+          );
         }
+        
+        let records;
+        try {
+          records = parse(csvText, {
+            columns: true,
+            skip_empty_lines: true,
+            trim: true
+          });
+        } catch (parseError: any) {
+          console.error('CSV parse error:', parseError);
+          return NextResponse.json(
+            { success: false, error: `Failed to parse CSV: ${parseError.message || 'Invalid CSV format'}` },
+            { status: 400 }
+          );
+        }
+        
+        if (!records || records.length === 0) {
+          return NextResponse.json(
+            { success: false, error: 'CSV file contains no valid records' },
+            { status: 400 }
+          );
+        }
+        
+        let imported = 0;
+        let errors = 0;
+        const errorDetails: string[] = [];
+        
+        for (let i = 0; i < records.length; i++) {
+          const record = records[i];
+          try {
+            // Flexible column matching
+            const macroName = record['Macro Name'] || record['macroName'] || record['macro_name'] || record['MacroName'] || record['Macro name'] || '';
+            const macro = record['Macro'] || record['macro'] || '';
+            const caseType = record['Case Type/ Subcategory'] || record['Case Type/Subcategory'] || record['Case Type'] || record['caseType'] || record['case_type'] || record['CaseType'] || null;
+            const brand = record['Brand'] || record['brand'] || null;
+            const description = record['What the macro is for'] || record['What the macro is for'] || record['Description'] || record['description'] || record['What the macro is for '] || null;
+            
+            if (!macroName || !macro) {
+              errors++;
+              errorDetails.push(`Row ${i + 2}: Missing required fields (Macro Name or Macro)`);
+              continue;
+            }
+            
+            await prisma.emailMacro.create({
+              data: {
+                macroName,
+                macro,
+                caseType,
+                brand,
+                description
+              }
+            });
+            imported++;
+          } catch (error: any) {
+            console.error(`Error importing email macro row ${i + 2}:`, error);
+            errors++;
+            errorDetails.push(`Row ${i + 2}: ${error.message || 'Database error'}`);
+          }
+        }
+        
+        return NextResponse.json({
+          success: true,
+          imported,
+          errors,
+          total: records.length,
+          errorDetails: errorDetails.length > 0 ? errorDetails.slice(0, 10) : undefined // Limit to first 10 errors
+        });
+      } catch (fileError: any) {
+        console.error('File processing error:', fileError);
+        return NextResponse.json(
+          { success: false, error: `Failed to process file: ${fileError.message || 'Unknown error'}` },
+          { status: 500 }
+        );
       }
-      
-      return NextResponse.json({
-        success: true,
-        imported,
-        errors,
-        total: records.length
-      });
     } else {
       // Manual create
-      const body = await request.json();
-      const { macroName, macro, caseType, brand, description } = body;
-      
-      if (!macroName || !macro) {
+      try {
+        const body = await request.json();
+        const { macroName, macro, caseType, brand, description } = body;
+        
+        if (!macroName || !macro) {
+          return NextResponse.json(
+            { success: false, error: 'Macro Name and Macro are required' },
+            { status: 400 }
+          );
+        }
+        
+        const newMacro = await prisma.emailMacro.create({
+          data: {
+            macroName,
+            macro,
+            caseType: caseType || null,
+            brand: brand || null,
+            description: description || null
+          }
+        });
+        
+        return NextResponse.json({ success: true, data: newMacro });
+      } catch (jsonError: any) {
+        console.error('JSON parse error:', jsonError);
         return NextResponse.json(
-          { success: false, error: 'Macro Name and Macro are required' },
+          { success: false, error: 'Invalid JSON in request body' },
           { status: 400 }
         );
       }
-      
-      const newMacro = await prisma.emailMacro.create({
-        data: {
-          macroName,
-          macro,
-          caseType: caseType || null,
-          brand: brand || null,
-          description: description || null
-        }
-      });
-      
-      return NextResponse.json({ success: true, data: newMacro });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating/importing email macro:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to create/import email macro' },
+      { success: false, error: error.message || 'Failed to create/import email macro' },
       { status: 500 }
     );
   }
