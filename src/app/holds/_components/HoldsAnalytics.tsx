@@ -5,6 +5,7 @@ import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 import ResolvedOrdersReport from "./ResolvedOrdersReport";
 import ResolvedOrdersReportWithComments from "./ResolvedOrdersReportWithComments";
+import DailyBreakdown from "./DailyBreakdown";
 
 interface AnalyticsData {
   overview: {
@@ -29,7 +30,7 @@ export default function HoldsAnalytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [agingReport, setAgingReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'aging' | 'resolved' | 'resolved-comments'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'aging' | 'resolved' | 'resolved-comments' | 'daily-breakdown'>('overview');
 
   useEffect(() => {
     fetchAnalytics();
@@ -114,6 +115,16 @@ export default function HoldsAnalytics() {
             }`}
           >
             📊 Resolved Orders with Comments
+          </button>
+          <button
+            onClick={() => setActiveTab('daily-breakdown')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              activeTab === 'daily-breakdown'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white/10 text-white/70 hover:bg-white/20'
+            }`}
+          >
+            📅 Daily Breakdown
           </button>
         </div>
 
@@ -271,6 +282,13 @@ export default function HoldsAnalytics() {
       {activeTab === 'resolved-comments' && (
         <div className="mt-6">
           <ResolvedOrdersReportWithComments />
+        </div>
+      )}
+      
+      {/* Daily Breakdown (separate card below) */}
+      {activeTab === 'daily-breakdown' && (
+        <div className="mt-6">
+          <DailyBreakdown />
         </div>
       )}
     </div>
