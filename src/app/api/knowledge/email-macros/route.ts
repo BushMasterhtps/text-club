@@ -74,10 +74,19 @@ export async function POST(request: NextRequest) {
           );
         }
         
-        let imported = 0;
+        // Prepare data for batch insert
+        const dataToInsert: Array<{
+          macroName: string;
+          macro: string;
+          caseType: string | null;
+          brand: string | null;
+          description: string | null;
+        }> = [];
+        
         let errors = 0;
         const errorDetails: string[] = [];
         
+        // Process records and prepare data
         for (let i = 0; i < records.length; i++) {
           const record = records[i];
           try {
@@ -94,20 +103,45 @@ export async function POST(request: NextRequest) {
               continue;
             }
             
-            await prisma.emailMacro.create({
-              data: {
-                macroName,
-                macro,
-                caseType,
-                brand,
-                description
-              }
+            dataToInsert.push({
+              macroName,
+              macro,
+              caseType,
+              brand,
+              description
             });
-            imported++;
           } catch (error: any) {
-            console.error(`Error importing email macro row ${i + 2}:`, error);
+            console.error(`Error processing email macro row ${i + 2}:`, error);
             errors++;
-            errorDetails.push(`Row ${i + 2}: ${error.message || 'Database error'}`);
+            errorDetails.push(`Row ${i + 2}: ${error.message || 'Processing error'}`);
+          }
+        }
+        
+        // Batch insert using createMany (much faster than individual creates)
+        // Process in batches of 100 to avoid potential issues
+        const BATCH_SIZE = 100;
+        let imported = 0;
+        
+        for (let i = 0; i < dataToInsert.length; i += BATCH_SIZE) {
+          const batch = dataToInsert.slice(i, i + BATCH_SIZE);
+          try {
+            const result = await prisma.emailMacro.createMany({
+              data: batch,
+              skipDuplicates: true // Skip duplicates if they exist
+            });
+            imported += result.count;
+          } catch (error: any) {
+            console.error(`Error inserting batch starting at row ${i + 2}:`, error);
+            // Try individual inserts for this batch if batch fails
+            for (const item of batch) {
+              try {
+                await prisma.emailMacro.create({ data: item });
+                imported++;
+              } catch (individualError: any) {
+                errors++;
+                errorDetails.push(`Row ${i + 2}: ${individualError.message || 'Database error'}`);
+              }
+            }
           }
         }
         

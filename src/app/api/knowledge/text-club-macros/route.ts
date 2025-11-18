@@ -46,10 +46,18 @@ export async function POST(request: NextRequest) {
         trim: true
       });
       
-      let imported = 0;
-      let errors = 0;
+      // Prepare data for batch insert
+      const dataToInsert: Array<{
+        macroName: string;
+        macroDetails: string;
+      }> = [];
       
-      for (const record of records) {
+      let errors = 0;
+      const errorDetails: string[] = [];
+      
+      // Process records and prepare data
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
         try {
           // Flexible column matching
           const macroName = record['Macro Name'] || record['macroName'] || record['macro_name'] || record['MacroName'] || '';
@@ -57,19 +65,45 @@ export async function POST(request: NextRequest) {
           
           if (!macroName || !macroDetails) {
             errors++;
+            errorDetails.push(`Row ${i + 2}: Missing required fields (Macro Name or Macro Details)`);
             continue;
           }
           
-          await prisma.textClubMacro.create({
-            data: {
-              macroName,
-              macroDetails
-            }
+          dataToInsert.push({
+            macroName,
+            macroDetails
           });
-          imported++;
-        } catch (error) {
-          console.error('Error importing text club macro:', error);
+        } catch (error: any) {
+          console.error(`Error processing text club macro row ${i + 2}:`, error);
           errors++;
+          errorDetails.push(`Row ${i + 2}: ${error.message || 'Processing error'}`);
+        }
+      }
+      
+      // Batch insert using createMany (much faster than individual creates)
+      const BATCH_SIZE = 100;
+      let imported = 0;
+      
+      for (let i = 0; i < dataToInsert.length; i += BATCH_SIZE) {
+        const batch = dataToInsert.slice(i, i + BATCH_SIZE);
+        try {
+          const result = await prisma.textClubMacro.createMany({
+            data: batch,
+            skipDuplicates: true
+          });
+          imported += result.count;
+        } catch (error: any) {
+          console.error(`Error inserting batch starting at row ${i + 2}:`, error);
+          // Try individual inserts for this batch if batch fails
+          for (const item of batch) {
+            try {
+              await prisma.textClubMacro.create({ data: item });
+              imported++;
+            } catch (individualError: any) {
+              errors++;
+              errorDetails.push(`Row ${i + 2}: ${individualError.message || 'Database error'}`);
+            }
+          }
         }
       }
       
@@ -77,7 +111,8 @@ export async function POST(request: NextRequest) {
         success: true,
         imported,
         errors,
-        total: records.length
+        total: records.length,
+        errorDetails: errorDetails.length > 0 ? errorDetails.slice(0, 10) : undefined
       });
     } else {
       // Manual create
