@@ -75,66 +75,67 @@ export async function POST(request: NextRequest) {
         
         // Prepare data for batch insert
         const dataToInsert: Array<{
-        brand: string;
-        product: string;
-        question: string;
-        answer: string;
-      }> = [];
-      
-      let errors = 0;
-      const errorDetails: string[] = [];
-      
-      // Process records and prepare data
-      for (let i = 0; i < records.length; i++) {
-        const record = records[i];
-        try {
-          // Flexible column matching
-          const brand = record['Brand'] || record['brand'] || '';
-          const product = record['Product'] || record['product'] || '';
-          const question = record['Question'] || record['question'] || '';
-          const answer = record['Answer'] || record['answer'] || '';
-          
-          if (!brand || !product || !question || !answer) {
-            errors++;
-            errorDetails.push(`Row ${i + 2}: Missing required fields (Brand, Product, Question, or Answer)`);
-            continue;
-          }
-          
-          dataToInsert.push({
-            brand,
-            product,
-            question,
-            answer
-          });
-        } catch (error: any) {
-          console.error(`Error processing product inquiry QA row ${i + 2}:`, error);
-          errors++;
-          errorDetails.push(`Row ${i + 2}: ${error.message || 'Processing error'}`);
-        }
-      }
-      
-      // Batch insert using createMany (much faster than individual creates)
-      const BATCH_SIZE = 100;
-      let imported = 0;
-      
-      for (let i = 0; i < dataToInsert.length; i += BATCH_SIZE) {
-        const batch = dataToInsert.slice(i, i + BATCH_SIZE);
-        try {
-          const result = await prisma.productInquiryQA.createMany({
-            data: batch,
-            skipDuplicates: true
-          });
-          imported += result.count;
-        } catch (error: any) {
-          console.error(`Error inserting batch starting at row ${i + 2}:`, error);
-          // Try individual inserts for this batch if batch fails
-          for (const item of batch) {
-            try {
-              await prisma.productInquiryQA.create({ data: item });
-              imported++;
-            } catch (individualError: any) {
+          brand: string;
+          product: string;
+          question: string;
+          answer: string;
+        }> = [];
+        
+        let errors = 0;
+        const errorDetails: string[] = [];
+        
+        // Process records and prepare data
+        for (let i = 0; i < records.length; i++) {
+          const record = records[i];
+          try {
+            // Flexible column matching
+            const brand = record['Brand'] || record['brand'] || '';
+            const product = record['Product'] || record['product'] || '';
+            const question = record['Question'] || record['question'] || '';
+            const answer = record['Answer'] || record['answer'] || '';
+            
+            if (!brand || !product || !question || !answer) {
               errors++;
-              errorDetails.push(`Row ${i + 2}: ${individualError.message || 'Database error'}`);
+              errorDetails.push(`Row ${i + 2}: Missing required fields (Brand, Product, Question, or Answer)`);
+              continue;
+            }
+            
+            dataToInsert.push({
+              brand,
+              product,
+              question,
+              answer
+            });
+          } catch (error: any) {
+            console.error(`Error processing product inquiry QA row ${i + 2}:`, error);
+            errors++;
+            errorDetails.push(`Row ${i + 2}: ${error.message || 'Processing error'}`);
+          }
+        }
+        
+        // Batch insert using createMany (much faster than individual creates)
+        const BATCH_SIZE = 100;
+        let imported = 0;
+        
+        for (let i = 0; i < dataToInsert.length; i += BATCH_SIZE) {
+          const batch = dataToInsert.slice(i, i + BATCH_SIZE);
+          try {
+            const result = await prisma.productInquiryQA.createMany({
+              data: batch,
+              skipDuplicates: true
+            });
+            imported += result.count;
+          } catch (error: any) {
+            console.error(`Error inserting batch starting at row ${i + 2}:`, error);
+            // Try individual inserts for this batch if batch fails
+            for (const item of batch) {
+              try {
+                await prisma.productInquiryQA.create({ data: item });
+                imported++;
+              } catch (individualError: any) {
+                errors++;
+                errorDetails.push(`Row ${i + 2}: ${individualError.message || 'Database error'}`);
+              }
             }
           }
         }

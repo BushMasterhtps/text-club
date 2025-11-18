@@ -82,51 +82,52 @@ export async function POST(request: NextRequest) {
         
         // Process records and prepare data
         for (let i = 0; i < records.length; i++) {
-        const record = records[i];
-        try {
-          // Flexible column matching
-          const macroName = record['Macro Name'] || record['macroName'] || record['macro_name'] || record['MacroName'] || '';
-          const macroDetails = record['Macro Details'] || record['macroDetails'] || record['macro_details'] || record['MacroDetails'] || record['Macro'] || record['macro'] || '';
-          
-          if (!macroName || !macroDetails) {
-            errors++;
-            errorDetails.push(`Row ${i + 2}: Missing required fields (Macro Name or Macro Details)`);
-            continue;
-          }
-          
-          dataToInsert.push({
-            macroName,
-            macroDetails
-          });
-        } catch (error: any) {
-          console.error(`Error processing text club macro row ${i + 2}:`, error);
-          errors++;
-          errorDetails.push(`Row ${i + 2}: ${error.message || 'Processing error'}`);
-        }
-      }
-      
-      // Batch insert using createMany (much faster than individual creates)
-      const BATCH_SIZE = 100;
-      let imported = 0;
-      
-      for (let i = 0; i < dataToInsert.length; i += BATCH_SIZE) {
-        const batch = dataToInsert.slice(i, i + BATCH_SIZE);
-        try {
-          const result = await prisma.textClubMacro.createMany({
-            data: batch,
-            skipDuplicates: true
-          });
-          imported += result.count;
-        } catch (error: any) {
-          console.error(`Error inserting batch starting at row ${i + 2}:`, error);
-          // Try individual inserts for this batch if batch fails
-          for (const item of batch) {
-            try {
-              await prisma.textClubMacro.create({ data: item });
-              imported++;
-            } catch (individualError: any) {
+          const record = records[i];
+          try {
+            // Flexible column matching
+            const macroName = record['Macro Name'] || record['macroName'] || record['macro_name'] || record['MacroName'] || '';
+            const macroDetails = record['Macro Details'] || record['macroDetails'] || record['macro_details'] || record['MacroDetails'] || record['Macro'] || record['macro'] || '';
+            
+            if (!macroName || !macroDetails) {
               errors++;
-              errorDetails.push(`Row ${i + 2}: ${individualError.message || 'Database error'}`);
+              errorDetails.push(`Row ${i + 2}: Missing required fields (Macro Name or Macro Details)`);
+              continue;
+            }
+            
+            dataToInsert.push({
+              macroName,
+              macroDetails
+            });
+          } catch (error: any) {
+            console.error(`Error processing text club macro row ${i + 2}:`, error);
+            errors++;
+            errorDetails.push(`Row ${i + 2}: ${error.message || 'Processing error'}`);
+          }
+        }
+        
+        // Batch insert using createMany (much faster than individual creates)
+        const BATCH_SIZE = 100;
+        let imported = 0;
+        
+        for (let i = 0; i < dataToInsert.length; i += BATCH_SIZE) {
+          const batch = dataToInsert.slice(i, i + BATCH_SIZE);
+          try {
+            const result = await prisma.textClubMacro.createMany({
+              data: batch,
+              skipDuplicates: true
+            });
+            imported += result.count;
+          } catch (error: any) {
+            console.error(`Error inserting batch starting at row ${i + 2}:`, error);
+            // Try individual inserts for this batch if batch fails
+            for (const item of batch) {
+              try {
+                await prisma.textClubMacro.create({ data: item });
+                imported++;
+              } catch (individualError: any) {
+                errors++;
+                errorDetails.push(`Row ${i + 2}: ${individualError.message || 'Database error'}`);
+              }
             }
           }
         }
