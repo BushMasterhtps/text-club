@@ -123,9 +123,10 @@ export async function GET(request: NextRequest) {
       nextDayStart.setDate(nextDayStart.getDate() + 1);
       
       // Tasks that existed at start of day (created before day start)
-      const tasksAtStart = allTasks.filter(t => 
-        new Date(t.createdAt) < dayStart
-      );
+      const tasksAtStart = allTasks.filter(t => {
+        const created = new Date(t.createdAt);
+        return created < dayStart;
+      });
       
       // Tasks created during this day
       const newTasks = allTasks.filter(t => {
@@ -140,6 +141,19 @@ export async function GET(request: NextRequest) {
         return completed >= dayStart && completed < dayEnd;
       });
       
+      // Debug logging for first day
+      if (currentCalendarDate.getTime() === startCalendarDate.getTime()) {
+        console.log('First day calculation:', {
+          date: currentCalendarDate.toISOString().split('T')[0],
+          dayStart: dayStart.toISOString(),
+          dayEnd: dayEnd.toISOString(),
+          totalTasks: allTasks.length,
+          tasksAtStart: tasksAtStart.length,
+          newTasks: newTasks.length,
+          completedTasks: completedTasks.length
+        });
+      }
+      
       // Calculate queue counts at end of day (5 PM PST)
       // For each task, determine its queue status at end of day
       const queueCountsAtEndOfDay: Record<string, number> = {};
@@ -148,55 +162,55 @@ export async function GET(request: NextRequest) {
       // Combine tasks at start and new tasks to get all tasks that existed during the day
       const allTasksForDay = [...tasksAtStart, ...newTasks];
       
+      // Also include tasks that were created before end date but might not be in tasksAtStart
+      // This ensures we capture all tasks that existed at any point during the day
+      const additionalTasks = allTasks.filter(t => {
+        const created = new Date(t.createdAt);
+        // Task was created before end of day but not already counted
+        return created < dayEnd && !allTasksForDay.find(at => at.id === t.id);
+      });
+      allTasksForDay.push(...additionalTasks);
+      
       allTasksForDay.forEach(task => {
         // Skip if task was completed before end of day
-        if (task.endTime && new Date(task.endTime) < dayEnd) {
-          return;
+        if (task.endTime) {
+          const completed = new Date(task.endTime);
+          if (completed < dayEnd) {
+            return; // Task was completed before end of day, don't count in queue
+          }
         }
         
         // Determine queue at end of day based on queue history
+        // For simplicity, use current holdsStatus if task wasn't completed
+        // This is more reliable than trying to parse complex queue history
         let queueAtEndOfDay = task.holdsStatus || 'Unknown';
         
-        if (task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory)) {
-          // Find the last queue entry before or at end of day
-          const relevantHistory = task.holdsQueueHistory
-            .filter((entry: any) => {
-              if (!entry.enteredAt) return false;
-              const entered = new Date(entry.enteredAt);
-              return entered <= dayEnd;
-            })
-            .sort((a: any, b: any) => {
-              // Sort by enteredAt to get chronological order
-              return new Date(a.enteredAt).getTime() - new Date(b.enteredAt).getTime();
-            });
-          
-          if (relevantHistory.length > 0) {
-            const lastEntry = relevantHistory[relevantHistory.length - 1];
-            // Check if task exited this queue before end of day
-            if (lastEntry.exitedAt) {
-              const exited = new Date(lastEntry.exitedAt);
-              if (exited < dayEnd) {
-                // Task moved to another queue, find the next queue entry
-                const nextEntry = task.holdsQueueHistory.find((entry: any) => {
-                  if (!entry.enteredAt) return false;
-                  const entered = new Date(entry.enteredAt);
-                  return entered > exited && entered <= dayEnd;
-                });
-                if (nextEntry) {
-                  queueAtEndOfDay = nextEntry.queue || 'Unknown';
-                } else {
-                  // Task exited but no new queue entry found - use current status
-                  queueAtEndOfDay = task.holdsStatus || 'Unknown';
-                }
-              } else {
-                // Task was still in this queue at end of day
-                queueAtEndOfDay = lastEntry.queue || 'Unknown';
-              }
-            } else {
-              // Task never exited this queue, so it's still in it at end of day
-              queueAtEndOfDay = lastEntry.queue || 'Unknown';
+        // If task has queue history, try to determine queue at end of day
+        if (task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
+          // Find entries that were active at end of day
+          const activeAtEndOfDay = task.holdsQueueHistory.filter((entry: any) => {
+            if (!entry.enteredAt) return false;
+            const entered = new Date(entry.enteredAt);
+            if (entered > dayEnd) return false; // Entry after end of day
+            
+            // If entry has exit time, check if it exited before end of day
+            if (entry.exitedAt) {
+              const exited = new Date(entry.exitedAt);
+              return exited >= dayEnd; // Still in queue at end of day
             }
+            
+            // No exit time means still in queue
+            return true;
+          });
+          
+          if (activeAtEndOfDay.length > 0) {
+            // Use the most recent entry that was active at end of day
+            const sorted = activeAtEndOfDay.sort((a: any, b: any) => {
+              return new Date(b.enteredAt).getTime() - new Date(a.enteredAt).getTime();
+            });
+            queueAtEndOfDay = sorted[0].queue || task.holdsStatus || 'Unknown';
           }
+          // If no active entries found, fall back to current status
         }
         
         // Count the task in its queue at end of day
