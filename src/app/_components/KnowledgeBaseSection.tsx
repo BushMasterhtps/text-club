@@ -134,7 +134,17 @@ export default function KnowledgeBaseSection() {
 
       const data = await res.json();
       if (data.success) {
-        alert(`✅ Imported ${data.imported} items${data.errors > 0 ? `, ${data.errors} errors` : ""}`);
+        let message = `✅ Imported ${data.imported} items`;
+        if (data.errors > 0) {
+          message += `\n\n⚠️ ${data.errors} errors occurred`;
+          if (data.errorDetails && data.errorDetails.length > 0) {
+            message += `\n\nError details:\n${data.errorDetails.slice(0, 5).join('\n')}`;
+            if (data.errorDetails.length > 5) {
+              message += `\n... and ${data.errorDetails.length - 5} more`;
+            }
+          }
+        }
+        alert(message);
         loadData();
       } else {
         alert(`❌ Import failed: ${data.error || "Unknown error"}`);
