@@ -62,7 +62,9 @@ export async function GET(request: NextRequest) {
     
     const includeTaskDetails = searchParams.get('includeTasks') === 'true';
     
-    // Get all Holds tasks that existed during this period
+    // Get all Holds tasks - we'll filter by date in the calculation logic
+    // This ensures we capture all tasks that existed during the period
+    // For now, get all tasks created before the end date to ensure we don't miss any
     const allTasks = await prisma.task.findMany({
       where: {
         taskType: 'HOLDS',
@@ -95,11 +97,28 @@ export async function GET(request: NextRequest) {
     
     // Generate daily breakdowns
     const dailyBreakdowns: any[] = [];
-    const currentDate = new Date(startDate);
     
-    while (currentDate <= endDate) {
-      const dayStart = getStartOfDayPST(currentDate);
-      const dayEnd = getEndOfDayPST(currentDate);
+    // Use calendar dates for iteration (not UTC dates)
+    const startCalendarDate = startDateParam ? new Date(startDateParam + 'T00:00:00') : new Date();
+    startCalendarDate.setDate(startCalendarDate.getDate() - 30); // Default to 30 days ago
+    
+    const endCalendarDate = endDateParam ? new Date(endDateParam + 'T00:00:00') : new Date();
+    
+    // Debug: Log what we're working with
+    console.log('Daily Breakdown API:', {
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      startCalendarDate: startCalendarDate.toISOString(),
+      endCalendarDate: endCalendarDate.toISOString(),
+      totalTasks: allTasks.length,
+      dateRange: `${startDateParam || 'default'} to ${endDateParam || 'default'}`
+    });
+    
+    const currentCalendarDate = new Date(startCalendarDate);
+    
+    while (currentCalendarDate <= endCalendarDate) {
+      const dayStart = getStartOfDayPST(currentCalendarDate);
+      const dayEnd = getEndOfDayPST(currentCalendarDate);
       const nextDayStart = new Date(dayStart);
       nextDayStart.setDate(nextDayStart.getDate() + 1);
       
@@ -220,7 +239,7 @@ export async function GET(request: NextRequest) {
       });
       
       const breakdown = {
-        date: currentDate.toISOString().split('T')[0],
+        date: currentCalendarDate.toISOString().split('T')[0],
         dayStart: dayStart.toISOString(),
         dayEnd: dayEnd.toISOString(),
         queueCountsAtEndOfDay,
@@ -266,8 +285,8 @@ export async function GET(request: NextRequest) {
       
       dailyBreakdowns.push(breakdown);
       
-      // Move to next day
-      currentDate.setDate(currentDate.getDate() + 1);
+      // Move to next calendar day
+      currentCalendarDate.setDate(currentCalendarDate.getDate() + 1);
     }
     
     return NextResponse.json({

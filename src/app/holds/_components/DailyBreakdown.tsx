@@ -52,7 +52,13 @@ export default function DailyBreakdown() {
       const data = await response.json();
       
       if (data.success) {
+        console.log('Daily Breakdown loaded:', {
+          breakdowns: data.data.breakdowns.length,
+          summary: data.data.summary
+        });
         setBreakdowns(data.data.breakdowns);
+      } else {
+        console.error('Failed to load daily breakdown:', data);
       }
     } catch (error) {
       console.error('Error loading daily breakdown:', error);
@@ -82,7 +88,9 @@ export default function DailyBreakdown() {
     }
   };
 
-  const handleDateClick = (date: string) => {
+  const handleDateClick = (e: React.MouseEvent, date: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     setSelectedDate(date);
     loadSpecificDate(date);
   };
@@ -211,7 +219,8 @@ export default function DailyBreakdown() {
                   ))}
                   <td className="px-3 py-2">
                     <button
-                      onClick={() => handleDateClick(breakdown.date)}
+                      type="button"
+                      onClick={(e) => handleDateClick(e, breakdown.date)}
                       className="text-blue-400 hover:text-blue-300 text-xs underline"
                     >
                       View Details
