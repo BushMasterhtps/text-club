@@ -10,17 +10,39 @@ import { prisma } from '@/lib/prisma';
  * - New tasks added that day
  */
 
-// Helper to get 5 PM PST for a given date
-function getEndOfDayPST(date: Date): Date {
-  const pstDate = new Date(date);
-  pstDate.setUTCHours(17, 0, 0, 0); // 5 PM PST = 17:00 UTC (PST is UTC-8, but we want 5 PM local)
-  // Actually, PST is UTC-8, so 5 PM PST = 1 AM UTC next day
-  // Let's adjust: 5 PM PST = 17:00 PST = 17:00 + 8 = 01:00 UTC next day
-  // But for simplicity, let's use 5 PM in the date's timezone
+// Helper to get end of day (5 PM PST) for a given date
+// If the date is today and it's before 5 PM PST, use current time
+// Otherwise, use 5 PM PST for that date
+// PST is UTC-8, so 5 PM PST = 17:00 PST = 17:00 + 8 = 01:00 UTC next day
+function getEndOfDayPST(date: Date, useCurrentTimeIfToday: boolean = true): Date {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  
+  // Check if this is today
+  const isToday = today.getTime() === targetDate.getTime();
+  
+  if (isToday && useCurrentTimeIfToday) {
+    // For today, check if it's before 5 PM PST
+    // Get current time and convert to PST
+    const pstOffset = -8 * 60 * 60 * 1000; // PST offset in milliseconds
+    const nowPST = new Date(now.getTime() + pstOffset);
+    const hourPST = nowPST.getUTCHours();
+    const minutePST = nowPST.getUTCMinutes();
+    
+    // If it's before 5 PM PST (17:00), use current time
+    if (hourPST < 17 || (hourPST === 17 && minutePST === 0)) {
+      return now; // Use current time for "end of day" if it's before 5 PM
+    }
+  }
+  
+  // Otherwise, use 5 PM PST for that date
   const year = date.getFullYear();
   const month = date.getMonth();
   const day = date.getDate();
-  return new Date(Date.UTC(year, month, day, 1, 0, 0, 0)); // 5 PM PST = 1 AM UTC next day
+  // 5 PM PST = 1 AM UTC next day
+  const nextDay = new Date(Date.UTC(year, month, day + 1, 1, 0, 0, 0));
+  return nextDay;
 }
 
 // Helper to get start of day PST (midnight PST)
@@ -135,9 +157,23 @@ export async function GET(request: NextRequest) {
     
     const currentCalendarDate = new Date(startCalendarDate);
     
+    // Get current date in PST for comparison
+    const now = new Date();
+    const todayPST = new Date(now.getTime() - (8 * 60 * 60 * 1000)); // Convert to PST
+    const todayCalendar = new Date(todayPST.getFullYear(), todayPST.getMonth(), todayPST.getDate());
+    
     while (currentCalendarDate <= endCalendarDate) {
+      // Check if this date is in the future
+      const isFutureDate = currentCalendarDate > todayCalendar;
+      
+      // Skip future dates - don't calculate data for dates that haven't happened yet
+      if (isFutureDate) {
+        currentCalendarDate.setDate(currentCalendarDate.getDate() + 1);
+        continue;
+      }
+      
       const dayStart = getStartOfDayPST(currentCalendarDate);
-      const dayEnd = getEndOfDayPST(currentCalendarDate);
+      const dayEnd = getEndOfDayPST(currentCalendarDate, true); // Use current time if today
       const nextDayStart = new Date(dayStart);
       nextDayStart.setDate(nextDayStart.getDate() + 1);
       
