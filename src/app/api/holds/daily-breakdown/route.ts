@@ -290,33 +290,56 @@ export async function GET(request: NextRequest) {
       });
       
       
-      // Calculate rollover tasks (moved between queues but not completed)
-      const rolloverTasks = allTasks.filter(task => {
-        // Task existed at start of day
-        if (new Date(task.createdAt) >= dayStart) return false;
-        // Task wasn't completed during this day
-        if (task.endTime && new Date(task.endTime) >= dayStart && new Date(task.endTime) < dayEnd) return false;
-        // Task has queue history showing movement during this day
-        if (!task.holdsQueueHistory || !Array.isArray(task.holdsQueueHistory)) return false;
+      // Calculate rollover tasks: tasks in "Agent Research" queue at end of day
+      const rolloverCount = queueCountsAtEndOfDay['Agent Research'] || 0;
+      const rolloverTasks = includeTaskDetails ? allTasksForDay.filter(task => {
+        // Skip if task was completed before end of day
+        if (task.endTime) {
+          const completed = new Date(task.endTime);
+          if (completed < dayEnd) return false;
+        }
         
-        const movementsToday = task.holdsQueueHistory.filter((entry: any) => {
-          if (!entry.enteredAt) return false;
-          const entered = new Date(entry.enteredAt);
-          return entered >= dayStart && entered < dayEnd;
-        });
+        // Determine queue at end of day (same logic as above)
+        let queueAtEndOfDay = task.holdsStatus || 'Unknown';
         
-        return movementsToday.length > 0;
-      });
+        if (task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
+          const activeAtEndOfDay = task.holdsQueueHistory.filter((entry: any) => {
+            if (!entry.enteredAt) return false;
+            const entered = new Date(entry.enteredAt);
+            if (entered > dayEnd) return false;
+            
+            if (entry.exitedAt) {
+              const exited = new Date(entry.exitedAt);
+              return exited >= dayEnd;
+            }
+            
+            return true;
+          });
+          
+          if (activeAtEndOfDay.length > 0) {
+            const sorted = activeAtEndOfDay.sort((a: any, b: any) => {
+              return new Date(b.enteredAt).getTime() - new Date(a.enteredAt).getTime();
+            });
+            queueAtEndOfDay = sorted[0].queue || task.holdsStatus || 'Unknown';
+          }
+        }
+        
+        return queueAtEndOfDay === 'Agent Research';
+      }) : [];
+      
+      // Calculate pending: tasks in "Customer Contact" + "Escalated Call 4+ Day" queues at end of day
+      const pendingCount = (queueCountsAtEndOfDay['Customer Contact'] || 0) + 
+                          (queueCountsAtEndOfDay['Escalated Call 4+ Day'] || 0);
       
       const breakdown = {
         date: currentCalendarDate.toISOString().split('T')[0],
         dayStart: dayStart.toISOString(),
         dayEnd: dayEnd.toISOString(),
         queueCountsAtEndOfDay,
-        totalPendingAtEndOfDay: Object.values(queueCountsAtEndOfDay).reduce((sum, count) => sum + count, 0),
+        totalPendingAtEndOfDay: pendingCount,
         newTasksCount: newTasks.length,
         completedTasksCount: completedTasks.length,
-        rolloverTasksCount: rolloverTasks.length,
+        rolloverTasksCount: rolloverCount,
         ...(includeTaskDetails && {
           newTasks: newTasks.map(t => ({
             id: t.id,
@@ -347,7 +370,31 @@ export async function GET(request: NextRequest) {
             agentName: t.assignedTo?.name || 'Unassigned',
             createdAt: t.createdAt,
             endTime: t.endTime,
-            queueHistory: t.holdsQueueHistory
+            queueHistory: t.holdsQueueHistory,
+            queueAtEndOfDay: (() => {
+              let queue = t.holdsStatus || 'Unknown';
+              if (t.holdsQueueHistory && Array.isArray(t.holdsQueueHistory) && t.holdsQueueHistory.length > 0) {
+                const dayStart = getStartOfDayPST(currentCalendarDate);
+                const dayEnd = getEndOfDayPST(currentCalendarDate, true);
+                const activeAtEndOfDay = t.holdsQueueHistory.filter((entry: any) => {
+                  if (!entry.enteredAt) return false;
+                  const entered = new Date(entry.enteredAt);
+                  if (entered > dayEnd) return false;
+                  if (entry.exitedAt) {
+                    const exited = new Date(entry.exitedAt);
+                    return exited >= dayEnd;
+                  }
+                  return true;
+                });
+                if (activeAtEndOfDay.length > 0) {
+                  const sorted = activeAtEndOfDay.sort((a: any, b: any) => {
+                    return new Date(b.enteredAt).getTime() - new Date(a.enteredAt).getTime();
+                  });
+                  queue = sorted[0].queue || t.holdsStatus || 'Unknown';
+                }
+              }
+              return queue;
+            })()
           })),
           tasksInQueueAtEndOfDay
         })
