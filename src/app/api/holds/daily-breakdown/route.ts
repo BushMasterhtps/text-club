@@ -93,6 +93,9 @@ export async function GET(request: NextRequest) {
     
     const includeTaskDetails = searchParams.get('includeTasks') === 'true';
     
+    // Get current time for historical date detection
+    const now = new Date();
+    
     // Get ALL Holds tasks - we need all tasks to accurately count what's in each queue at end of day
     // Tasks in queues might have been created days/weeks ago, so we can't filter by creation date
     const allTasks = await prisma.task.findMany({
@@ -222,19 +225,39 @@ export async function GET(request: NextRequest) {
       });
       
       allTasksForDay.forEach(task => {
-        // For Daily Breakdown EOD snapshot, we use the CURRENT queue status (holdsStatus)
-        // This shows what queue each task is currently in, for tasks that existed on that day
-        // The logic is:
-        // - If task is currently in "Customer Contact", it counts as "Pending"
-        // - If task is currently in "Agent Research", it counts as "Rollover"
-        // - If task is currently in "Completed", it counts as "Completed"
-        // - We count ALL tasks that existed on the day (created before end of day), regardless of when they were completed
-        
-        // Use the CURRENT holdsStatus to determine which queue the task is in
-        // This represents the current state, which is what we want for the EOD snapshot
+        // For Daily Breakdown EOD snapshot, determine the queue at end of day
+        // For today (if before 5 PM PST), use current status
+        // For any past date, reconstruct from queue history to get accurate EOD state
         let queueAtEndOfDay = task.holdsStatus || 'Unknown';
         
-        // Count the task in its current queue
+        // Check if this is a past date (EOD has already passed)
+        const isPastDate = dayEnd < now;
+        
+        // For past dates, reconstruct queue from history to get accurate EOD snapshot
+        if (isPastDate && task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
+          const activeAtEndOfDay = task.holdsQueueHistory.filter((entry: any) => {
+            if (!entry.enteredAt) return false;
+            const entered = new Date(entry.enteredAt);
+            if (entered > dayEnd) return false; // Entered after EOD
+            
+            if (entry.exitedAt) {
+              const exited = new Date(entry.exitedAt);
+              return exited >= dayEnd; // Still in queue at EOD
+            }
+            
+            return true; // Never exited, still in queue
+          });
+          
+          if (activeAtEndOfDay.length > 0) {
+            const sorted = activeAtEndOfDay.sort((a: any, b: any) => {
+              return new Date(b.enteredAt).getTime() - new Date(a.enteredAt).getTime();
+            });
+            queueAtEndOfDay = sorted[0].queue || task.holdsStatus || 'Unknown';
+          }
+        }
+        // For recent dates, use current status (already set above)
+        
+        // Count the task in its queue at end of day
         queueCountsAtEndOfDay[queueAtEndOfDay] = (queueCountsAtEndOfDay[queueAtEndOfDay] || 0) + 1;
         
         if (includeTaskDetails) {
@@ -256,18 +279,19 @@ export async function GET(request: NextRequest) {
       
       
       // Calculate rollover tasks: tasks in "Agent Research" queue at end of day
-      const rolloverCount = queueCountsAtEndOfDay['Agent Research'] || 0;
+      // Use the same queue counts we calculated above (which already uses historical reconstruction for old dates)
+      const rolloverCount = queueCountsAtEndOfDay['Agent Research'] || 
+                           queueCountsAtEndOfDay['agent research'] || 
+                           queueCountsAtEndOfDay['AGENT RESEARCH'] || 0;
+      
+      // For task details, filter tasks that were in Agent Research at EOD
       const rolloverTasks = includeTaskDetails ? allTasksForDay.filter(task => {
-        // Skip if task was completed before end of day
-        if (task.endTime) {
-          const completed = new Date(task.endTime);
-          if (completed < dayEnd) return false;
-        }
-        
-        // Determine queue at end of day (same logic as above)
+        // Determine queue at end of day (same logic as in main loop)
         let queueAtEndOfDay = task.holdsStatus || 'Unknown';
         
-        if (task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
+        const isPastDate = dayEnd < now;
+        
+        if (isPastDate && task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
           const activeAtEndOfDay = task.holdsQueueHistory.filter((entry: any) => {
             if (!entry.enteredAt) return false;
             const entered = new Date(entry.enteredAt);
@@ -289,7 +313,9 @@ export async function GET(request: NextRequest) {
           }
         }
         
-        return queueAtEndOfDay === 'Agent Research';
+        return queueAtEndOfDay === 'Agent Research' || 
+               queueAtEndOfDay === 'agent research' || 
+               queueAtEndOfDay === 'AGENT RESEARCH';
       }) : [];
       
       // Calculate pending: tasks in "Customer Contact" + "Escalated Call 4+ Day" queues at end of day
