@@ -5,7 +5,7 @@ import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 
 interface AssistanceRequestsSectionProps {
-  taskType?: "TEXT_CLUB" | "WOD_IVCS" | "EMAIL_REQUESTS" | "STANDALONE_REFUNDS";
+  taskType?: "TEXT_CLUB" | "WOD_IVCS" | "EMAIL_REQUESTS" | "STANDALONE_REFUNDS" | "YOTPO" | "HOLDS";
 }
 
 interface AssistanceRequest {
@@ -69,10 +69,28 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
       const data = await response.json();
       
       if (data.success) {
-        // Filter by taskType if specified
-        const filteredRequests = taskType 
-          ? (data.requests || []).filter((req: AssistanceRequest) => req.taskType === taskType)
-          : (data.requests || []);
+        // Filter logic:
+        // - Text Club, WOD/IVCS, Email Requests, and Yotpo should show ALL of each other's requests (cross-visible)
+        // - Holds should ONLY show Holds requests (isolated)
+        let filteredRequests = data.requests || [];
+        
+        if (taskType) {
+          if (taskType === "HOLDS") {
+            // Holds: Only show Holds requests
+            filteredRequests = filteredRequests.filter((req: AssistanceRequest) => req.taskType === "HOLDS");
+          } else {
+            // Text Club, WOD/IVCS, Email Requests, Yotpo: Show all non-Holds requests
+            filteredRequests = filteredRequests.filter((req: AssistanceRequest) => 
+              req.taskType !== "HOLDS" && 
+              (req.taskType === "TEXT_CLUB" || 
+               req.taskType === "WOD_IVCS" || 
+               req.taskType === "EMAIL_REQUESTS" || 
+               req.taskType === "YOTPO" ||
+               req.taskType === "STANDALONE_REFUNDS")
+            );
+          }
+        }
+        
         setRequests(filteredRequests);
       } else {
         console.error("Failed to load assistance requests:", data.error);
@@ -162,7 +180,12 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">🆘 Assistance Requests (All Task Types)</h3>
+        <h3 className="text-lg font-semibold">
+          🆘 Assistance Requests
+          {taskType === "HOLDS" 
+            ? " (Holds Only)" 
+            : " (All Task Types)"}
+        </h3>
         <div className="flex items-center gap-2">
           <span className="text-sm text-white/60">{requests.length} total requests</span>
           <SmallButton onClick={loadRequests} disabled={loading}>

@@ -7,9 +7,11 @@ export async function GET(req: Request) {
     console.log("🔍 Assistance API: Fetching assistance requests...");
     
     // Fetch all tasks that have assistance notes and are either pending assistance or have been responded to
+    // Exclude unassigned tasks (assignedToId must not be null)
     const tasks = await prisma.task.findMany({
       where: {
         assistanceNotes: { not: null },
+        assignedToId: { not: null }, // Only show tasks that are assigned to an agent
         OR: [
           { status: "ASSISTANCE_REQUIRED" }, // Pending assistance requests
           { 
