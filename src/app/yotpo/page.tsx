@@ -9,7 +9,7 @@ import { useAutoLogout } from '@/hooks/useAutoLogout';
 import ThemeToggle from '@/app/_components/ThemeToggle';
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import YotpoAnalytics from '@/app/_components/YotpoAnalytics';
-import { AssistanceRequestsSection } from '@/app/_components/AssistanceRequestsSection';
+import { AssistanceRequestsSection } from '@/app/manager/_components/AssistanceRequestsSection';
 import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
 import SubmissionsReport from '@/app/yotpo/_components/SubmissionsReport';
 
@@ -1038,18 +1038,29 @@ export default function YotpoPage() {
     }
   };
 
-  // Load assistance requests
+  // Load assistance requests - get all non-Holds requests for cross-visibility
   const loadAssistanceRequests = async () => {
     try {
       const response = await fetch('/api/manager/assistance', { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          const yotpoRequests = data.requests.filter((req: any) => req.taskType === 'YOTPO');
-          setAssistanceRequests(yotpoRequests);
+          // Get all non-Holds requests (for cross-task-type visibility)
+          const allNonHoldsRequests = (data.requests || []).filter((req: any) => 
+            req.taskType !== 'HOLDS' && 
+            (req.taskType === 'TEXT_CLUB' || 
+             req.taskType === 'WOD_IVCS' || 
+             req.taskType === 'EMAIL_REQUESTS' || 
+             req.taskType === 'YOTPO' ||
+             req.taskType === 'STANDALONE_REFUNDS')
+          );
           
-          const pendingRequests = yotpoRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
+          setAssistanceRequests(allNonHoldsRequests);
           
+          // Check for pending requests (all non-Holds)
+          const pendingRequests = allNonHoldsRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
+          
+          // Show notification if there are new pending requests
           if (pendingRequests.length > 0 && (newAssistanceCount === 0 || pendingRequests.length > newAssistanceCount)) {
             setShowNotification(true);
             setTimeout(() => setShowNotification(false), 5000);
@@ -1300,11 +1311,7 @@ export default function YotpoPage() {
         {/* Assistance Requests Section */}
         {activeSection === "assistance" && (
           <div className="space-y-8">
-            <AssistanceRequestsSection 
-              requests={assistanceRequests}
-              onRequestsChange={setAssistanceRequests}
-              title="🆘 Yotpo Assistance Requests"
-            />
+            <AssistanceRequestsSection taskType="YOTPO" />
           </div>
         )}
 

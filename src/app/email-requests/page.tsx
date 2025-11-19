@@ -813,26 +813,37 @@ export default function EmailRequestsPage() {
     }
   };
 
-  // Load assistance requests
+  // Load assistance requests - get all non-Holds requests for cross-visibility
   const loadAssistanceRequests = async () => {
     try {
       const response = await fetch('/api/manager/assistance', { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          const emailRequests = data.requests.filter((req: any) => req.taskType === 'EMAIL_REQUESTS');
-          setAssistanceRequests(emailRequests);
+          // Get all non-Holds requests (for cross-task-type visibility)
+          const allNonHoldsRequests = (data.requests || []).filter((req: any) => 
+            req.taskType !== 'HOLDS' && 
+            (req.taskType === 'TEXT_CLUB' || 
+             req.taskType === 'WOD_IVCS' || 
+             req.taskType === 'EMAIL_REQUESTS' || 
+             req.taskType === 'YOTPO' ||
+             req.taskType === 'STANDALONE_REFUNDS')
+          );
           
-          // Check for pending requests
-          const pendingRequests = emailRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
+          setAssistanceRequests(allNonHoldsRequests);
           
-          // Show notification if there are pending requests and it's either the first load or there are new requests
-          if (pendingRequests.length > 0 && (newAssistanceCount === 0 || pendingRequests.length > newAssistanceCount)) {
+          // Check for pending requests (all non-Holds)
+          const pendingRequests = allNonHoldsRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
+          const currentPendingCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
+          const newPendingCount = pendingRequests.length;
+          
+          // Show notification if there are new pending requests
+          if (newPendingCount > 0 && (currentPendingCount === 0 || newPendingCount > currentPendingCount)) {
             setShowNotification(true);
             setTimeout(() => setShowNotification(false), 5000);
           }
           
-          setNewAssistanceCount(pendingRequests.length);
+          setNewAssistanceCount(newPendingCount);
         }
       }
     } catch (error) {

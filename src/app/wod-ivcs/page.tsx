@@ -693,18 +693,29 @@ export default function WodIvcsDashboard() {
       const data = await response.json();
       
       if (data.success) {
-        const newRequests = data.requests || [];
-        console.log("🔍 New requests count:", newRequests.length);
+        // Get all non-Holds requests (for cross-task-type visibility)
+        const allNonHoldsRequests = (data.requests || []).filter((req: any) => 
+          req.taskType !== 'HOLDS' && 
+          (req.taskType === 'TEXT_CLUB' || 
+           req.taskType === 'WOD_IVCS' || 
+           req.taskType === 'EMAIL_REQUESTS' || 
+           req.taskType === 'YOTPO' ||
+           req.taskType === 'STANDALONE_REFUNDS')
+        );
         
-        // Check for new assistance requests
-        const currentCount = assistanceRequests.length;
-        const newCount = newRequests.length;
+        console.log("🔍 All non-Holds requests count:", allNonHoldsRequests.length);
         
-        console.log("🔍 Current count:", currentCount, "New count:", newCount);
+        // Check for pending requests (all non-Holds)
+        const pendingRequests = allNonHoldsRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
+        const currentPendingCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
+        const newPendingCount = pendingRequests.length;
         
-        if (newCount > currentCount) {
-          console.log("🔍 New assistance requests detected!");
-          setNewAssistanceCount(newCount - currentCount);
+        console.log("🔍 Current pending count:", currentPendingCount, "New pending count:", newPendingCount);
+        
+        // Show notification if there are new pending requests
+        if (newPendingCount > 0 && (currentPendingCount === 0 || newPendingCount > currentPendingCount)) {
+          console.log("🔍 New pending assistance requests detected!");
+          setNewAssistanceCount(newPendingCount - currentPendingCount);
           setShowNotification(true);
           
           // Auto-hide notification after 5 seconds
@@ -713,7 +724,7 @@ export default function WodIvcsDashboard() {
           }, 5000);
         }
         
-        setAssistanceRequests(newRequests);
+        setAssistanceRequests(allNonHoldsRequests);
       } else {
         console.error("Failed to load assistance requests:", data.error);
       }

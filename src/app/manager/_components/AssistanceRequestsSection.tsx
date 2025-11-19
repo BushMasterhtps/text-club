@@ -105,7 +105,10 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
 
   useEffect(() => {
     loadRequests();
-  }, []);
+    // Poll for updates every 30 seconds
+    const interval = setInterval(loadRequests, 30000);
+    return () => clearInterval(interval);
+  }, [taskType]);
 
   const handleResponse = async (requestId: string) => {
     const response = responseText[requestId]?.trim();
