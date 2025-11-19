@@ -42,6 +42,8 @@ export async function GET(req: Request) {
         // Email Request specific fields
         emailRequestFor: true,
         details: true,
+        salesforceCaseNumber: true,
+        customerNameNumber: true,
         // Standalone Refund specific fields
         refundAmount: true,
         paymentMethod: true,
@@ -147,6 +149,8 @@ export async function GET(req: Request) {
           // Email Request specific fields
           emailRequestFor: task.emailRequestFor,
           details: task.details,
+          salesforceCaseNumber: task.salesforceCaseNumber,
+          customerNameNumber: task.customerNameNumber,
           // Standalone Refund specific fields
           refundAmount: task.refundAmount,
           paymentMethod: task.paymentMethod,

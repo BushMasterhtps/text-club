@@ -1091,7 +1091,24 @@ export default function EmailRequestsPage() {
         {/* Assistance Requests Section */}
         {activeSection === "assistance" && (
           <div className="space-y-8">
-            <AssistanceRequestsSection taskType="EMAIL_REQUESTS" />
+            <AssistanceRequestsSection 
+              taskType="EMAIL_REQUESTS" 
+              onPendingCountChange={(count) => {
+                const previousCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
+                // Update badge count
+                setAssistanceRequests((prev: any[]) => {
+                  // Create a dummy array with the right count for badge calculation
+                  const newArray = Array(count).fill({ status: 'ASSISTANCE_REQUIRED' });
+                  return newArray as any[];
+                });
+                // Show notification if count increased
+                if (count > 0 && (previousCount === 0 || count > previousCount)) {
+                  setNewAssistanceCount(Math.max(1, count - previousCount));
+                  setShowNotification(true);
+                  setTimeout(() => setShowNotification(false), 5000);
+                }
+              }}
+            />
           </div>
         )}
 

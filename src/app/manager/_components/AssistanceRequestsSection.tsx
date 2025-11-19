@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 
 interface AssistanceRequestsSectionProps {
   taskType?: "TEXT_CLUB" | "WOD_IVCS" | "EMAIL_REQUESTS" | "STANDALONE_REFUNDS" | "YOTPO" | "HOLDS";
+  onPendingCountChange?: (count: number) => void; // Callback to notify parent of pending count changes
 }
 
 interface AssistanceRequest {
@@ -33,6 +34,8 @@ interface AssistanceRequest {
   // Email Request specific fields
   emailRequestFor?: string;
   details?: string;
+  salesforceCaseNumber?: string;
+  customerNameNumber?: string;
   // Standalone Refund specific fields
   refundAmount?: number;
   paymentMethod?: string;
@@ -57,11 +60,12 @@ interface AssistanceRequest {
   holdsDaysInSystem?: number;
 }
 
-export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: AssistanceRequestsSectionProps) {
+export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCountChange }: AssistanceRequestsSectionProps) {
   const [requests, setRequests] = useState<AssistanceRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [responseText, setResponseText] = useState<Record<string, string>>({});
+  const previousPendingCountRef = useRef(0);
 
   const loadRequests = async () => {
     setLoading(true);
@@ -89,6 +93,18 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                req.taskType === "YOTPO" ||
                req.taskType === "STANDALONE_REFUNDS")
             );
+          }
+        }
+        
+        // Calculate pending count
+        const pendingCount = filteredRequests.filter((req: AssistanceRequest) => req.status === "ASSISTANCE_REQUIRED").length;
+        
+        // Notify parent if pending count changed (for notification banners)
+        if (onPendingCountChange) {
+          const previousCount = previousPendingCountRef.current;
+          if (pendingCount !== previousCount) {
+            onPendingCountChange(pendingCount);
+            previousPendingCountRef.current = pendingCount;
           }
         }
         
@@ -241,8 +257,21 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                               {request.email && (
                                 <div><strong>📧 Email:</strong> {request.email}</div>
                               )}
+                              {request.customerNameNumber && (
+                                <div><strong>👤 Customer Name:</strong> {request.customerNameNumber}</div>
+                              )}
+                              {request.salesforceCaseNumber && (
+                                <div><strong>📋 SF Case #:</strong> {request.salesforceCaseNumber}</div>
+                              )}
                               <div><strong>Request For:</strong> {request.emailRequestFor || "N/A"}</div>
-                              <div><strong>Details:</strong> {request.details || "N/A"}</div>
+                              {request.details && (
+                                <div className="mt-2">
+                                  <strong>Details:</strong>
+                                  <div className="mt-1 bg-white/5 p-3 rounded border border-white/10 whitespace-pre-wrap text-white/90">
+                                    {request.details}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ) : request.taskType === "STANDALONE_REFUNDS" ? (
                             <div className="text-sm text-white/80 space-y-1">
@@ -403,8 +432,21 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                               {request.email && (
                                 <div><strong>📧 Email:</strong> {request.email}</div>
                               )}
+                              {request.customerNameNumber && (
+                                <div><strong>👤 Customer Name:</strong> {request.customerNameNumber}</div>
+                              )}
+                              {request.salesforceCaseNumber && (
+                                <div><strong>📋 SF Case #:</strong> {request.salesforceCaseNumber}</div>
+                              )}
                               <div><strong>Request For:</strong> {request.emailRequestFor || "N/A"}</div>
-                              <div><strong>Details:</strong> {request.details || "N/A"}</div>
+                              {request.details && (
+                                <div className="mt-2">
+                                  <strong>Details:</strong>
+                                  <div className="mt-1 bg-white/5 p-3 rounded border border-white/10 whitespace-pre-wrap text-white/90">
+                                    {request.details}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ) : request.taskType === "STANDALONE_REFUNDS" ? (
                             <div className="text-sm text-white/80 space-y-1 mt-2">
