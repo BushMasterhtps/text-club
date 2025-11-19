@@ -66,14 +66,61 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Debug: Log SalesForce Case Number mapping
+        // Find Salesforce Case Number column - try multiple variations
+        // The column name can vary: "SaleForce Case Number (please DO NOT include any other system number) I.E. 1234567"
         const sfCaseNum = record['SaleForce Case Num'] || 
                          record['SaleForce Case Number (please DO NOT include any other system number) I.E 1234567'] || 
-                         record['SaleForce Case Number (please DO NOT include any other system number) I.E. 1234567'] || 
-                         null;
+                         record['SaleForce Case Number (please DO NOT include any other system number) I.E. 1234567'] ||
+                         record['SaleForce Case Number'] ||
+                         // Try case-insensitive search
+                         Object.keys(record).find(key => 
+                           key.toLowerCase().includes('saleforce') && 
+                           key.toLowerCase().includes('case')
+                         ) ? record[Object.keys(record).find(key => 
+                           key.toLowerCase().includes('saleforce') && 
+                           key.toLowerCase().includes('case')
+                         )!] : null;
+        
+        // Find Email column - try variations
+        const email = record['Email'] || 
+                     record['email'] ||
+                     Object.keys(record).find(key => key.toLowerCase() === 'email') 
+                       ? record[Object.keys(record).find(key => key.toLowerCase() === 'email')!] 
+                       : null;
+        
+        // Find Name column - try variations
+        const name = record['Name'] || 
+                    record['name'] ||
+                    Object.keys(record).find(key => key.toLowerCase() === 'name') 
+                      ? record[Object.keys(record).find(key => key.toLowerCase() === 'name')!] 
+                      : null;
+        
+        // Find "What is the email request for?" column - try variations
+        const emailRequestFor = record['What is the email request for?'] ||
+                               record['what is the email request for?'] ||
+                               Object.keys(record).find(key => 
+                                 key.toLowerCase().includes('email request for') ||
+                                 key.toLowerCase().includes('request for')
+                               ) ? record[Object.keys(record).find(key => 
+                                 key.toLowerCase().includes('email request for') ||
+                                 key.toLowerCase().includes('request for')
+                               )!] : null;
+        
+        // Find Details column
+        const details = record['Details'] ||
+                       record['details'] ||
+                       Object.keys(record).find(key => key.toLowerCase() === 'details') 
+                         ? record[Object.keys(record).find(key => key.toLowerCase() === 'details')!] 
+                         : null;
         
         if (index < 3) { // Log first 3 records for debugging
-          console.log(`📋 Record ${index + 1} - SF Case Number:`, sfCaseNum);
+          console.log(`📋 Record ${index + 1}:`, {
+            email,
+            name,
+            sfCaseNum,
+            emailRequestFor,
+            availableKeys: Object.keys(record)
+          });
         }
 
         // Create task data
@@ -81,12 +128,11 @@ export async function POST(request: NextRequest) {
           taskType: 'EMAIL_REQUESTS' as const,
           status: 'PENDING' as const,
           completionTime,
-          salesforceCaseNumber: sfCaseNum,
-          emailRequestFor: record['What is the email request for?'] || null,
-          details: record['Details'] || null,
-          // Map other fields as needed
-          email: record['Email'] || null,
-          text: record['Name'] || null, // Using Name field for text
+          salesforceCaseNumber: sfCaseNum || null,
+          emailRequestFor: emailRequestFor || null,
+          details: details || null,
+          email: email || null,
+          text: name || null, // Using Name field for text
           brand: 'Email Request', // Default brand for email requests
         };
 
