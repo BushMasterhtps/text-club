@@ -230,67 +230,28 @@ export async function GET(request: NextRequest) {
       });
       
       allTasksForDay.forEach(task => {
-        // Determine if task was in a queue at end of day
-        // A task is "in queue at EOD" if:
-        // 1. It wasn't completed before end of day, OR
-        // 2. It was completed after end of day (so it was still in queue at EOD)
-        let wasInQueueAtEOD = true;
+        // For Daily Breakdown EOD snapshot, we use the CURRENT queue status (holdsStatus)
+        // This shows what queue each task is currently in, for tasks that existed on that day
+        // The logic is:
+        // - If task is currently in "Customer Contact", it counts as "Pending"
+        // - If task is currently in "Agent Research", it counts as "Rollover"
+        // - If task is currently in "Completed", it counts as "Completed"
+        // - We only count tasks that existed on the day (created before end of day)
         
+        // Skip tasks that were completed before the start of the day
+        // (they didn't exist during this day)
         if (task.endTime) {
           const completed = new Date(task.endTime);
-          if (completed < dayEnd) {
-            // Task was completed before end of day, so it wasn't in queue at EOD
-            wasInQueueAtEOD = false;
+          if (completed < dayStart) {
+            return; // Task was completed before this day started, don't count
           }
-          // If completed >= dayEnd, task was still in queue at EOD
         }
         
-        if (!wasInQueueAtEOD) {
-          return; // Skip tasks that were completed before end of day
-        }
-        
-        // For end-of-day snapshot, use the current holdsStatus
-        // This represents where the task currently is (or was, if it's completed)
-        // For reporting purposes, if a task exists and wasn't completed before EOD,
-        // we use its current queue status
+        // Use the CURRENT holdsStatus to determine which queue the task is in
+        // This represents the current state, which is what we want for the EOD snapshot
         let queueAtEndOfDay = task.holdsStatus || 'Unknown';
         
-        // Try to use queue history if available and if it's a historical date
-        // For today or very recent dates, current status is most accurate
-        const daysAgo = Math.floor((todayCalendar.getTime() - currentCalendarDate.getTime()) / (1000 * 60 * 60 * 24));
-        const isHistoricalDate = daysAgo > 0;
-        
-        if (isHistoricalDate && task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
-          // Try to find what queue the task was in at end of day from history
-          const activeAtEndOfDay = task.holdsQueueHistory.filter((entry: any) => {
-            if (!entry.enteredAt) return false;
-            const entered = new Date(entry.enteredAt);
-            if (entered > dayEnd) return false; // Entry after end of day
-            
-            // If entry has exit time, check if it exited before or after end of day
-            if (entry.exitedAt) {
-              const exited = new Date(entry.exitedAt);
-              // If exited before end of day, this entry wasn't active at EOD
-              if (exited < dayEnd) return false;
-              // If exited >= end of day, it was still active at EOD
-              return true;
-            }
-            
-            // No exit time means still in queue (entry is still active)
-            return true;
-          });
-          
-          if (activeAtEndOfDay.length > 0) {
-            // Use the most recent entry that was active at end of day
-            const sorted = activeAtEndOfDay.sort((a: any, b: any) => {
-              return new Date(b.enteredAt).getTime() - new Date(a.enteredAt).getTime();
-            });
-            const mostRecentEntry = sorted[0];
-            queueAtEndOfDay = mostRecentEntry.queue || task.holdsStatus || 'Unknown';
-          }
-        }
-        
-        // Count the task in its queue at end of day
+        // Count the task in its current queue
         queueCountsAtEndOfDay[queueAtEndOfDay] = (queueCountsAtEndOfDay[queueAtEndOfDay] || 0) + 1;
         
         if (includeTaskDetails) {
