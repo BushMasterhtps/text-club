@@ -144,7 +144,9 @@ export async function POST(request: NextRequest) {
     // Assign tasks
     const tasksToUpdate = taskIds.slice(0, tasksToAssign);
     
-    // First, check which tasks need to be reassigned (COMPLETED tasks)
+    // First, check which tasks need status changes
+    // - COMPLETED tasks need to be set back to PENDING
+    // - IN_PROGRESS tasks can be reassigned directly
     const tasksToReassign = await prisma.task.findMany({
       where: {
         id: { in: tasksToUpdate },
@@ -166,16 +168,18 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // Now assign all tasks (both previously PENDING and newly reassigned)
+    // Now assign all tasks - allow reassignment of already-assigned tasks
+    // This handles both PENDING and IN_PROGRESS tasks, and allows reassignment
     const updateResult = await prisma.task.updateMany({
       where: {
         id: { in: tasksToUpdate },
         taskType: 'HOLDS',
-        status: 'PENDING',
-        assignedToId: null, // Only assign unassigned tasks
+        status: { in: ['PENDING', 'IN_PROGRESS'] }, // Allow both PENDING and IN_PROGRESS
+        // Removed assignedToId: null check to allow reassignment
       },
       data: {
         assignedToId: agentId,
+        status: 'IN_PROGRESS', // Set to IN_PROGRESS when assigned
         updatedAt: new Date(),
       },
     });
