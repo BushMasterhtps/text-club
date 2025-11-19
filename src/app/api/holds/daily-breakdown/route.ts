@@ -239,32 +239,32 @@ export async function GET(request: NextRequest) {
         }
         
         // For end-of-day snapshot, use the current holdsStatus
-        // This is the most reliable way since it represents the current state
-        // Queue history is complex and may not accurately reflect the state at a specific point in time
+        // This is the most reliable approach: if a task wasn't completed before end of day,
+        // its current queue status is what it was at end of day (or close enough for reporting purposes)
+        // Queue history parsing is complex and unreliable - current status is more accurate
         let queueAtEndOfDay = task.holdsStatus || 'Unknown';
         
-        // Only use queue history if we're looking at a past date (not today)
-        // For historical dates, we need to reconstruct the state from history
-        const isHistoricalDate = currentCalendarDate < todayCalendar;
-        if (isHistoricalDate && task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
-          // Find entries that were active at end of day
+        // Only try to use queue history for very old historical dates where current status might have changed
+        // For recent dates (within last 7 days), current status is reliable
+        const daysAgo = Math.floor((todayCalendar.getTime() - currentCalendarDate.getTime()) / (1000 * 60 * 60 * 24));
+        const isOldHistoricalDate = daysAgo > 7;
+        
+        if (isOldHistoricalDate && task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
+          // For old dates, try to reconstruct from history
           const activeAtEndOfDay = task.holdsQueueHistory.filter((entry: any) => {
             if (!entry.enteredAt) return false;
             const entered = new Date(entry.enteredAt);
-            if (entered > dayEnd) return false; // Entry after end of day
+            if (entered > dayEnd) return false;
             
-            // If entry has exit time, check if it exited before end of day
             if (entry.exitedAt) {
               const exited = new Date(entry.exitedAt);
-              return exited >= dayEnd; // Still in queue at end of day
+              return exited >= dayEnd;
             }
             
-            // No exit time means still in queue
             return true;
           });
           
           if (activeAtEndOfDay.length > 0) {
-            // Use the most recent entry that was active at end of day
             const sorted = activeAtEndOfDay.sort((a: any, b: any) => {
               return new Date(b.enteredAt).getTime() - new Date(a.enteredAt).getTime();
             });
