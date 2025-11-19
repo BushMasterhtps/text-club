@@ -213,20 +213,12 @@ export async function GET(request: NextRequest) {
       const tasksInQueueAtEndOfDay: Record<string, any[]> = {};
       
       // Use ALL tasks that existed at end of day
-      // A task "existed" if it was created before end of day AND wasn't completed before start of day
+      // A task "existed" if it was created before end of day
+      // We don't filter by completion time - we want to see the CURRENT queue state for all tasks that existed on that day
       const allTasksForDay = allTasks.filter(t => {
         const created = new Date(t.createdAt);
         // Task must have been created before end of day
-        if (created >= dayEnd) return false;
-        
-        // If task was completed, it must have been completed after start of day (or not completed at all)
-        if (t.endTime) {
-          const completed = new Date(t.endTime);
-          // If completed before start of day, it didn't exist during this day
-          if (completed < dayStart) return false;
-        }
-        
-        return true; // Task existed during this day
+        return created < dayEnd;
       });
       
       allTasksForDay.forEach(task => {
@@ -236,16 +228,7 @@ export async function GET(request: NextRequest) {
         // - If task is currently in "Customer Contact", it counts as "Pending"
         // - If task is currently in "Agent Research", it counts as "Rollover"
         // - If task is currently in "Completed", it counts as "Completed"
-        // - We only count tasks that existed on the day (created before end of day)
-        
-        // Skip tasks that were completed before the start of the day
-        // (they didn't exist during this day)
-        if (task.endTime) {
-          const completed = new Date(task.endTime);
-          if (completed < dayStart) {
-            return; // Task was completed before this day started, don't count
-          }
-        }
+        // - We count ALL tasks that existed on the day (created before end of day), regardless of when they were completed
         
         // Use the CURRENT holdsStatus to determine which queue the task is in
         // This represents the current state, which is what we want for the EOD snapshot
