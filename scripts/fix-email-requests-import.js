@@ -12,14 +12,28 @@ const prisma = new PrismaClient();
 
 async function fixEmailRequests() {
   try {
-    // Read the CSV file
-    const csvPath = path.join(__dirname, '../CSV - Email Requests 1.csv');
+    // Try multiple possible CSV file locations
+    const possiblePaths = [
+      path.join(__dirname, '../CSV - Email Requests 1.csv'),
+      path.join(process.cwd(), 'CSV - Email Requests 1.csv'),
+      '/Users/Bushmaster JSON/Downloads/CSV - Email Requests 1.csv',
+    ];
     
-    if (!fs.existsSync(csvPath)) {
-      console.error('❌ CSV file not found at:', csvPath);
+    let csvPath = null;
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        csvPath = p;
+        break;
+      }
+    }
+    
+    if (!csvPath) {
+      console.error('❌ CSV file not found. Tried:', possiblePaths);
       console.log('Please place the CSV file in the project root as "CSV - Email Requests 1.csv"');
       return;
     }
+    
+    console.log('📁 Using CSV file:', csvPath);
 
     const csvText = fs.readFileSync(csvPath, 'utf-8');
     const records = parse(csvText, {
