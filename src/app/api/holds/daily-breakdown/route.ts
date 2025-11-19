@@ -231,13 +231,15 @@ export async function GET(request: NextRequest) {
           }
         }
         
-        // Determine queue at end of day based on queue history
-        // For simplicity, use current holdsStatus if task wasn't completed
-        // This is more reliable than trying to parse complex queue history
+        // For end-of-day snapshot, use the current holdsStatus
+        // This is the most reliable way since it represents the current state
+        // Queue history is complex and may not accurately reflect the state at a specific point in time
         let queueAtEndOfDay = task.holdsStatus || 'Unknown';
         
-        // If task has queue history, try to determine queue at end of day
-        if (task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
+        // Only use queue history if we're looking at a past date (not today)
+        // For historical dates, we need to reconstruct the state from history
+        const isHistoricalDate = currentCalendarDate < todayCalendar;
+        if (isHistoricalDate && task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
           // Find entries that were active at end of day
           const activeAtEndOfDay = task.holdsQueueHistory.filter((entry: any) => {
             if (!entry.enteredAt) return false;
@@ -261,7 +263,6 @@ export async function GET(request: NextRequest) {
             });
             queueAtEndOfDay = sorted[0].queue || task.holdsStatus || 'Unknown';
           }
-          // If no active entries found, fall back to current status
         }
         
         // Count the task in its queue at end of day
@@ -332,18 +333,28 @@ export async function GET(request: NextRequest) {
                                  queueCountsAtEndOfDay['ESCALATED CALL 4+ DAY'] || 0;
       const pendingCount = customerContactCount + escalatedCallCount;
       
-      // Debug logging
-      if (currentCalendarDate.getTime() === startCalendarDate.getTime() || 
-          (specificDate && currentCalendarDate.toISOString().split('T')[0] === specificDate)) {
-        console.log('Daily Breakdown - Queue Counts:', {
-          date: currentCalendarDate.toISOString().split('T')[0],
-          queueCountsAtEndOfDay,
-          customerContactCount,
-          escalatedCallCount,
-          pendingCount,
-          allQueueKeys: Object.keys(queueCountsAtEndOfDay)
-        });
-      }
+      // Debug logging - always log for troubleshooting
+      console.log('Daily Breakdown - Queue Counts:', {
+        date: currentCalendarDate.toISOString().split('T')[0],
+        dayEnd: dayEnd.toISOString(),
+        totalTasksForDay: allTasksForDay.length,
+        tasksCompletedBeforeEOD: allTasksForDay.filter(t => {
+          if (!t.endTime) return false;
+          return new Date(t.endTime) < dayEnd;
+        }).length,
+        queueCountsAtEndOfDay,
+        customerContactCount,
+        escalatedCallCount,
+        pendingCount,
+        allQueueKeys: Object.keys(queueCountsAtEndOfDay),
+        sampleTaskStatuses: allTasksForDay.slice(0, 5).map(t => ({
+          id: t.id,
+          holdsStatus: t.holdsStatus,
+          status: t.status,
+          endTime: t.endTime,
+          hasQueueHistory: !!t.holdsQueueHistory
+        }))
+      });
       
       const breakdown = {
         date: currentCalendarDate.toISOString().split('T')[0],
