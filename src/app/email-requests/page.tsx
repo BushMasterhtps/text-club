@@ -1688,7 +1688,7 @@ function PendingEmailRequestTasksSection() {
                   </span>
                 </td>
                 <td className="py-3 px-2 text-white/80">{task.email || 'N/A'}</td>
-                <td className="py-3 px-2 text-white/80">{task.text || 'N/A'}</td>
+                <td className="py-3 px-2 text-white/80">{task.text || task.customerNameNumber || 'N/A'}</td>
                 <td className="py-3 px-2 text-white/80">{task.salesforceCaseNumber || 'N/A'}</td>
                 <td className="py-3 px-2 text-white/80">{task.emailRequestFor || 'N/A'}</td>
                 <td className="py-3 px-2 text-white/80">

@@ -83,65 +83,108 @@ export async function GET(req: Request) {
 
     console.log("🔍 Assistance API: Found", tasks.length, "tasks with assistance notes");
     
+    // Helper function to safely convert dates to ISO strings
+    const safeToISOString = (date: Date | null | undefined): string | null => {
+      if (!date) return null;
+      try {
+        if (date instanceof Date) {
+          return date.toISOString();
+        }
+        // If it's already a string, return it
+        if (typeof date === 'string') {
+          return date;
+        }
+        return null;
+      } catch (error) {
+        console.error('Error converting date to ISO string:', error);
+        return null;
+      }
+    };
+
     // Transform the data to match the frontend interface
     const requests = tasks.map(task => {
-      // Calculate order age for WOD/IVCS tasks
-      let orderAge = null;
-      if (task.taskType === "WOD_IVCS" && task.purchaseDate) {
-        const purchaseDate = new Date(task.purchaseDate);
-        const now = new Date();
-        const diffTime = Math.abs(now.getTime() - purchaseDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        orderAge = `${diffDays} day${diffDays !== 1 ? 's' : ''} old`;
-      }
+      try {
+        // Calculate order age for WOD/IVCS tasks
+        let orderAge = null;
+        if (task.taskType === "WOD_IVCS" && task.purchaseDate) {
+          try {
+            const purchaseDate = new Date(task.purchaseDate);
+            if (!isNaN(purchaseDate.getTime())) {
+              const now = new Date();
+              const diffTime = Math.abs(now.getTime() - purchaseDate.getTime());
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              orderAge = `${diffDays} day${diffDays !== 1 ? 's' : ''} old`;
+            }
+          } catch (error) {
+            console.error('Error calculating order age:', error);
+          }
+        }
 
-      return {
-        id: task.id,
-        brand: task.brand || task.rawMessage?.brand || "Unknown",
-        phone: task.phone || task.rawMessage?.phone || "Unknown",
-        text: task.text || task.rawMessage?.text || "Unknown",
-        agentName: task.assignedTo?.name || "Unknown",
-        agentEmail: task.assignedTo?.email || "Unknown",
-        assistanceNotes: task.assistanceNotes || "",
-        managerResponse: task.managerResponse,
-        createdAt: task.createdAt.toISOString(),
-        updatedAt: task.updatedAt.toISOString(),
-        status: task.status,
-        taskType: task.taskType,
-        // WOD/IVCS specific fields
-        wodIvcsSource: task.wodIvcsSource,
-        documentNumber: task.documentNumber,
-        customerName: task.customerName,
-        amount: task.amount,
-        webOrderDifference: task.webOrderDifference,
-        purchaseDate: task.purchaseDate?.toISOString(),
-        orderAge: orderAge,
-        // Email Request specific fields
-        emailRequestFor: task.emailRequestFor,
-        details: task.details,
-        // Standalone Refund specific fields
-        refundAmount: task.refundAmount,
-        paymentMethod: task.paymentMethod,
-        refundReason: task.refundReason,
-        // Yotpo specific fields
-        yotpoDateSubmitted: task.yotpoDateSubmitted?.toISOString(),
-        yotpoPrOrYotpo: task.yotpoPrOrYotpo,
-        yotpoCustomerName: task.yotpoCustomerName,
-        yotpoEmail: task.yotpoEmail,
-        yotpoOrderDate: task.yotpoOrderDate?.toISOString(),
-        yotpoProduct: task.yotpoProduct,
-        yotpoIssueTopic: task.yotpoIssueTopic,
-        yotpoReviewDate: task.yotpoReviewDate?.toISOString(),
-        yotpoReview: task.yotpoReview,
-        yotpoSfOrderLink: task.yotpoSfOrderLink,
-        // Holds specific fields
-        holdsOrderDate: task.holdsOrderDate?.toISOString(),
-        holdsOrderNumber: task.holdsOrderNumber,
-        holdsCustomerEmail: task.holdsCustomerEmail,
-        holdsPriority: task.holdsPriority,
-        holdsStatus: task.holdsStatus,
-        holdsDaysInSystem: task.holdsDaysInSystem,
-      };
+        return {
+          id: task.id,
+          brand: task.brand || task.rawMessage?.brand || "Unknown",
+          phone: task.phone || task.rawMessage?.phone || "Unknown",
+          text: task.text || task.rawMessage?.text || "Unknown",
+          agentName: task.assignedTo?.name || "Unknown",
+          agentEmail: task.assignedTo?.email || "Unknown",
+          assistanceNotes: task.assistanceNotes || "",
+          managerResponse: task.managerResponse,
+          createdAt: task.createdAt ? safeToISOString(task.createdAt) : null,
+          updatedAt: task.updatedAt ? safeToISOString(task.updatedAt) : null,
+          status: task.status,
+          taskType: task.taskType,
+          // WOD/IVCS specific fields
+          wodIvcsSource: task.wodIvcsSource,
+          documentNumber: task.documentNumber,
+          customerName: task.customerName,
+          amount: task.amount,
+          webOrderDifference: task.webOrderDifference,
+          purchaseDate: safeToISOString(task.purchaseDate),
+          orderAge: orderAge,
+          // Email Request specific fields
+          emailRequestFor: task.emailRequestFor,
+          details: task.details,
+          // Standalone Refund specific fields
+          refundAmount: task.refundAmount,
+          paymentMethod: task.paymentMethod,
+          refundReason: task.refundReason,
+          // Yotpo specific fields
+          yotpoDateSubmitted: safeToISOString(task.yotpoDateSubmitted),
+          yotpoPrOrYotpo: task.yotpoPrOrYotpo,
+          yotpoCustomerName: task.yotpoCustomerName,
+          yotpoEmail: task.yotpoEmail,
+          yotpoOrderDate: safeToISOString(task.yotpoOrderDate),
+          yotpoProduct: task.yotpoProduct,
+          yotpoIssueTopic: task.yotpoIssueTopic,
+          yotpoReviewDate: safeToISOString(task.yotpoReviewDate),
+          yotpoReview: task.yotpoReview,
+          yotpoSfOrderLink: task.yotpoSfOrderLink,
+          // Holds specific fields
+          holdsOrderDate: safeToISOString(task.holdsOrderDate),
+          holdsOrderNumber: task.holdsOrderNumber,
+          holdsCustomerEmail: task.holdsCustomerEmail,
+          holdsPriority: task.holdsPriority,
+          holdsStatus: task.holdsStatus,
+          holdsDaysInSystem: task.holdsDaysInSystem,
+        };
+      } catch (error) {
+        console.error(`Error transforming task ${task.id}:`, error);
+        // Return a minimal valid object to prevent API failure
+        return {
+          id: task.id,
+          brand: task.brand || task.rawMessage?.brand || "Unknown",
+          phone: task.phone || task.rawMessage?.phone || "Unknown",
+          text: task.text || task.rawMessage?.text || "Unknown",
+          agentName: task.assignedTo?.name || "Unknown",
+          agentEmail: task.assignedTo?.email || "Unknown",
+          assistanceNotes: task.assistanceNotes || "",
+          managerResponse: task.managerResponse,
+          createdAt: task.createdAt ? safeToISOString(task.createdAt) : null,
+          updatedAt: task.updatedAt ? safeToISOString(task.updatedAt) : null,
+          status: task.status,
+          taskType: task.taskType,
+        };
+      }
     });
 
     console.log("🔍 Assistance API: Returning", requests.length, "requests");

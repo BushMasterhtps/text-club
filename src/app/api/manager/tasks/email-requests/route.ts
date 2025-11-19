@@ -24,10 +24,25 @@ export async function GET(request: NextRequest) {
       where.assignedToId = assignedTo;
     }
 
-    // Get tasks
+    // Get tasks with all email request fields
     const tasks = await prisma.task.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        assignedToId: true,
+        // Email Request specific fields
+        email: true,
+        text: true,
+        emailRequestFor: true,
+        details: true,
+        salesforceCaseNumber: true,
+        customerNameNumber: true,
+        salesOrderId: true,
+        completionTime: true,
+        timestamp: true,
         assignedTo: {
           select: {
             id: true,
