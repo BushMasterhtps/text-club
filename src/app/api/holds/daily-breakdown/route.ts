@@ -93,15 +93,12 @@ export async function GET(request: NextRequest) {
     
     const includeTaskDetails = searchParams.get('includeTasks') === 'true';
     
-    // Get all Holds tasks - we'll filter by date in the calculation logic
-    // This ensures we capture all tasks that existed during the period
-    // For now, get all tasks created before the end date to ensure we don't miss any
+    // Get ALL Holds tasks - we need all tasks to accurately count what's in each queue at end of day
+    // Tasks in queues might have been created days/weeks ago, so we can't filter by creation date
     const allTasks = await prisma.task.findMany({
       where: {
-        taskType: 'HOLDS',
-        createdAt: {
-          lte: endDate
-        }
+        taskType: 'HOLDS'
+        // No date filtering - we need ALL tasks to determine queue counts at end of day
       },
       select: {
         id: true,
@@ -215,11 +212,21 @@ export async function GET(request: NextRequest) {
       const queueCountsAtEndOfDay: Record<string, number> = {};
       const tasksInQueueAtEndOfDay: Record<string, any[]> = {};
       
-      // Use ALL tasks that existed before end of day (not just tasks created during the day)
-      // This ensures we count tasks that were in queues at end of day, regardless of when they were created
+      // Use ALL tasks that existed at end of day
+      // A task "existed" if it was created before end of day AND wasn't completed before start of day
       const allTasksForDay = allTasks.filter(t => {
         const created = new Date(t.createdAt);
-        return created < dayEnd; // Task existed before end of day
+        // Task must have been created before end of day
+        if (created >= dayEnd) return false;
+        
+        // If task was completed, it must have been completed after start of day (or not completed at all)
+        if (t.endTime) {
+          const completed = new Date(t.endTime);
+          // If completed before start of day, it didn't exist during this day
+          if (completed < dayStart) return false;
+        }
+        
+        return true; // Task existed during this day
       });
       
       allTasksForDay.forEach(task => {
