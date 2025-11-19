@@ -215,17 +215,12 @@ export async function GET(request: NextRequest) {
       const queueCountsAtEndOfDay: Record<string, number> = {};
       const tasksInQueueAtEndOfDay: Record<string, any[]> = {};
       
-      // Combine tasks at start and new tasks to get all tasks that existed during the day
-      const allTasksForDay = [...tasksAtStart, ...newTasks];
-      
-      // Also include tasks that were created before end date but might not be in tasksAtStart
-      // This ensures we capture all tasks that existed at any point during the day
-      const additionalTasks = allTasks.filter(t => {
+      // Use ALL tasks that existed before end of day (not just tasks created during the day)
+      // This ensures we count tasks that were in queues at end of day, regardless of when they were created
+      const allTasksForDay = allTasks.filter(t => {
         const created = new Date(t.createdAt);
-        // Task was created before end of day but not already counted
-        return created < dayEnd && !allTasksForDay.find(at => at.id === t.id);
+        return created < dayEnd; // Task existed before end of day
       });
-      allTasksForDay.push(...additionalTasks);
       
       allTasksForDay.forEach(task => {
         // Skip if task was completed before end of day
@@ -328,8 +323,27 @@ export async function GET(request: NextRequest) {
       }) : [];
       
       // Calculate pending: tasks in "Customer Contact" + "Escalated Call 4+ Day" queues at end of day
-      const pendingCount = (queueCountsAtEndOfDay['Customer Contact'] || 0) + 
-                          (queueCountsAtEndOfDay['Escalated Call 4+ Day'] || 0);
+      // Check all possible queue name variations
+      const customerContactCount = queueCountsAtEndOfDay['Customer Contact'] || 
+                                   queueCountsAtEndOfDay['customer contact'] || 
+                                   queueCountsAtEndOfDay['CUSTOMER CONTACT'] || 0;
+      const escalatedCallCount = queueCountsAtEndOfDay['Escalated Call 4+ Day'] || 
+                                 queueCountsAtEndOfDay['escalated call 4+ day'] || 
+                                 queueCountsAtEndOfDay['ESCALATED CALL 4+ DAY'] || 0;
+      const pendingCount = customerContactCount + escalatedCallCount;
+      
+      // Debug logging
+      if (currentCalendarDate.getTime() === startCalendarDate.getTime() || 
+          (specificDate && currentCalendarDate.toISOString().split('T')[0] === specificDate)) {
+        console.log('Daily Breakdown - Queue Counts:', {
+          date: currentCalendarDate.toISOString().split('T')[0],
+          queueCountsAtEndOfDay,
+          customerContactCount,
+          escalatedCallCount,
+          pendingCount,
+          allQueueKeys: Object.keys(queueCountsAtEndOfDay)
+        });
+      }
       
       const breakdown = {
         date: currentCalendarDate.toISOString().split('T')[0],
