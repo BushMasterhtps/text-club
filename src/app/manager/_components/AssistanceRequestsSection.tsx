@@ -13,6 +13,7 @@ interface AssistanceRequest {
   brand: string;
   phone: string;
   text: string;
+  email?: string | null;
   agentName: string;
   agentEmail: string;
   assistanceNotes: string;
@@ -234,6 +235,9 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                             </div>
                           ) : request.taskType === "EMAIL_REQUESTS" ? (
                             <div className="text-sm text-white/80 space-y-1">
+                              {request.email && (
+                                <div><strong>📧 Email:</strong> {request.email}</div>
+                              )}
                               <div><strong>Request For:</strong> {request.emailRequestFor || "N/A"}</div>
                               <div><strong>Details:</strong> {request.details || "N/A"}</div>
                             </div>
@@ -283,9 +287,16 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                               )}
                             </div>
                           ) : (
+                            // Text Club tasks - show all available details
                             <div className="text-sm text-white/80 space-y-1">
-                              <div><strong>Phone:</strong> {request.phone}</div>
-                              <div><strong>Message:</strong> {request.text}</div>
+                              {request.email && (
+                                <div><strong>📧 Email:</strong> {request.email}</div>
+                              )}
+                              <div><strong>📞 Phone:</strong> {request.phone}</div>
+                              <div><strong>💬 Message:</strong> {request.text}</div>
+                              {request.brand && request.brand !== "Unknown" && (
+                                <div><strong>🏷️ Brand:</strong> {request.brand}</div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -386,6 +397,9 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                             </div>
                           ) : request.taskType === "EMAIL_REQUESTS" ? (
                             <div className="text-sm text-white/80 space-y-1 mt-2">
+                              {request.email && (
+                                <div><strong>📧 Email:</strong> {request.email}</div>
+                              )}
                               <div><strong>Request For:</strong> {request.emailRequestFor || "N/A"}</div>
                               <div><strong>Details:</strong> {request.details || "N/A"}</div>
                             </div>
@@ -401,7 +415,19 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB" }: Assistance
                               <div><strong>🏷️ Queue:</strong> {request.holdsStatus || "N/A"}</div>
                               <div><strong>⭐ Priority:</strong> {request.holdsPriority || "N/A"}</div>
                             </div>
-                          ) : null}
+                          ) : (
+                            // Text Club tasks - show all available details
+                            <div className="text-sm text-white/80 space-y-1 mt-2">
+                              {request.email && (
+                                <div><strong>📧 Email:</strong> {request.email}</div>
+                              )}
+                              <div><strong>📞 Phone:</strong> {request.phone}</div>
+                              <div><strong>💬 Message:</strong> {request.text}</div>
+                              {request.brand && request.brand !== "Unknown" && (
+                                <div><strong>🏷️ Brand:</strong> {request.brand}</div>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="text-2xl">{getStatusEmoji(request.status)}</div>
                       </div>

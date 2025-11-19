@@ -3565,7 +3565,7 @@ export default function ManagerPage() {
   const navigationItems = [
     { id: "overview", label: "📊 Overview", description: "Dashboard metrics and progress" },
     { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage tasks" },
-    { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.length },
+    { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.filter(r => r.status === "ASSISTANCE_REQUIRED").length },
     { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
     { id: "analytics", label: "📈 Analytics", description: "Text Club specific analytics and insights" },
     { id: "team-analytics", label: "📊 Team Analytics", description: "Team-wide performance and task insights", external: true, href: "/analytics" }
