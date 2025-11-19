@@ -712,16 +712,19 @@ export default function WodIvcsDashboard() {
         
         console.log("🔍 Current pending count:", currentPendingCount, "New pending count:", newPendingCount);
         
-        // Show notification if there are new pending requests
-        if (newPendingCount > 0 && (currentPendingCount === 0 || newPendingCount > currentPendingCount)) {
-          console.log("🔍 New pending assistance requests detected!");
-          setNewAssistanceCount(newPendingCount - currentPendingCount);
-          setShowNotification(true);
-          
-          // Auto-hide notification after 5 seconds
-          setTimeout(() => {
-            setShowNotification(false);
-          }, 5000);
+        // Show notification if there are pending requests
+        // Show on first load if there are any pending, or if there are new pending requests
+        if (newPendingCount > 0) {
+          if (currentPendingCount === 0 || newPendingCount > currentPendingCount) {
+            console.log("🔍 New pending assistance requests detected!");
+            setNewAssistanceCount(Math.max(1, newPendingCount - currentPendingCount));
+            setShowNotification(true);
+            
+            // Auto-hide notification after 5 seconds
+            setTimeout(() => {
+              setShowNotification(false);
+            }, 5000);
+          }
         }
         
         setAssistanceRequests(allNonHoldsRequests);

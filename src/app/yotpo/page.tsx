@@ -1060,10 +1060,15 @@ export default function YotpoPage() {
           // Check for pending requests (all non-Holds)
           const pendingRequests = allNonHoldsRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
           
-          // Show notification if there are new pending requests
-          if (pendingRequests.length > 0 && (newAssistanceCount === 0 || pendingRequests.length > newAssistanceCount)) {
-            setShowNotification(true);
-            setTimeout(() => setShowNotification(false), 5000);
+          // Show notification if there are pending requests
+          // Show on first load if there are any pending, or if there are new pending requests
+          const currentPendingCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
+          if (pendingRequests.length > 0) {
+            if (currentPendingCount === 0 || pendingRequests.length > currentPendingCount) {
+              setNewAssistanceCount(Math.max(1, pendingRequests.length - currentPendingCount));
+              setShowNotification(true);
+              setTimeout(() => setShowNotification(false), 5000);
+            }
           }
           
           setNewAssistanceCount(pendingRequests.length);

@@ -837,10 +837,14 @@ export default function EmailRequestsPage() {
           const currentPendingCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
           const newPendingCount = pendingRequests.length;
           
-          // Show notification if there are new pending requests
-          if (newPendingCount > 0 && (currentPendingCount === 0 || newPendingCount > currentPendingCount)) {
-            setShowNotification(true);
-            setTimeout(() => setShowNotification(false), 5000);
+          // Show notification if there are pending requests
+          // Show on first load if there are any pending, or if there are new pending requests
+          if (newPendingCount > 0) {
+            if (currentPendingCount === 0 || newPendingCount > currentPendingCount) {
+              setNewAssistanceCount(Math.max(1, newPendingCount - currentPendingCount));
+              setShowNotification(true);
+              setTimeout(() => setShowNotification(false), 5000);
+            }
           }
           
           setNewAssistanceCount(newPendingCount);
