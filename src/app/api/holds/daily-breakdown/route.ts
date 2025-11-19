@@ -158,8 +158,7 @@ export async function GET(request: NextRequest) {
     
     const currentCalendarDate = new Date(startCalendarDate);
     
-    // Get current date in PST for comparison
-    const now = new Date();
+    // Get current date in PST for comparison (using 'now' defined at top of function)
     const todayPST = new Date(now.getTime() - (8 * 60 * 60 * 1000)); // Convert to PST
     const todayCalendar = new Date(todayPST.getFullYear(), todayPST.getMonth(), todayPST.getDate());
     
