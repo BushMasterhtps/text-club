@@ -230,45 +230,63 @@ export async function GET(request: NextRequest) {
       });
       
       allTasksForDay.forEach(task => {
-        // Skip if task was completed before end of day
+        // Determine if task was in a queue at end of day
+        // A task is "in queue at EOD" if:
+        // 1. It wasn't completed before end of day, OR
+        // 2. It was completed after end of day (so it was still in queue at EOD)
+        let wasInQueueAtEOD = true;
+        
         if (task.endTime) {
           const completed = new Date(task.endTime);
           if (completed < dayEnd) {
-            return; // Task was completed before end of day, don't count in queue
+            // Task was completed before end of day, so it wasn't in queue at EOD
+            wasInQueueAtEOD = false;
           }
+          // If completed >= dayEnd, task was still in queue at EOD
+        }
+        
+        if (!wasInQueueAtEOD) {
+          return; // Skip tasks that were completed before end of day
         }
         
         // For end-of-day snapshot, use the current holdsStatus
-        // This is the most reliable approach: if a task wasn't completed before end of day,
-        // its current queue status is what it was at end of day (or close enough for reporting purposes)
-        // Queue history parsing is complex and unreliable - current status is more accurate
+        // This represents where the task currently is (or was, if it's completed)
+        // For reporting purposes, if a task exists and wasn't completed before EOD,
+        // we use its current queue status
         let queueAtEndOfDay = task.holdsStatus || 'Unknown';
         
-        // Only try to use queue history for very old historical dates where current status might have changed
-        // For recent dates (within last 7 days), current status is reliable
+        // Try to use queue history if available and if it's a historical date
+        // For today or very recent dates, current status is most accurate
         const daysAgo = Math.floor((todayCalendar.getTime() - currentCalendarDate.getTime()) / (1000 * 60 * 60 * 24));
-        const isOldHistoricalDate = daysAgo > 7;
+        const isHistoricalDate = daysAgo > 0;
         
-        if (isOldHistoricalDate && task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
-          // For old dates, try to reconstruct from history
+        if (isHistoricalDate && task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
+          // Try to find what queue the task was in at end of day from history
           const activeAtEndOfDay = task.holdsQueueHistory.filter((entry: any) => {
             if (!entry.enteredAt) return false;
             const entered = new Date(entry.enteredAt);
-            if (entered > dayEnd) return false;
+            if (entered > dayEnd) return false; // Entry after end of day
             
+            // If entry has exit time, check if it exited before or after end of day
             if (entry.exitedAt) {
               const exited = new Date(entry.exitedAt);
-              return exited >= dayEnd;
+              // If exited before end of day, this entry wasn't active at EOD
+              if (exited < dayEnd) return false;
+              // If exited >= end of day, it was still active at EOD
+              return true;
             }
             
+            // No exit time means still in queue (entry is still active)
             return true;
           });
           
           if (activeAtEndOfDay.length > 0) {
+            // Use the most recent entry that was active at end of day
             const sorted = activeAtEndOfDay.sort((a: any, b: any) => {
               return new Date(b.enteredAt).getTime() - new Date(a.enteredAt).getTime();
             });
-            queueAtEndOfDay = sorted[0].queue || task.holdsStatus || 'Unknown';
+            const mostRecentEntry = sorted[0];
+            queueAtEndOfDay = mostRecentEntry.queue || task.holdsStatus || 'Unknown';
           }
         }
         
