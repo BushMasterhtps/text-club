@@ -67,10 +67,10 @@ export async function POST(req: Request) {
       brand: item.brand ?? null,
     }));
 
-    // Step 3: Upsert into SpamArchive using createMany with skipDuplicates
-    // This is more efficient than individual upserts
-    // First, try to create all entries (new ones will be created, duplicates will be skipped)
+    // Step 3: Upsert into SpamArchive
+    // Use createMany with skipDuplicates for new entries, then update existing ones
     try {
+      // Create new entries (duplicates will be skipped)
       await db.spamArchive.createMany({
         data: archiveEntries,
         skipDuplicates: true,
@@ -81,22 +81,21 @@ export async function POST(req: Request) {
     }
 
     // Step 4: Update existing archive entries' lastSeen and hitCount
-    // Use raw SQL for efficiency with large datasets
-    const updatePromises = archiveEntries.map((entry) =>
-      prisma.$executeRaw`
-        UPDATE "SpamArchive"
-        SET "lastSeen" = CURRENT_TIMESTAMP,
-            "hitCount" = "hitCount" + 1
-        WHERE "textHash" = ${entry.textHash}
-      `.catch(() => {
-        // Ignore errors for entries that don't exist (they were created above)
-      })
-    );
-
-    // Execute updates in parallel (but limit concurrency to avoid overwhelming the database)
-    const BATCH_SIZE = 50;
-    for (let i = 0; i < updatePromises.length; i += BATCH_SIZE) {
-      await Promise.all(updatePromises.slice(i, i + BATCH_SIZE));
+    // Use a single efficient raw SQL query to update all matching entries at once
+    const textHashes = archiveEntries.map(e => e.textHash);
+    if (textHashes.length > 0) {
+      try {
+        // Update all matching entries in one query using IN clause
+        await prisma.$executeRaw`
+          UPDATE "SpamArchive"
+          SET "lastSeen" = CURRENT_TIMESTAMP,
+              "hitCount" = "hitCount" + 1
+          WHERE "textHash" = ANY(${textHashes}::text[])
+        `;
+      } catch (error) {
+        console.error("Error updating spam archive entries:", error);
+        // Continue - this is not critical
+      }
     }
 
     // Step 5: Update all SPAM_REVIEW items to SPAM_ARCHIVED in one efficient query
