@@ -1474,24 +1474,21 @@ function SpamReviewSection({
   }
 
   async function applyAllFiltered() {
-    if (!confirm("Archive all spam that matches the current filter?")) return;
+    if (!confirm(`Archive all ${total} spam items that match the current filter?`)) return;
     
-    // For large batches (>100), use background processing
-    if (total > 100) {
-      if (!confirm(`This will process ${total} spam items in batches. This may take several minutes. Continue?`)) return;
-      await processSpamInBackground();
-    } else {
-      await processSpamDirectly();
-    }
+    // Use direct database update endpoint - handles any size efficiently
+    await processSpamDirectly();
   }
 
   async function processSpamDirectly() {
     try {
       setApplyLoading(true);
-      const res = await fetch("/api/manager/spam/apply", {
+      // Use direct database update endpoint to avoid timeout issues
+      // This endpoint uses efficient bulk operations that can handle any size
+      const res = await fetch("/api/manager/spam/apply-direct", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archiveAll: true, q: q.trim() || undefined }),
+        body: JSON.stringify({ q: q.trim() || undefined }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.success) { 
@@ -1502,6 +1499,12 @@ function SpamReviewSection({
       onChangedCounts?.(0, -archivedCount);
       resetPaging();
       await fetchPage(1);
+      
+      // Show success message with processing time
+      if (data.processingTimeMs && archivedCount > 0) {
+        const timeSeconds = (data.processingTimeMs / 1000).toFixed(1);
+        console.log(`Successfully archived ${archivedCount} items in ${timeSeconds}s`);
+      }
     } finally { 
       setApplyLoading(false); 
     }
@@ -1568,7 +1571,7 @@ function SpamReviewSection({
           <div className="text-sm text-white/60">{open ? `${total} total` : ""}</div>
           {open && (
             <SmallButton onClick={applyAllFiltered} disabled={applyLoading || loading || total === 0} title="Archive all matches">
-              {applyLoading ? (total > 100 ? "Processing in batches…" : "Applying…") : "Apply reviewer decisions"}
+              {applyLoading ? "Processing…" : "Apply reviewer decisions"}
             </SmallButton>
           )}
           <SmallButton onClick={() => setOpen((s) => !s)}>{open ? "Hide" : "Show"}</SmallButton>
