@@ -1,6 +1,6 @@
 /**
  * Task Weight System
- * Based on actual average handle times from production data (22,078 tasks)
+ * Based on actual average handle times from production data (22,676 tasks)
  * Weight = Average Handle Time in Minutes (1 min = 1.0 point)
  * 
  * Data Source: Production Railway Database Query (Nov 2025)
@@ -64,14 +64,45 @@ const EMAIL_REQUESTS_WEIGHTS: Record<string, number> = {
 };
 
 // ============================================================================
+// YOTPO Disposition Weights (598 tasks analyzed)
+// ============================================================================
+const YOTPO_WEIGHTS: Record<string, number> = {
+  "Information – Unfeasible request or information not available": 23.20,
+  "Information – Tracking or delivery status provided": 12.39,
+  "Return Authorization – Created and sent to customer": 8.45,
+  "Refund – Return to sender (RTS)": 8.53,
+  "Refund – Partial refund issued": 8.21,
+  "Reship – Damaged or quality issue": 8.20,
+  "AER – None Serious AER - RA Issued": 7.78,
+  "Refund – Full refund issued": 7.62,
+  "Unsubscribed – Customer removed from communications": 7.42,
+  "Subscription – Cancelled": 7.37,
+  "Information – Product usage or transition tips sent": 7.31,
+  "Subscription – Updated (next charge date, frequency, etc.)": 7.29,
+  "Information – Product Information sent": 7.13,
+  "Reship – Item or order not received": 6.77,
+  "Information – Billing Inquiry": 6.67,
+  "Subscription – Cancelled due to PayPal limitations": 6.68,
+  "Escalation – Sent Negative Feedback Macro": 5.46,
+  "Duplicate Request – No new action required": 5.24,
+  "Information – Medical or veterinary guidance provided": 4.84,
+  "Refund – Refund issued with condolences (pet passing or sensitive case)": 4.72,
+  "Passed MBG": 3.85,
+  "Delivered – Order delivered after review, no further action required": 3.14,
+  "Previously Assisted – Issue already resolved or refund previously issued": 2.18,
+  "No Match – No valid account or order located": 0.68,
+  "AER – Serious AER - Refund Issued": 0.23,
+};
+
+// ============================================================================
 // Task Type Default Weights (when disposition is missing)
 // ============================================================================
 const TASK_TYPE_DEFAULTS: Record<string, number> = {
   TEXT_CLUB: 2.60,           // Avg of all TEXT_CLUB dispositions
   WOD_IVCS: 2.14,            // Avg of all WOD_IVCS dispositions
   EMAIL_REQUESTS: 5.27,      // Avg of all EMAIL_REQUESTS dispositions
-  YOTPO: 7.0,                // Initial estimate (will update after ~1 week of data)
-  TRELLO: 3.0,               // Adjusted down from 5.0 (no disposition/time tracking = lower confidence)
+  YOTPO: 6.22,               // Weighted avg of all YOTPO dispositions (598 tasks)
+  TRELLO: 3.0,               // Fixed weight (no disposition/time tracking)
   HOLDS: 4.0,                // Estimate (moderate complexity)
   STANDALONE_REFUNDS: 3.0,   // Estimate
 };
@@ -98,6 +129,9 @@ export function getTaskWeight(taskType: string, disposition?: string | null): nu
       break;
     case "EMAIL_REQUESTS":
       weight = EMAIL_REQUESTS_WEIGHTS[disposition];
+      break;
+    case "YOTPO":
+      weight = YOTPO_WEIGHTS[disposition];
       break;
     case "TRELLO":
       return TASK_TYPE_DEFAULTS.TRELLO;
@@ -149,6 +183,17 @@ export function getAllWeights(): DispositionWeight[] {
     });
   });
 
+  // YOTPO
+  Object.entries(YOTPO_WEIGHTS).forEach(([disposition, weight]) => {
+    weights.push({
+      disposition,
+      taskType: "YOTPO",
+      weight,
+      avgMinutes: weight,
+      taskCount: 0
+    });
+  });
+
   // Sort by weight descending
   return weights.sort((a, b) => b.weight - a.weight);
 }
@@ -170,6 +215,9 @@ export function getWeightsByTaskType(taskType: string): Array<{ disposition: str
     case "EMAIL_REQUESTS":
       weights = EMAIL_REQUESTS_WEIGHTS;
       break;
+    case "YOTPO":
+      weights = YOTPO_WEIGHTS;
+      break;
     default:
       return [];
   }
@@ -186,16 +234,17 @@ export function getWeightsByTaskType(taskType: string): Array<{ disposition: str
 export const WEIGHT_SUMMARY = {
   totalDispositions: Object.keys(TEXT_CLUB_WEIGHTS).length + 
                       Object.keys(WOD_IVCS_WEIGHTS).length + 
-                      Object.keys(EMAIL_REQUESTS_WEIGHTS).length,
-  totalTasksAnalyzed: 22078, // 11129 + 9963 + 986
+                      Object.keys(EMAIL_REQUESTS_WEIGHTS).length +
+                      Object.keys(YOTPO_WEIGHTS).length,
+  totalTasksAnalyzed: 22676, // 11129 + 9963 + 986 + 598
   taskTypes: {
     TEXT_CLUB: { avgWeight: 2.60, dispositions: Object.keys(TEXT_CLUB_WEIGHTS).length, tasksAnalyzed: 11129 },
     WOD_IVCS: { avgWeight: 2.14, dispositions: Object.keys(WOD_IVCS_WEIGHTS).length, tasksAnalyzed: 9963 },
     EMAIL_REQUESTS: { avgWeight: 5.27, dispositions: Object.keys(EMAIL_REQUESTS_WEIGHTS).length, tasksAnalyzed: 986 },
-    YOTPO: { avgWeight: 7.0, dispositions: 0, tasksAnalyzed: 0 }, // Initial estimate
-    TRELLO: { avgWeight: 3.0, dispositions: 0, tasksAnalyzed: 0 }, // Adjusted down (no tracking)
+    YOTPO: { avgWeight: 6.22, dispositions: Object.keys(YOTPO_WEIGHTS).length, tasksAnalyzed: 598 },
+    TRELLO: { avgWeight: 3.0, dispositions: 0, tasksAnalyzed: 0 }, // Fixed weight (no tracking)
   },
-  highestWeight: 7.17, // EMAIL: Unable to Complete - Link/Sale Unavailable
-  lowestWeight: 0.57,  // TEXT_CLUB: Spam - One word statement
+  highestWeight: 23.20, // YOTPO: Information – Unfeasible request or information not available
+  lowestWeight: 0.23,  // YOTPO: AER – Serious AER - Refund Issued
 };
 

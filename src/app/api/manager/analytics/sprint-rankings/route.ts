@@ -6,7 +6,7 @@ import {
   formatSprintPeriod,
   isSeniorAgent 
 } from '@/lib/sprint-utils';
-import { getTaskWeight } from '@/lib/task-weights';
+import { getTaskWeight, getAllWeights, WEIGHT_SUMMARY } from '@/lib/task-weights';
 
 const SPRINT_DURATION_DAYS = 14;
 
@@ -487,7 +487,11 @@ export async function GET(request: NextRequest) {
         seniors: seniorAgents,
         unqualified
       },
-      teamAverages
+      teamAverages,
+      weightIndex: {
+        summary: WEIGHT_SUMMARY,
+        dispositions: getAllWeights()
+      }
     });
 
   } catch (error) {

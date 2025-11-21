@@ -283,6 +283,85 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                 </div>
               )}
 
+              {/* Weight Index - Show in all views */}
+              {sprintData?.weightIndex && (
+                <details className="bg-yellow-500/10 rounded-lg p-4 border border-yellow-500/20">
+                  <summary className="cursor-pointer text-sm font-medium text-yellow-300 hover:text-yellow-200">
+                    ⭐ Task Weight Index ({sprintData.weightIndex.summary?.totalDispositions || 0} dispositions from {sprintData.weightIndex.summary?.totalTasksAnalyzed?.toLocaleString() || 0} real tasks)
+                  </summary>
+                  <div className="mt-4 space-y-4">
+                    {/* Summary Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {Object.entries(sprintData.weightIndex.summary?.taskTypes || {}).map(([taskType, stats]: [string, any]) => (
+                        <div key={taskType} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                          <div className="text-xs font-medium text-white/90 mb-1">
+                            {taskType.replace('_', ' ')}
+                          </div>
+                          <div className="text-sm text-yellow-300 font-bold">{stats.avgWeight?.toFixed(2)} pts avg</div>
+                          <div className="text-xs text-white/50">{stats.dispositions} types • {stats.tasksAnalyzed?.toLocaleString()} analyzed</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Disposition List by Task Type */}
+                    <div className="space-y-3">
+                      {['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'YOTPO'].map(taskType => {
+                        const dispositions = sprintData.weightIndex.dispositions?.filter((d: any) => d.taskType === taskType) || [];
+                        if (dispositions.length === 0) return null;
+
+                        return (
+                          <div key={taskType}>
+                            <div className="text-xs font-semibold text-white/80 mb-2 uppercase tracking-wide">
+                              {taskType.replace('_', ' ')}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {dispositions.map((d: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between bg-white/5 rounded px-3 py-2 text-xs border border-white/10">
+                                  <div className="flex-1 text-white/70 truncate pr-2" title={d.disposition}>
+                                    {d.disposition}
+                                  </div>
+                                  <div className="text-yellow-300 font-semibold whitespace-nowrap">
+                                    {d.weight.toFixed(2)} pts
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      
+                      {/* Fixed Weights */}
+                      <div>
+                        <div className="text-xs font-semibold text-white/80 mb-2 uppercase tracking-wide">
+                          FIXED WEIGHTS
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                          <div className="flex items-center justify-between bg-purple-500/10 border border-purple-500/30 rounded px-3 py-2 text-xs">
+                            <div className="text-purple-300">Trello (All)</div>
+                            <div className="text-yellow-300 font-semibold">3.00 pts</div>
+                          </div>
+                          <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded px-3 py-2 text-xs">
+                            <div className="text-white/70">Holds (All)</div>
+                            <div className="text-yellow-300 font-semibold">4.00 pts</div>
+                          </div>
+                          <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded px-3 py-2 text-xs">
+                            <div className="text-white/70">Standalone Refunds (All)</div>
+                            <div className="text-yellow-300 font-semibold">3.00 pts</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Explanation */}
+                    <div className="text-xs text-white/50 bg-white/5 rounded p-3 border border-white/10">
+                      💡 <strong>How it works:</strong> Each task's weight is based on its actual average handle time from production data. 
+                      Higher complexity tasks (like "Answered in SF") earn more points than simpler tasks (like "Spam"). 
+                      This ensures agents who tackle harder work get proper credit, making rankings fair across different workload mixes.
+                    </div>
+                  </div>
+                </details>
+              )}
+
               {/* Ranking Description */}
               <div className="bg-white/5 rounded-lg p-4">
                 <div className="text-sm text-white/80">
@@ -1147,15 +1226,15 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
               </details>
 
               {/* Weight Index */}
-              {scorecardData.weightIndex && (
+              {(scorecardData.weightIndex || sprintData?.weightIndex) && (
                 <details className="bg-yellow-500/10 rounded-lg p-4 border border-yellow-500/20">
                   <summary className="cursor-pointer text-sm font-medium text-yellow-300 hover:text-yellow-200">
-                    ⭐ Task Weight Index ({scorecardData.weightIndex.summary?.totalDispositions || 0} dispositions from {scorecardData.weightIndex.summary?.totalTasksAnalyzed?.toLocaleString() || 0} real tasks)
+                    ⭐ Task Weight Index ({(scorecardData.weightIndex || sprintData?.weightIndex)?.summary?.totalDispositions || 0} dispositions from {(scorecardData.weightIndex || sprintData?.weightIndex)?.summary?.totalTasksAnalyzed?.toLocaleString() || 0} real tasks)
                   </summary>
                   <div className="mt-4 space-y-4">
                     {/* Summary Stats */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {Object.entries(scorecardData.weightIndex.summary?.taskTypes || {}).map(([taskType, stats]: [string, any]) => (
+                      {Object.entries((scorecardData.weightIndex || sprintData?.weightIndex)?.summary?.taskTypes || {}).map(([taskType, stats]: [string, any]) => (
                         <div key={taskType} className="bg-white/5 rounded-lg p-3 border border-white/10">
                           <div className="text-xs font-medium text-white/90 mb-1">
                             {taskType.replace('_', ' ')}
@@ -1168,8 +1247,9 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
 
                     {/* Disposition List by Task Type */}
                     <div className="space-y-3">
-                      {['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS'].map(taskType => {
-                        const dispositions = scorecardData.weightIndex.dispositions?.filter((d: any) => d.taskType === taskType) || [];
+                      {['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'YOTPO'].map(taskType => {
+                        const weightIndex = scorecardData.weightIndex || sprintData?.weightIndex;
+                        const dispositions = weightIndex?.dispositions?.filter((d: any) => d.taskType === taskType) || [];
                         if (dispositions.length === 0) return null;
 
                         return (
@@ -1201,7 +1281,7 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                           <div className="flex items-center justify-between bg-purple-500/10 border border-purple-500/30 rounded px-3 py-2 text-xs">
                             <div className="text-purple-300">Trello (All)</div>
-                            <div className="text-yellow-300 font-semibold">5.00 pts</div>
+                            <div className="text-yellow-300 font-semibold">3.00 pts</div>
                           </div>
                           <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded px-3 py-2 text-xs">
                             <div className="text-white/70">Holds (All)</div>
