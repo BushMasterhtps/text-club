@@ -7,10 +7,10 @@ export async function GET(request: NextRequest) {
     const agentId = searchParams.get('agentId');
     const queue = searchParams.get('queue');
 
-    // Build where clause - include both PENDING and COMPLETED (for reassignment)
+    // Build where clause - include PENDING, COMPLETED, IN_PROGRESS, and ASSISTANCE_REQUIRED (for reassignment)
     const whereClause: any = {
       taskType: 'HOLDS',
-      status: { in: ['PENDING', 'COMPLETED'] },
+      status: { in: ['PENDING', 'COMPLETED', 'IN_PROGRESS', 'ASSISTANCE_REQUIRED'] },
     };
 
     // Filter by agent if specified (otherwise only unassigned)
@@ -119,12 +119,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check current workload
+    // Check current workload (count PENDING and IN_PROGRESS tasks)
     const currentWorkload = await prisma.task.count({
       where: {
         assignedToId: agentId,
         taskType: 'HOLDS',
-        status: 'PENDING',
+        status: { in: ['PENDING', 'IN_PROGRESS'] },
       },
     });
 
@@ -146,17 +146,18 @@ export async function POST(request: NextRequest) {
     
     // First, check which tasks need status changes
     // - COMPLETED tasks need to be set back to PENDING
+    // - ASSISTANCE_REQUIRED tasks need to be set back to PENDING
     // - IN_PROGRESS tasks can be reassigned directly
     const tasksToReassign = await prisma.task.findMany({
       where: {
         id: { in: tasksToUpdate },
         taskType: 'HOLDS',
-        status: 'COMPLETED',
+        status: { in: ['COMPLETED', 'ASSISTANCE_REQUIRED'] },
       },
       select: { id: true, holdsStatus: true }
     });
     
-    // Set COMPLETED tasks back to PENDING for reassignment
+    // Set COMPLETED and ASSISTANCE_REQUIRED tasks back to PENDING for reassignment
     if (tasksToReassign.length > 0) {
       await prisma.task.updateMany({
         where: {
@@ -169,12 +170,12 @@ export async function POST(request: NextRequest) {
     }
     
     // Now assign all tasks - allow reassignment of already-assigned tasks
-    // This handles both PENDING and IN_PROGRESS tasks, and allows reassignment
+    // This handles PENDING, IN_PROGRESS, and ASSISTANCE_REQUIRED tasks, and allows reassignment
     const updateResult = await prisma.task.updateMany({
       where: {
         id: { in: tasksToUpdate },
         taskType: 'HOLDS',
-        status: { in: ['PENDING', 'IN_PROGRESS'] }, // Allow both PENDING and IN_PROGRESS
+        status: { in: ['PENDING', 'IN_PROGRESS', 'ASSISTANCE_REQUIRED'] }, // Allow PENDING, IN_PROGRESS, and ASSISTANCE_REQUIRED
         // Removed assignedToId: null check to allow reassignment
       },
       data: {
