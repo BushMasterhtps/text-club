@@ -91,6 +91,8 @@ export async function GET(request: NextRequest) {
         },
         hoursInQueue,
         needsAttention: hoursInQueue >= 48, // Flag if 48+ hours in queue
+        // Convert Decimal field to number for JSON serialization
+        holdsOrderAmount: task.holdsOrderAmount ? Number(task.holdsOrderAmount) : null,
       };
     });
 

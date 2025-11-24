@@ -129,7 +129,8 @@ export async function GET(request: NextRequest) {
         duration: task.durationSec,
         queueTimes,
         queueHistory,
-        orderAmount: typeof task.holdsOrderAmount === 'number' ? task.holdsOrderAmount : (task.holdsOrderAmount ? parseFloat(String(task.holdsOrderAmount)) : 0) || 0,
+        // Convert Decimal field to number for JSON serialization
+        orderAmount: task.holdsOrderAmount ? Number(task.holdsOrderAmount) : 0,
         notes: task.holdsNotes || '',
         createdAt: task.createdAt
       };

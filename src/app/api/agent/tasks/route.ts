@@ -136,7 +136,18 @@ export async function GET(req: Request) {
         text: task.text || task.rawMessage?.text || "",
         orderAge: orderAge,
         orderAgeDays: orderAgeDays,
-        rawMessage: undefined // Remove from response
+        rawMessage: undefined, // Remove from response
+        // Convert Decimal fields to numbers for JSON serialization
+        amount: task.amount ? Number(task.amount) : null,
+        webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
+        webOrderSubtotal: task.webOrderSubtotal ? Number(task.webOrderSubtotal) : null,
+        webOrderTotal: task.webOrderTotal ? Number(task.webOrderTotal) : null,
+        nsVsWebDiscrepancy: task.nsVsWebDiscrepancy ? Number(task.nsVsWebDiscrepancy) : null,
+        netSuiteTotal: task.netSuiteTotal ? Number(task.netSuiteTotal) : null,
+        webTotal: task.webTotal ? Number(task.webTotal) : null,
+        webVsNsDifference: task.webVsNsDifference ? Number(task.webVsNsDifference) : null,
+        amountToBeRefunded: task.amountToBeRefunded ? Number(task.amountToBeRefunded) : null,
+        refundAmount: task.refundAmount ? Number(task.refundAmount) : null,
       };
     });
 

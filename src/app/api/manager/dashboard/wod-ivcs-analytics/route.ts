@@ -297,8 +297,9 @@ export async function GET(request: NextRequest) {
       documentNumber: task.documentNumber,
       webOrder: task.webOrder,
       customerName: task.customerName,
-      amount: task.amount,
-      webOrderDifference: task.webOrderDifference,
+      // Convert Decimal fields to numbers for JSON serialization
+      amount: task.amount ? Number(task.amount) : null,
+      webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
       purchaseDate: task.purchaseDate?.toISOString() || null
     }));
 
