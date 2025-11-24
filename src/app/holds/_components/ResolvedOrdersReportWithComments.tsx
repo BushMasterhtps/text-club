@@ -456,7 +456,16 @@ export default function ResolvedOrdersReportWithComments() {
                       ${(typeof task.orderAmount === 'number' ? task.orderAmount : parseFloat(String(task.orderAmount || 0)) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-3 py-2 text-white/80 text-xs">
-                      {task.completedDate ? new Date(task.completedDate).toLocaleString() : 'N/A'}
+                      {task.completedDate ? new Date(task.completedDate).toLocaleString('en-US', { 
+                        timeZone: 'America/Los_Angeles',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: true
+                      }) : 'N/A'}
                     </td>
                     <td className="px-3 py-2 text-white/80">
                       {formatDuration(task.duration || 0)}
@@ -541,7 +550,16 @@ export default function ResolvedOrdersReportWithComments() {
               <div>
                 <span className="text-white/60">Completed:</span>
                 <span className="text-white ml-2">
-                  {selectedTask.completedDate ? new Date(selectedTask.completedDate).toLocaleString() : 'N/A'}
+                  {selectedTask.completedDate ? new Date(selectedTask.completedDate).toLocaleString('en-US', { 
+                    timeZone: 'America/Los_Angeles',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
+                  }) : 'N/A'}
                 </span>
               </div>
               <div>

@@ -150,16 +150,31 @@ export async function GET(request: NextRequest) {
       ];
       
       tasksWithMetrics.forEach(task => {
+        // Convert dates to PST timezone for CSV export
+        const formatDateToPST = (dateString: string | null) => {
+          if (!dateString) return '';
+          return new Date(dateString).toLocaleString('en-US', { 
+            timeZone: 'America/Los_Angeles',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+          });
+        };
+        
         const row = [
           task.orderNumber || '',
           task.customerEmail || '',
-          task.orderDate ? new Date(task.orderDate).toLocaleString() : '',
+          formatDateToPST(task.orderDate),
           task.priority || '',
           task.finalQueue || '',
           task.disposition || '',
           task.agentName || '',
           task.orderAmount || '0',
-          task.completedDate ? new Date(task.completedDate).toLocaleString() : '',
+          formatDateToPST(task.completedDate),
           task.duration || '',
           task.queueTimes['Agent Research'] || '0',
           task.queueTimes['Customer Contact'] || '0',
