@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const take = parseInt(searchParams.get('take') || '100', 10);
     const skip = parseInt(searchParams.get('skip') || '0', 10);
     
-    // Build where clause
+    // Build where clause - Match what the queues API does: filter by holdsStatus = 'Completed'
     // Exclude dispositions that just move to another queue (not truly resolved)
     const excludedDispositions = [
       'Unable to Resolve', // Moves to Customer Contact
@@ -31,51 +31,43 @@ export async function GET(request: NextRequest) {
     
     const where: any = {
       taskType: 'HOLDS',
-      status: 'COMPLETED',
+      holdsStatus: 'Completed', // Match the Completed queue filter
       disposition: { 
         not: null,
-        notIn: excludedDispositions // Only show actually resolved orders
+        notIn: excludedDispositions
       }
     };
     
-    // Build date filter conditions
-    let dateFilterConditions: any[] = [];
-    
     // Date range filter - Convert PST dates to UTC boundaries
-    // PST is UTC-8, so 11/24 00:00 PST = 11/24 08:00 UTC, and 11/24 23:59 PST = 11/25 07:59 UTC
-    // Use endTime if available, otherwise fall back to updatedAt for date filtering
     if (startDate && endDate) {
       const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
       const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
       
       // Start of day in PST = 8:00 AM UTC (PST is UTC-8)
       const pstStartUTC = new Date(Date.UTC(startYear, startMonth - 1, startDay, 8, 0, 0, 0));
-      
-      // End of day in PST = 7:59:59.999 AM UTC next day (11:59:59.999 PM PST = 7:59:59.999 AM UTC next day)
+      // End of day in PST = 7:59:59.999 AM UTC next day
       const pstEndUTC = new Date(Date.UTC(endYear, endMonth - 1, endDay + 1, 7, 59, 59, 999));
       
-      // Filter by endTime if it exists, otherwise use updatedAt as fallback
-      dateFilterConditions.push({
-        OR: [
-          {
-            endTime: {
-              gte: pstStartUTC,
-              lte: pstEndUTC
-            }
-          },
-          {
-            AND: [
-              { endTime: null },
-              {
-                updatedAt: {
-                  gte: pstStartUTC,
-                  lte: pstEndUTC
-                }
-              }
-            ]
+      // Use endTime if available, otherwise use updatedAt
+      where.OR = [
+        {
+          endTime: {
+            gte: pstStartUTC,
+            lte: pstEndUTC
           }
-        ]
-      });
+        },
+        {
+          AND: [
+            { endTime: null },
+            {
+              updatedAt: {
+                gte: pstStartUTC,
+                lte: pstEndUTC
+              }
+            }
+          ]
+        }
+      ];
     }
     
     // Agent filter
@@ -90,17 +82,24 @@ export async function GET(request: NextRequest) {
     
     // Search filter (order number or email)
     if (search) {
-      dateFilterConditions.push({
-        OR: [
+      // If date filter exists, combine with AND; otherwise just add search
+      if (startDate && endDate && where.OR) {
+        where.AND = [
+          { OR: where.OR },
+          {
+            OR: [
+              { holdsOrderNumber: { contains: search, mode: 'insensitive' } },
+              { holdsCustomerEmail: { contains: search, mode: 'insensitive' } }
+            ]
+          }
+        ];
+        delete where.OR;
+      } else {
+        where.OR = [
           { holdsOrderNumber: { contains: search, mode: 'insensitive' } },
           { holdsCustomerEmail: { contains: search, mode: 'insensitive' } }
-        ]
-      });
-    }
-    
-    // Combine all conditions with AND
-    if (dateFilterConditions.length > 0) {
-      where.AND = dateFilterConditions;
+        ];
+      }
     }
     
     // Get total count
