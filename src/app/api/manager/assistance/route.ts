@@ -113,7 +113,7 @@ export async function GET(req: Request) {
         let orderAge = null;
         if (task.taskType === "WOD_IVCS" && task.purchaseDate) {
           try {
-            const purchaseDate = new Date(task.purchaseDate);
+            const purchaseDate = task.purchaseDate instanceof Date ? task.purchaseDate : new Date(task.purchaseDate);
             if (!isNaN(purchaseDate.getTime())) {
               const now = new Date();
               const diffTime = Math.abs(now.getTime() - purchaseDate.getTime());
@@ -125,54 +125,58 @@ export async function GET(req: Request) {
           }
         }
 
+        // Safely get email - check task.email first, then rawMessage (but rawMessage doesn't have email in select)
+        const email = task.email || null;
+
         return {
           id: task.id,
           brand: task.brand || task.rawMessage?.brand || "Unknown",
           phone: task.phone || task.rawMessage?.phone || "Unknown",
           text: task.text || task.rawMessage?.text || "Unknown",
+          email: email,
           agentName: task.assignedTo?.name || "Unknown",
           agentEmail: task.assignedTo?.email || "Unknown",
           assistanceNotes: task.assistanceNotes || "",
-          managerResponse: task.managerResponse,
-          createdAt: task.createdAt ? safeToISOString(task.createdAt) : null,
-          updatedAt: task.updatedAt ? safeToISOString(task.updatedAt) : null,
+          managerResponse: task.managerResponse || null,
+          createdAt: safeToISOString(task.createdAt),
+          updatedAt: safeToISOString(task.updatedAt),
           status: task.status,
           taskType: task.taskType,
           // WOD/IVCS specific fields
-          wodIvcsSource: task.wodIvcsSource,
-          documentNumber: task.documentNumber,
-          customerName: task.customerName,
-          amount: task.amount,
-          webOrderDifference: task.webOrderDifference,
+          wodIvcsSource: task.wodIvcsSource || null,
+          documentNumber: task.documentNumber || null,
+          customerName: task.customerName || null,
+          amount: task.amount ? Number(task.amount) : null,
+          webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
           purchaseDate: safeToISOString(task.purchaseDate),
           orderAge: orderAge,
           // Email Request specific fields
-          emailRequestFor: task.emailRequestFor,
-          details: task.details,
-          salesforceCaseNumber: task.salesforceCaseNumber,
-          customerNameNumber: task.customerNameNumber,
+          emailRequestFor: task.emailRequestFor || null,
+          details: task.details || null,
+          salesforceCaseNumber: task.salesforceCaseNumber || null,
+          customerNameNumber: task.customerNameNumber || null,
           // Standalone Refund specific fields
-          refundAmount: task.refundAmount,
-          paymentMethod: task.paymentMethod,
-          refundReason: task.refundReason,
+          refundAmount: task.refundAmount ? Number(task.refundAmount) : null,
+          paymentMethod: task.paymentMethod || null,
+          refundReason: task.refundReason || null,
           // Yotpo specific fields
           yotpoDateSubmitted: safeToISOString(task.yotpoDateSubmitted),
-          yotpoPrOrYotpo: task.yotpoPrOrYotpo,
-          yotpoCustomerName: task.yotpoCustomerName,
-          yotpoEmail: task.yotpoEmail,
+          yotpoPrOrYotpo: task.yotpoPrOrYotpo || null,
+          yotpoCustomerName: task.yotpoCustomerName || null,
+          yotpoEmail: task.yotpoEmail || null,
           yotpoOrderDate: safeToISOString(task.yotpoOrderDate),
-          yotpoProduct: task.yotpoProduct,
-          yotpoIssueTopic: task.yotpoIssueTopic,
+          yotpoProduct: task.yotpoProduct || null,
+          yotpoIssueTopic: task.yotpoIssueTopic || null,
           yotpoReviewDate: safeToISOString(task.yotpoReviewDate),
-          yotpoReview: task.yotpoReview,
-          yotpoSfOrderLink: task.yotpoSfOrderLink,
+          yotpoReview: task.yotpoReview || null,
+          yotpoSfOrderLink: task.yotpoSfOrderLink || null,
           // Holds specific fields
           holdsOrderDate: safeToISOString(task.holdsOrderDate),
-          holdsOrderNumber: task.holdsOrderNumber,
-          holdsCustomerEmail: task.holdsCustomerEmail,
-          holdsPriority: task.holdsPriority,
-          holdsStatus: task.holdsStatus,
-          holdsDaysInSystem: task.holdsDaysInSystem,
+          holdsOrderNumber: task.holdsOrderNumber || null,
+          holdsCustomerEmail: task.holdsCustomerEmail || null,
+          holdsPriority: task.holdsPriority || null,
+          holdsStatus: task.holdsStatus || null,
+          holdsDaysInSystem: task.holdsDaysInSystem || null,
         };
       } catch (error) {
         console.error(`Error transforming task ${task.id}:`, error);
@@ -182,13 +186,13 @@ export async function GET(req: Request) {
           brand: task.brand || task.rawMessage?.brand || "Unknown",
           phone: task.phone || task.rawMessage?.phone || "Unknown",
           text: task.text || task.rawMessage?.text || "Unknown",
-          email: task.email || task.rawMessage?.email || null,
+          email: task.email || null,
           agentName: task.assignedTo?.name || "Unknown",
           agentEmail: task.assignedTo?.email || "Unknown",
           assistanceNotes: task.assistanceNotes || "",
-          managerResponse: task.managerResponse,
-          createdAt: task.createdAt ? safeToISOString(task.createdAt) : null,
-          updatedAt: task.updatedAt ? safeToISOString(task.updatedAt) : null,
+          managerResponse: task.managerResponse || null,
+          createdAt: safeToISOString(task.createdAt),
+          updatedAt: safeToISOString(task.updatedAt),
           status: task.status,
           taskType: task.taskType,
         };
