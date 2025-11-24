@@ -3135,24 +3135,29 @@ function TaskCard({
                       <option value="Resolved - other">✅ Resolved - other (requires note)</option>
                       <option value="International Order - Unable to Call/ Sent Email">🌍 International Order - Unable to Call/ Sent Email (→ Customer Contact)</option>
                       <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Customer Contact) (requires note)</option>
+                      <option value="Closed & Refunded - Fraud/Reseller">🔒 Closed & Refunded - Fraud/Reseller</option>
                     </>
                   ) : task.holdsStatus === "Customer Contact" ? (
                     <>
+                      <option value="In Communication">💬 In Communication (→ Customer Contact)</option>
                       <option value="Refunded & Closed - No Contact">💰 Refunded & Closed - No Contact</option>
                       <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
                       <option value="Refunded & Closed - Comma Issue">🔧 Refunded & Closed - Comma Issue</option>
                       <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
                       <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
                       <option value="Resolved - Other">✅ Resolved - Other (requires note)</option>
+                      <option value="Closed & Refunded - Fraud/Reseller">🔒 Closed & Refunded - Fraud/Reseller</option>
                     </>
                   ) : task.holdsStatus === "Escalated Call 4+ Day" ? (
                     <>
+                      <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Escalation) (requires note)</option>
                       <option value="International Order - Unable to Call / Sent Email">🌍 International Order - Unable to Call / Sent Email (→ Customer Contact)</option>
                       <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
                       <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
                       <option value="Refunded & Closed - No Contact">💰 Refunded & Closed - No Contact</option>
                       <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
                       <option value="Resolved - Other">✅ Resolved - Other (requires note)</option>
+                      <option value="Closed & Refunded - Fraud/Reseller">🔒 Closed & Refunded - Fraud/Reseller</option>
                     </>
                   ) : (
                     <>
@@ -3311,9 +3316,9 @@ function TaskCard({
 
             {/* Disposition Notes field for Holds tasks (required for ALL Resolved dispositions) */}
             {task.taskType === "HOLDS" && disposition && (() => {
-              // ALL "Resolved" dispositions require a note
+              // Dispositions that require a note
               const requiresNote = [
-                "Unable to Resolve",
+                "Unable to Resolve", // Required when in Escalation queue
                 "Resolved - other",
                 "Resolved - Other",
                 "Resolved - fixed format / fixed address",
@@ -3324,7 +3329,10 @@ function TaskCard({
               // Check if disposition starts with "Resolved"
               const isResolved = disposition.toLowerCase().startsWith("resolved");
               
-              return requiresNote.includes(disposition) || isResolved;
+              // "Unable to Resolve" requires note when in Escalation queue
+              const isUnableToResolveInEscalation = disposition === "Unable to Resolve" && task.holdsStatus === "Escalated Call 4+ Day";
+              
+              return requiresNote.includes(disposition) || isResolved || isUnableToResolveInEscalation;
             })() && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/80">

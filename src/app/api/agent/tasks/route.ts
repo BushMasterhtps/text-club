@@ -151,9 +151,27 @@ export async function GET(req: Request) {
       };
     });
 
-    // Custom sorting: IN_PROGRESS first (current assignments), then PENDING (new assignments), then ASSISTANCE_REQUIRED
-    // Within the same status, preserve createdAt ordering from the DB (oldest/newest per `order`)
+    // Custom sorting for Holds tasks: Sort by queue priority (Escalated Call 4+ Day > Customer Contact > Agent Research)
+    // Then by status: IN_PROGRESS first (current assignments), then PENDING (new assignments), then ASSISTANCE_REQUIRED
+    const holdsQueuePriority: Record<string, number> = {
+      'Escalated Call 4+ Day': 1,
+      'Customer Contact': 2,
+      'Agent Research': 3,
+      'Duplicates': 4,
+      'Completed': 5,
+    };
+    
     const sortedTasks = transformedTasks.sort((a, b) => {
+      // If both are Holds tasks, sort by queue priority first
+      if (a.taskType === 'HOLDS' && b.taskType === 'HOLDS') {
+        const aPriority = holdsQueuePriority[a.holdsStatus || ''] || 999;
+        const bPriority = holdsQueuePriority[b.holdsStatus || ''] || 999;
+        if (aPriority !== bPriority) {
+          return aPriority - bPriority; // Lower number = higher priority
+        }
+      }
+      
+      // Then sort by status: IN_PROGRESS > PENDING > ASSISTANCE_REQUIRED
       const statusOrder = { 'IN_PROGRESS': 1, 'PENDING': 2, 'ASSISTANCE_REQUIRED': 3 };
       const aOrder = statusOrder[a.status as keyof typeof statusOrder] || 4;
       const bOrder = statusOrder[b.status as keyof typeof statusOrder] || 4;

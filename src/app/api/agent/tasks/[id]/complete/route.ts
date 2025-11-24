@@ -101,7 +101,29 @@ export async function POST(
         newStatus = "COMPLETED"; // Count towards agent's completion stats
         newHoldsQueue = "Duplicates";
         shouldUnassign = true; // Unassign for manager review
-      } else if (disposition === "Unable to Resolve" || disposition === "International Order - Unable to Call/ Sent Email") {
+      } else if (disposition === "Unable to Resolve") {
+        // Handle "Unable to Resolve" based on current queue
+        if (task.holdsStatus === "Escalated Call 4+ Day") {
+          // From Escalation: Send back to Escalated Call 4+ Day queue (requires note)
+          newStatus = "COMPLETED"; // Task is complete for THIS agent (counts towards their stats)
+          newHoldsQueue = "Escalated Call 4+ Day";
+          shouldUnassign = true; // Remove from agent's queue so it can be reassigned
+        } else {
+          // From other queues: Move to Customer Contact queue
+          newStatus = "COMPLETED"; // Task is complete for THIS agent (counts towards their stats)
+          newHoldsQueue = "Customer Contact";
+          shouldUnassign = true; // Remove from agent's queue so it can be reassigned
+        }
+      } else if (disposition === "In Communication") {
+        // From Customer Contact: Send back to Customer Contact queue (optional note)
+        newStatus = "COMPLETED"; // Task is complete for THIS agent (counts towards their stats)
+        newHoldsQueue = "Customer Contact";
+        shouldUnassign = true; // Remove from agent's queue so it can be reassigned
+      } else if (disposition === "Closed & Refunded - Fraud/Reseller") {
+        // From any queue: Move to Completed queue (optional note)
+        newStatus = "COMPLETED";
+        newHoldsQueue = "Completed"; // Move to Completed queue
+      } else if (disposition === "International Order - Unable to Call/ Sent Email" || disposition === "International Order - Unable to Call / Sent Email") {
         // Move to Customer Contact queue - Complete for agent, PENDING for reassignment
         newStatus = "COMPLETED"; // Task is complete for THIS agent (counts towards their stats)
         newHoldsQueue = "Customer Contact";
