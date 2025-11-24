@@ -213,8 +213,9 @@ export async function GET(request: NextRequest) {
       details: task.details,
       salesforceCaseNumber: task.salesforceCaseNumber,
       assignedTo: task.assignedTo?.name || 'Unassigned',
-      createdAt: task.createdAt,
-      completedAt: task.endTime,
+      // Convert Date fields to ISO strings for JSON serialization
+      createdAt: task.createdAt?.toISOString() || null,
+      completedAt: task.endTime?.toISOString() || null,
       duration: task.durationSec ? Math.round(task.durationSec / 60) : null // Convert to minutes
     }));
 

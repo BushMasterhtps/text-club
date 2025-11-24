@@ -119,20 +119,21 @@ export async function GET(request: NextRequest) {
         id: task.id,
         orderNumber: task.holdsOrderNumber,
         customerEmail: task.holdsCustomerEmail,
-        orderDate: task.holdsOrderDate,
+        // Convert Date fields to ISO strings for JSON serialization
+        orderDate: task.holdsOrderDate?.toISOString() || null,
         priority: task.holdsPriority,
         finalQueue: task.holdsStatus,
         disposition: task.disposition,
         agentName: task.assignedTo?.name || 'Unassigned',
         agentEmail: task.assignedTo?.email || '',
-        completedDate: task.endTime,
+        completedDate: task.endTime?.toISOString() || null,
         duration: task.durationSec,
         queueTimes,
         queueHistory,
         // Convert Decimal field to number for JSON serialization
         orderAmount: task.holdsOrderAmount ? Number(task.holdsOrderAmount) : 0,
         notes: task.holdsNotes || '',
-        createdAt: task.createdAt
+        createdAt: task.createdAt?.toISOString() || null
       };
     });
     

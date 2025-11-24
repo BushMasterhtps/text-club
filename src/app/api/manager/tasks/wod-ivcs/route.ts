@@ -221,8 +221,9 @@ export async function GET(req: Request) {
       text: null, // WOD/IVCS tasks don't have text
       email: task.email ?? null,
       phone: task.phone ?? null,
-      createdAt: task.createdAt,
-      receivedAt: task.createdAt, // Use createdAt as receivedAt for WOD/IVCS
+      // Convert Date fields to ISO strings for JSON serialization
+      createdAt: task.createdAt?.toISOString() || null,
+      receivedAt: task.createdAt?.toISOString() || null, // Use createdAt as receivedAt for WOD/IVCS
       rawStatus: null, // WOD/IVCS tasks don't have rawStatus
       taskId: task.id,
       assignedToId: task.assignedToId,
@@ -247,14 +248,14 @@ export async function GET(req: Request) {
       shippingCountry: task.shippingCountry,
       shippingState: task.shippingState,
       
-      // Order age fields
-      purchaseDate: task.purchaseDate,
+      // Order age fields - convert Date to ISO string
+      purchaseDate: task.purchaseDate?.toISOString() || null,
       orderAge: orderAge,
       orderAgeDays: orderAgeDays,
       
-      // Send-back tracking fields
+      // Send-back tracking fields - convert Date to ISO string
       sentBackBy: task.sentBackBy,
-      sentBackAt: task.sentBackAt,
+      sentBackAt: task.sentBackAt?.toISOString() || null,
       sentBackDisposition: task.sentBackDisposition,
       sentBackByUser: task.sentBackByUser,
     };
