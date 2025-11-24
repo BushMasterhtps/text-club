@@ -1627,9 +1627,9 @@ export default function AgentPage() {
                         </div>
                         {scorecardData.sprint.nextRankAgent && (
                           <div className="mt-3 pt-3 border-t border-white/10">
-                            <div className="text-xs text-white/60">Gap to #{scorecardData.sprint.my.rankByHybrid - 1}:</div>
+                            <div className="text-xs text-white/60">Gap to #{scorecardData.sprint.my.rankByPtsPerDay - 1}:</div>
                             <div className="text-sm font-semibold text-orange-300">
-                              +{(scorecardData.sprint.nextRankAgent.hybridScore - scorecardData.sprint.my.hybridScore).toFixed(1)} pts needed
+                              +{(scorecardData.sprint.nextRankAgent.weightedDailyAvg - scorecardData.sprint.my.weightedDailyAvg).toFixed(1)} pts/day needed
                             </div>
                           </div>
                         )}
