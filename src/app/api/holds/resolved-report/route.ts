@@ -38,11 +38,21 @@ export async function GET(request: NextRequest) {
       }
     };
     
-    // Date range filter
+    // Date range filter - Convert PST dates to UTC boundaries
+    // PST is UTC-8, so 11/24 00:00 PST = 11/24 08:00 UTC, and 11/24 23:59 PST = 11/25 07:59 UTC
     if (startDate && endDate) {
+      const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+      const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+      
+      // Start of day in PST = 8:00 AM UTC (PST is UTC-8)
+      const pstStartUTC = new Date(Date.UTC(startYear, startMonth - 1, startDay, 8, 0, 0, 0));
+      
+      // End of day in PST = 7:59:59.999 AM UTC next day (11:59:59.999 PM PST = 7:59:59.999 AM UTC next day)
+      const pstEndUTC = new Date(Date.UTC(endYear, endMonth - 1, endDay + 1, 7, 59, 59, 999));
+      
       where.endTime = {
-        gte: new Date(startDate),
-        lte: new Date(endDate + 'T23:59:59.999Z')
+        gte: pstStartUTC,
+        lte: pstEndUTC
       };
     }
     
