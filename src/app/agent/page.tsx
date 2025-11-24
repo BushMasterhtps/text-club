@@ -1446,7 +1446,7 @@ export default function AgentPage() {
                       {scorecardData.sprint?.my?.qualified && (
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-white/60">Current Sprint:</span>
-                          <span className="text-lg font-bold text-white">#{scorecardData.sprint.my.rankByHybrid}</span>
+                          <span className="text-lg font-bold text-white">#{scorecardData.sprint.my.rankByPtsPerDay}</span>
                         </div>
                       )}
                   {scorecardData.lifetime?.my?.qualified && (
@@ -1610,7 +1610,7 @@ export default function AgentPage() {
                       // QUALIFIED - Show Rankings
                       <>
                         <div className="flex items-end gap-2">
-                          <div className="text-3xl font-bold text-white">#{scorecardData.sprint.my.rankByHybrid}</div>
+                          <div className="text-3xl font-bold text-white">#{scorecardData.sprint.my.rankByPtsPerDay}</div>
                           <div className="text-sm text-white/60 mb-1">of {scorecardData.sprint.totalCompetitors}</div>
                         </div>
                         <div className="mt-2">

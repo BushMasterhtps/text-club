@@ -188,8 +188,14 @@ export async function GET(req: NextRequest) {
       }
 
       // Calculate days worked
+      // Only count days with 10+ Trello requests as "days worked" to filter out misdated imports
+      const TRELLO_DAY_THRESHOLD = 10; // Minimum Trello requests to count as a full work day
       const portalWorkedDates = new Set(tasks.map(t => t.endTime!.toISOString().split('T')[0]));
-      const trelloWorkDates = new Set(trello.map(t => t.date.toISOString().split('T')[0]));
+      const trelloWorkDates = new Set(
+        trello
+          .filter(t => t.cardsCount >= TRELLO_DAY_THRESHOLD)
+          .map(t => t.date.toISOString().split('T')[0])
+      );
       const allWorkDates = new Set([...portalWorkedDates, ...trelloWorkDates]);
       const daysWorked = allWorkDates.size;
 
@@ -439,15 +445,23 @@ export async function GET(req: NextRequest) {
     }
 
     // Find next rank agent (for gap analysis)
-    const getNextRankAgent = (ranked: any, myAgent: any) => {
+    // Lifetime uses rankByHybrid, Sprint uses rankByPtsPerDay (to match manager portal)
+    const getNextRankAgentLifetime = (ranked: any, myAgent: any) => {
       if (!myAgent || !myAgent.qualified) return null;
       const myRank = myAgent.rankByHybrid;
       if (myRank === 1) return null; // Already #1
       return ranked.competitive.find((a: any) => a.rankByHybrid === myRank - 1);
     };
 
-    const nextRankLifetime = getNextRankAgent(lifetimeRanked, myLifetime);
-    const nextRankSprint = getNextRankAgent(sprintRanked, mySprint);
+    const getNextRankAgentSprint = (ranked: any, myAgent: any) => {
+      if (!myAgent || !myAgent.qualified) return null;
+      const myRank = myAgent.rankByPtsPerDay;
+      if (myRank === 1) return null; // Already #1
+      return ranked.competitive.find((a: any) => a.rankByPtsPerDay === myRank - 1);
+    };
+
+    const nextRankLifetime = getNextRankAgentLifetime(lifetimeRanked, myLifetime);
+    const nextRankSprint = getNextRankAgentSprint(sprintRanked, mySprint);
 
     return NextResponse.json({
       success: true,
