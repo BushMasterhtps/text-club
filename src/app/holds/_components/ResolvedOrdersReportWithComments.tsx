@@ -585,12 +585,30 @@ export default function ResolvedOrdersReportWithComments() {
                         <div className="text-white">{entry.queue || 'Unknown'}</div>
                         {entry.enteredAt && (
                           <div className="text-white/60">
-                            Entered: {new Date(entry.enteredAt).toLocaleString()}
+                            Entered: {new Date(entry.enteredAt).toLocaleString('en-US', { 
+                              timeZone: 'America/Los_Angeles',
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: true
+                            })}
                           </div>
                         )}
                         {entry.exitedAt && (
                           <div className="text-white/60">
-                            Exited: {new Date(entry.exitedAt).toLocaleString()}
+                            Exited: {new Date(entry.exitedAt).toLocaleString('en-US', { 
+                              timeZone: 'America/Los_Angeles',
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: true
+                            })}
                           </div>
                         )}
                       </div>
