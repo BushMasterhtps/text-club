@@ -440,18 +440,22 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
                 <label className="block text-white/80 text-sm font-medium mb-2">
                   Select Agent
                 </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {agents.map(agent => (
-                    <button
-                      key={agent.id}
-                      onClick={() => handleAgentSelect(agent)}
-                      className="p-3 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 hover:border-blue-500/50 text-left transition-all"
-                    >
-                      <div className="font-medium text-white">{agent.name}</div>
-                      <div className="text-white/60 text-xs">{agent.email}</div>
-                    </button>
-                  ))}
-                </div>
+                {agents.length === 0 ? (
+                  <div className="text-white/60 text-sm py-4">Loading agents...</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {agents.map(agent => (
+                      <button
+                        key={agent.id}
+                        onClick={() => handleAgentSelect(agent)}
+                        className="p-3 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 hover:border-blue-500/50 text-left transition-all"
+                      >
+                        <div className="font-medium text-white">{agent.name || agent.email}</div>
+                        <div className="text-white/60 text-xs">{agent.email}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

@@ -140,6 +140,7 @@ export default function AnalyticsPage() {
   const [overviewStats, setOverviewStats] = useState<OverviewStats | null>(null);
   const [taskTypeStats, setTaskTypeStats] = useState<TaskTypeStats | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus[]>([]);
+  const [allAgents, setAllAgents] = useState<Array<{ id: string; name: string; email: string }>>([]);
   const [dailyTrends, setDailyTrends] = useState<DailyTrend[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDateRange, setSelectedDateRange] = useState<'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom'>('today');
@@ -258,11 +259,12 @@ export default function AnalyticsPage() {
       const dateRange = getDateRange(selectedDateRange);
       
       // Load all analytics data in parallel
-      const [overviewRes, taskStatsRes, agentsRes, trendsRes] = await Promise.all([
+      const [overviewRes, taskStatsRes, agentsRes, trendsRes, allAgentsRes] = await Promise.all([
         fetch(`/api/analytics/overview?startDate=${dateRange.start}&endDate=${dateRange.end}`),
         fetch(`/api/analytics/task-types?startDate=${dateRange.start}&endDate=${dateRange.end}`),
         fetch('/api/analytics/agent-status'),
-        fetch(`/api/analytics/daily-trends?startDate=${dateRange.start}&endDate=${dateRange.end}`)
+        fetch(`/api/analytics/daily-trends?startDate=${dateRange.start}&endDate=${dateRange.end}`),
+        fetch('/api/manager/agents') // Fetch all agents for One-on-One Notes (includes paused agents)
       ]);
 
       if (overviewRes.ok) {
@@ -290,6 +292,18 @@ export default function AnalyticsPage() {
         const trendsData = await trendsRes.json();
         if (trendsData.success) {
           setDailyTrends(trendsData.data);
+        }
+      }
+
+      // Load all agents for One-on-One Notes (not filtered by isLive)
+      if (allAgentsRes.ok) {
+        const allAgentsData = await allAgentsRes.json();
+        if (allAgentsData.success && allAgentsData.agents) {
+          setAllAgents(allAgentsData.agents.map((agent: any) => ({
+            id: agent.id,
+            name: agent.name,
+            email: agent.email
+          })));
         }
       }
     } catch (error) {
@@ -1037,11 +1051,7 @@ export default function AnalyticsPage() {
 
         {/* One-on-One Notes Section */}
         <OneOnOneNotes 
-          agents={agentStatus && Array.isArray(agentStatus) ? agentStatus.map(agent => ({
-            id: agent.id,
-            name: agent.name,
-            email: agent.email
-          })) : []}
+          agents={allAgents}
         />
       </div>
     </main>
