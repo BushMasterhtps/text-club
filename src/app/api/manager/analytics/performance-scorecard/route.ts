@@ -125,10 +125,10 @@ export async function GET(req: NextRequest) {
     }, {} as Record<string, number>);
 
     // Also get dates where agents did Trello work (for days worked calculation)
-    // Only count days with 10+ Trello requests as "days worked" to filter out misdated imports
-    const TRELLO_DAY_THRESHOLD = 10; // Minimum Trello requests to count as a full work day
+    // Only count days with 15+ Trello requests as "days worked" to filter out misdated imports
+    const TRELLO_DAY_THRESHOLD = 15; // Minimum Trello requests to count as a full work day
     const trelloDates = trelloCompletions.reduce((acc, tc) => {
-      // Only count days with 10+ Trello requests as work days
+      // Only count days with 15+ Trello requests as work days
       if (tc.cardsCount >= TRELLO_DAY_THRESHOLD) {
         if (!acc[tc.agentId]) {
           acc[tc.agentId] = new Set();

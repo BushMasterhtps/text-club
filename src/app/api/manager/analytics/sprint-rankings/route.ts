@@ -165,8 +165,8 @@ export async function GET(request: NextRequest) {
       });
 
       const trelloCount = trelloCompletions.reduce((sum, t) => sum + t.cardsCount, 0);
-      // Only count days with 10+ Trello requests as "days worked" to filter out misdated imports
-      const TRELLO_DAY_THRESHOLD = 10; // Minimum Trello requests to count as a full work day
+      // Only count days with 15+ Trello requests as "days worked" to filter out misdated imports
+      const TRELLO_DAY_THRESHOLD = 15; // Minimum Trello requests to count as a full work day
       const trelloWorkDates = new Set(
         trelloCompletions
           .filter(t => t.cardsCount >= TRELLO_DAY_THRESHOLD)

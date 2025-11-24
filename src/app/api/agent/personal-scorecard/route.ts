@@ -188,8 +188,8 @@ export async function GET(req: NextRequest) {
       }
 
       // Calculate days worked
-      // Only count days with 10+ Trello requests as "days worked" to filter out misdated imports
-      const TRELLO_DAY_THRESHOLD = 10; // Minimum Trello requests to count as a full work day
+      // Only count days with 15+ Trello requests as "days worked" to filter out misdated imports
+      const TRELLO_DAY_THRESHOLD = 15; // Minimum Trello requests to count as a full work day
       const portalWorkedDates = new Set(tasks.map(t => t.endTime!.toISOString().split('T')[0]));
       const trelloWorkDates = new Set(
         trello
