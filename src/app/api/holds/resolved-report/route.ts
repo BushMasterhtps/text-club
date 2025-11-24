@@ -38,8 +38,12 @@ export async function GET(request: NextRequest) {
       }
     };
     
+    // Build date filter conditions
+    let dateFilterConditions: any[] = [];
+    
     // Date range filter - Convert PST dates to UTC boundaries
     // PST is UTC-8, so 11/24 00:00 PST = 11/24 08:00 UTC, and 11/24 23:59 PST = 11/25 07:59 UTC
+    // Use endTime if available, otherwise fall back to updatedAt for date filtering
     if (startDate && endDate) {
       const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
       const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
@@ -50,10 +54,28 @@ export async function GET(request: NextRequest) {
       // End of day in PST = 7:59:59.999 AM UTC next day (11:59:59.999 PM PST = 7:59:59.999 AM UTC next day)
       const pstEndUTC = new Date(Date.UTC(endYear, endMonth - 1, endDay + 1, 7, 59, 59, 999));
       
-      where.endTime = {
-        gte: pstStartUTC,
-        lte: pstEndUTC
-      };
+      // Filter by endTime if it exists, otherwise use updatedAt as fallback
+      dateFilterConditions.push({
+        OR: [
+          {
+            endTime: {
+              gte: pstStartUTC,
+              lte: pstEndUTC
+            }
+          },
+          {
+            AND: [
+              { endTime: null },
+              {
+                updatedAt: {
+                  gte: pstStartUTC,
+                  lte: pstEndUTC
+                }
+              }
+            ]
+          }
+        ]
+      });
     }
     
     // Agent filter
@@ -68,10 +90,17 @@ export async function GET(request: NextRequest) {
     
     // Search filter (order number or email)
     if (search) {
-      where.OR = [
-        { holdsOrderNumber: { contains: search, mode: 'insensitive' } },
-        { holdsCustomerEmail: { contains: search, mode: 'insensitive' } }
-      ];
+      dateFilterConditions.push({
+        OR: [
+          { holdsOrderNumber: { contains: search, mode: 'insensitive' } },
+          { holdsCustomerEmail: { contains: search, mode: 'insensitive' } }
+        ]
+      });
+    }
+    
+    // Combine all conditions with AND
+    if (dateFilterConditions.length > 0) {
+      where.AND = dateFilterConditions;
     }
     
     // Get total count
