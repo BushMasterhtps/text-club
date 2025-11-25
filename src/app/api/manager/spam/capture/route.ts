@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SpamMode, RawStatus } from "@prisma/client";
+import { validateStatusTransition } from "@/lib/self-healing/status-validator";
 
 function norm(s: string | null | undefined) {
   return (s ?? "")
@@ -85,7 +86,19 @@ export async function POST() {
         if (ruleMatchesText(r, rm.brand, rm.text)) hits.push(r.pattern);
       }
       if (hits.length) {
-        updates.push({ id: rm.id, hits });
+        // Validate status transition before adding to updates
+        const validation = validateStatusTransition(
+          rm.status,
+          RawStatus.SPAM_REVIEW,
+          'spam capture'
+        );
+        
+        if (validation.valid) {
+          updates.push({ id: rm.id, hits });
+        } else {
+          // Log blocked transition but continue processing
+          console.warn(`[SELF-HEAL] Skipping message ${rm.id}: ${validation.error}`);
+        }
       }
     }
 
