@@ -95,20 +95,8 @@ export async function POST(req: Request) {
     for (const file of files) {
       console.log(`Processing file: ${file.name}, size: ${file.size} bytes`);
       
-      // Check file size (Vercel has a 4.5MB limit for serverless functions)
-      if (file.size > 4 * 1024 * 1024) {
-        console.error(`File ${file.name} is too large: ${file.size} bytes`);
-        perFileResults.push({
-          fileName: file.name,
-          brand: brandFromFilename(file.name),
-          inserted: 0,
-          skippedExisting: 0,
-          totalRows: 0,
-          importBatchId: "(error - file too large)",
-        });
-        continue;
-      }
-
+      // Check file size (Netlify has limits, but we'll process anyway and let it timeout if needed)
+      // For very large files, recommend using the script instead
       const buf = Buffer.from(await file.arrayBuffer());
       const csv = buf.toString("utf8");
       console.log(`File ${file.name} content length: ${csv.length} characters`);
@@ -120,6 +108,11 @@ export async function POST(req: Request) {
       }) as Array<Record<string, string>>;
       
       console.log(`File ${file.name} parsed into ${rows.length} rows`);
+      
+      // Warn if file is very large (but still process it)
+      if (rows.length > 5000) {
+        console.warn(`⚠️  Large file detected (${rows.length} rows). This may timeout. Consider using the import script for files this large.`);
+      }
 
       if (!rows.length) {
         perFileResults.push({
