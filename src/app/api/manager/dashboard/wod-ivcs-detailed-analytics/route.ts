@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
         sources,
         formattedTime: session.createdAt.toLocaleString()
       };
-    });
+    }));
 
     // Get duplicate analysis with frequency tracking
     const duplicateAnalysis = {
