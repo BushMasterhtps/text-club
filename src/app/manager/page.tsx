@@ -1258,13 +1258,11 @@ function SpamPreviewCaptureSection() {
       
       const res = await fetch("/api/manager/spam/capture", { method: "POST" });
       
-      // FIX: Check response status before parsing JSON to prevent errors
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP ${res.status}: ${errorText || "Capture failed"}`);
-      }
-      
-      const data = await res.json();
+      // Use response validator to handle all response types gracefully
+      const { validateAndParseResponse } = await import("@/lib/self-healing/response-validator");
+      const data = await validateAndParseResponse(res, {
+        fallbackError: 'Failed to capture spam'
+      });
       
       if (data?.success) {
         const captured = data.updatedCount ?? 0;
@@ -3327,8 +3325,13 @@ export default function ManagerPage() {
       const response = await fetch("/api/manager/assistance", { cache: "no-store" });
       console.log("🔍 Assistance API response status:", response.status);
       
-      if (response.ok) {
-        const data = await response.json();
+      // Use response validator to handle all response types gracefully
+      const { validateAndParseResponse } = await import("@/lib/self-healing/response-validator");
+      const data = await validateAndParseResponse(response, {
+        fallbackError: 'Unable to load assistance requests'
+      });
+      
+      if (data.success) {
         console.log("🔍 Assistance API data:", data);
         // Filter out HOLDS tasks - they should only appear in Holds dashboard
         const filteredRequests = (data.requests || []).filter((req: any) => req.taskType !== 'HOLDS');
@@ -3354,10 +3357,25 @@ export default function ManagerPage() {
         
         setAssistanceRequests(newRequests);
       } else {
-        console.error("🔍 Assistance API error:", response.status, response.statusText);
+        // Handle error response (already parsed by validator)
+        console.error("🔍 Assistance API error:", data.error || 'Unknown error');
+        
+        // Auto-retry if retryAfter is provided
+        if (data.retryAfter) {
+          console.log(`[SELF-HEAL] Auto-retrying assistance requests in ${data.retryAfter} seconds`);
+          setTimeout(() => {
+            loadAssistanceRequests();
+          }, data.retryAfter * 1000);
+        }
       }
     } catch (error) {
       console.error("Error loading assistance requests:", error);
+      
+      // Auto-retry on network errors
+      console.log("[SELF-HEAL] Network error, retrying in 5 seconds");
+      setTimeout(() => {
+        loadAssistanceRequests();
+      }, 5000);
     }
   }
 
