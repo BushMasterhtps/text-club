@@ -96,10 +96,11 @@ export async function POST() {
       const CONCURRENT_UPDATES = 10;
       for (let i = 0; i < updates.length; i += CONCURRENT_UPDATES) {
         const chunk = updates.slice(i, i + CONCURRENT_UPDATES);
-        await Promise.all(
+        const chunkResults = await Promise.all(
           chunk.map(async ({ id, hits }) => {
             try {
               // FIX: Only update if still READY (prevent invalid status transitions)
+              // This ensures we don't accidentally update PROMOTED messages
               const result = await prisma.rawMessage.updateMany({
                 where: { 
                   id,
@@ -110,24 +111,15 @@ export async function POST() {
                   previewMatches: hits,
                 },
               });
-              return result.count > 0; // Return true if updated
+              return result.count; // Return count of updated rows (0 or 1)
             } catch (error) {
               console.error(`Error updating raw message ${id}:`, error);
-              return false; // Return false if update failed
+              return 0; // Return 0 if update failed
             }
           })
         );
-        // Count only successful updates
-        const successfulUpdates = await Promise.all(
-          chunk.map(async ({ id }) => {
-            const msg = await prisma.rawMessage.findUnique({
-              where: { id },
-              select: { status: true }
-            });
-            return msg?.status === RawStatus.SPAM_REVIEW;
-          })
-        );
-        updatedCount += successfulUpdates.filter(Boolean).length;
+        // Sum up successful updates from this chunk
+        updatedCount += chunkResults.reduce((sum, count) => sum + count, 0);
       }
     }
 
