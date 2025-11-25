@@ -249,6 +249,7 @@ async function importCSVFile(filePath) {
         } catch (error) {
           // If batch insert fails, fall back to individual inserts (EXACT MATCH TO API LOGIC)
           console.error(`   ⚠️  Batch insert failed, falling back to individual inserts...`);
+          let batchSkipped = 0;
           for (const record of batch) {
             try {
               await prisma.rawMessage.create({ data: record });
@@ -257,12 +258,16 @@ async function importCSVFile(filePath) {
               // Handle duplicate constraint errors (EXACT MATCH TO API LOGIC)
               if (individualError.message && individualError.message.includes('Unique constraint failed on the fields: (`hashKey`)')) {
                 // Duplicate detected during insert - count as skipped, not error
-                skippedExisting++;
+                batchSkipped++;
               } else {
                 errors++;
                 errorDetails.push(`Row ${i + 2}: ${individualError.message}`);
               }
             }
+          }
+          // Update skipped count for duplicates found during individual inserts
+          if (batchSkipped > 0) {
+            skippedExisting += batchSkipped;
           }
         }
       }
