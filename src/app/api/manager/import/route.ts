@@ -1,11 +1,9 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { parse } from "csv-parse/sync";
 import crypto from "crypto";
-
-const prisma = new PrismaClient();
 
 /* ------------ helpers (mirror your Apps Script semantics) ------------ */
 function normText(s: unknown) {
