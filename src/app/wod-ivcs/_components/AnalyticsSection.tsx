@@ -271,18 +271,27 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
     
     const headers = [
       'Duplicate Order',
+      'Web Order',
       'Customer',
       'Source',
       'Original Import Date',
       'Status',
       'Completed By',
+      'Completed By Email',
       'Completed On',
       'Disposition',
-      'Age (Days)'
+      'Amount',
+      'NetSuite Total',
+      'Web Total',
+      'Web vs NS Difference',
+      'Warehouse Status',
+      'Age (Days)',
+      'Last Seen Date'
     ];
     
     const rows = detailedAnalytics.duplicateAnalysis.duplicateDetails.map((detail: any) => [
-      detail.duplicateTask.documentNumber || detail.duplicateTask.webOrder,
+      detail.duplicateTask.documentNumber || 'N/A',
+      detail.duplicateTask.webOrder || 'N/A',
       detail.duplicateTask.customerName || 'Unknown',
       detail.duplicateTask.source === 'SO_VS_WEB_DIFFERENCE' ? 'SO vs Web Difference' :
       detail.duplicateTask.source === 'ORDERS_NOT_DOWNLOADING' ? 'Orders Not Downloading' :
@@ -290,13 +299,20 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
       new Date(detail.originalTask.createdAt).toLocaleDateString(),
       detail.wasImported ? 'Imported' : 'Filtered Out',
       detail.originalTask.completedBy || 'N/A',
+      detail.originalTask.completedByEmail || 'N/A',
       detail.originalTask.completedOn ? new Date(detail.originalTask.completedOn).toLocaleDateString() : 'N/A',
       detail.originalTask.disposition || 'N/A',
-      detail.ageInDays
+      detail.originalTask.amount ? `$${Number(detail.originalTask.amount).toFixed(2)}` : 'N/A',
+      detail.originalTask.netSuiteTotal ? `$${Number(detail.originalTask.netSuiteTotal).toFixed(2)}` : 'N/A',
+      detail.originalTask.webTotal ? `$${Number(detail.originalTask.webTotal).toFixed(2)}` : 'N/A',
+      detail.originalTask.webVsNsDifference ? `$${Number(detail.originalTask.webVsNsDifference).toFixed(2)}` : 'N/A',
+      detail.originalTask.warehouseEdgeStatus || 'N/A',
+      detail.ageInDays,
+      detail.lastSeenDate ? new Date(detail.lastSeenDate).toLocaleDateString() : 'N/A'
     ]);
     
     const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -304,6 +320,70 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
     const a = document.createElement('a');
     a.href = url;
     a.download = `wod-ivcs-duplicate-analysis-${startDate}-to-${endDate}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const exportStaleOrdersToCSV = () => {
+    if (!detailedAnalytics?.duplicateAnalysis?.staleOrders) return;
+    
+    const headers = [
+      'Order Number',
+      'Web Order',
+      'Customer',
+      'Source',
+      'Times Seen',
+      'First Seen Date',
+      'Last Seen Date',
+      'Days Since First Seen',
+      'Completed By',
+      'Completed By Email',
+      'Completed On',
+      'Disposition',
+      'Amount',
+      'NetSuite Total',
+      'Web Total',
+      'Web vs NS Difference',
+      'Warehouse Status',
+      'Purchase Date',
+      'Age (Days)'
+    ];
+    
+    const rows = detailedAnalytics.duplicateAnalysis.staleOrders.map((order: any) => [
+      order.documentNumber || 'N/A',
+      order.webOrder || 'N/A',
+      order.customerName || 'Unknown',
+      order.source === 'SO_VS_WEB_DIFFERENCE' ? 'SO vs Web Difference' :
+      order.source === 'ORDERS_NOT_DOWNLOADING' ? 'Orders Not Downloading' :
+      order.source === 'INVALID_CASH_SALE' ? 'Invalid Cash Sale' : order.source,
+      order.frequency,
+      new Date(order.firstSeen).toLocaleDateString(),
+      new Date(order.lastSeen).toLocaleDateString(),
+      order.daysSinceFirstSeen,
+      order.originalTask?.completedBy || 'N/A',
+      order.originalTask?.completedByEmail || 'N/A',
+      order.originalTask?.completedAt ? new Date(order.originalTask.completedAt).toLocaleDateString() : 'N/A',
+      order.originalTask?.disposition || 'N/A',
+      order.originalTask?.amount ? `$${Number(order.originalTask.amount).toFixed(2)}` : 'N/A',
+      order.originalTask?.netSuiteTotal ? `$${Number(order.originalTask.netSuiteTotal).toFixed(2)}` : 'N/A',
+      order.originalTask?.webTotal ? `$${Number(order.originalTask.webTotal).toFixed(2)}` : 'N/A',
+      order.originalTask?.webVsNsDifference ? `$${Number(order.originalTask.webVsNsDifference).toFixed(2)}` : 'N/A',
+      order.originalTask?.warehouseEdgeStatus || 'N/A',
+      order.originalTask?.purchaseDate ? new Date(order.originalTask.purchaseDate).toLocaleDateString() : 'N/A',
+      order.ageInDays
+    ]);
+    
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `wod-ivcs-stale-orders-${startDate}-to-${endDate}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -741,10 +821,99 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
                     </div>
                   </div>
 
+                  {/* Stale Orders Report (5+ days old, multiple imports) */}
+                  {detailedAnalytics.duplicateAnalysis.staleOrders && detailedAnalytics.duplicateAnalysis.staleOrders.length > 0 && (
+                    <div className="mb-6">
+                      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h4 className="font-semibold text-red-300 mb-1">🚨 Stale Orders Report (5+ Days Old)</h4>
+                            <p className="text-sm text-red-200/80">
+                              Orders that keep appearing in imports despite being completed. These may need system admin review.
+                            </p>
+                          </div>
+                          <PrimaryButton onClick={() => exportStaleOrdersToCSV()}>
+                            📊 Export Stale Orders CSV
+                          </PrimaryButton>
+                        </div>
+                        <div className="text-lg font-bold text-red-300">
+                          {detailedAnalytics.duplicateAnalysis.staleOrders.length} stale orders identified
+                        </div>
+                      </div>
+
+                      <div className="bg-white/5 rounded-lg p-4 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-white/20">
+                              <th className="text-left py-2">Order</th>
+                              <th className="text-left py-2">Customer</th>
+                              <th className="text-left py-2">Source</th>
+                              <th className="text-left py-2">Times Seen</th>
+                              <th className="text-left py-2">First Seen</th>
+                              <th className="text-left py-2">Last Seen</th>
+                              <th className="text-left py-2">Days Old</th>
+                              <th className="text-left py-2">Completed By</th>
+                              <th className="text-left py-2">Disposition</th>
+                              <th className="text-left py-2">Amount</th>
+                              <th className="text-left py-2">Warehouse Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {detailedAnalytics.duplicateAnalysis.staleOrders.map((order: any, index: number) => (
+                              <tr key={index} className="border-b border-white/10">
+                                <td className="py-2">
+                                  <div className="font-medium text-white">
+                                    {order.documentNumber || order.webOrder}
+                                  </div>
+                                </td>
+                                <td className="py-2 text-white/80">{order.customerName || 'Unknown'}</td>
+                                <td className="py-2 text-white/80">
+                                  {order.source === 'SO_VS_WEB_DIFFERENCE' ? 'SO vs Web' :
+                                   order.source === 'ORDERS_NOT_DOWNLOADING' ? 'Orders Not Downloading' :
+                                   order.source === 'INVALID_CASH_SALE' ? 'Invalid Cash Sale' : order.source}
+                                </td>
+                                <td className="py-2">
+                                  <span className="px-2 py-1 bg-red-500/20 text-red-300 rounded text-xs font-bold">
+                                    {order.frequency}x
+                                  </span>
+                                </td>
+                                <td className="py-2 text-white/80">
+                                  {new Date(order.firstSeen).toLocaleDateString()}
+                                </td>
+                                <td className="py-2 text-white/80">
+                                  {new Date(order.lastSeen).toLocaleDateString()}
+                                </td>
+                                <td className="py-2">
+                                  <span className="px-2 py-1 bg-red-500/20 text-red-300 rounded text-xs">
+                                    {order.daysSinceFirstSeen} days
+                                  </span>
+                                </td>
+                                <td className="py-2 text-white/80">
+                                  {order.originalTask?.completedBy || 'N/A'}
+                                </td>
+                                <td className="py-2">
+                                  <span className="px-2 py-1 bg-orange-500/20 text-orange-300 rounded text-xs">
+                                    {order.originalTask?.disposition || 'N/A'}
+                                  </span>
+                                </td>
+                                <td className="py-2 text-white/80">
+                                  {order.originalTask?.amount ? `$${Number(order.originalTask.amount).toFixed(2)}` : 'N/A'}
+                                </td>
+                                <td className="py-2 text-white/80">
+                                  {order.originalTask?.warehouseEdgeStatus || 'N/A'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Duplicate Details Table */}
                   <div className="bg-white/5 rounded-lg p-4">
                     <div className="flex justify-between items-center mb-3">
-                      <h5 className="font-medium text-white">📋 Duplicate Details</h5>
+                      <h5 className="font-medium text-white">📋 All Duplicate Details</h5>
                       <PrimaryButton onClick={exportDuplicateAnalysisToCSV}>
                         📊 Export CSV
                       </PrimaryButton>
@@ -760,7 +929,9 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
                             <th className="text-left py-2">Completed By</th>
                             <th className="text-left py-2">Completed On</th>
                             <th className="text-left py-2">Disposition</th>
+                            <th className="text-left py-2">Amount</th>
                             <th className="text-left py-2">Age (Days)</th>
+                            <th className="text-left py-2">Last Seen</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -788,8 +959,10 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
                                 </span>
                               </td>
                               <td className="py-2">
-                                <div className="text-white/80">{detail.originalTask.completedBy}</div>
-                                <div className="text-xs text-white/60">{detail.originalTask.completedByEmail}</div>
+                                <div className="text-white/80">{detail.originalTask.completedBy || 'N/A'}</div>
+                                {detail.originalTask.completedByEmail && (
+                                  <div className="text-xs text-white/60">{detail.originalTask.completedByEmail}</div>
+                                )}
                               </td>
                               <td className="py-2 text-white/80">
                                 {detail.originalTask.completedOn ? new Date(detail.originalTask.completedOn).toLocaleDateString() : 'N/A'}
@@ -799,6 +972,9 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
                                   {detail.originalTask.disposition || 'N/A'}
                                 </span>
                               </td>
+                              <td className="py-2 text-white/80">
+                                {detail.originalTask.amount ? `$${Number(detail.originalTask.amount).toFixed(2)}` : 'N/A'}
+                              </td>
                               <td className="py-2">
                                 <span className={`px-2 py-1 rounded text-xs ${
                                   detail.ageInDays <= 7 ? 'bg-green-500/20 text-green-300' :
@@ -807,6 +983,9 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
                                 }`}>
                                   {detail.ageInDays} days
                                 </span>
+                              </td>
+                              <td className="py-2 text-white/80 text-xs">
+                                {detail.lastSeenDate ? new Date(detail.lastSeenDate).toLocaleDateString() : 'N/A'}
                               </td>
                             </tr>
                           ))}
