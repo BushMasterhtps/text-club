@@ -1255,9 +1255,38 @@ function SpamPreviewCaptureSection() {
     try {
       setCaptureLoading(true);
       setCaptureMsg(null);
+      
       const res = await fetch("/api/manager/spam/capture", { method: "POST" });
+      
+      // FIX: Check response status before parsing JSON to prevent errors
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errorText || "Capture failed"}`);
+      }
+      
       const data = await res.json();
-      setCaptureMsg(data?.success ? `Captured ${data.updatedCount ?? 0} tasks.` : (data?.error || "Capture failed."));
+      
+      if (data?.success) {
+        const captured = data.updatedCount ?? 0;
+        const total = data.totalInQueue ?? 0;
+        const remaining = data.remainingInQueue ?? 0;
+        
+        // Show progress popup with format: "Captured 100 / X (total in queue)"
+        const message = `Captured ${captured} / ${total} (total in queue)${remaining > 0 ? `\n${remaining} remaining` : "\nAll done! ✅"}`;
+        
+        // Show alert popup
+        alert(message);
+        
+        // Also show in UI
+        setCaptureMsg(`Captured ${captured} spam items. ${remaining > 0 ? `${remaining} remaining in queue.` : "All done!"}`);
+      } else {
+        throw new Error(data?.error || "Capture failed");
+      }
+    } catch (error: any) {
+      console.error("Capture spam error:", error);
+      const errorMsg = error?.message || "Failed to capture spam. Please try again.";
+      alert(`Error: ${errorMsg}`);
+      setCaptureMsg(errorMsg);
     } finally {
       setCaptureLoading(false);
     }

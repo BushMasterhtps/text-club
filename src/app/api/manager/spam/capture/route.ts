@@ -42,30 +42,42 @@ function ruleMatchesText(
 }
 
 export async function POST() {
-  // 1) load rules once
-  const rules = await prisma.spamRule.findMany({
-    where: { enabled: true },
-    select: { id: true, pattern: true, patternNorm: true, mode: true, brand: true },
-  });
+  try {
+    // 1) load rules once
+    const rules = await prisma.spamRule.findMany({
+      where: { enabled: true },
+      select: { id: true, pattern: true, patternNorm: true, mode: true, brand: true },
+    });
 
-  // 2) stream through pending raws in chunks
-  // Only scan READY (not yet processed) and PROMOTED (converted to tasks) messages
-  // Completed/actioned messages would have different statuses, so no date filter needed
-  const CHUNK = 250;
-  let offset = 0;
-  let updatedCount = 0;
+    // 2) Get total count of READY messages (only scan READY, not PROMOTED)
+    // PROMOTED messages are already converted to tasks and should not be re-scanned
+    const totalReady = await prisma.rawMessage.count({
+      where: { status: RawStatus.READY }
+    });
 
-  while (true) {
+    // 3) Process only 100 items at a time to prevent timeouts and connection issues
+    const BATCH_SIZE = 100;
     const batch = await prisma.rawMessage.findMany({
       where: { 
-        status: { in: [RawStatus.READY, RawStatus.PROMOTED] }
+        status: RawStatus.READY  // FIX: Only scan READY messages, not PROMOTED
       },
       select: { id: true, brand: true, text: true },
       orderBy: { createdAt: "desc" },
-      skip: offset,
-      take: CHUNK,
+      take: BATCH_SIZE,
     });
-    if (batch.length === 0) break;
+
+    if (batch.length === 0) {
+      return NextResponse.json({ 
+        success: true, 
+        updatedCount: 0,
+        totalInQueue: totalReady,
+        remainingInQueue: totalReady
+      });
+    }
+
+    // 4) Process batch and mark as spam if matched
+    let updatedCount = 0;
+    const updates: Array<{ id: string; hits: string[] }> = [];
 
     for (const rm of batch) {
       const hits: string[] = [];
@@ -73,20 +85,71 @@ export async function POST() {
         if (ruleMatchesText(r, rm.brand, rm.text)) hits.push(r.pattern);
       }
       if (hits.length) {
-        await prisma.rawMessage.update({
-          where: { id: rm.id },
-          data: {
-            status: RawStatus.SPAM_REVIEW,
-            previewMatches: hits,
-          },
-        });
-        updatedCount++;
+        updates.push({ id: rm.id, hits });
       }
     }
 
-    offset += batch.length;
-    if (batch.length < CHUNK) break;
-  }
+    // 5) Batch update to reduce database connections
+    // FIX: Add validation - only update messages that are still READY (prevent race conditions)
+    if (updates.length > 0) {
+      // Use Promise.all for parallel updates but limit concurrency to prevent connection exhaustion
+      const CONCURRENT_UPDATES = 10;
+      for (let i = 0; i < updates.length; i += CONCURRENT_UPDATES) {
+        const chunk = updates.slice(i, i + CONCURRENT_UPDATES);
+        await Promise.all(
+          chunk.map(async ({ id, hits }) => {
+            try {
+              // FIX: Only update if still READY (prevent invalid status transitions)
+              const result = await prisma.rawMessage.updateMany({
+                where: { 
+                  id,
+                  status: RawStatus.READY  // Only update if still READY
+                },
+                data: {
+                  status: RawStatus.SPAM_REVIEW,
+                  previewMatches: hits,
+                },
+              });
+              return result.count > 0; // Return true if updated
+            } catch (error) {
+              console.error(`Error updating raw message ${id}:`, error);
+              return false; // Return false if update failed
+            }
+          })
+        );
+        // Count only successful updates
+        const successfulUpdates = await Promise.all(
+          chunk.map(async ({ id }) => {
+            const msg = await prisma.rawMessage.findUnique({
+              where: { id },
+              select: { status: true }
+            });
+            return msg?.status === RawStatus.SPAM_REVIEW;
+          })
+        );
+        updatedCount += successfulUpdates.filter(Boolean).length;
+      }
+    }
 
-  return NextResponse.json({ success: true, updatedCount });
+    // 6) Calculate remaining items in queue
+    const remainingInQueue = Math.max(0, totalReady - updatedCount);
+
+    return NextResponse.json({ 
+      success: true, 
+      updatedCount,
+      totalInQueue: totalReady,
+      remainingInQueue,
+      processed: batch.length
+    });
+  } catch (error: any) {
+    console.error("Spam capture error:", error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: error?.message || "Failed to capture spam",
+        details: error?.stack 
+      },
+      { status: 500 }
+    );
+  }
 }

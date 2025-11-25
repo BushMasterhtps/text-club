@@ -53,12 +53,12 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
   });
 
-  // 2) pull "pending" raws (READY or PROMOTED) - limit for performance
-  // Only scan READY (not yet processed) and PROMOTED (converted to tasks) messages
-  // Completed/actioned messages would have different statuses, so no date filter needed
+  // 2) pull "pending" raws - ONLY scan READY (not yet processed) messages
+  // FIX: Do not scan PROMOTED messages as they are already converted to tasks
+  // PROMOTED messages should not be re-scanned for spam
   const raws = await prisma.rawMessage.findMany({
     where: { 
-      status: { in: [RawStatus.READY, RawStatus.PROMOTED] }
+      status: RawStatus.READY  // FIX: Only scan READY messages
     },
     select: { id: true, brand: true, text: true },
     orderBy: { createdAt: "desc" },
