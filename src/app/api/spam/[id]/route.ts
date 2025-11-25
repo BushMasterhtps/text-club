@@ -2,9 +2,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 /** DELETE /api/spam/[id] — delete one spam rule by ID */
 export async function DELETE(
