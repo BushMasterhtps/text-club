@@ -98,7 +98,8 @@ export async function GET(req: Request) {
       orderBy: {
         updatedAt: "desc"
       }
-    });
+      });
+    }, { service: 'assistance-api' });
 
     console.log("🔍 Assistance API: Found", tasks.length, "tasks with assistance notes");
     
