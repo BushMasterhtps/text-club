@@ -43,8 +43,62 @@ export async function GET(request: NextRequest) {
       let totalDuplicates = session.duplicates || 0;
       let totalPreviouslyCompleted = session.filtered || 0;
 
-      // Group duplicates by source and fetch original task details
-      const duplicateDetailsPromises = session.duplicateRecords.map(async (duplicate) => {
+      // Collect all unique original task IDs to batch fetch (CRITICAL: Prevents connection pool exhaustion)
+      const originalTaskIds = session.duplicateRecords
+        .map(d => d.originalTaskId)
+        .filter((id): id is string => !!id);
+      
+      // Batch fetch ALL original tasks in a single query (instead of N individual queries)
+      const originalTasksMap = new Map<string, any>();
+      if (originalTaskIds.length > 0) {
+        try {
+          const originalTasks = await prisma.task.findMany({
+            where: { id: { in: originalTaskIds } },
+            select: {
+              id: true,
+              amount: true,
+              webOrderDifference: true,
+              netSuiteTotal: true,
+              webTotal: true,
+              webVsNsDifference: true,
+              nsVsWebDiscrepancy: true,
+              warehouseEdgeStatus: true,
+              purchaseDate: true,
+              disposition: true,
+              endTime: true,
+              assignedTo: {
+                select: {
+                  name: true,
+                  email: true
+                }
+              }
+            }
+          });
+          
+          // Create a map for O(1) lookup
+          for (const task of originalTasks) {
+            originalTasksMap.set(task.id, {
+              amount: task.amount ? Number(task.amount) : null,
+              webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
+              netSuiteTotal: task.netSuiteTotal ? Number(task.netSuiteTotal) : null,
+              webTotal: task.webTotal ? Number(task.webTotal) : null,
+              webVsNsDifference: task.webVsNsDifference ? Number(task.webVsNsDifference) : null,
+              nsVsWebDiscrepancy: task.nsVsWebDiscrepancy ? Number(task.nsVsWebDiscrepancy) : null,
+              warehouseEdgeStatus: task.warehouseEdgeStatus,
+              purchaseDate: task.purchaseDate?.toISOString() || null,
+              disposition: task.disposition,
+              completedAt: task.endTime?.toISOString() || null,
+              completedBy: task.assignedTo?.name || null,
+              completedByEmail: task.assignedTo?.email || null
+            });
+          }
+        } catch (error) {
+          console.error(`Error batch fetching original tasks:`, error);
+        }
+      }
+
+      // Group duplicates by source and map to original task details
+      const duplicateDetails = session.duplicateRecords.map((duplicate) => {
         const source = duplicate.source || 'UNKNOWN';
         if (!sources[source]) {
           sources[source] = {
@@ -57,52 +111,10 @@ export async function GET(request: NextRequest) {
 
         sources[source].duplicates += 1;
         
-        // Fetch original task details if available (for financial validation)
-        let originalTaskDetails = null;
-        if (duplicate.originalTaskId) {
-          try {
-            const originalTask = await prisma.task.findUnique({
-              where: { id: duplicate.originalTaskId },
-              select: {
-                amount: true,
-                webOrderDifference: true,
-                netSuiteTotal: true,
-                webTotal: true,
-                webVsNsDifference: true,
-                nsVsWebDiscrepancy: true,
-                warehouseEdgeStatus: true,
-                purchaseDate: true,
-                disposition: true,
-                endTime: true,
-                assignedTo: {
-                  select: {
-                    name: true,
-                    email: true
-                  }
-                }
-              }
-            });
-            
-            if (originalTask) {
-              originalTaskDetails = {
-                amount: originalTask.amount ? Number(originalTask.amount) : null,
-                webOrderDifference: originalTask.webOrderDifference ? Number(originalTask.webOrderDifference) : null,
-                netSuiteTotal: originalTask.netSuiteTotal ? Number(originalTask.netSuiteTotal) : null,
-                webTotal: originalTask.webTotal ? Number(originalTask.webTotal) : null,
-                webVsNsDifference: originalTask.webVsNsDifference ? Number(originalTask.webVsNsDifference) : null,
-                nsVsWebDiscrepancy: originalTask.nsVsWebDiscrepancy ? Number(originalTask.nsVsWebDiscrepancy) : null,
-                warehouseEdgeStatus: originalTask.warehouseEdgeStatus,
-                purchaseDate: originalTask.purchaseDate?.toISOString() || null,
-                disposition: originalTask.disposition,
-                completedAt: originalTask.endTime?.toISOString() || null,
-                completedBy: originalTask.assignedTo?.name || duplicate.originalCompletedBy,
-                completedByEmail: originalTask.assignedTo?.email || null
-              };
-            }
-          } catch (error) {
-            console.error(`Error fetching original task ${duplicate.originalTaskId}:`, error);
-          }
-        }
+        // Look up original task details from the batch-fetched map
+        const originalTaskDetails = duplicate.originalTaskId 
+          ? originalTasksMap.get(duplicate.originalTaskId) 
+          : null;
         
         return {
           duplicateTask: {
@@ -112,12 +124,12 @@ export async function GET(request: NextRequest) {
             source: duplicate.source
           },
           originalTask: {
-            completedBy: duplicate.originalCompletedBy,
+            completedBy: originalTaskDetails?.completedBy || duplicate.originalCompletedBy,
             completedOn: duplicate.originalCompletedAt,
-            disposition: duplicate.originalDisposition,
+            disposition: originalTaskDetails?.disposition || duplicate.originalDisposition,
             createdAt: duplicate.originalCreatedAt,
             taskId: duplicate.originalTaskId,
-            // Enhanced financial details
+            // Enhanced financial details from batch-fetched data
             ...(originalTaskDetails || {})
           },
           ageInDays: duplicate.ageInDays,
@@ -126,9 +138,6 @@ export async function GET(request: NextRequest) {
           importSessionId: session.id
         };
       });
-
-      // Wait for all duplicate details to be fetched
-      const duplicateDetails = await Promise.all(duplicateDetailsPromises);
       
       // Add details to their respective sources
       for (const detail of duplicateDetails) {
