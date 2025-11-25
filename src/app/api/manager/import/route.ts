@@ -31,6 +31,7 @@ function stripUS1(phone: unknown) {
   return String(phone ?? "");
 }
 function brandFromFilename(name: string) {
+  // EXACT MATCH TO SCRIPT: Include all brand aliases
   const aliases: Record<string, string> = {
     gundrymd: "GundryMD",
     drmarty: "DrMarty",
@@ -38,6 +39,16 @@ function brandFromFilename(name: string) {
     ultimatepetnutrition: "DrMarty",
     activatedyou: "ActivatedYou",
     activatedu: "ActivatedYou",
+    upn: "UPN",
+    ultimatpetnutrition: "UPN",
+    terramare: "TerraMare",
+    roundhouseprovisions: "RoundHouseProvisions",
+    powerlife: "PowerLife",
+    nucific: "Nucific",
+    lonewolfranch: "LoneWolfRanch",
+    kintsugihair: "KintsugiHair",
+    badlandsranch: "BadlandsRanch",
+    bhmd: "BHMD"
   };
   const base = String(name || "").split(".")[0];
   const first = (base.split(/[\s_\-]+/)[0] || "").toLowerCase();
@@ -154,7 +165,7 @@ export async function POST(req: Request) {
       const iText = H("text", "message", "body", "sms text", "content");
       const iDate = H("date", "message date", "received", "received at", "time", "timestamp");
 
-      // Build candidates + key list
+      // Build candidates + key list (EXACT MATCH TO SCRIPT LOGIC)
       const candidates: Array<{
         importBatchId: string;
         receivedAt: Date;
@@ -167,16 +178,36 @@ export async function POST(req: Request) {
         status: "READY";
       }> = [];
       const keys: string[] = [];
+      let errors = 0;
+      const errorDetails: string[] = [];
 
-      for (const row of rows as Array<Record<string, string>>) {
-        if (iToPh < 0 || iText < 0 || iDate < 0) continue;
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i] as Record<string, string>;
+        
+        // Skip TOTAL rows (EXACT MATCH TO SCRIPT LOGIC)
+        if (row[headers[0]]?.toUpperCase() === 'TOTAL' || 
+            row[headers[0]]?.toUpperCase() === '-') {
+          continue;
+        }
+        
+        if (iToPh < 0 || iText < 0 || iDate < 0) {
+          errors++;
+          errorDetails.push(`Row ${i + 2}: Missing required columns (TO_PHONE, TEXT, or DATE)`);
+          continue;
+        }
 
         const toPhone = String(row[headers[iToPh]] ?? "").trim();
         const text = String(row[headers[iText]] ?? "").trim();
         const when = parseDate(row[headers[iDate]]);
         const key = buildKey(toPhone, when, text, brand);
-        if (!key) continue;
+        
+        if (!key) {
+          errors++;
+          errorDetails.push(`Row ${i + 2}: Invalid data (missing toPhone, date, or text)`);
+          continue;
+        }
 
+        // EXACT MATCH TO SCRIPT: Generate SHA1 hash of the key for duplicate detection
         const hashKey = crypto.createHash("sha1").update(key).digest("hex");
 
         candidates.push({
@@ -192,8 +223,13 @@ export async function POST(req: Request) {
         });
         keys.push(hashKey);
       }
+      
+      if (errors > 0) {
+        console.warn(`File ${file.name}: ${errors} rows had errors (see errorDetails)`);
+      }
 
-      // De-dupe: bulk lookup existing hashKeys
+      // De-dupe: bulk lookup existing hashKeys (EXACT MATCH TO SCRIPT LOGIC)
+      // This ensures duplicates are detected across ALL existing records, not just within this import
       const existing = await prisma.rawMessage.findMany({
         where: { hashKey: { in: keys } },
         select: { hashKey: true },
@@ -204,34 +240,49 @@ export async function POST(req: Request) {
       let inserted = 0;
       let skippedExisting = candidates.length - toInsert.length;
       
+      console.log(`File ${file.name}: ${toInsert.length} new records, ${skippedExisting} duplicates detected`);
+      
       if (toInsert.length) {
-        // Insert new records in batches for speed
-        const batchSize = 100; // Insert in batches of 100
-        for (let i = 0; i < toInsert.length; i += batchSize) {
-          const batch = toInsert.slice(i, i + batchSize);
-            try {
-              const result = await prisma.rawMessage.createMany({
-                data: batch,
-                skipDuplicates: true // This will skip any duplicates that might have been created between our check and insert
-              });
-              inserted += result.count;
-            } catch (error) {
-              // If batch insert fails, fall back to individual inserts for this batch
-              console.log(`Batch insert failed, falling back to individual inserts for batch ${i}-${i + batchSize}`);
-              for (const record of batch) {
-                try {
-                  await prisma.rawMessage.create({ data: record });
-                  inserted++;
-                } catch (individualError) {
-                  if (individualError instanceof Error && individualError.message.includes('Unique constraint failed on the fields: (`hashKey`)')) {
-                    skippedExisting++;
-                  } else {
-                    throw individualError;
-                  }
+        // Insert new records in batches (using script's approach for better large file handling)
+        // For large files, use smaller batches to avoid timeout
+        const BATCH_SIZE = rows.length > 5000 ? 50 : 100;
+        const totalBatches = Math.ceil(toInsert.length / BATCH_SIZE);
+        
+        for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+          const batchChunk = toInsert.slice(i, i + BATCH_SIZE);
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+          
+          // Log progress for large files (every 10 batches or on last batch)
+          if (rows.length > 5000 && (batchNum % 10 === 0 || batchNum === totalBatches)) {
+            console.log(`File ${file.name}: Processing batch ${batchNum}/${totalBatches} (${Math.min(i + BATCH_SIZE, toInsert.length)}/${toInsert.length} records)`);
+          }
+          
+          try {
+            const result = await prisma.rawMessage.createMany({
+              data: batchChunk,
+              skipDuplicates: true // Safeguard against race conditions
+            });
+            inserted += result.count;
+          } catch (error) {
+            // If batch insert fails, fall back to individual inserts (EXACT MATCH TO SCRIPT LOGIC)
+            console.log(`Batch insert failed for batch ${batchNum}, falling back to individual inserts...`);
+            for (const record of batchChunk) {
+              try {
+                await prisma.rawMessage.create({ data: record });
+                inserted++;
+              } catch (individualError) {
+                // Handle duplicate constraint errors (EXACT MATCH TO SCRIPT LOGIC)
+                if (individualError instanceof Error && individualError.message.includes('Unique constraint failed on the fields: (`hashKey`)')) {
+                  // Duplicate detected during insert - count as skipped, not error
+                  skippedExisting++;
+                } else {
+                  console.error(`Error inserting record:`, individualError);
+                  throw individualError;
                 }
               }
             }
           }
+        }
         
         console.log(`File ${file.name}: ${inserted} inserted, ${skippedExisting} skipped (duplicates)`);
       }
