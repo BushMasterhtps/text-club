@@ -200,22 +200,62 @@ export async function GET(req: Request) {
         };
       } catch (error) {
         console.error(`Error transforming task ${task.id}:`, error);
-        // Return a minimal valid object to prevent API failure
-        return {
+        console.error(`Task data:`, {
           id: task.id,
-          brand: task.brand || task.rawMessage?.brand || "Unknown",
-          phone: task.phone || task.rawMessage?.phone || "Unknown",
-          text: task.text || task.rawMessage?.text || "Unknown",
-          email: task.email || null,
-          agentName: task.assignedTo?.name || "Unknown",
-          agentEmail: task.assignedTo?.email || "Unknown",
-          assistanceNotes: task.assistanceNotes || "",
-          managerResponse: task.managerResponse || null,
-          createdAt: safeToISOString(task.createdAt),
-          updatedAt: safeToISOString(task.updatedAt),
-          status: task.status,
           taskType: task.taskType,
-        };
+          hasAmount: !!task.amount,
+          hasHoldsOrderAmount: !!task.holdsOrderAmount,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        // Return a minimal valid object to prevent API failure
+        // Ensure all Decimal fields are converted even in error case
+        try {
+          return {
+            id: task.id,
+            brand: task.brand || task.rawMessage?.brand || "Unknown",
+            phone: task.phone || task.rawMessage?.phone || "Unknown",
+            text: task.text || task.rawMessage?.text || "Unknown",
+            email: task.email || null,
+            agentName: task.assignedTo?.name || "Unknown",
+            agentEmail: task.assignedTo?.email || "Unknown",
+            assistanceNotes: task.assistanceNotes || "",
+            managerResponse: task.managerResponse || null,
+            createdAt: safeToISOString(task.createdAt),
+            updatedAt: safeToISOString(task.updatedAt),
+            status: task.status,
+            taskType: task.taskType,
+            // Convert all Decimal fields to prevent serialization errors
+            amount: task.amount ? Number(task.amount) : null,
+            webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
+            refundAmount: task.refundAmount ? Number(task.refundAmount) : null,
+            holdsOrderAmount: task.holdsOrderAmount ? Number(task.holdsOrderAmount) : null,
+            webOrderSubtotal: task.webOrderSubtotal ? Number(task.webOrderSubtotal) : null,
+            webOrderTotal: task.webOrderTotal ? Number(task.webOrderTotal) : null,
+            nsVsWebDiscrepancy: task.nsVsWebDiscrepancy ? Number(task.nsVsWebDiscrepancy) : null,
+            netSuiteTotal: task.netSuiteTotal ? Number(task.netSuiteTotal) : null,
+            webTotal: task.webTotal ? Number(task.webTotal) : null,
+            webVsNsDifference: task.webVsNsDifference ? Number(task.webVsNsDifference) : null,
+            amountToBeRefunded: task.amountToBeRefunded ? Number(task.amountToBeRefunded) : null,
+          };
+        } catch (fallbackError) {
+          console.error(`Critical error in fallback transformation for task ${task.id}:`, fallbackError);
+          // Last resort: return absolute minimum
+          return {
+            id: task.id,
+            brand: "Unknown",
+            phone: "Unknown",
+            text: "Unknown",
+            email: null,
+            agentName: task.assignedTo?.name || "Unknown",
+            agentEmail: task.assignedTo?.email || "Unknown",
+            assistanceNotes: task.assistanceNotes || "",
+            managerResponse: task.managerResponse || null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            status: task.status,
+            taskType: task.taskType || "TEXT_CLUB",
+          };
+        }
       }
     });
 
