@@ -537,9 +537,16 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
         </div>
       </div>
 
-      {(analyticsError || detailedAnalyticsError) && (
-        <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 text-red-200">
-          {error}
+      {analyticsError && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+          <div className="text-red-300">⚠️ {analyticsError}</div>
+          <div className="text-red-200/70 text-sm mt-1">Main analytics data failed to load. Detailed analytics may still be available below.</div>
+        </div>
+      )}
+      {detailedAnalyticsError && !analyticsError && (
+        <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
+          <div className="text-orange-300">⚠️ {detailedAnalyticsError}</div>
+          <div className="text-orange-200/70 text-sm mt-1">Detailed analytics failed to load. Main analytics data is still available.</div>
         </div>
       )}
 
