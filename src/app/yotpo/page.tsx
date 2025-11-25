@@ -1026,13 +1026,22 @@ export default function YotpoPage() {
   const loadOverviewData = async () => {
     setOverviewLoading(true);
     try {
+      console.log("🔍 [Yotpo] Loading overview data...");
       const response = await fetch('/api/yotpo/overview');
-      const data = await response.json();
-      if (data.success) {
-        setOverviewData(data.data);
+      console.log("🔍 [Yotpo] Overview API response status:", response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log("🔍 [Yotpo] Overview API data:", data);
+        
+        if (data.success) {
+          setOverviewData(data.data);
+        }
+      } else {
+        console.error("🔍 [Yotpo] Overview API error:", response.status, response.statusText);
       }
     } catch (error) {
-      console.error('Error loading overview data:', error);
+      console.error("🔍 [Yotpo] Error loading overview data:", error);
     } finally {
       setOverviewLoading(false);
     }
@@ -1041,9 +1050,14 @@ export default function YotpoPage() {
   // Load assistance requests - get all non-Holds requests for cross-visibility
   const loadAssistanceRequests = async () => {
     try {
+      console.log("🔍 [Yotpo] Loading assistance requests...");
       const response = await fetch('/api/manager/assistance', { cache: 'no-store' });
+      console.log("🔍 [Yotpo] Assistance API response status:", response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log("🔍 [Yotpo] Assistance API data:", data);
+        
         if (data.success) {
           // Get all non-Holds requests (for cross-task-type visibility)
           const allNonHoldsRequests = (data.requests || []).filter((req: any) => 
@@ -1055,6 +1069,8 @@ export default function YotpoPage() {
              req.taskType === 'STANDALONE_REFUNDS')
           );
           
+          console.log("🔍 [Yotpo] All non-Holds requests count:", allNonHoldsRequests.length);
+          
           setAssistanceRequests(allNonHoldsRequests);
           
           // Check for pending requests (all non-Holds)
@@ -1063,8 +1079,13 @@ export default function YotpoPage() {
           // Show notification if there are pending requests
           // Show on first load if there are any pending, or if there are new pending requests
           const currentPendingCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
+          const newPendingCount = pendingRequests.length;
+          
+          console.log("🔍 [Yotpo] Current pending count:", currentPendingCount, "New pending count:", newPendingCount);
+          
           if (pendingRequests.length > 0) {
             if (currentPendingCount === 0 || pendingRequests.length > currentPendingCount) {
+              console.log("🔍 [Yotpo] New pending assistance requests detected!");
               setNewAssistanceCount(Math.max(1, pendingRequests.length - currentPendingCount));
               setShowNotification(true);
               setTimeout(() => setShowNotification(false), 5000);
@@ -1073,9 +1094,11 @@ export default function YotpoPage() {
           
           setNewAssistanceCount(pendingRequests.length);
         }
+      } else {
+        console.error("🔍 [Yotpo] Assistance API error:", response.status, response.statusText);
       }
     } catch (error) {
-      console.error('Error loading assistance requests:', error);
+      console.error("🔍 [Yotpo] Error loading assistance requests:", error);
     }
   };
 

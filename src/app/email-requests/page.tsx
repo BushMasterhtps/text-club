@@ -801,13 +801,22 @@ export default function EmailRequestsPage() {
   const loadOverviewData = async () => {
     setOverviewLoading(true);
     try {
+      console.log("🔍 [Email Requests] Loading overview data...");
       const response = await fetch('/api/manager/dashboard/email-requests-overview');
-      const data = await response.json();
-      if (data.success) {
-        setOverviewData(data.data);
+      console.log("🔍 [Email Requests] Overview API response status:", response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log("🔍 [Email Requests] Overview API data:", data);
+        
+        if (data.success) {
+          setOverviewData(data.data);
+        }
+      } else {
+        console.error("🔍 [Email Requests] Overview API error:", response.status, response.statusText);
       }
     } catch (error) {
-      console.error('Error loading overview data:', error);
+      console.error("🔍 [Email Requests] Error loading overview data:", error);
     } finally {
       setOverviewLoading(false);
     }
@@ -816,9 +825,14 @@ export default function EmailRequestsPage() {
   // Load assistance requests - get all non-Holds requests for cross-visibility
   const loadAssistanceRequests = async () => {
     try {
+      console.log("🔍 [Email Requests] Loading assistance requests...");
       const response = await fetch('/api/manager/assistance', { cache: 'no-store' });
+      console.log("🔍 [Email Requests] Assistance API response status:", response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log("🔍 [Email Requests] Assistance API data:", data);
+        
         if (data.success) {
           // Get all non-Holds requests (for cross-task-type visibility)
           const allNonHoldsRequests = (data.requests || []).filter((req: any) => 
@@ -830,6 +844,8 @@ export default function EmailRequestsPage() {
              req.taskType === 'STANDALONE_REFUNDS')
           );
           
+          console.log("🔍 [Email Requests] All non-Holds requests count:", allNonHoldsRequests.length);
+          
           setAssistanceRequests(allNonHoldsRequests);
           
           // Check for pending requests (all non-Holds)
@@ -837,10 +853,13 @@ export default function EmailRequestsPage() {
           const currentPendingCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
           const newPendingCount = pendingRequests.length;
           
+          console.log("🔍 [Email Requests] Current pending count:", currentPendingCount, "New pending count:", newPendingCount);
+          
           // Show notification if there are pending requests
           // Show on first load if there are any pending, or if there are new pending requests
           if (newPendingCount > 0) {
             if (currentPendingCount === 0 || newPendingCount > currentPendingCount) {
+              console.log("🔍 [Email Requests] New pending assistance requests detected!");
               setNewAssistanceCount(Math.max(1, newPendingCount - currentPendingCount));
               setShowNotification(true);
               setTimeout(() => setShowNotification(false), 5000);
@@ -849,9 +868,11 @@ export default function EmailRequestsPage() {
           
           setNewAssistanceCount(newPendingCount);
         }
+      } else {
+        console.error("🔍 [Email Requests] Assistance API error:", response.status, response.statusText);
       }
     } catch (error) {
-      console.error('Error loading assistance requests:', error);
+      console.error("🔍 [Email Requests] Error loading assistance requests:", error);
     }
   };
 

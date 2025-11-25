@@ -57,28 +57,42 @@ export default function HoldsPage() {
   // Load assistance requests
   const loadAssistanceRequests = async () => {
     try {
+      console.log("🔍 [Holds] Loading assistance requests...");
       const response = await fetch('/api/manager/assistance', { cache: 'no-store' });
+      console.log("🔍 [Holds] Assistance API response status:", response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log("🔍 [Holds] Assistance API data:", data);
+        
         if (data.success) {
           // Filter for HOLDS tasks only
           const holdsRequests = data.requests.filter((req: any) => req.taskType === 'HOLDS');
+          console.log("🔍 [Holds] Holds requests count:", holdsRequests.length);
+          
           setAssistanceRequests(holdsRequests);
           
           // Check for pending requests
           const pendingRequests = holdsRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
+          const currentPendingCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
+          const newPendingCount = pendingRequests.length;
+          
+          console.log("🔍 [Holds] Current pending count:", currentPendingCount, "New pending count:", newPendingCount);
           
           // Show notification if there are pending requests
           if (pendingRequests.length > 0 && (newAssistanceCount === 0 || pendingRequests.length > newAssistanceCount)) {
+            console.log("🔍 [Holds] New pending assistance requests detected!");
             setShowNotification(true);
             setTimeout(() => setShowNotification(false), 5000);
           }
           
           setNewAssistanceCount(pendingRequests.length);
         }
+      } else {
+        console.error("🔍 [Holds] Assistance API error:", response.status, response.statusText);
       }
     } catch (error) {
-      console.error('Error loading assistance requests:', error);
+      console.error("🔍 [Holds] Error loading assistance requests:", error);
     }
   };
 
