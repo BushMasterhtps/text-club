@@ -76,6 +76,8 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
   const [detailedAnalytics, setDetailedAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null); // Separate error for main analytics
+  const [detailedAnalyticsError, setDetailedAnalyticsError] = useState<string | null>(null); // Separate error for detailed analytics
   
   // Date range state
   const [dateMode, setDateMode] = useState<'single' | 'compare'>('single');
@@ -150,6 +152,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
   const loadDetailedAnalytics = async () => {
     if (!startDate || !endDate) return;
     
+    setDetailedAnalyticsError(null); // Clear previous error
     try {
       const params = new URLSearchParams({
         startDate,
@@ -162,14 +165,17 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
         if (data.success) {
           setDetailedAnalytics(data.data);
         } else {
-          setError(data.error || 'Failed to load detailed analytics');
+          setDetailedAnalyticsError(data.error || 'Failed to load detailed analytics');
+          console.error('Detailed analytics API error:', data.error);
         }
       } else {
-        setError('Failed to load detailed analytics');
+        const errorText = await response.text().catch(() => 'Unknown error');
+        setDetailedAnalyticsError('Failed to load detailed analytics');
+        console.error('Detailed analytics HTTP error:', response.status, errorText);
       }
     } catch (error) {
       console.error('Error loading detailed analytics:', error);
-      setError('Failed to load detailed analytics');
+      setDetailedAnalyticsError('Failed to load detailed analytics');
     }
   };
 
@@ -177,7 +183,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
     if (!startDate || !endDate) return;
     
     setLoading(true);
-    setError(null);
+    setAnalyticsError(null); // Clear previous error
     
     try {
       const params = new URLSearchParams({
@@ -200,14 +206,17 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
         if (data.success) {
           setAnalyticsData(data.data);
         } else {
-          setError(data.error || 'Failed to load analytics');
+          setAnalyticsError(data.error || 'Failed to load analytics');
+          console.error('Analytics API error:', data.error);
         }
       } else {
-        setError('Failed to load analytics');
+        const errorText = await response.text().catch(() => 'Unknown error');
+        setAnalyticsError('Failed to load analytics');
+        console.error('Analytics HTTP error:', response.status, errorText);
       }
     } catch (error) {
       console.error('Analytics loading error:', error);
-      setError('Failed to load analytics');
+      setAnalyticsError('Failed to load analytics');
     } finally {
       setLoading(false);
     }
@@ -528,7 +537,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
         </div>
       </div>
 
-      {error && (
+      {(analyticsError || detailedAnalyticsError) && (
         <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 text-red-200">
           {error}
         </div>
