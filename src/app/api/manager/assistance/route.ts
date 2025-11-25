@@ -276,6 +276,16 @@ export async function GET(req: Request) {
       stack: error?.stack,
       name: error?.name
     });
+    // Handle circuit breaker errors gracefully
+    if (error?.message?.includes('Circuit breaker')) {
+      return NextResponse.json({
+        success: false,
+        error: 'Service temporarily unavailable',
+        retryAfter: 30,
+        details: 'Circuit breaker is open',
+      }, { status: 503 });
+    }
+    
     return NextResponse.json({
       success: false,
       error: error?.message || "Failed to fetch assistance requests",
