@@ -66,6 +66,16 @@ export async function GET(req: Request) {
         holdsPriority: true,
         holdsStatus: true,
         holdsDaysInSystem: true,
+        holdsOrderAmount: true, // Added missing Decimal field
+        // WOD/IVCS additional Decimal fields that might be needed
+        webOrderSubtotal: true,
+        webOrderTotal: true,
+        nsVsWebDiscrepancy: true,
+        netSuiteTotal: true,
+        webTotal: true,
+        webVsNsDifference: true,
+        // Standalone Refund additional Decimal field
+        amountToBeRefunded: true,
         // NOTE: orderDate is excluded - it's only for Standalone Refunds
         assignedTo: {
           select: {
@@ -177,6 +187,16 @@ export async function GET(req: Request) {
           holdsPriority: task.holdsPriority || null,
           holdsStatus: task.holdsStatus || null,
           holdsDaysInSystem: task.holdsDaysInSystem || null,
+          holdsOrderAmount: task.holdsOrderAmount ? Number(task.holdsOrderAmount) : null, // Convert Decimal to Number
+          // WOD/IVCS additional Decimal fields
+          webOrderSubtotal: task.webOrderSubtotal ? Number(task.webOrderSubtotal) : null,
+          webOrderTotal: task.webOrderTotal ? Number(task.webOrderTotal) : null,
+          nsVsWebDiscrepancy: task.nsVsWebDiscrepancy ? Number(task.nsVsWebDiscrepancy) : null,
+          netSuiteTotal: task.netSuiteTotal ? Number(task.netSuiteTotal) : null,
+          webTotal: task.webTotal ? Number(task.webTotal) : null,
+          webVsNsDifference: task.webVsNsDifference ? Number(task.webVsNsDifference) : null,
+          // Standalone Refund additional Decimal field
+          amountToBeRefunded: task.amountToBeRefunded ? Number(task.amountToBeRefunded) : null,
         };
       } catch (error) {
         console.error(`Error transforming task ${task.id}:`, error);
