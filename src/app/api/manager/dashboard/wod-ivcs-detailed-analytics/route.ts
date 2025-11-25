@@ -36,15 +36,15 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Process import sessions
-    const processedSessions = importSessions.map(session => {
+    // Process import sessions (async to fetch original task details)
+    const processedSessions = await Promise.all(importSessions.map(async (session) => {
       const sources: Record<string, any> = {};
       let totalTasks = session.imported || 0;
       let totalDuplicates = session.duplicates || 0;
       let totalPreviouslyCompleted = session.filtered || 0;
 
-      // Group duplicates by source
-      for (const duplicate of session.duplicateRecords) {
+      // Group duplicates by source and fetch original task details
+      const duplicateDetailsPromises = session.duplicateRecords.map(async (duplicate) => {
         const source = duplicate.source || 'UNKNOWN';
         if (!sources[source]) {
           sources[source] = {
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
           }
         }
         
-        sources[source].duplicateDetails.push({
+        return {
           duplicateTask: {
             documentNumber: duplicate.documentNumber,
             webOrder: duplicate.webOrder,
@@ -124,7 +124,18 @@ export async function GET(request: NextRequest) {
           wasImported: false,
           lastSeenDate: session.createdAt.toISOString(), // When this duplicate was detected
           importSessionId: session.id
-        });
+        };
+      });
+
+      // Wait for all duplicate details to be fetched
+      const duplicateDetails = await Promise.all(duplicateDetailsPromises);
+      
+      // Add details to their respective sources
+      for (const detail of duplicateDetails) {
+        const source = detail.duplicateTask.source || 'UNKNOWN';
+        if (sources[source]) {
+          sources[source].duplicateDetails.push(detail);
+        }
       }
 
       // Add a general source entry for the session
