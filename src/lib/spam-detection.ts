@@ -66,15 +66,30 @@ function analyzeCharacterPatterns(text: string): { score: number; reasons: strin
   const patterns: SpamPattern[] = [];
   let score = 0;
 
-  // Excessive special characters
+  // Excessive special characters (more aggressive)
   const specialCharRatio = (text.match(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/g) || []).length / text.length;
-  if (specialCharRatio > 0.3) {
-    score += 25;
+  if (specialCharRatio > 0.2) { // Lowered from 0.3 to catch more
+    score += 30; // Increased from 25
     reasons.push(`High special character ratio: ${(specialCharRatio * 100).toFixed(1)}%`);
     patterns.push({
       type: 'character_pattern',
       pattern: 'excessive_special_chars',
       confidence: specialCharRatio * 100,
+      examples: [text.substring(0, 50) + '...']
+    });
+  }
+  
+  // Gibberish detection - random characters and symbols mixed together
+  // Pattern: lots of special chars, numbers, and letters in random order
+  const gibberishPattern = /[a-z]{1,2}[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?0-9]{2,}[a-z]{1,2}/i;
+  const hasGibberishPattern = gibberishPattern.test(text) && specialCharRatio > 0.15;
+  if (hasGibberishPattern) {
+    score += 40; // High score for obvious gibberish
+    reasons.push('Gibberish pattern detected (random chars/symbols)');
+    patterns.push({
+      type: 'character_pattern',
+      pattern: 'gibberish',
+      confidence: 95,
       examples: [text.substring(0, 50) + '...']
     });
   }
@@ -174,56 +189,97 @@ function analyzeStructurePatterns(text: string): { score: number; reasons: strin
     });
   }
 
-  // Random numbers/strings (e.g., "23345", "123456")
+  // Random numbers/strings (e.g., "23345", "123456", "113")
   const onlyNumbers = /^\d+$/.test(text.trim());
-  if (onlyNumbers && text.length >= 3 && text.length <= 20) {
-    score += 25;
+  if (onlyNumbers && text.length >= 2 && text.length <= 20) { // Lowered from 3 to catch "113"
+    score += 35; // Increased from 25
     reasons.push('Random number sequence');
     patterns.push({
       type: 'structure_pattern',
       pattern: 'random_numbers',
+      confidence: 90, // Increased confidence
+      examples: [text]
+    });
+  }
+  
+  // Very short random strings (1-2 characters that aren't common words)
+  const legitimateShortWords = ['ok', 'okay', 'yes', 'no', 'hi', 'yo', 'yu'];
+  if (text.trim().length <= 2 && !legitimateShortWords.includes(text.trim().toLowerCase())) {
+    score += 30; // High score for very short random strings
+    reasons.push('Very short random string');
+    patterns.push({
+      type: 'structure_pattern',
+      pattern: 'very_short_random',
       confidence: 85,
       examples: [text]
     });
   }
 
   // Single word with no context (e.g., "Purr", "Ok", "B h")
+  // BUT exclude common legitimate single-word responses
   const words = text.trim().split(/\s+/);
-  if (words.length <= 2 && text.length < 20 && !text.match(/[.!?]$/)) {
+  const legitimateSingleWords = ['ok', 'okay', 'yes', 'no', 'thanks', 'thank you', 'y', 'n', 'hi', 'hello'];
+  const isLegitimateSingleWord = words.length === 1 && legitimateSingleWords.includes(words[0].toLowerCase());
+  
+  if (words.length <= 2 && text.length < 20 && !text.match(/[.!?]$/) && !isLegitimateSingleWord) {
     // Check if it looks like incomplete message or single word spam
     const hasMeaningfulContent = words.some(w => w.length > 3);
-    if (!hasMeaningfulContent || words.length === 1) {
-      score += 20;
+    // Don't flag common words like "DOG" if they're likely part of a product inquiry
+    const isCommonProductWord = /dog|cat|food|treat|order|product/i.test(text);
+    
+    if (!hasMeaningfulContent || (words.length === 1 && !isCommonProductWord)) {
+      score += 15; // Reduced from 20 to be less aggressive
       reasons.push('Single word or incomplete message');
       patterns.push({
         type: 'structure_pattern',
         pattern: 'single_word_no_context',
-        confidence: 75,
+        confidence: 60, // Reduced confidence
         examples: [text]
       });
     }
   }
 
   // Personal conversation patterns (e.g., "Just got home", "Are u at", "Sweet dreams")
+  // BUT exclude legitimate auto-replies that contain business context
   const personalPatterns = [
     /just got home/i,
     /are u at/i,
     /sweet dreams/i,
     /leaving now/i,
-    /i'm driving/i,
-    /sent from my/i,
     /thinking about you/i,
     /made it home/i
   ];
   
+  // More aggressive patterns that need business context check
+  const aggressivePersonalPatterns = [
+    /i'm driving/i,
+    /sent from my/i
+  ];
+  
+  // Check for business context (order, food, product, subscription, etc.)
+  const hasBusinessContext = /order|food|product|subscription|delivery|ship|purchase|buy|payment|refund|customer|service/i.test(text);
+  
+  // Only flag as personal if it matches AND has no business context
   const hasPersonalPattern = personalPatterns.some(pattern => pattern.test(text));
-  if (hasPersonalPattern) {
+  const hasAggressivePattern = aggressivePersonalPatterns.some(pattern => pattern.test(text));
+  
+  if (hasPersonalPattern && !hasBusinessContext) {
     score += 30;
     reasons.push('Personal conversation pattern detected');
     patterns.push({
       type: 'structure_pattern',
       pattern: 'personal_conversation',
       confidence: 80,
+      examples: [text.substring(0, 50) + '...']
+    });
+  } else if (hasAggressivePattern && !hasBusinessContext) {
+    // Auto-replies like "I'm driving" are less suspicious if they have business context
+    score += 15; // Reduced score for auto-replies
+    reasons.push('Auto-reply pattern detected (low confidence)');
+    patterns.push({
+      type: 'structure_pattern',
+      pattern: 'auto_reply',
+      confidence: 50,
       examples: [text.substring(0, 50) + '...']
     });
   }

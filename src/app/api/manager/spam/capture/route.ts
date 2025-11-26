@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SpamMode, RawStatus } from "@prisma/client";
 import { validateStatusTransition } from "@/lib/self-healing/status-validator";
-import { getImprovedSpamScore } from "@/lib/spam-detection";
+import { getImprovedSpamScore, analyzeSpamPatterns } from "@/lib/spam-detection";
 import { fuzzyContains } from "@/lib/fuzzy-matching";
 
 function norm(s: string | null | undefined) {
@@ -32,15 +32,21 @@ function ruleMatchesText(
     
     // For single-word patterns, check if it exists as a complete word
     if (patternWords.length === 1) {
-      // Exact match first
+      // Exact match first (strict word boundary)
       if (words.some(word => word === p)) return true;
       
       // Then try fuzzy matching for variations (e.g., "unlock", "UnLOck", "nlock")
       // Only use fuzzy for common spam keywords that have variations
+      // IMPORTANT: Don't use fuzzy for typos like "fodd" - they should only match exactly
       const fuzzyKeywords = ['unlock', 'claim', 'win', 'free', 'urgent'];
-      if (fuzzyKeywords.some(keyword => similarity(p, keyword) > 0.5)) {
+      const isTypoPattern = p.length <= 4 && /[^aeiou]{3,}/i.test(p); // Likely typo if short and has many consonants
+      
+      if (!isTypoPattern && fuzzyKeywords.some(keyword => similarity(p, keyword) > 0.5)) {
         return fuzzyContains(t, p, 0.7); // 70% similarity threshold
       }
+      
+      // For typo patterns or non-fuzzy keywords, require exact match only
+      return false;
     }
     
     // For multi-word patterns, check if the phrase exists with word boundaries
@@ -113,6 +119,7 @@ export async function POST() {
 
     for (const rm of batch) {
       const hits: string[] = [];
+      let patternScore = 0;
       let learningScore = 0;
       
       // Check phrase rules first
@@ -120,14 +127,34 @@ export async function POST() {
         if (ruleMatchesText(r, rm.brand, rm.text)) hits.push(r.pattern);
       }
       
-      // Check learning system if no phrase rules matched (for efficiency)
+      // Check pattern detection for obvious spam (gibberish, random numbers, etc.)
+      // This catches obvious spam that phrase rules might miss
+      if (rm.text) {
+        try {
+          const patternResult = analyzeSpamPatterns(rm.text);
+          patternScore = patternResult.score;
+          
+          // Lower threshold for obvious spam patterns (60% instead of 70%)
+          // Obvious spam like gibberish should score 80%+
+          if (patternScore >= 60) {
+            // Add pattern reasons to hits for tracking
+            const patternReasons = patternResult.reasons.slice(0, 2).join(', ');
+            hits.push(`Pattern: ${Math.round(patternScore)}% (${patternReasons})`);
+          }
+        } catch (error) {
+          console.error(`Error analyzing patterns for message ${rm.id}:`, error);
+        }
+      }
+      
+      // Check learning system if no phrase rules or patterns matched (for efficiency)
       if (hits.length === 0 && rm.text) {
         try {
           const learningResult = await getImprovedSpamScore(rm.text, rm.brand || undefined);
           learningScore = learningResult.score;
           
-          // If learning system says it's spam (score >= 70), add to hits
-          if (learningScore >= 70) {
+          // Lower threshold to 60% for learning system too (was 70%)
+          // This catches more spam while still maintaining accuracy
+          if (learningScore >= 60) {
             hits.push(`Learning: ${Math.round(learningScore)}%`);
             learningMatchedCount++;
           }
@@ -136,7 +163,7 @@ export async function POST() {
         }
       }
       
-      // If we have matches (from rules or learning), validate and add to updates
+      // If we have matches (from rules, patterns, or learning), validate and add to updates
       if (hits.length > 0) {
         // Validate status transition before adding to updates
         const validation = validateStatusTransition(
