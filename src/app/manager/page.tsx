@@ -1306,6 +1306,9 @@ function SpamPreviewCaptureSection() {
     let isComplete = false;
     const BATCH_SIZE = 200;
     
+    // Debug: Log fast capture count
+    console.log(`[BACKGROUND PROCESSING] Starting with fastCaptured: ${fastCaptured}`);
+    
     try {
       while (!isComplete) {
         const res = await fetch("/api/manager/spam/capture-background", {
@@ -1329,7 +1332,7 @@ function SpamPreviewCaptureSection() {
           const processed = data.processed ?? 0;
           
           // Debug logging
-          console.log(`[BACKGROUND PROCESSING] Batch captured: ${batchCaptured}, Total so far: ${totalBackgroundCaptured}, Processed: ${processed}, Remaining: ${remaining}`);
+          console.log(`[BACKGROUND PROCESSING] Batch captured: ${batchCaptured}, Total background so far: ${totalBackgroundCaptured}, Fast captured: ${fastCaptured}, Processed: ${processed}, Remaining: ${remaining}`);
           
           // Update UI with progress
           setCaptureMsg(
@@ -1340,6 +1343,9 @@ function SpamPreviewCaptureSection() {
           if (isComplete) {
             // Calculate total captured (fast capture + background)
             const totalCaptured = fastCaptured + totalBackgroundCaptured;
+            
+            // Debug: Log final totals
+            console.log(`[BACKGROUND PROCESSING] Complete! Fast: ${fastCaptured}, Background: ${totalBackgroundCaptured}, Total: ${totalCaptured}`);
             
             const finalMessage = `✅ Background processing complete!\n\n` +
               `Total captured: ${totalCaptured} spam items\n` +
