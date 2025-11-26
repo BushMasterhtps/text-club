@@ -219,7 +219,6 @@ export async function POST() {
         }
       }
     }
-    
     }
     
     console.log(`[SPAM CAPTURE] Complete analysis: ${allMessages.length} messages, ${updates.length} matches found (${phraseMatchedCount} phrase, ${patternMatchedCount} pattern, ${learningMatchedCount} learning), ${validationBlockedCount} blocked by validation`);
