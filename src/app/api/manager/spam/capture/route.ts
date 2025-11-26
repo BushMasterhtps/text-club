@@ -140,6 +140,11 @@ export async function POST() {
           const patternResult = analyzeSpamPatterns(rm.text);
           patternScore = patternResult.score;
           
+          // DEBUG: Log pattern scores for first few messages
+          if (updates.length < 5) {
+            console.log(`[SPAM CAPTURE DEBUG] Message ${rm.id.substring(0, 8)}... text="${rm.text?.substring(0, 50)}..." patternScore=${patternScore}`);
+          }
+          
           // Lower threshold for obvious spam patterns (60% instead of 70%)
           // Obvious spam like gibberish should score 80%+
           if (patternScore >= 60) {
@@ -149,7 +154,12 @@ export async function POST() {
             patternMatchedCount++;
           }
         } catch (error) {
-          console.error(`Error analyzing patterns for message ${rm.id}:`, error);
+          console.error(`[SPAM CAPTURE] Error analyzing patterns for message ${rm.id}:`, error);
+        }
+      } else {
+        // DEBUG: Log messages without text
+        if (updates.length < 5) {
+          console.log(`[SPAM CAPTURE DEBUG] Message ${rm.id.substring(0, 8)}... has no text`);
         }
       }
       
@@ -190,6 +200,18 @@ export async function POST() {
     }
     
     console.log(`[SPAM CAPTURE] Batch analysis: ${batch.length} messages, ${updates.length} matches found (${phraseMatchedCount} phrase, ${patternMatchedCount} pattern, ${learningMatchedCount} learning), ${validationBlockedCount} blocked by validation`);
+    console.log(`[SPAM CAPTURE] Rules loaded: ${rules.length}, Batch has text: ${batch.filter(r => r.text).length}/${batch.length}`);
+    
+    // DEBUG: Show sample of first few messages
+    if (batch.length > 0) {
+      const sample = batch.slice(0, 3);
+      console.log(`[SPAM CAPTURE DEBUG] Sample messages:`, sample.map(r => ({
+        id: r.id.substring(0, 8),
+        hasText: !!r.text,
+        textPreview: r.text?.substring(0, 30),
+        brand: r.brand
+      })));
+    }
 
     // 5) Batch update to reduce database connections
     // FIX: Use transaction to prevent race conditions where messages change status between fetch and update
