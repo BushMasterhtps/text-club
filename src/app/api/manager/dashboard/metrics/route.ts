@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
 export async function GET(request: NextRequest) {
-  try {
+  return await withSelfHealing(async () => {
+    try {
     // Get current date boundaries for "today"
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -68,20 +70,21 @@ export async function GET(request: NextRequest) {
       }
     });
 
-  } catch (error) {
-    console.error("Error fetching dashboard metrics:", error);
-    console.error("Error details:", {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : undefined
-    });
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: "Failed to fetch dashboard metrics",
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error("Error fetching dashboard metrics:", error);
+      console.error("Error details:", {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : undefined
+      });
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "Failed to fetch dashboard metrics",
+          details: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { status: 500 }
+      );
+    }
+  }, { service: 'database' });
 }

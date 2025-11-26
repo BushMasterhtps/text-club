@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
 // NOTE: Work around stale Prisma type hints in some editors by casting to `any`.
 // Runtime is fine because Prisma generated client DOES have `spamArchive`.
@@ -32,10 +33,11 @@ function chunk<T>(arr: T[], size: number): T[][] {
  * Returns: { success: true, archivedCount, affectedIds: string[] }
  */
 export async function POST(req: Request) {
-  // CACHE BUST: Force new deployment to clear Netlify cache
-  const startTime = Date.now();
-  
-  try {
+  return await withSelfHealing(async () => {
+    // CACHE BUST: Force new deployment to clear Netlify cache
+    const startTime = Date.now();
+    
+    try {
     const body = await req.json().catch(() => ({}));
     const ids = Array.isArray(body?.ids) ? (body.ids as string[]) : undefined;
     const archiveAll = !!body?.archiveAll;
@@ -130,11 +132,12 @@ export async function POST(req: Request) {
       affectedIds: rows.map((r) => r.id),
       processingTimeMs: processingTime,
     });
-  } catch (err) {
-    console.error("apply reviewer decisions error:", err);
-    return NextResponse.json(
-      { success: false, error: "Failed to apply reviewer decisions" },
-      { status: 500 }
-    );
-  }
+    } catch (err) {
+      console.error("apply reviewer decisions error:", err);
+      return NextResponse.json(
+        { success: false, error: "Failed to apply reviewer decisions" },
+        { status: 500 }
+      );
+    }
+  }, { service: 'database' });
 }

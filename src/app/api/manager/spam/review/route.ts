@@ -2,9 +2,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getImprovedSpamScore } from "@/lib/spam-detection";
+import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
 export async function GET(req: Request) {
-  try {
+  return await withSelfHealing(async () => {
+    try {
     const url = new URL(req.url);
     const takeParam = parseInt(url.searchParams.get("take") || "50", 10);
     const skipParam = parseInt(url.searchParams.get("skip") || "0", 10);
@@ -107,8 +109,9 @@ export async function GET(req: Request) {
       pageSize: take,
       offset: skip,
     });
-  } catch (err) {
-    console.error("spam review GET error:", err);
-    return NextResponse.json({ error: "Failed to load spam review" }, { status: 500 });
-  }
+    } catch (err) {
+      console.error("spam review GET error:", err);
+      return NextResponse.json({ error: "Failed to load spam review" }, { status: 500 });
+    }
+  }, { service: 'database' });
 }

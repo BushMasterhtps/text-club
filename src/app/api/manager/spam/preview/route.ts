@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { SpamMode, RawStatus } from "@prisma/client";
 import { getImprovedSpamScore, analyzeSpamPatterns } from "@/lib/spam-detection";
 import { fuzzyContains } from "@/lib/fuzzy-matching";
+import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
 /** simple normalize: lowercase, strip punctuation, collapse spaces */
 function norm(s: string | null | undefined) {
@@ -79,10 +80,11 @@ function similarity(str1: string, str2: string): number {
 }
 
 export async function GET() {
-  try {
-    // CACHE BUST: Force new deployment to clear Netlify cache
-    // 1) load enabled rules
-    const rules = await prisma.spamRule.findMany({
+  return await withSelfHealing(async () => {
+    try {
+      // CACHE BUST: Force new deployment to clear Netlify cache
+      // 1) load enabled rules
+      const rules = await prisma.spamRule.findMany({
       where: { enabled: true },
       select: { id: true, pattern: true, patternNorm: true, mode: true, brand: true },
       orderBy: { updatedAt: "desc" },
@@ -199,5 +201,6 @@ export async function GET() {
       },
       { status: 500 }
     );
-  }
+    }
+  }, { service: 'database' });
 }

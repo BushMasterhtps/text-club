@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { $Enums } from "@prisma/client";
+import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
 // Which statuses count as "open"
 const OPEN_STATUSES: $Enums.TaskStatus[] = [
@@ -11,7 +12,8 @@ const OPEN_STATUSES: $Enums.TaskStatus[] = [
 ];
 
 export async function GET(request: Request) {
-  try {
+  return await withSelfHealing(async () => {
+    try {
     // Get filter parameter (e.g., ?filter=TEXT_CLUB or ?filter=HOLDS)
     const url = new URL(request.url);
     const filter = url.searchParams.get('filter');
@@ -97,21 +99,22 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ success: true, agents: withCounts });
-  } catch (err) {
-    console.error("agents GET error:", err);
-    console.error("Error details:", {
-      message: err instanceof Error ? err.message : 'Unknown error',
-      stack: err instanceof Error ? err.stack : undefined,
-      name: err instanceof Error ? err.name : undefined
-    });
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: "Failed to load agents",
-        details: err instanceof Error ? err.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
-  }
+      return NextResponse.json({ success: true, agents: withCounts });
+    } catch (err) {
+      console.error("agents GET error:", err);
+      console.error("Error details:", {
+        message: err instanceof Error ? err.message : 'Unknown error',
+        stack: err instanceof Error ? err.stack : undefined,
+        name: err instanceof Error ? err.name : undefined
+      });
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "Failed to load agents",
+          details: err instanceof Error ? err.message : 'Unknown error'
+        },
+        { status: 500 }
+      );
+    }
+  }, { service: 'database' });
 }
