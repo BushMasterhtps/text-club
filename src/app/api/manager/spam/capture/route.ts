@@ -92,35 +92,55 @@ export async function POST() {
       where: { status: RawStatus.READY }
     });
 
-    // 3) Process only 100 items at a time to prevent timeouts and connection issues
-    const BATCH_SIZE = 100;
-    const batch = await prisma.rawMessage.findMany({
+    // 3) Process same scope as preview (1000 messages) but in batches to prevent timeouts
+    // Preview checks 1000 messages and finds 529 matches, so we should process the same 1000
+    const PREVIEW_SCOPE = 1000; // Match preview's scope
+    const PROCESSING_BATCH_SIZE = 100; // Process 100 at a time to avoid timeouts
+    
+    // Fetch all messages in preview scope (same as preview)
+    const allMessages = await prisma.rawMessage.findMany({
       where: { 
         status: RawStatus.READY  // FIX: Only scan READY messages, not PROMOTED
       },
       select: { id: true, brand: true, text: true, status: true }, // FIX: Include status for validation
       orderBy: { createdAt: "desc" },
-      take: BATCH_SIZE,
+      take: PREVIEW_SCOPE, // Match preview's scope
     });
 
-    if (batch.length === 0) {
+    if (allMessages.length === 0) {
       return NextResponse.json({ 
         success: true, 
         updatedCount: 0,
         totalInQueue: totalReady,
-        remainingInQueue: totalReady
+        remainingInQueue: totalReady,
+        processed: 0
       });
     }
+    
+    console.log(`[SPAM CAPTURE] Processing ${allMessages.length} messages (matching preview scope of ${PREVIEW_SCOPE})`);
 
-    // 4) Process batch and mark as spam if matched
+    // 4) Process all messages and mark as spam if matched
     let updatedCount = 0;
     const updates: Array<{ id: string; hits: string[] }> = [];
     let learningMatchedCount = 0;
     let patternMatchedCount = 0;
     let phraseMatchedCount = 0;
     let validationBlockedCount = 0;
+    
+    // Process messages in internal batches to avoid timeout during analysis
+    const processingBatches = [];
+    for (let i = 0; i < allMessages.length; i += PROCESSING_BATCH_SIZE) {
+      processingBatches.push(allMessages.slice(i, i + PROCESSING_BATCH_SIZE));
+    }
+    
+    console.log(`[SPAM CAPTURE] Processing ${allMessages.length} messages in ${processingBatches.length} internal batches of ${PROCESSING_BATCH_SIZE}`);
 
-    for (const rm of batch) {
+    // Process each internal batch
+    for (let batchIndex = 0; batchIndex < processingBatches.length; batchIndex++) {
+      const batch = processingBatches[batchIndex];
+      console.log(`[SPAM CAPTURE] Processing internal batch ${batchIndex + 1}/${processingBatches.length} (${batch.length} messages)`);
+      
+      for (const rm of batch) {
       const hits: string[] = [];
       let patternScore = 0;
       let learningScore = 0;
@@ -200,12 +220,14 @@ export async function POST() {
       }
     }
     
-    console.log(`[SPAM CAPTURE] Batch analysis: ${batch.length} messages, ${updates.length} matches found (${phraseMatchedCount} phrase, ${patternMatchedCount} pattern, ${learningMatchedCount} learning), ${validationBlockedCount} blocked by validation`);
-    console.log(`[SPAM CAPTURE] Rules loaded: ${rules.length}, Batch has text: ${batch.filter(r => r.text).length}/${batch.length}`);
+    }
+    
+    console.log(`[SPAM CAPTURE] Complete analysis: ${allMessages.length} messages, ${updates.length} matches found (${phraseMatchedCount} phrase, ${patternMatchedCount} pattern, ${learningMatchedCount} learning), ${validationBlockedCount} blocked by validation`);
+    console.log(`[SPAM CAPTURE] Rules loaded: ${rules.length}, Messages with text: ${allMessages.filter(r => r.text).length}/${allMessages.length}`);
     
     // DEBUG: Show sample of first few messages
-    if (batch.length > 0) {
-      const sample = batch.slice(0, 3);
+    if (allMessages.length > 0) {
+      const sample = allMessages.slice(0, 3);
       console.log(`[SPAM CAPTURE DEBUG] Sample messages:`, sample.map(r => ({
         id: r.id.substring(0, 8),
         hasText: !!r.text,
@@ -217,7 +239,7 @@ export async function POST() {
     // 5) Batch update to reduce database connections
     // FIX: Use transaction to prevent race conditions where messages change status between fetch and update
     if (updates.length > 0) {
-      console.log(`[SPAM CAPTURE] Attempting to update ${updates.length} messages out of ${batch.length} processed...`);
+      console.log(`[SPAM CAPTURE] Attempting to update ${updates.length} messages out of ${allMessages.length} processed...`);
       
       // Collect all IDs for batch update
       const updateIds = updates.map(u => u.id);
