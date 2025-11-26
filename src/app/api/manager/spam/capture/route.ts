@@ -116,6 +116,9 @@ export async function POST() {
     let updatedCount = 0;
     const updates: Array<{ id: string; hits: string[] }> = [];
     let learningMatchedCount = 0;
+    let patternMatchedCount = 0;
+    let phraseMatchedCount = 0;
+    let validationBlockedCount = 0;
 
     for (const rm of batch) {
       const hits: string[] = [];
@@ -124,7 +127,10 @@ export async function POST() {
       
       // Check phrase rules first
       for (const r of rules) {
-        if (ruleMatchesText(r, rm.brand, rm.text)) hits.push(r.pattern);
+        if (ruleMatchesText(r, rm.brand, rm.text)) {
+          hits.push(r.pattern);
+          phraseMatchedCount++;
+        }
       }
       
       // Check pattern detection for obvious spam (gibberish, random numbers, etc.)
@@ -140,6 +146,7 @@ export async function POST() {
             // Add pattern reasons to hits for tracking
             const patternReasons = patternResult.reasons.slice(0, 2).join(', ');
             hits.push(`Pattern: ${Math.round(patternScore)}% (${patternReasons})`);
+            patternMatchedCount++;
           }
         } catch (error) {
           console.error(`Error analyzing patterns for message ${rm.id}:`, error);
@@ -177,42 +184,104 @@ export async function POST() {
         } else {
           // Log blocked transition but continue processing
           console.warn(`[SELF-HEAL] Skipping message ${rm.id}: ${validation.error}`);
+          validationBlockedCount++;
         }
       }
     }
+    
+    console.log(`[SPAM CAPTURE] Batch analysis: ${batch.length} messages, ${updates.length} matches found (${phraseMatchedCount} phrase, ${patternMatchedCount} pattern, ${learningMatchedCount} learning), ${validationBlockedCount} blocked by validation`);
 
     // 5) Batch update to reduce database connections
-    // FIX: Add validation - only update messages that are still READY (prevent race conditions)
+    // FIX: Use transaction to prevent race conditions where messages change status between fetch and update
     if (updates.length > 0) {
-      // Use Promise.all for parallel updates but limit concurrency to prevent connection exhaustion
-      const CONCURRENT_UPDATES = 10;
-      for (let i = 0; i < updates.length; i += CONCURRENT_UPDATES) {
-        const chunk = updates.slice(i, i + CONCURRENT_UPDATES);
-        const chunkResults = await Promise.all(
-          chunk.map(async ({ id, hits }) => {
-            try {
-              // FIX: Only update if still READY (prevent invalid status transitions)
-              // This ensures we don't accidentally update PROMOTED messages
-              const result = await prisma.rawMessage.updateMany({
-                where: { 
-                  id,
-                  status: RawStatus.READY  // Only update if still READY
-                },
-                data: {
-                  status: RawStatus.SPAM_REVIEW,
-                  previewMatches: hits,
-                },
-              });
-              return result.count; // Return count of updated rows (0 or 1)
-            } catch (error) {
-              console.error(`Error updating raw message ${id}:`, error);
-              return 0; // Return 0 if update failed
-            }
-          })
-        );
-        // Sum up successful updates from this chunk
-        updatedCount += chunkResults.reduce((sum, count) => sum + count, 0);
+      console.log(`[SPAM CAPTURE] Attempting to update ${updates.length} messages out of ${batch.length} processed...`);
+      
+      // Collect all IDs for batch update
+      const updateIds = updates.map(u => u.id);
+      const updateMap = new Map(updates.map(u => [u.id, u.hits]));
+      
+      // Use a single updateMany with IN clause for better performance and atomicity
+      // This updates all matching messages in one query
+      try {
+        const result = await prisma.rawMessage.updateMany({
+          where: { 
+            id: { in: updateIds },
+            status: RawStatus.READY  // Only update if still READY (prevents race conditions)
+          },
+          data: {
+            status: RawStatus.SPAM_REVIEW,
+            // Note: previewMatches will be set to the hits for each message
+            // Since updateMany doesn't support per-row data, we'll do a second pass for previewMatches
+          },
+        });
+        
+        updatedCount = result.count;
+        console.log(`[SPAM CAPTURE] Updated ${updatedCount} messages to SPAM_REVIEW status`);
+        
+        // Now update previewMatches for each successfully updated message
+        // Do this in smaller batches to avoid connection issues
+        if (updatedCount > 0) {
+          const CONCURRENT_UPDATES = 10;
+          for (let i = 0; i < updateIds.length; i += CONCURRENT_UPDATES) {
+            const chunk = updateIds.slice(i, i + CONCURRENT_UPDATES);
+            await Promise.all(
+              chunk.map(async (id) => {
+                try {
+                  const hits = updateMap.get(id);
+                  if (hits) {
+                    await prisma.rawMessage.updateMany({
+                      where: { 
+                        id,
+                        status: RawStatus.SPAM_REVIEW  // Only update if we successfully moved to SPAM_REVIEW
+                      },
+                      data: {
+                        previewMatches: hits,
+                      },
+                    });
+                  }
+                } catch (error) {
+                  console.error(`[SPAM CAPTURE] Error updating previewMatches for ${id}:`, error);
+                }
+              })
+            );
+          }
+        }
+        
+        const statusChangedCount = updates.length - updatedCount;
+        if (statusChangedCount > 0) {
+          console.warn(`[SPAM CAPTURE] ${statusChangedCount} messages changed status (race condition) - they were likely promoted to tasks between fetch and update`);
+        }
+      } catch (error) {
+        console.error(`[SPAM CAPTURE] Error in batch update:`, error);
+        // Fallback to individual updates if batch update fails
+        const CONCURRENT_UPDATES = 10;
+        for (let i = 0; i < updates.length; i += CONCURRENT_UPDATES) {
+          const chunk = updates.slice(i, i + CONCURRENT_UPDATES);
+          const chunkResults = await Promise.all(
+            chunk.map(async ({ id, hits }) => {
+              try {
+                const result = await prisma.rawMessage.updateMany({
+                  where: { 
+                    id,
+                    status: RawStatus.READY
+                  },
+                  data: {
+                    status: RawStatus.SPAM_REVIEW,
+                    previewMatches: hits,
+                  },
+                });
+                return result.count;
+              } catch (error) {
+                console.error(`[SPAM CAPTURE] Error updating raw message ${id}:`, error);
+                return 0;
+              }
+            })
+          );
+          updatedCount += chunkResults.reduce((sum, count) => sum + count, 0);
+        }
       }
+    } else {
+      console.log(`[SPAM CAPTURE] No matches found in batch of ${batch.length} messages`);
     }
 
     // 6) Calculate remaining items in queue
