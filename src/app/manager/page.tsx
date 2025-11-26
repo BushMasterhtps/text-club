@@ -1268,15 +1268,29 @@ function SpamPreviewCaptureSection() {
         const captured = data.updatedCount ?? 0;
         const total = data.totalInQueue ?? 0;
         const remaining = data.remainingInQueue ?? 0;
+        const isPartial = data.partial ?? false;
+        const processed = data.processed ?? 0;
+        const totalToProcess = data.totalToProcess ?? total;
         
         // Show progress popup with format: "Captured 100 / X (total in queue)"
-        const message = `Captured ${captured} / ${total} (total in queue)${remaining > 0 ? `\n${remaining} remaining` : "\nAll done! ✅"}`;
+        let message = `Captured ${captured} / ${total} (total in queue)`;
+        if (isPartial) {
+          message += `\n\n⚠️ Partial completion (timeout protection)\nProcessed ${processed}/${totalToProcess} messages\n${remaining} remaining\n\nClick "Capture Spam" again to continue processing.`;
+        } else if (remaining > 0) {
+          message += `\n${remaining} remaining`;
+        } else {
+          message += "\nAll done! ✅";
+        }
         
         // Show alert popup
         alert(message);
         
         // Also show in UI
-        setCaptureMsg(`Captured ${captured} spam items. ${remaining > 0 ? `${remaining} remaining in queue.` : "All done!"}`);
+        if (isPartial) {
+          setCaptureMsg(`Captured ${captured} spam items (partial). ${remaining} remaining. Click "Capture Spam" again to continue.`);
+        } else {
+          setCaptureMsg(`Captured ${captured} spam items. ${remaining > 0 ? `${remaining} remaining in queue.` : "All done!"}`);
+        }
       } else {
         throw new Error(data?.error || "Capture failed");
       }
