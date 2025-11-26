@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { learnFromSpamDecision } from "@/lib/spam-detection";
+import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
 export async function POST(
   req: Request,
