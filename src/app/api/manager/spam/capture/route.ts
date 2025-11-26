@@ -79,6 +79,9 @@ function similarity(str1: string, str2: string): number {
 }
 
 export async function POST() {
+  const startTime = Date.now();
+  const MAX_EXECUTION_TIME = 20000; // 20 seconds (leave 6 seconds buffer for Netlify's 26s timeout)
+  
   try {
     // 1) load rules once
     const rules = await prisma.spamRule.findMany({
@@ -137,6 +140,61 @@ export async function POST() {
 
     // Process each internal batch
     for (let batchIndex = 0; batchIndex < processingBatches.length; batchIndex++) {
+      // Check if we're approaching timeout
+      const elapsed = Date.now() - startTime;
+      if (elapsed > MAX_EXECUTION_TIME) {
+        console.log(`[SPAM CAPTURE] Approaching timeout (${elapsed}ms), returning partial results`);
+        // Update what we have so far
+        if (updates.length > 0) {
+          const updateIds = updates.map(u => u.id);
+          const updateMap = new Map(updates.map(u => [u.id, u.hits]));
+          
+          const result = await prisma.rawMessage.updateMany({
+            where: { 
+              id: { in: updateIds },
+              status: RawStatus.READY
+            },
+            data: { status: RawStatus.SPAM_REVIEW },
+          });
+          
+          updatedCount = result.count;
+          
+          // Update previewMatches
+          if (updatedCount > 0) {
+            const CONCURRENT_UPDATES = 10;
+            for (let i = 0; i < updateIds.length; i += CONCURRENT_UPDATES) {
+              const chunk = updateIds.slice(i, i + CONCURRENT_UPDATES);
+              await Promise.all(
+                chunk.map(async (id) => {
+                  const hits = updateMap.get(id);
+                  if (hits) {
+                    await prisma.rawMessage.updateMany({
+                      where: { id, status: RawStatus.SPAM_REVIEW },
+                      data: { previewMatches: hits },
+                    });
+                  }
+                })
+              );
+            }
+          }
+        }
+        
+        const remainingInQueue = Math.max(0, totalReady - updatedCount);
+        return NextResponse.json({ 
+          success: true, 
+          updatedCount,
+          totalInQueue: totalReady,
+          remainingInQueue,
+          processed: (batchIndex * PROCESSING_BATCH_SIZE) + (batchIndex < processingBatches.length ? processingBatches[batchIndex].length : 0),
+          totalToProcess: allMessages.length,
+          partial: true,
+          message: `Processed ${batchIndex + 1}/${processingBatches.length} batches before timeout. ${remainingInQueue} messages remaining. Click "Capture Spam" again to continue.`,
+          phraseMatchedCount,
+          patternMatchedCount,
+          learningMatchedCount
+        });
+      }
+      
       const batch = processingBatches[batchIndex];
       console.log(`[SPAM CAPTURE] Processing internal batch ${batchIndex + 1}/${processingBatches.length} (${batch.length} messages)`);
       
