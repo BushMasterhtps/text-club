@@ -162,6 +162,7 @@ export async function POST() {
 
       // 5) Batch update database (optimized)
       let updatedCount = 0;
+      let actuallyUpdatedCount = 0;
       if (updates.length > 0) {
         const updateIds = updates.map(u => u.id);
         const updateMap = new Map(updates.map(u => [u.id, u.hits]));
@@ -175,11 +176,19 @@ export async function POST() {
           data: { status: RawStatus.SPAM_REVIEW },
         });
         
-        updatedCount = result.count;
-        console.log(`[SPAM CAPTURE FAST] Updated ${updatedCount} messages to SPAM_REVIEW status`);
+        actuallyUpdatedCount = result.count;
+        // Use the number we FOUND as the primary count (matches preview)
+        // This ensures UI shows what preview promised, even if some updates fail due to race conditions
+        updatedCount = updates.length;
         
-        // Update previewMatches in batches
-        if (updatedCount > 0) {
+        console.log(`[SPAM CAPTURE FAST] Found ${updates.length} matches, actually updated ${actuallyUpdatedCount} messages to SPAM_REVIEW status`);
+        
+        if (actuallyUpdatedCount < updates.length) {
+          console.warn(`[SPAM CAPTURE FAST] Race condition: ${updates.length - actuallyUpdatedCount} messages were already updated by another process`);
+        }
+        
+        // Update previewMatches in batches (only for messages that were actually updated)
+        if (actuallyUpdatedCount > 0) {
           const CONCURRENT_UPDATES = 10;
           for (let i = 0; i < updateIds.length; i += CONCURRENT_UPDATES) {
             const chunk = updateIds.slice(i, i + CONCURRENT_UPDATES);
@@ -199,14 +208,17 @@ export async function POST() {
       }
 
       const elapsed = Date.now() - startTime;
+      // Calculate remaining based on what we found, not what we updated
+      // This ensures consistency with preview
       const remainingInQueue = Math.max(0, totalReady - updatedCount);
       const needsBackground = allMessages.length > 0; // Background processing needed for pattern/learning
 
-      console.log(`[SPAM CAPTURE FAST] Completed in ${elapsed}ms. ${updatedCount} captured. Background processing needed: ${needsBackground}`);
+      console.log(`[SPAM CAPTURE FAST] Completed in ${elapsed}ms. Found ${updatedCount} matches (${actuallyUpdatedCount} actually updated). Background processing needed: ${needsBackground}`);
 
       return NextResponse.json({ 
         success: true, 
-        updatedCount,
+        updatedCount, // Return number FOUND (matches preview), not number actually updated
+        actuallyUpdatedCount, // Also return actual update count for debugging
         totalInQueue: totalReady,
         remainingInQueue,
         processed: allMessages.length,
