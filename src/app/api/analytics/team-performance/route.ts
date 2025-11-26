@@ -60,6 +60,12 @@ export async function GET(request: NextRequest) {
               sentBackBy: agent.id,
               status: "PENDING",
               endTime: { gte: start, lte: end }
+            },
+            // Include tasks completed by this agent but now unassigned (e.g., "Unable to Resolve" for Holds)
+            {
+              completedBy: agent.id,
+              status: "COMPLETED",
+              endTime: { gte: start, lte: end }
             }
           ]
         }
@@ -69,7 +75,7 @@ export async function GET(request: NextRequest) {
       const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'YOTPO', 'HOLDS', 'STANDALONE_REFUNDS'];
       
       for (const taskType of taskTypes) {
-        // Count completed tasks (including sent-back tasks)
+        // Count completed tasks (including sent-back tasks and unassigned completed tasks)
         const completedTasks = await prisma.task.findMany({
           where: {
             OR: [
@@ -82,6 +88,13 @@ export async function GET(request: NextRequest) {
               {
                 sentBackBy: agent.id,
                 status: "PENDING",
+                taskType: taskType as any,
+                endTime: { gte: start, lte: end }
+              },
+              // Include tasks completed by this agent but now unassigned (e.g., "Unable to Resolve" for Holds)
+              {
+                completedBy: agent.id,
+                status: "COMPLETED",
                 taskType: taskType as any,
                 endTime: { gte: start, lte: end }
               }

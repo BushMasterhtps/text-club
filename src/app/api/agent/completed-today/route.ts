@@ -29,15 +29,27 @@ export async function GET(req: Request) {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
-    // Get completed tasks for today
+    // Get completed tasks for today (including unassigned completed tasks, e.g., "Unable to Resolve" for Holds)
     const tasks = await prisma.task.findMany({
       where: {
-        assignedToId: user.id,
-        status: "COMPLETED",
-        endTime: {
-          gte: startOfToday,
-          lt: endOfToday
-        }
+        OR: [
+          {
+            assignedToId: user.id,
+            status: "COMPLETED",
+            endTime: {
+              gte: startOfToday,
+              lt: endOfToday
+            }
+          },
+          {
+            completedBy: user.id,
+            status: "COMPLETED",
+            endTime: {
+              gte: startOfToday,
+              lt: endOfToday
+            }
+          }
+        ]
       },
       select: {
         id: true,

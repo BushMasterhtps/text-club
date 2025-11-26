@@ -99,15 +99,20 @@ export async function GET(req: NextRequest) {
     ];
 
     // Fetch all tasks (for lifetime and current sprint)
+    // Include both assigned tasks and unassigned completed tasks (e.g., "Unable to Resolve" for Holds)
     const allTasks = await prisma.task.findMany({
       where: {
         status: "COMPLETED",
-        assignedToId: { not: null },
+        OR: [
+          { assignedToId: { not: null } },
+          { completedBy: { not: null } }
+        ],
         endTime: { not: null }
       },
       select: {
         id: true,
         assignedToId: true,
+        completedBy: true,
         endTime: true,
         startTime: true,
         taskType: true,
@@ -132,8 +137,11 @@ export async function GET(req: NextRequest) {
     // Build agent scorecards for ALL agents (lifetime and current sprint)
     const buildAgentScorecard = (userId: string, userEmail: string, userName: string, startDate: Date | null, endDate: Date | null) => {
       // Filter tasks by date range if provided
+      // Include tasks assigned to user OR completed by user (for unassigned completions)
       const tasks = allTasks.filter(t => {
-        if (t.assignedToId !== userId) return false;
+        const isAssignedToUser = t.assignedToId === userId;
+        const isCompletedByUser = t.completedBy === userId;
+        if (!isAssignedToUser && !isCompletedByUser) return false;
         if (!t.endTime) return false;
         if (startDate && t.endTime < startDate) return false;
         if (endDate && t.endTime > endDate) return false;

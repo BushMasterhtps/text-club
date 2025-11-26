@@ -156,7 +156,9 @@ export async function POST(
     }
     
     // Update task status, end time, duration, and disposition
-    const updatedTask = await prisma.task.update({
+    // Wrap with self-healing for database write operations
+    const updatedTask = await withSelfHealing(
+      () => prisma.task.update({
       where: { id },
       data: {
         status: isSendBack ? "PENDING" : (task.taskType === "HOLDS" ? newStatus : "COMPLETED"),
@@ -171,7 +173,10 @@ export async function POST(
           holdsStatus: newHoldsQueue,
           holdsQueueHistory: newQueueHistory,
           holdsOrderAmount: orderAmount ? parseFloat(orderAmount) : null,
-          holdsNotes: dispositionNote || null // Store disposition note in holdsNotes for agent visibility
+          holdsNotes: dispositionNote || null, // Store disposition note in holdsNotes for agent visibility
+          // Track who completed the task (for all Holds completions, even if unassigned)
+          completedBy: user.id,
+          completedAt: new Date()
         }),
         // Add send-back tracking fields for WOD/IVCS
         ...(isSendBack && {
@@ -190,7 +195,9 @@ export async function POST(
         sentBackAt: true,
         sentBackDisposition: true
       }
-    });
+    }),
+      { service: 'database', useRetry: true, useCircuitBreaker: true }
+    );
 
     // Learn from agent's decision (legitimate vs spam)
     try {

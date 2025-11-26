@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
     // OPTIMIZED: Get all agents and their task data in parallel with minimal queries
-    const [agents, openTaskGroups, inProgressGroups, completedTodayGroups, sentBackTodayGroups, lastActivities] = await Promise.all([
+    const [agents, openTaskGroups, inProgressGroups, completedTodayGroups, completedByGroups, sentBackTodayGroups, lastActivities] = await Promise.all([
       // Get all agents
       prisma.user.findMany({
         where: { role: { in: ["AGENT", "MANAGER_AGENT"] } },
@@ -33,11 +33,21 @@ export async function GET(request: NextRequest) {
         },
         _count: { id: true }
       }),
-      // Group completed today by agent + task type (1 query instead of N×4)
+      // Group completed today by assignedToId + task type
       prisma.task.groupBy({
         by: ['assignedToId', 'taskType'],
         where: {
           assignedToId: { not: null },
+          status: "COMPLETED",
+          endTime: { gte: startOfToday, lt: endOfToday }
+        },
+        _count: { id: true }
+      }),
+      // Group completed today by completedBy + task type (for unassigned completions, e.g., "Unable to Resolve" for Holds)
+      prisma.task.groupBy({
+        by: ['completedBy', 'taskType'],
+        where: {
+          completedBy: { not: null },
           status: "COMPLETED",
           endTime: { gte: startOfToday, lt: endOfToday }
         },
@@ -82,12 +92,23 @@ export async function GET(request: NextRequest) {
     }
 
     const completedTodayMap = new Map<string, Map<string, number>>();
+    // Add completed tasks by assignedToId
     for (const g of completedTodayGroups) {
       if (!g.assignedToId) continue;
       if (!completedTodayMap.has(g.assignedToId)) {
         completedTodayMap.set(g.assignedToId, new Map());
       }
-      completedTodayMap.get(g.assignedToId)!.set(g.taskType, g._count.id);
+      const currentCount = completedTodayMap.get(g.assignedToId)!.get(g.taskType) || 0;
+      completedTodayMap.get(g.assignedToId)!.set(g.taskType, currentCount + g._count.id);
+    }
+    // Add completed tasks by completedBy (for unassigned completions, e.g., "Unable to Resolve" for Holds)
+    for (const g of completedByGroups) {
+      if (!g.completedBy) continue;
+      if (!completedTodayMap.has(g.completedBy)) {
+        completedTodayMap.set(g.completedBy, new Map());
+      }
+      const currentCount = completedTodayMap.get(g.completedBy)!.get(g.taskType) || 0;
+      completedTodayMap.get(g.completedBy)!.set(g.taskType, currentCount + g._count.id);
     }
 
     const sentBackMap = new Map<string, Map<string, number>>();

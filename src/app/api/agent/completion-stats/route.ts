@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
 export async function GET(request: NextRequest) {
   try {
@@ -56,53 +57,73 @@ export async function GET(request: NextRequest) {
       endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999) + pstOffset);
     }
 
-    // Get completion stats by task type for today (including sent-back tasks)
-    const completionStats = await prisma.task.groupBy({
-      by: ['taskType'],
-      where: {
-        OR: [
-          {
-            assignedToId: user.id,
-            status: 'COMPLETED',
-            endTime: {
-              gte: startOfDay,
-              lte: endOfDay
+    // Get completion stats by task type for today (including sent-back tasks and unassigned completed tasks)
+    const completionStats = await withSelfHealing(
+      () => prisma.task.groupBy({
+        by: ['taskType'],
+        where: {
+          OR: [
+            {
+              assignedToId: user.id,
+              status: 'COMPLETED',
+              endTime: {
+                gte: startOfDay,
+                lte: endOfDay
+              }
+            },
+            {
+              sentBackBy: user.id,
+              status: 'PENDING',
+              endTime: {
+                gte: startOfDay,
+                lte: endOfDay
+              }
+            },
+            // NEW: Include tasks completed by this user but now unassigned (e.g., "Unable to Resolve" for Holds)
+            {
+              completedBy: user.id,
+              status: 'COMPLETED',
+              endTime: {
+                gte: startOfDay,
+                lte: endOfDay
+              }
             }
-          },
-          {
-            sentBackBy: user.id,
-            status: 'PENDING',
-            endTime: {
-              gte: startOfDay,
-              lte: endOfDay
-            }
-          }
-        ]
-      },
-      _count: {
-        id: true
-      }
-    });
+          ]
+        },
+        _count: {
+          id: true
+        }
+      }),
+      { service: 'database', useRetry: true, useCircuitBreaker: true }
+    );
 
-    // Get total completion stats (lifetime) including sent-back tasks
-    const totalStats = await prisma.task.groupBy({
-      by: ['taskType'],
-      where: {
-        OR: [
-          {
-            assignedToId: user.id,
-            status: 'COMPLETED'
-          },
-          {
-            sentBackBy: user.id,
-            status: 'PENDING'
-          }
-        ]
-      },
-      _count: {
-        id: true
-      }
-    });
+    // Get total completion stats (lifetime) including sent-back tasks and unassigned completed tasks
+    const totalStats = await withSelfHealing(
+      () => prisma.task.groupBy({
+        by: ['taskType'],
+        where: {
+          OR: [
+            {
+              assignedToId: user.id,
+              status: 'COMPLETED'
+            },
+            {
+              sentBackBy: user.id,
+              status: 'PENDING'
+            },
+            // NEW: Include tasks completed by this user but now unassigned (e.g., "Unable to Resolve" for Holds)
+            {
+              completedBy: user.id,
+              status: 'COMPLETED'
+            }
+          ]
+        },
+        _count: {
+          id: true
+        }
+      }),
+      { service: 'database', useRetry: true, useCircuitBreaker: true }
+    );
 
 
     // Format the response

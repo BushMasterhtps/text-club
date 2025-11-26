@@ -84,6 +84,7 @@ model User {
 
   tasks             Task[]              @relation("UserTasks")
   sentBackTasks     Task[]              @relation("SentBackTasks")
+  completedTasks    Task[]              @relation("CompletedTasks")
   assistance        AssistanceRequest[]
   histories         TaskHistory[]       @relation("UserHistory")
   trelloCompletions TrelloCompletion[]
@@ -124,6 +125,12 @@ model Task {
   sentBackAt          DateTime?
   sentBackDisposition String?
   sentBackByUser      User?     @relation("SentBackTasks", fields: [sentBackBy], references: [id])
+
+  // 🎯 Completion tracking for Holds tasks (and all task types for audit trail)
+  // Tracks who completed the task, even if task is later unassigned
+  completedBy         String?
+  completedAt         DateTime?
+  completedByUser     User?     @relation("CompletedTasks", fields: [completedBy], references: [id])
 
   // 🆕 WOD/IVCS specific fields
   wodIvcsSource       WodIvcsSource?

@@ -202,13 +202,25 @@ async function getAgentPerformance(whereClause: any) {
           name: true,
         },
       },
+      completedByUser: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
   });
 
-  // Group by agent
+  // Group by agent (consider both assignedTo and completedBy for completed tasks)
   const agentStats = tasks.reduce((acc, task) => {
-    const agentId = task.assignedTo?.id || 'unassigned';
-    const agentName = task.assignedTo?.name || 'Unassigned';
+    // For completed tasks, use completedBy if available (for unassigned completions)
+    // Otherwise use assignedTo
+    const agentId = (task.status === 'COMPLETED' && task.completedBy && task.completedByUser) 
+      ? task.completedByUser.id 
+      : (task.assignedTo?.id || 'unassigned');
+    const agentName = (task.status === 'COMPLETED' && task.completedBy && task.completedByUser)
+      ? task.completedByUser.name
+      : (task.assignedTo?.name || 'Unassigned');
     
     if (!acc[agentId]) {
       acc[agentId] = {

@@ -1,0 +1,36 @@
+Holds Fix Backup - Quick Reference
+==================================
+Timestamp: 2025-11-26T22:03:54.827Z
+Backup File: holds-fix-backup-2025-11-26T22-03-53-968Z.json
+
+Summary:
+- Total Holds Tasks: 657
+- Unassigned "Unable to Resolve": 20
+- Total Users: 22
+
+Unassigned "Unable to Resolve" Tasks (for backfill):
+1. Task ID: cmiephumo001jk1096xo3v2p0, Completed: 2025-11-25T15:37:48.432Z, Queue: Customer Contact
+2. Task ID: cmiephvlv001qk109hog8wy7w, Completed: 2025-11-25T16:43:08.203Z, Queue: Customer Contact
+3. Task ID: cmiephw5y001uk1098nnmsu6h, Completed: 2025-11-25T16:13:40.620Z, Queue: Customer Contact
+4. Task ID: cmiephv6s001nk109ifm8s1ve, Completed: 2025-11-25T16:22:32.730Z, Queue: Customer Contact
+5. Task ID: cmic3zs9d000tie09h9aujgnp, Completed: 2025-11-25T16:47:16.274Z, Queue: Escalated Call 4+ Day
+6. Task ID: cmiezxv60000el809uezis9ei, Completed: 2025-11-25T20:51:05.418Z, Queue: Customer Contact
+7. Task ID: cmiezxuvi000cl809d98mlcnr, Completed: 2025-11-25T21:06:36.797Z, Queue: Customer Contact
+8. Task ID: cmiezxvwc000jl809y2cmylbk, Completed: 2025-11-25T21:09:25.376Z, Queue: Customer Contact
+9. Task ID: cmig55apw001ml409qkq346h9, Completed: 2025-11-26T19:45:13.760Z, Queue: Customer Contact
+10. Task ID: cmig55cnw001zl40983qlqnm4, Completed: 2025-11-26T16:32:24.016Z, Queue: Customer Contact
+11. Task ID: cmig55b0o001ol409y6hf1882, Completed: 2025-11-26T19:56:20.946Z, Queue: Customer Contact
+12. Task ID: cmig55dpp0026l409k86wo6dt, Completed: 2025-11-26T20:11:33.641Z, Queue: Customer Contact
+13. Task ID: cmig55bmb001sl409aygaqxa4, Completed: 2025-11-26T19:32:13.272Z, Queue: Customer Contact
+14. Task ID: cmig557s90012l409i668lymy, Completed: 2025-11-26T18:35:35.135Z, Queue: Customer Contact
+15. Task ID: cmig55eau002al409veyia1uc, Completed: 2025-11-26T20:17:14.917Z, Queue: Customer Contact
+16. Task ID: cmiggsrxc000qjx09zzdtp0ec, Completed: 2025-11-26T21:25:41.768Z, Queue: Escalated Call 4+ Day
+17. Task ID: cmiggssnt000vjx09qcugu9vb, Completed: 2025-11-26T21:32:52.748Z, Queue: Escalated Call 4+ Day
+18. Task ID: cmiggssik000ujx09tf47j9od, Completed: 2025-11-26T21:14:35.453Z, Queue: Customer Contact
+19. Task ID: cmiggsr75000ljx09kg6dmuho, Completed: 2025-11-26T21:25:29.012Z, Queue: Customer Contact
+20. Task ID: cmiggsqrc000ijx096r3qlk0x, Completed: 2025-11-26T22:03:36.061Z, Queue: Customer Contact
+
+Rollback Instructions:
+1. If needed, restore from: holds-fix-backup-2025-11-26T22-03-53-968Z.json
+2. Revert Git commit: git revert HEAD
+3. Remove migration fields if necessary

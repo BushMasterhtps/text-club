@@ -50,12 +50,13 @@ export async function GET(req: Request) {
       dateEnd = new Date(Date.UTC(year, month, day + 1, 7, 59, 59, 999)); // Next day 7:59 AM UTC = 11:59 PM PST
     }
     
-    // Get all tasks for this user (including sent-back tasks that are no longer assigned)
+    // Get all tasks for this user (including sent-back tasks and completed tasks that are no longer assigned)
     const tasks = await prisma.task.findMany({
       where: { 
         OR: [
           { assignedToId: user.id },
-          { sentBackBy: user.id } // Include tasks sent back by this user
+          { sentBackBy: user.id }, // Include tasks sent back by this user
+          { completedBy: user.id } // Include tasks completed by this user but now unassigned (e.g., "Unable to Resolve" for Holds)
         ]
       },
       select: {
@@ -66,7 +67,9 @@ export async function GET(req: Request) {
         assistanceNotes: true,
         createdAt: true,
         sentBackBy: true,
-        sentBackAt: true
+        sentBackAt: true,
+        completedBy: true,
+        completedAt: true
       }
     });
 
@@ -84,11 +87,14 @@ export async function GET(req: Request) {
       // Count as completed if:
       // 1. Status is COMPLETED (normal completion)
       // 2. Status is PENDING but has sentBackBy (sent back tasks that still count as work done)
-      if (!t.endTime) return false;
-      const endTime = new Date(t.endTime);
+      // 3. Status is COMPLETED and has completedBy (unassigned completed tasks, e.g., "Unable to Resolve" for Holds)
+      if (!t.endTime && !t.completedAt) return false;
+      const endTime = t.endTime ? new Date(t.endTime) : (t.completedAt ? new Date(t.completedAt) : null);
+      if (!endTime) return false;
       const isCompleted = t.status === "COMPLETED";
       const isSentBack = t.status === "PENDING" && t.sentBackBy; // Sent back tasks still count as work
-      return (isCompleted || isSentBack) && endTime >= dateStart && endTime < dateEnd;
+      const isCompletedByUser = t.status === "COMPLETED" && t.completedBy === user.id; // Unassigned completed tasks
+      return (isCompleted || isSentBack || isCompletedByUser) && endTime >= dateStart && endTime < dateEnd;
     }).length;
     
     const assistanceSent = tasks.filter(t => 

@@ -26,20 +26,38 @@ export async function GET() {
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
 
-    const completedToday = await prisma.task.groupBy({
-      by: ["assignedToId"],
-      _count: { _all: true },
-      where: {
-        assignedToId: { not: null },
-        status: TaskStatus.COMPLETED,
-        updatedAt: { gte: startOfDay },
-      },
-    });
+    // Get completed today by both assignedToId and completedBy (for unassigned completions, e.g., "Unable to Resolve" for Holds)
+    const [completedTodayAssigned, completedTodayByCompletedBy] = await Promise.all([
+      prisma.task.groupBy({
+        by: ["assignedToId"],
+        _count: { _all: true },
+        where: {
+          assignedToId: { not: null },
+          status: TaskStatus.COMPLETED,
+          updatedAt: { gte: startOfDay },
+        },
+      }),
+      prisma.task.groupBy({
+        by: ["completedBy"],
+        _count: { _all: true },
+        where: {
+          completedBy: { not: null },
+          status: TaskStatus.COMPLETED,
+          updatedAt: { gte: startOfDay },
+        },
+      }),
+    ]);
 
     const completedMap = new Map<string, number>();
-    for (const row of completedToday) {
+    // Add completed tasks by assignedToId
+    for (const row of completedTodayAssigned) {
       if (!row.assignedToId) continue;
       completedMap.set(row.assignedToId, (completedMap.get(row.assignedToId) || 0) + row._count._all);
+    }
+    // Add completed tasks by completedBy (for unassigned completions, e.g., "Unable to Resolve" for Holds)
+    for (const row of completedTodayByCompletedBy) {
+      if (!row.completedBy) continue;
+      completedMap.set(row.completedBy, (completedMap.get(row.completedBy) || 0) + row._count._all);
     }
 
     // Flatten counts into per-agent buckets
