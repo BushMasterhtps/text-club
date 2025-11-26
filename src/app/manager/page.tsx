@@ -1297,6 +1297,21 @@ function SpamPreviewCaptureSection() {
         {captureMsg && <span className="text-sm text-white/70">{captureMsg}</span>}
       </div>
 
+      {/* Spam Detection System Explanation */}
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-sm text-white/80">
+        <div className="font-medium text-white/90 mb-2">📋 How Our Spam Detection Works:</div>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>Phrase Rules (512 active):</strong> Matches exact keywords and phrases from our spam rule database. Uses word boundary matching to avoid false positives.</li>
+          <li><strong>Fuzzy Matching:</strong> Catches variations of keywords (e.g., "unlock", "UnLOck", "nlock") using similarity scoring (70%+ match).</li>
+          <li><strong>Pattern Detection:</strong> Identifies spam patterns like personal messages ("Just got home"), random strings ("23345"), gibberish, and incomplete messages.</li>
+          <li><strong>Learning System:</strong> Learns from manual spam review decisions and historical data to improve detection over time. Only checks items that don't match phrase rules for efficiency.</li>
+          <li><strong>Confidence Scoring:</strong> Items scoring 70%+ are marked as spam. Lower scores may require manual review.</li>
+        </ul>
+        <div className="mt-2 text-white/60 text-xs">
+          💡 <strong>Tip:</strong> Use "Preview Spam" to see what would be caught before capturing. The system processes 100 items at a time to prevent timeouts.
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <SmallButton onClick={doPreview} disabled={previewLoading}>
           {previewLoading ? "Previewing…" : "Preview Spam"}

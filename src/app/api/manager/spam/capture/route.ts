@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SpamMode, RawStatus } from "@prisma/client";
 import { validateStatusTransition } from "@/lib/self-healing/status-validator";
+import { getImprovedSpamScore } from "@/lib/spam-detection";
+import { fuzzyContains } from "@/lib/fuzzy-matching";
 
 function norm(s: string | null | undefined) {
   return (s ?? "")
@@ -24,22 +26,50 @@ function ruleMatchesText(
   if (!p || !t) return false;
 
   if (r.mode === SpamMode.CONTAINS) {
-    // Use word boundary matching instead of simple substring
-    // This ensures "cod" matches "cod" but not "code" or "could"
+    // First try exact word boundary matching (fast path)
     const words = t.split(/\s+/);
     const patternWords = p.split(/\s+/);
     
     // For single-word patterns, check if it exists as a complete word
     if (patternWords.length === 1) {
-      return words.some(word => word === p);
+      // Exact match first
+      if (words.some(word => word === p)) return true;
+      
+      // Then try fuzzy matching for variations (e.g., "unlock", "UnLOck", "nlock")
+      // Only use fuzzy for common spam keywords that have variations
+      const fuzzyKeywords = ['unlock', 'claim', 'win', 'free', 'urgent'];
+      if (fuzzyKeywords.some(keyword => similarity(p, keyword) > 0.5)) {
+        return fuzzyContains(t, p, 0.7); // 70% similarity threshold
+      }
     }
     
     // For multi-word patterns, check if the phrase exists with word boundaries
     const regex = new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
-    return regex.test(t);
+    if (regex.test(t)) return true;
+    
+    // If exact match fails, try fuzzy matching for multi-word patterns
+    // This helps catch variations like "unlock now" vs "unlock now!"
+    return fuzzyContains(t, p, 0.75); // 75% similarity for phrases
   }
   if (r.mode === SpamMode.LONE) return t === p;
   return false;
+}
+
+// Helper function for similarity check (simple version for inline use)
+function similarity(str1: string, str2: string): number {
+  if (str1 === str2) return 1;
+  if (str1.length === 0 || str2.length === 0) return 0;
+  
+  const maxLen = Math.max(str1.length, str2.length);
+  let distance = 0;
+  
+  // Simple character-by-character comparison
+  for (let i = 0; i < Math.min(str1.length, str2.length); i++) {
+    if (str1[i] !== str2[i]) distance++;
+  }
+  distance += Math.abs(str1.length - str2.length);
+  
+  return 1 - (distance / maxLen);
 }
 
 export async function POST() {
@@ -62,7 +92,7 @@ export async function POST() {
       where: { 
         status: RawStatus.READY  // FIX: Only scan READY messages, not PROMOTED
       },
-      select: { id: true, brand: true, text: true },
+      select: { id: true, brand: true, text: true, status: true }, // FIX: Include status for validation
       orderBy: { createdAt: "desc" },
       take: BATCH_SIZE,
     });
@@ -79,13 +109,35 @@ export async function POST() {
     // 4) Process batch and mark as spam if matched
     let updatedCount = 0;
     const updates: Array<{ id: string; hits: string[] }> = [];
+    let learningMatchedCount = 0;
 
     for (const rm of batch) {
       const hits: string[] = [];
+      let learningScore = 0;
+      
+      // Check phrase rules first
       for (const r of rules) {
         if (ruleMatchesText(r, rm.brand, rm.text)) hits.push(r.pattern);
       }
-      if (hits.length) {
+      
+      // Check learning system if no phrase rules matched (for efficiency)
+      if (hits.length === 0 && rm.text) {
+        try {
+          const learningResult = await getImprovedSpamScore(rm.text, rm.brand || undefined);
+          learningScore = learningResult.score;
+          
+          // If learning system says it's spam (score >= 70), add to hits
+          if (learningScore >= 70) {
+            hits.push(`Learning: ${Math.round(learningScore)}%`);
+            learningMatchedCount++;
+          }
+        } catch (error) {
+          console.error(`Error getting learning score for message ${rm.id}:`, error);
+        }
+      }
+      
+      // If we have matches (from rules or learning), validate and add to updates
+      if (hits.length > 0) {
         // Validate status transition before adding to updates
         const validation = validateStatusTransition(
           rm.status,
@@ -144,7 +196,8 @@ export async function POST() {
       updatedCount,
       totalInQueue: totalReady,
       remainingInQueue,
-      processed: batch.length
+      processed: batch.length,
+      learningMatchedCount // Include learning system count
     });
   } catch (error: any) {
     console.error("Spam capture error:", error);

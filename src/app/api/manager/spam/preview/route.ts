@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SpamMode, RawStatus } from "@prisma/client";
 import { getImprovedSpamScore } from "@/lib/spam-detection";
+import { fuzzyContains } from "@/lib/fuzzy-matching";
 
 /** simple normalize: lowercase, strip punctuation, collapse spaces */
 function norm(s: string | null | undefined) {
@@ -26,22 +27,49 @@ function ruleMatchesText(
   if (!p || !t) return false;
 
   if (r.mode === SpamMode.CONTAINS) {
-    // Use word boundary matching instead of simple substring
-    // This ensures "cod" matches "cod" but not "code" or "could"
+    // First try exact word boundary matching (fast path)
     const words = t.split(/\s+/);
     const patternWords = p.split(/\s+/);
     
     // For single-word patterns, check if it exists as a complete word
     if (patternWords.length === 1) {
-      return words.some(word => word === p);
+      // Exact match first
+      if (words.some(word => word === p)) return true;
+      
+      // Then try fuzzy matching for variations (e.g., "unlock", "UnLOck", "nlock")
+      // Only use fuzzy for common spam keywords that have variations
+      const fuzzyKeywords = ['unlock', 'claim', 'win', 'free', 'urgent'];
+      if (fuzzyKeywords.some(keyword => similarity(p, keyword) > 0.5)) {
+        return fuzzyContains(t, p, 0.7); // 70% similarity threshold
+      }
     }
     
     // For multi-word patterns, check if the phrase exists with word boundaries
     const regex = new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
-    return regex.test(t);
+    if (regex.test(t)) return true;
+    
+    // If exact match fails, try fuzzy matching for multi-word patterns
+    return fuzzyContains(t, p, 0.75); // 75% similarity for phrases
   }
   if (r.mode === SpamMode.LONE) return t === p; // exactly the lone token/phrase
   return false;
+}
+
+// Helper function for similarity check (simple version for inline use)
+function similarity(str1: string, str2: string): number {
+  if (str1 === str2) return 1;
+  if (str1.length === 0 || str2.length === 0) return 0;
+  
+  const maxLen = Math.max(str1.length, str2.length);
+  let distance = 0;
+  
+  // Simple character-by-character comparison
+  for (let i = 0; i < Math.min(str1.length, str2.length); i++) {
+    if (str1[i] !== str2[i]) distance++;
+  }
+  distance += Math.abs(str1.length - str2.length);
+  
+  return 1 - (distance / maxLen);
 }
 
 export async function GET() {
@@ -62,7 +90,7 @@ export async function GET() {
     },
     select: { id: true, brand: true, text: true },
     orderBy: { createdAt: "desc" },
-    take: 500, // Further reduced to prevent timeouts
+    take: 1000, // Increased to show more accurate preview (was 500)
   });
 
   let matchedCount = 0;

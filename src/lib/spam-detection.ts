@@ -174,6 +174,72 @@ function analyzeStructurePatterns(text: string): { score: number; reasons: strin
     });
   }
 
+  // Random numbers/strings (e.g., "23345", "123456")
+  const onlyNumbers = /^\d+$/.test(text.trim());
+  if (onlyNumbers && text.length >= 3 && text.length <= 20) {
+    score += 25;
+    reasons.push('Random number sequence');
+    patterns.push({
+      type: 'structure_pattern',
+      pattern: 'random_numbers',
+      confidence: 85,
+      examples: [text]
+    });
+  }
+
+  // Single word with no context (e.g., "Purr", "Ok", "B h")
+  const words = text.trim().split(/\s+/);
+  if (words.length <= 2 && text.length < 20 && !text.match(/[.!?]$/)) {
+    // Check if it looks like incomplete message or single word spam
+    const hasMeaningfulContent = words.some(w => w.length > 3);
+    if (!hasMeaningfulContent || words.length === 1) {
+      score += 20;
+      reasons.push('Single word or incomplete message');
+      patterns.push({
+        type: 'structure_pattern',
+        pattern: 'single_word_no_context',
+        confidence: 75,
+        examples: [text]
+      });
+    }
+  }
+
+  // Personal conversation patterns (e.g., "Just got home", "Are u at", "Sweet dreams")
+  const personalPatterns = [
+    /just got home/i,
+    /are u at/i,
+    /sweet dreams/i,
+    /leaving now/i,
+    /i'm driving/i,
+    /sent from my/i,
+    /thinking about you/i,
+    /made it home/i
+  ];
+  
+  const hasPersonalPattern = personalPatterns.some(pattern => pattern.test(text));
+  if (hasPersonalPattern) {
+    score += 30;
+    reasons.push('Personal conversation pattern detected');
+    patterns.push({
+      type: 'structure_pattern',
+      pattern: 'personal_conversation',
+      confidence: 80,
+      examples: [text.substring(0, 50) + '...']
+    });
+  }
+
+  // Incomplete messages (ends abruptly, no punctuation, very short)
+  if (text.length < 15 && !text.match(/[.!?]$/) && words.length <= 3) {
+    score += 15;
+    reasons.push('Incomplete message');
+    patterns.push({
+      type: 'structure_pattern',
+      pattern: 'incomplete_message',
+      confidence: 65,
+      examples: [text]
+    });
+  }
+
   return { score, reasons, patterns };
 }
 
@@ -185,12 +251,14 @@ function analyzeWordPatterns(text: string): { score: number; reasons: string[]; 
   const words = text.toLowerCase().split(/\s+/);
   const wordCount = words.length;
 
-  // Common spam words
+  // Common spam words (expanded list)
   const spamWords = [
     'free', 'win', 'congratulations', 'urgent', 'limited time', 'act now',
     'click here', 'unsubscribe', 'opt out', 'special offer', 'deal',
     'discount', 'save', 'money', 'cash', 'prize', 'winner', 'selected',
-    'guaranteed', 'risk free', 'no obligation', 'call now', 'text stop'
+    'guaranteed', 'risk free', 'no obligation', 'call now', 'text stop',
+    'unlock', 'unlock!', 'unlock now', 'claim', 'claim now', 'click',
+    'limited', 'exclusive', 'offer expires', 'act fast', 'hurry'
   ];
 
   const foundSpamWords = words.filter(word => 
@@ -226,6 +294,27 @@ function analyzeWordPatterns(text: string): { score: number; reasons: string[]; 
       pattern: 'repetitive_words',
       confidence: Math.min(repetitiveWords.length * 15, 80),
       examples: repetitiveWords.map(r => r.word)
+    });
+  }
+
+  // Gibberish detection - words that don't look like real words
+  const gibberishWords = words.filter(word => {
+    // Words that are too short and have no vowels
+    if (word.length <= 3 && !/[aeiou]/i.test(word)) return true;
+    // Words with excessive consonants
+    const consonantRatio = (word.match(/[bcdfghjklmnpqrstvwxyz]/gi) || []).length / word.length;
+    if (consonantRatio > 0.8 && word.length > 4) return true;
+    return false;
+  });
+
+  if (gibberishWords.length > 0 && gibberishWords.length / words.length > 0.3) {
+    score += 20;
+    reasons.push(`Gibberish words detected: ${gibberishWords.slice(0, 3).join(', ')}`);
+    patterns.push({
+      type: 'word_frequency',
+      pattern: 'gibberish_words',
+      confidence: 75,
+      examples: gibberishWords.slice(0, 5)
     });
   }
 
