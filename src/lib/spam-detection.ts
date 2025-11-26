@@ -140,14 +140,27 @@ function analyzeStructurePatterns(text: string): { score: number; reasons: strin
   const patterns: SpamPattern[] = [];
   let score = 0;
 
-  // Very short messages
-  if (text.length < 5) {
-    score += 15;
+  // Very short messages (but don't double-count if it's already a random number)
+  const isOnlyNumbers = /^\d+$/.test(text.trim());
+  if (text.length < 5 && !isOnlyNumbers) {
+    score += 20; // Increased from 15
     reasons.push('Very short message');
     patterns.push({
       type: 'length_pattern',
       pattern: 'very_short',
-      confidence: 60,
+      confidence: 70, // Increased confidence
+      examples: [text]
+    });
+  }
+  
+  // Very short messages that are ONLY numbers get extra boost
+  if (text.length < 5 && isOnlyNumbers) {
+    score += 25; // Extra boost for short number-only messages
+    reasons.push('Very short number-only message');
+    patterns.push({
+      type: 'length_pattern',
+      pattern: 'very_short_numbers',
+      confidence: 95,
       examples: [text]
     });
   }
@@ -189,28 +202,41 @@ function analyzeStructurePatterns(text: string): { score: number; reasons: strin
     });
   }
 
-  // Random numbers/strings (e.g., "23345", "123456", "113")
+  // Random numbers/strings (e.g., "23345", "123456", "113", "4", "2", "1")
   const onlyNumbers = /^\d+$/.test(text.trim());
-  if (onlyNumbers && text.length >= 2 && text.length <= 20) { // Lowered from 3 to catch "113"
-    score += 35; // Increased from 25
-    reasons.push('Random number sequence');
-    patterns.push({
-      type: 'structure_pattern',
-      pattern: 'random_numbers',
-      confidence: 90, // Increased confidence
-      examples: [text]
-    });
+  if (onlyNumbers) {
+    // Single digit numbers (1-9) are almost always spam
+    if (text.trim().length === 1) {
+      score += 100; // Maximum score for single digit numbers
+      reasons.push('Single digit number (almost always spam)');
+      patterns.push({
+        type: 'structure_pattern',
+        pattern: 'single_digit_number',
+        confidence: 100,
+        examples: [text]
+      });
+    } else if (text.length >= 2 && text.length <= 20) {
+      score += 50; // Increased from 35 for multi-digit numbers
+      reasons.push('Random number sequence');
+      patterns.push({
+        type: 'structure_pattern',
+        pattern: 'random_numbers',
+        confidence: 95, // Increased confidence
+        examples: [text]
+      });
+    }
   }
   
-  // Very short random strings (1-2 characters that aren't common words)
+  // Very short random strings (1-2 characters that aren't common words or numbers)
   const legitimateShortWords = ['ok', 'okay', 'yes', 'no', 'hi', 'yo', 'yu'];
-  if (text.trim().length <= 2 && !legitimateShortWords.includes(text.trim().toLowerCase())) {
-    score += 30; // High score for very short random strings
+  const isNumber = /^\d+$/.test(text.trim());
+  if (text.trim().length <= 2 && !legitimateShortWords.includes(text.trim().toLowerCase()) && !isNumber) {
+    score += 40; // Increased from 30 for very short random strings
     reasons.push('Very short random string');
     patterns.push({
       type: 'structure_pattern',
       pattern: 'very_short_random',
-      confidence: 85,
+      confidence: 90, // Increased confidence
       examples: [text]
     });
   }

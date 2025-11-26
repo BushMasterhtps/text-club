@@ -145,9 +145,10 @@ export async function POST() {
             console.log(`[SPAM CAPTURE DEBUG] Message ${rm.id.substring(0, 8)}... text="${rm.text?.substring(0, 50)}..." patternScore=${patternScore}`);
           }
           
-          // Lower threshold for obvious spam patterns (60% instead of 70%)
-          // Obvious spam like gibberish should score 80%+
-          if (patternScore >= 60) {
+          // Lower threshold for obvious spam patterns (50% instead of 60%)
+          // This catches more spam including single words, short messages, etc.
+          // Obvious spam like random numbers should score 100%
+          if (patternScore >= 50) {
             // Add pattern reasons to hits for tracking
             const patternReasons = patternResult.reasons.slice(0, 2).join(', ');
             hits.push(`Pattern: ${Math.round(patternScore)}% (${patternReasons})`);

@@ -136,8 +136,9 @@ export async function GET() {
           const patternResult = analyzeSpamPatterns(rm.text);
           patternScore = patternResult.score;
           
-          // Lower threshold for obvious spam patterns (60% instead of 70%)
-          if (patternScore >= 60) {
+          // Lower threshold for obvious spam patterns (50% instead of 60%)
+          // This catches more spam including single words, short messages, etc.
+          if (patternScore >= 50) {
             const patternReasons = patternResult.reasons.slice(0, 2).join(', ');
             hits.push(`Pattern: ${Math.round(patternScore)}% (${patternReasons})`);
           }
