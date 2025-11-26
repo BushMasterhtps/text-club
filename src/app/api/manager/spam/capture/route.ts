@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SpamMode, RawStatus } from "@prisma/client";
 import { validateStatusTransition } from "@/lib/self-healing/status-validator";
-import { getImprovedSpamScore, analyzeSpamPatterns } from "@/lib/spam-detection";
 import { fuzzyContains } from "@/lib/fuzzy-matching";
+import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
 function norm(s: string | null | undefined) {
   return (s ?? "")
@@ -78,334 +78,149 @@ function similarity(str1: string, str2: string): number {
   return 1 - (distance / maxLen);
 }
 
+/**
+ * FAST CAPTURE: Phrase rules only (2-5 seconds)
+ * This is the first step - catches most spam quickly
+ * Background processing (pattern + learning) happens separately via /capture-background
+ */
 export async function POST() {
-  const startTime = Date.now();
-  const MAX_EXECUTION_TIME = 20000; // 20 seconds (leave 6 seconds buffer for Netlify's 26s timeout)
-  
-  try {
-    // 1) load rules once
-    const rules = await prisma.spamRule.findMany({
-      where: { enabled: true },
-      select: { id: true, pattern: true, patternNorm: true, mode: true, brand: true },
-    });
-
-    // 2) Get total count of READY messages (only scan READY, not PROMOTED)
-    // PROMOTED messages are already converted to tasks and should not be re-scanned
-    const totalReady = await prisma.rawMessage.count({
-      where: { status: RawStatus.READY }
-    });
-
-    // 3) Process same scope as preview (1000 messages) but in batches to prevent timeouts
-    // Preview checks 1000 messages and finds 529 matches, so we should process the same 1000
-    const PREVIEW_SCOPE = 1000; // Match preview's scope
-    const PROCESSING_BATCH_SIZE = 100; // Process 100 at a time to avoid timeouts
+  return await withSelfHealing(async () => {
+    const startTime = Date.now();
     
-    // Fetch all messages in preview scope (same as preview)
-    const allMessages = await prisma.rawMessage.findMany({
-      where: { 
-        status: RawStatus.READY  // FIX: Only scan READY messages, not PROMOTED
-      },
-      select: { id: true, brand: true, text: true, status: true }, // FIX: Include status for validation
-      orderBy: { createdAt: "desc" },
-      take: PREVIEW_SCOPE, // Match preview's scope
-    });
-
-    if (allMessages.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        updatedCount: 0,
-        totalInQueue: totalReady,
-        remainingInQueue: totalReady,
-        processed: 0
+    try {
+      // 1) Load rules once
+      const rules = await prisma.spamRule.findMany({
+        where: { enabled: true },
+        select: { id: true, pattern: true, patternNorm: true, mode: true, brand: true },
       });
-    }
-    
-    console.log(`[SPAM CAPTURE] Processing ${allMessages.length} messages (matching preview scope of ${PREVIEW_SCOPE})`);
 
-    // 4) Process all messages and mark as spam if matched
-    let updatedCount = 0;
-    const updates: Array<{ id: string; hits: string[] }> = [];
-    let learningMatchedCount = 0;
-    let patternMatchedCount = 0;
-    let phraseMatchedCount = 0;
-    let validationBlockedCount = 0;
-    
-    // Process messages in internal batches to avoid timeout during analysis
-    const processingBatches = [];
-    for (let i = 0; i < allMessages.length; i += PROCESSING_BATCH_SIZE) {
-      processingBatches.push(allMessages.slice(i, i + PROCESSING_BATCH_SIZE));
-    }
-    
-    console.log(`[SPAM CAPTURE] Processing ${allMessages.length} messages in ${processingBatches.length} internal batches of ${PROCESSING_BATCH_SIZE}`);
+      // 2) Get total count of READY messages
+      const totalReady = await prisma.rawMessage.count({
+        where: { status: RawStatus.READY }
+      });
 
-    // Process each internal batch
-    for (let batchIndex = 0; batchIndex < processingBatches.length; batchIndex++) {
-      // Check if we're approaching timeout
-      const elapsed = Date.now() - startTime;
-      if (elapsed > MAX_EXECUTION_TIME) {
-        console.log(`[SPAM CAPTURE] Approaching timeout (${elapsed}ms), returning partial results`);
-        // Update what we have so far
-        if (updates.length > 0) {
-          const updateIds = updates.map(u => u.id);
-          const updateMap = new Map(updates.map(u => [u.id, u.hits]));
-          
-          const result = await prisma.rawMessage.updateMany({
-            where: { 
-              id: { in: updateIds },
-              status: RawStatus.READY
-            },
-            data: { status: RawStatus.SPAM_REVIEW },
-          });
-          
-          updatedCount = result.count;
-          
-          // Update previewMatches
-          if (updatedCount > 0) {
-            const CONCURRENT_UPDATES = 10;
-            for (let i = 0; i < updateIds.length; i += CONCURRENT_UPDATES) {
-              const chunk = updateIds.slice(i, i + CONCURRENT_UPDATES);
-              await Promise.all(
-                chunk.map(async (id) => {
-                  const hits = updateMap.get(id);
-                  if (hits) {
-                    await prisma.rawMessage.updateMany({
-                      where: { id, status: RawStatus.SPAM_REVIEW },
-                      data: { previewMatches: hits },
-                    });
-                  }
-                })
-              );
-            }
-          }
-        }
-        
-        const remainingInQueue = Math.max(0, totalReady - updatedCount);
+      // 3) Process same scope as preview (1000 messages)
+      const PREVIEW_SCOPE = 1000;
+      
+      // Fetch all messages in preview scope
+      const allMessages = await prisma.rawMessage.findMany({
+        where: { 
+          status: RawStatus.READY
+        },
+        select: { id: true, brand: true, text: true, status: true },
+        orderBy: { createdAt: "desc" },
+        take: PREVIEW_SCOPE,
+      });
+
+      if (allMessages.length === 0) {
         return NextResponse.json({ 
           success: true, 
-          updatedCount,
+          updatedCount: 0,
           totalInQueue: totalReady,
-          remainingInQueue,
-          processed: (batchIndex * PROCESSING_BATCH_SIZE) + (batchIndex < processingBatches.length ? processingBatches[batchIndex].length : 0),
-          totalToProcess: allMessages.length,
-          partial: true,
-          message: `Processed ${batchIndex + 1}/${processingBatches.length} batches before timeout. ${remainingInQueue} messages remaining. Click "Capture Spam" again to continue.`,
-          phraseMatchedCount,
-          patternMatchedCount,
-          learningMatchedCount
+          remainingInQueue: totalReady,
+          processed: 0,
+          needsBackground: false
         });
       }
       
-      const batch = processingBatches[batchIndex];
-      console.log(`[SPAM CAPTURE] Processing internal batch ${batchIndex + 1}/${processingBatches.length} (${batch.length} messages)`);
-      
-      for (const rm of batch) {
-      const hits: string[] = [];
-      let patternScore = 0;
-      let learningScore = 0;
-      
-      // Check phrase rules first
-      for (const r of rules) {
-        if (ruleMatchesText(r, rm.brand, rm.text)) {
-          hits.push(r.pattern);
-          phraseMatchedCount++;
-        }
-      }
-      
-      // Check pattern detection for obvious spam (gibberish, random numbers, etc.)
-      // This catches obvious spam that phrase rules might miss
-      if (rm.text) {
-        try {
-          const patternResult = analyzeSpamPatterns(rm.text);
-          patternScore = patternResult.score;
-          
-          // DEBUG: Log pattern scores for first few messages
-          if (updates.length < 5) {
-            console.log(`[SPAM CAPTURE DEBUG] Message ${rm.id.substring(0, 8)}... text="${rm.text?.substring(0, 50)}..." patternScore=${patternScore}`);
-          }
-          
-          // Lower threshold for obvious spam patterns (50% instead of 60%)
-          // This catches more spam including single words, short messages, etc.
-          // Obvious spam like random numbers should score 100%
-          if (patternScore >= 50) {
-            // Add pattern reasons to hits for tracking
-            const patternReasons = patternResult.reasons.slice(0, 2).join(', ');
-            hits.push(`Pattern: ${Math.round(patternScore)}% (${patternReasons})`);
-            patternMatchedCount++;
-          }
-        } catch (error) {
-          console.error(`[SPAM CAPTURE] Error analyzing patterns for message ${rm.id}:`, error);
-        }
-      } else {
-        // DEBUG: Log messages without text
-        if (updates.length < 5) {
-          console.log(`[SPAM CAPTURE DEBUG] Message ${rm.id.substring(0, 8)}... has no text`);
-        }
-      }
-      
-      // Check learning system if no phrase rules or patterns matched (for efficiency)
-      if (hits.length === 0 && rm.text) {
-        try {
-          const learningResult = await getImprovedSpamScore(rm.text, rm.brand || undefined);
-          learningScore = learningResult.score;
-          
-          // Lower threshold to 60% for learning system too (was 70%)
-          // This catches more spam while still maintaining accuracy
-          if (learningScore >= 60) {
-            hits.push(`Learning: ${Math.round(learningScore)}%`);
-            learningMatchedCount++;
-          }
-        } catch (error) {
-          console.error(`Error getting learning score for message ${rm.id}:`, error);
-        }
-      }
-      
-      // If we have matches (from rules, patterns, or learning), validate and add to updates
-      if (hits.length > 0) {
-        // Validate status transition before adding to updates
-        const validation = validateStatusTransition(
-          rm.status,
-          RawStatus.SPAM_REVIEW,
-          'spam capture'
-        );
-        
-        if (validation.valid) {
-          updates.push({ id: rm.id, hits });
-        } else {
-          // Log blocked transition but continue processing
-          console.warn(`[SELF-HEAL] Skipping message ${rm.id}: ${validation.error}`);
-          validationBlockedCount++;
-        }
-      }
-    }
-    }
-    
-    console.log(`[SPAM CAPTURE] Complete analysis: ${allMessages.length} messages, ${updates.length} matches found (${phraseMatchedCount} phrase, ${patternMatchedCount} pattern, ${learningMatchedCount} learning), ${validationBlockedCount} blocked by validation`);
-    console.log(`[SPAM CAPTURE] Rules loaded: ${rules.length}, Messages with text: ${allMessages.filter(r => r.text).length}/${allMessages.length}`);
-    
-    // DEBUG: Show sample of first few messages
-    if (allMessages.length > 0) {
-      const sample = allMessages.slice(0, 3);
-      console.log(`[SPAM CAPTURE DEBUG] Sample messages:`, sample.map(r => ({
-        id: r.id.substring(0, 8),
-        hasText: !!r.text,
-        textPreview: r.text?.substring(0, 30),
-        brand: r.brand
-      })));
-    }
+      console.log(`[SPAM CAPTURE FAST] Processing ${allMessages.length} messages (phrase rules only)`);
 
-    // 5) Batch update to reduce database connections
-    // FIX: Use transaction to prevent race conditions where messages change status between fetch and update
-    if (updates.length > 0) {
-      console.log(`[SPAM CAPTURE] Attempting to update ${updates.length} messages out of ${allMessages.length} processed...`);
+      // 4) FAST CAPTURE: Only check phrase rules (fast string matching)
+      const updates: Array<{ id: string; hits: string[] }> = [];
+      let phraseMatchedCount = 0;
+      let validationBlockedCount = 0;
+
+      for (const rm of allMessages) {
+        const hits: string[] = [];
+        
+        // ONLY check phrase rules (fast - no pattern/learning analysis)
+        for (const r of rules) {
+          if (ruleMatchesText(r, rm.brand, rm.text)) {
+            hits.push(r.pattern);
+            phraseMatchedCount++;
+          }
+        }
+        
+        // If we have phrase rule matches, validate and add to updates
+        if (hits.length > 0) {
+          const validation = validateStatusTransition(
+            rm.status,
+            RawStatus.SPAM_REVIEW,
+            'spam capture'
+          );
+          
+          if (validation.valid) {
+            updates.push({ id: rm.id, hits });
+          } else {
+            console.warn(`[SELF-HEAL] Skipping message ${rm.id}: ${validation.error}`);
+            validationBlockedCount++;
+          }
+        }
+      }
       
-      // Collect all IDs for batch update
-      const updateIds = updates.map(u => u.id);
-      const updateMap = new Map(updates.map(u => [u.id, u.hits]));
-      
-      // Use a single updateMany with IN clause for better performance and atomicity
-      // This updates all matching messages in one query
-      try {
+      console.log(`[SPAM CAPTURE FAST] Found ${updates.length} phrase rule matches out of ${allMessages.length} messages`);
+
+      // 5) Batch update database (optimized)
+      let updatedCount = 0;
+      if (updates.length > 0) {
+        const updateIds = updates.map(u => u.id);
+        const updateMap = new Map(updates.map(u => [u.id, u.hits]));
+        
+        // Single batch update for status
         const result = await prisma.rawMessage.updateMany({
           where: { 
             id: { in: updateIds },
-            status: RawStatus.READY  // Only update if still READY (prevents race conditions)
+            status: RawStatus.READY
           },
-          data: {
-            status: RawStatus.SPAM_REVIEW,
-            // Note: previewMatches will be set to the hits for each message
-            // Since updateMany doesn't support per-row data, we'll do a second pass for previewMatches
-          },
+          data: { status: RawStatus.SPAM_REVIEW },
         });
         
         updatedCount = result.count;
-        console.log(`[SPAM CAPTURE] Updated ${updatedCount} messages to SPAM_REVIEW status`);
+        console.log(`[SPAM CAPTURE FAST] Updated ${updatedCount} messages to SPAM_REVIEW status`);
         
-        // Now update previewMatches for each successfully updated message
-        // Do this in smaller batches to avoid connection issues
+        // Update previewMatches in batches
         if (updatedCount > 0) {
           const CONCURRENT_UPDATES = 10;
           for (let i = 0; i < updateIds.length; i += CONCURRENT_UPDATES) {
             const chunk = updateIds.slice(i, i + CONCURRENT_UPDATES);
             await Promise.all(
               chunk.map(async (id) => {
-                try {
-                  const hits = updateMap.get(id);
-                  if (hits) {
-                    await prisma.rawMessage.updateMany({
-                      where: { 
-                        id,
-                        status: RawStatus.SPAM_REVIEW  // Only update if we successfully moved to SPAM_REVIEW
-                      },
-                      data: {
-                        previewMatches: hits,
-                      },
-                    });
-                  }
-                } catch (error) {
-                  console.error(`[SPAM CAPTURE] Error updating previewMatches for ${id}:`, error);
+                const hits = updateMap.get(id);
+                if (hits) {
+                  await prisma.rawMessage.updateMany({
+                    where: { id, status: RawStatus.SPAM_REVIEW },
+                    data: { previewMatches: hits },
+                  });
                 }
               })
             );
           }
         }
-        
-        const statusChangedCount = updates.length - updatedCount;
-        if (statusChangedCount > 0) {
-          console.warn(`[SPAM CAPTURE] ${statusChangedCount} messages changed status (race condition) - they were likely promoted to tasks between fetch and update`);
-        }
-      } catch (error) {
-        console.error(`[SPAM CAPTURE] Error in batch update:`, error);
-        // Fallback to individual updates if batch update fails
-        const CONCURRENT_UPDATES = 10;
-        for (let i = 0; i < updates.length; i += CONCURRENT_UPDATES) {
-          const chunk = updates.slice(i, i + CONCURRENT_UPDATES);
-          const chunkResults = await Promise.all(
-            chunk.map(async ({ id, hits }) => {
-              try {
-                const result = await prisma.rawMessage.updateMany({
-                  where: { 
-                    id,
-                    status: RawStatus.READY
-                  },
-                  data: {
-                    status: RawStatus.SPAM_REVIEW,
-                    previewMatches: hits,
-                  },
-                });
-                return result.count;
-              } catch (error) {
-                console.error(`[SPAM CAPTURE] Error updating raw message ${id}:`, error);
-                return 0;
-              }
-            })
-          );
-          updatedCount += chunkResults.reduce((sum, count) => sum + count, 0);
-        }
       }
-    } else {
-      console.log(`[SPAM CAPTURE] No matches found in ${allMessages.length} messages`);
-    }
 
-    // 6) Calculate remaining items in queue
-    const remainingInQueue = Math.max(0, totalReady - updatedCount);
+      const elapsed = Date.now() - startTime;
+      const remainingInQueue = Math.max(0, totalReady - updatedCount);
+      const needsBackground = allMessages.length > 0; // Background processing needed for pattern/learning
 
-    return NextResponse.json({ 
-      success: true, 
-      updatedCount,
-      totalInQueue: totalReady,
-      remainingInQueue,
-      processed: allMessages.length,
-      learningMatchedCount // Include learning system count
-    });
-  } catch (error: any) {
-    console.error("Spam capture error:", error);
-    return NextResponse.json(
-      { 
-        success: false, 
+      console.log(`[SPAM CAPTURE FAST] Completed in ${elapsed}ms. ${updatedCount} captured. Background processing needed: ${needsBackground}`);
+
+      return NextResponse.json({ 
+        success: true, 
+        updatedCount,
+        totalInQueue: totalReady,
+        remainingInQueue,
+        processed: allMessages.length,
+        phraseMatchedCount,
+        needsBackground, // Frontend will call background endpoint if true
+        elapsed
+      });
+    } catch (error: any) {
+      console.error("[SPAM CAPTURE FAST] Error:", error);
+      return NextResponse.json({
+        success: false,
         error: error?.message || "Failed to capture spam",
-        details: error?.stack 
-      },
-      { status: 500 }
-    );
-  }
+        details: error?.stack
+      }, { status: 500 });
+    }
+  }, { service: 'spam-capture' });
 }

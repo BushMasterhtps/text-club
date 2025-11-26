@@ -1256,6 +1256,7 @@ function SpamPreviewCaptureSection() {
       setCaptureLoading(true);
       setCaptureMsg(null);
       
+      // STEP 1: Fast capture (phrase rules only)
       const res = await fetch("/api/manager/spam/capture", { method: "POST" });
       
       // Use response validator to handle all response types gracefully
@@ -1268,28 +1269,22 @@ function SpamPreviewCaptureSection() {
         const captured = data.updatedCount ?? 0;
         const total = data.totalInQueue ?? 0;
         const remaining = data.remainingInQueue ?? 0;
-        const isPartial = data.partial ?? false;
-        const processed = data.processed ?? 0;
-        const totalToProcess = data.totalToProcess ?? total;
+        const needsBackground = data.needsBackground ?? false;
+        const elapsed = data.elapsed ?? 0;
         
-        // Show progress popup with format: "Captured 100 / X (total in queue)"
-        let message = `Captured ${captured} / ${total} (total in queue)`;
-        if (isPartial) {
-          message += `\n\n⚠️ Partial completion (timeout protection)\nProcessed ${processed}/${totalToProcess} messages\n${remaining} remaining\n\nClick "Capture Spam" again to continue processing.`;
-        } else if (remaining > 0) {
-          message += `\n${remaining} remaining`;
+        // Show fast capture results
+        let message = `✅ Fast capture complete!\n\nCaptured ${captured} spam items (phrase rules)\nTime: ${(elapsed / 1000).toFixed(1)}s\n\n`;
+        
+        if (needsBackground) {
+          message += `🔄 Processing pattern + learning matches in background...`;
+          setCaptureMsg(`Captured ${captured} spam items. Processing pattern + learning matches...`);
+          
+          // STEP 2: Background processing (pattern + learning)
+          await processBackgroundCapture(total, remaining);
         } else {
-          message += "\nAll done! ✅";
-        }
-        
-        // Show alert popup
-        alert(message);
-        
-        // Also show in UI
-        if (isPartial) {
-          setCaptureMsg(`Captured ${captured} spam items (partial). ${remaining} remaining. Click "Capture Spam" again to continue.`);
-        } else {
+          message += remaining > 0 ? `${remaining} remaining in queue.` : "All done! ✅";
           setCaptureMsg(`Captured ${captured} spam items. ${remaining > 0 ? `${remaining} remaining in queue.` : "All done!"}`);
+          alert(message);
         }
       } else {
         throw new Error(data?.error || "Capture failed");
@@ -1301,6 +1296,60 @@ function SpamPreviewCaptureSection() {
       setCaptureMsg(errorMsg);
     } finally {
       setCaptureLoading(false);
+    }
+  }
+
+  async function processBackgroundCapture(totalInQueue: number, initialRemaining: number) {
+    let skip = 0;
+    let totalBackgroundCaptured = 0;
+    let isComplete = false;
+    const BATCH_SIZE = 200;
+    
+    try {
+      while (!isComplete) {
+        const res = await fetch("/api/manager/spam/capture-background", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ skip, take: BATCH_SIZE })
+        });
+        
+        const { validateAndParseResponse } = await import("@/lib/self-healing/response-validator");
+        const data = await validateAndParseResponse(res, {
+          fallbackError: 'Background processing failed'
+        });
+        
+        if (data?.success) {
+          totalBackgroundCaptured += data.updatedCount ?? 0;
+          isComplete = data.complete ?? false;
+          skip = data.nextSkip ?? (skip + BATCH_SIZE);
+          
+          const remaining = data.remaining ?? 0;
+          const processed = data.processed ?? 0;
+          
+          // Update UI with progress
+          setCaptureMsg(
+            `Captured ${totalBackgroundCaptured} additional spam items (pattern + learning). ` +
+            `Processing ${processed} messages... ${remaining > 0 ? `${remaining} remaining.` : "Almost done!"}`
+          );
+          
+          if (isComplete) {
+            const finalMessage = `✅ Background processing complete!\n\n` +
+              `Total captured: ${totalBackgroundCaptured} spam items (pattern + learning)\n` +
+              `All spam detection complete!`;
+            alert(finalMessage);
+            setCaptureMsg(`Background processing complete! Captured ${totalBackgroundCaptured} additional spam items.`);
+            loadSummary(); // Refresh counts
+            break;
+          }
+        } else {
+          console.error("Background processing error:", data?.error);
+          setCaptureMsg(`Background processing encountered an error: ${data?.error || "Unknown error"}`);
+          break;
+        }
+      }
+    } catch (error: any) {
+      console.error("Background processing error:", error);
+      setCaptureMsg(`Background processing failed: ${error?.message || "Unknown error"}`);
     }
   }
 

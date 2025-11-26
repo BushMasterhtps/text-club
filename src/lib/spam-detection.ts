@@ -502,6 +502,7 @@ export async function learnFromSpamDecision(
 
 /**
  * Get improved spam score based on historical decisions
+ * (Single-item version - kept for backward compatibility with other APIs)
  */
 export async function getImprovedSpamScore(
   text: string, 
@@ -544,4 +545,89 @@ export async function getImprovedSpamScore(
     ...baseAnalysis,
     historicalConfidence: 0
   };
+}
+
+/**
+ * OPTIMIZED: Get improved spam scores for multiple texts in batch
+ * This is much faster than calling getImprovedSpamScore individually
+ * Used by spam capture for performance optimization
+ */
+export async function getBatchImprovedSpamScores(
+  items: Array<{ text: string; brand?: string }>
+): Promise<Map<string, SpamScore & { historicalConfidence: number }>> {
+  const results = new Map<string, SpamScore & { historicalConfidence: number }>();
+  
+  if (items.length === 0) return results;
+  
+  try {
+    // OPTIMIZATION: Batch fetch all learning data at once instead of per-item queries
+    // Get all unique text prefixes and brands
+    const textPrefixes = items.map(item => item.text.substring(0, 50));
+    const brands = items.map(item => item.brand).filter(Boolean) as string[];
+    const uniqueBrands = [...new Set(brands)];
+    
+    // Single batch query for all learning data
+    const allLearningData = await prisma.spamLearning.findMany({
+      where: {
+        OR: [
+          ...textPrefixes.map(prefix => ({ text: { contains: prefix } })),
+          ...uniqueBrands.map(brand => ({ brand }))
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 1000 // Increased limit for batch processing
+    });
+    
+    // OPTIMIZATION: Parallel pattern analysis (CPU-bound, can run in parallel)
+    const patternAnalyses = await Promise.all(
+      items.map(item => analyzeSpamPatterns(item.text))
+    );
+    
+    // Match learning data to items
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const baseAnalysis = patternAnalyses[i];
+      const itemKey = `${item.text.substring(0, 50)}|${item.brand || ''}`;
+      
+      // Find relevant learning data for this item
+      const similarTexts = allLearningData.filter(learning => {
+        const textMatch = learning.text?.includes(item.text.substring(0, 50));
+        const brandMatch = item.brand ? learning.brand === item.brand : true;
+        return textMatch || brandMatch;
+      }).slice(0, 10); // Limit to top 10 matches per item
+      
+      if (similarTexts.length > 0) {
+        const spamCount = similarTexts.filter(s => s.isSpam).length;
+        const historicalConfidence = (spamCount / similarTexts.length) * 100;
+        
+        // Adjust score based on historical data
+        const adjustedScore = baseAnalysis.score + (historicalConfidence - 50) * 0.3;
+        
+        results.set(itemKey, {
+          ...baseAnalysis,
+          score: Math.max(0, Math.min(100, adjustedScore)),
+          historicalConfidence
+        });
+      } else {
+        results.set(itemKey, {
+          ...baseAnalysis,
+          historicalConfidence: 0
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Failed to get batch historical spam data:', error);
+    // Fallback: return pattern analysis only (no learning)
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemKey = `${item.text.substring(0, 50)}|${item.brand || ''}`;
+      const baseAnalysis = analyzeSpamPatterns(item.text);
+      results.set(itemKey, {
+        ...baseAnalysis,
+        historicalConfidence: 0
+      });
+    }
+  }
+  
+  return results;
 }
