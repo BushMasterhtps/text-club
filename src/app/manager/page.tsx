@@ -1266,24 +1266,25 @@ function SpamPreviewCaptureSection() {
       });
       
       if (data?.success) {
-        const captured = data.updatedCount ?? 0;
+        const fastCaptured = data.updatedCount ?? 0;
         const total = data.totalInQueue ?? 0;
         const remaining = data.remainingInQueue ?? 0;
         const needsBackground = data.needsBackground ?? false;
         const elapsed = data.elapsed ?? 0;
         
         // Show fast capture results
-        let message = `✅ Fast capture complete!\n\nCaptured ${captured} spam items (phrase rules)\nTime: ${(elapsed / 1000).toFixed(1)}s\n\n`;
+        let message = `✅ Fast capture complete!\n\nCaptured ${fastCaptured} spam items (phrase rules)\nTime: ${(elapsed / 1000).toFixed(1)}s\n\n`;
         
         if (needsBackground) {
           message += `🔄 Processing pattern + learning matches in background...`;
-          setCaptureMsg(`Captured ${captured} spam items. Processing pattern + learning matches...`);
+          setCaptureMsg(`Captured ${fastCaptured} spam items. Processing pattern + learning matches...`);
           
           // STEP 2: Background processing (pattern + learning)
-          await processBackgroundCapture(total, remaining);
+          // Pass fastCaptured so we can show total in final message
+          await processBackgroundCapture(total, remaining, fastCaptured);
         } else {
           message += remaining > 0 ? `${remaining} remaining in queue.` : "All done! ✅";
-          setCaptureMsg(`Captured ${captured} spam items. ${remaining > 0 ? `${remaining} remaining in queue.` : "All done!"}`);
+          setCaptureMsg(`Captured ${fastCaptured} spam items. ${remaining > 0 ? `${remaining} remaining in queue.` : "All done!"}`);
           alert(message);
         }
       } else {
@@ -1299,7 +1300,7 @@ function SpamPreviewCaptureSection() {
     }
   }
 
-  async function processBackgroundCapture(totalInQueue: number, initialRemaining: number) {
+  async function processBackgroundCapture(totalInQueue: number, initialRemaining: number, fastCaptured: number = 0) {
     let skip = 0;
     let totalBackgroundCaptured = 0;
     let isComplete = false;
@@ -1319,12 +1320,16 @@ function SpamPreviewCaptureSection() {
         });
         
         if (data?.success) {
-          totalBackgroundCaptured += data.updatedCount ?? 0;
+          const batchCaptured = data.updatedCount ?? 0;
+          totalBackgroundCaptured += batchCaptured;
           isComplete = data.complete ?? false;
           skip = data.nextSkip ?? (skip + BATCH_SIZE);
           
           const remaining = data.remaining ?? 0;
           const processed = data.processed ?? 0;
+          
+          // Debug logging
+          console.log(`[BACKGROUND PROCESSING] Batch captured: ${batchCaptured}, Total so far: ${totalBackgroundCaptured}, Processed: ${processed}, Remaining: ${remaining}`);
           
           // Update UI with progress
           setCaptureMsg(
@@ -1333,11 +1338,16 @@ function SpamPreviewCaptureSection() {
           );
           
           if (isComplete) {
+            // Calculate total captured (fast capture + background)
+            const totalCaptured = fastCaptured + totalBackgroundCaptured;
+            
             const finalMessage = `✅ Background processing complete!\n\n` +
-              `Total captured: ${totalBackgroundCaptured} spam items (pattern + learning)\n` +
+              `Total captured: ${totalCaptured} spam items\n` +
+              `  • Phrase rules: ${fastCaptured}\n` +
+              `  • Pattern + learning: ${totalBackgroundCaptured}\n\n` +
               `All spam detection complete!`;
             alert(finalMessage);
-            setCaptureMsg(`Background processing complete! Captured ${totalBackgroundCaptured} additional spam items.`);
+            setCaptureMsg(`Background processing complete! Total captured: ${totalCaptured} spam items (${fastCaptured} phrase rules, ${totalBackgroundCaptured} pattern + learning).`);
             // Note: Summary will auto-refresh via the existing 30-second interval
             // No manual refresh needed to avoid scope issues
             break;
