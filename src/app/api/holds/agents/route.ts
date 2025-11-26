@@ -30,23 +30,33 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get task counts for each Holds agent
-    const agentsWithCounts = await Promise.all(
-      agents.map(async (agent) => {
-        const holdsCount = await prisma.task.count({
-          where: {
-            assignedToId: agent.id,
-            taskType: 'HOLDS',
-            status: { in: ['PENDING', 'IN_PROGRESS', 'ASSISTANCE_REQUIRED'] }
-          }
-        });
+    // Get task counts for all agents in a single query (fixes N+1 issue)
+    const agentIds = agents.map(agent => agent.id);
+    const taskCounts = await prisma.task.groupBy({
+      by: ['assignedToId'],
+      where: {
+        assignedToId: { in: agentIds },
+        taskType: 'HOLDS',
+        status: { in: ['PENDING', 'IN_PROGRESS', 'ASSISTANCE_REQUIRED'] }
+      },
+      _count: {
+        id: true
+      }
+    });
 
-        return {
-          ...agent,
-          holdsCount
-        };
-      })
-    );
+    // Create a map of agentId -> count for quick lookup
+    const countMap = new Map<string, number>();
+    taskCounts.forEach(({ assignedToId, _count }) => {
+      if (assignedToId) {
+        countMap.set(assignedToId, _count.id);
+      }
+    });
+
+    // Combine agents with their counts
+    const agentsWithCounts = agents.map(agent => ({
+      ...agent,
+      holdsCount: countMap.get(agent.id) || 0
+    }));
 
     return NextResponse.json({
       success: true,
