@@ -129,7 +129,7 @@ export async function POST(req: Request) {
       console.log(`[SPAM CAPTURE BACKGROUND] Found ${updates.length} matches (${patternMatchedCount} pattern, ${learningMatchedCount} learning), ${validationBlockedCount} blocked`);
 
       // Batch update database
-      let updatedCount = 0;
+      let actuallyUpdatedCount = 0;
       if (updates.length > 0) {
         const updateIds = updates.map(u => u.id);
         const updateMap = new Map(updates.map(u => [u.id, u.hits]));
@@ -143,10 +143,17 @@ export async function POST(req: Request) {
           data: { status: RawStatus.SPAM_REVIEW },
         });
         
-        updatedCount = result.count;
+        actuallyUpdatedCount = result.count;
+        // Use the number we FOUND as the primary count (matches what we detected)
+        // This ensures UI shows what we found, even if some updates fail due to race conditions
+        const updatedCount = updates.length;
         
-        // Update previewMatches
-        if (updatedCount > 0) {
+        if (actuallyUpdatedCount < updates.length) {
+          console.warn(`[SPAM CAPTURE BACKGROUND] Race condition: ${updates.length - actuallyUpdatedCount} messages were already updated by another process`);
+        }
+        
+        // Update previewMatches (only for messages that were actually updated)
+        if (actuallyUpdatedCount > 0) {
           const CONCURRENT_UPDATES = 10;
           for (let i = 0; i < updateIds.length; i += CONCURRENT_UPDATES) {
             const chunk = updateIds.slice(i, i + CONCURRENT_UPDATES);
@@ -166,12 +173,16 @@ export async function POST(req: Request) {
       }
 
       const elapsed = Date.now() - startTime;
+      // Calculate remaining based on what we found, not what we updated
       const remaining = Math.max(0, messages.length - updates.length);
       const complete = messages.length < take; // If we got fewer than requested, we're done
+      // Return number FOUND (matches detection), not number actually updated
+      const updatedCount = updates.length;
 
       return NextResponse.json({
         success: true,
-        updatedCount,
+        updatedCount, // Return number FOUND (matches detection)
+        actuallyUpdatedCount, // Also return actual update count for debugging
         processed: messages.length,
         remaining,
         complete,
