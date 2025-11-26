@@ -1338,7 +1338,27 @@ function SpamPreviewCaptureSection() {
               `All spam detection complete!`;
             alert(finalMessage);
             setCaptureMsg(`Background processing complete! Captured ${totalBackgroundCaptured} additional spam items.`);
-            loadSummary(); // Refresh counts
+            // Refresh counts after alert closes - fetch directly to avoid scope issues
+            setTimeout(async () => {
+              try {
+                const response = await fetch("/api/manager/dashboard/metrics", { cache: "no-store" });
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.success && data.metrics) {
+                    const metrics = data.metrics;
+                    setPending(metrics.pending);
+                    setSpamReview(metrics.spamReview);
+                    setCompleted(metrics.totalCompleted);
+                    setCompletedToday(metrics.completedToday);
+                    setInProgress(metrics.inProgress);
+                    setAssistanceRequired(metrics.assistanceRequired);
+                    setPctDone(metrics.pctDone);
+                  }
+                }
+              } catch (error) {
+                console.error("Error refreshing summary after background processing:", error);
+              }
+            }, 100);
             break;
           }
         } else {
