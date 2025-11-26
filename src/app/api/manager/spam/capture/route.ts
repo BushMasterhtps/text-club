@@ -325,7 +325,7 @@ export async function POST() {
         }
       }
     } else {
-      console.log(`[SPAM CAPTURE] No matches found in batch of ${batch.length} messages`);
+      console.log(`[SPAM CAPTURE] No matches found in ${allMessages.length} messages`);
     }
 
     // 6) Calculate remaining items in queue
@@ -336,7 +336,7 @@ export async function POST() {
       updatedCount,
       totalInQueue: totalReady,
       remainingInQueue,
-      processed: batch.length,
+      processed: allMessages.length,
       learningMatchedCount // Include learning system count
     });
   } catch (error: any) {
