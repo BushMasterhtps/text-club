@@ -29,7 +29,13 @@ export default function DashboardLayout({
       `}>
         {/* Header */}
         <header className="sticky top-0 z-20 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 backdrop-blur-sm border-b border-white/10 shadow-lg">
-          <div className="px-6 py-4">
+          <div className={`
+            px-6 py-4 transition-all duration-300
+            ${sidebarCollapsed 
+              ? 'max-w-none' 
+              : 'max-w-[1400px] mx-auto'
+            }
+          `}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4 min-w-0">
                 <img 
@@ -57,10 +63,10 @@ export default function DashboardLayout({
 
         {/* Page Content - Centered with max-width when sidebar is open */}
         <div className={`
-          p-6 mx-auto transition-all duration-300
+          transition-all duration-300
           ${sidebarCollapsed 
-            ? 'w-full max-w-none' 
-            : 'w-full max-w-[1400px]'
+            ? 'w-full max-w-none p-6' 
+            : 'max-w-[1400px] mx-auto px-6 py-6'
           }
         `}>
           {children}
