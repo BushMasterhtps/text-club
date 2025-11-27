@@ -8,20 +8,27 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    // Build date filter
+    // Build date filter - use endTime for completed tasks, createdAt for others
     const dateFilter: any = {};
     if (startDate) {
       dateFilter.gte = new Date(startDate);
     }
     if (endDate) {
-      dateFilter.lte = new Date(endDate);
+      // Add end of day time (23:59:59.999) to include the full day
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
     }
 
     const whereClause: any = {
       taskType: 'HOLDS',
     };
 
+    // Store date filter separately to be used appropriately in each function
+    // For completed tasks, we'll filter by endTime; for others, by createdAt
     if (Object.keys(dateFilter).length > 0) {
+      whereClause.dateFilter = dateFilter;
+      // For non-completed tasks, still use createdAt
       whereClause.createdAt = dateFilter;
     }
 
@@ -193,8 +200,36 @@ async function getAgingReport(whereClause: any) {
 }
 
 async function getAgentPerformance(whereClause: any) {
+  // Extract date filter if present
+  const dateFilter = whereClause.dateFilter;
+  const baseWhere: any = {
+    taskType: 'HOLDS',
+  };
+
+  // Build query: For completed tasks, filter by endTime; for others, filter by createdAt
+  let whereCondition: any = baseWhere;
+  
+  if (dateFilter) {
+    // If date filter exists, use OR to handle both completed (endTime) and non-completed (createdAt)
+    whereCondition = {
+      ...baseWhere,
+      OR: [
+        // Completed tasks: filter by endTime (includes completedBy tasks)
+        {
+          status: 'COMPLETED',
+          endTime: dateFilter,
+        },
+        // Non-completed tasks: filter by createdAt
+        {
+          status: { not: 'COMPLETED' },
+          createdAt: dateFilter,
+        },
+      ],
+    };
+  }
+
   const tasks = await prisma.task.findMany({
-    where: whereClause,
+    where: whereCondition,
     include: {
       assignedTo: {
         select: {
