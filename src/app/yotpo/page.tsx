@@ -1018,8 +1018,6 @@ function YotpoPageContent() {
     updatedAt: string;
     status: string;
   }>>([]);
-  const [newAssistanceCount, setNewAssistanceCount] = useState(0);
-  const [showNotification, setShowNotification] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // Auto logout hook
@@ -1076,26 +1074,7 @@ function YotpoPageContent() {
           
           setAssistanceRequests(allNonHoldsRequests);
           
-          // Check for pending requests (all non-Holds)
-          const pendingRequests = allNonHoldsRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
-          
-          // Show notification if there are pending requests
-          // Show on first load if there are any pending, or if there are new pending requests
-          const currentPendingCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
-          const newPendingCount = pendingRequests.length;
-          
-          console.log("🔍 [Yotpo] Current pending count:", currentPendingCount, "New pending count:", newPendingCount);
-          
-          if (pendingRequests.length > 0) {
-            if (currentPendingCount === 0 || pendingRequests.length > currentPendingCount) {
-              console.log("🔍 [Yotpo] New pending assistance requests detected!");
-              setNewAssistanceCount(Math.max(1, pendingRequests.length - currentPendingCount));
-              setShowNotification(true);
-              setTimeout(() => setShowNotification(false), 5000);
-            }
-          }
-          
-          setNewAssistanceCount(pendingRequests.length);
+          // Notification is now handled by DashboardLayout via useAssistanceRequests hook
         }
       } else {
         console.error("🔍 [Yotpo] Assistance API error:", response.status, response.statusText);
@@ -1163,31 +1142,6 @@ function YotpoPageContent() {
 
       {/* Auto Logout Warning - Handled by useAutoLogout hook */}
 
-      {/* Notification for new assistance requests */}
-      {showNotification && newAssistanceCount > 0 && (
-        <div className="fixed top-20 right-6 z-50 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-pulse">
-          <span className="text-lg">🆘</span>
-          <div>
-            <div className="font-semibold">New Assistance Request{newAssistanceCount > 1 ? 's' : ''}!</div>
-            <div className="text-sm opacity-90">{newAssistanceCount} agent{newAssistanceCount > 1 ? 's' : ''} need{newAssistanceCount === 1 ? 's' : ''} help</div>
-          </div>
-          <button
-            onClick={() => {
-              setShowNotification(false);
-              setActiveSection("assistance");
-            }}
-            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm font-medium transition-colors"
-          >
-            View
-          </button>
-          <button
-            onClick={() => setShowNotification(false)}
-            className="text-white/70 hover:text-white text-lg leading-none"
-          >
-            ×
-          </button>
-        </div>
-      )}
 
       {/* Content Sections */}
       <div className="space-y-8 mt-8">
@@ -1276,9 +1230,7 @@ function YotpoPageContent() {
                 });
                 // Show notification if count increased
                 if (count > 0 && (previousCount === 0 || count > previousCount)) {
-                  setNewAssistanceCount(Math.max(1, count - previousCount));
-                  setShowNotification(true);
-                  setTimeout(() => setShowNotification(false), 5000);
+                  // Notification is now handled by DashboardLayout
                 }
               }}
             />

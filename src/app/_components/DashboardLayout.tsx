@@ -3,21 +3,30 @@
 import { ReactNode, useState } from 'react';
 import UnifiedNavigation from './UnifiedNavigation';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
-import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
 import UnifiedSettings from './UnifiedSettings';
+import AssistanceRequestNotification from './AssistanceRequestNotification';
+import { useAssistanceRequests } from '@/hooks/useAssistanceRequests';
 
 interface DashboardLayoutProps {
   children: ReactNode;
   headerActions?: ReactNode;
 }
 
-export default function DashboardLayout({ 
+function DashboardLayoutContent({ 
   children, 
   headerActions 
 }: DashboardLayoutProps) {
   const { currentDashboard, dashboardConfigs, sidebarCollapsed } = useDashboardNavigation();
   const currentConfig = dashboardConfigs.find(d => d.id === currentDashboard);
   const [showSettings, setShowSettings] = useState(false);
+  
+  // Unified assistance request management
+  const {
+    pendingCount,
+    showNotification,
+    newAssistanceCount,
+    setShowNotification,
+  } = useAssistanceRequests();
 
   return (
     <div className="flex min-h-screen bg-neutral-900">
@@ -88,6 +97,14 @@ export default function DashboardLayout({
         </div>
       </main>
 
+      {/* Unified Assistance Request Notification */}
+      <AssistanceRequestNotification
+        show={showNotification}
+        count={newAssistanceCount}
+        onDismiss={() => setShowNotification(false)}
+        onView={() => setShowNotification(false)}
+      />
+
       {/* Unified Settings Modal */}
       {showSettings && (
         <UnifiedSettings 
@@ -97,5 +114,9 @@ export default function DashboardLayout({
       )}
     </div>
   );
+}
+
+export default function DashboardLayout(props: DashboardLayoutProps) {
+  return <DashboardLayoutContent {...props} />;
 }
 

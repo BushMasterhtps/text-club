@@ -3358,7 +3358,7 @@ function ManagerPageContent() {
   const [pctDone, setPctDone] = useState<number | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
 
-  // Assistance Requests state
+  // Assistance Requests state (for AssistanceRequestsSection component)
   const [assistanceRequests, setAssistanceRequests] = useState<Array<{
     id: string;
     brand: string;
@@ -3372,8 +3372,6 @@ function ManagerPageContent() {
     updatedAt: string;
     status: string;
   }>>([]);
-  const [newAssistanceCount, setNewAssistanceCount] = useState(0);
-  const [showNotification, setShowNotification] = useState(false);
 
   // Agents (for Assign block at end)
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -3418,63 +3416,20 @@ function ManagerPageContent() {
     }
   }
 
+  // Load assistance requests for AssistanceRequestsSection component
+  // (Notification is now handled by DashboardLayout via useAssistanceRequests hook)
   async function loadAssistanceRequests() {
     try {
-      console.log("🔍 Loading assistance requests...");
       const response = await fetch("/api/manager/assistance", { cache: "no-store" });
-      console.log("🔍 Assistance API response status:", response.status);
-      
-      // Use response validator to handle all response types gracefully
-      const { validateAndParseResponse } = await import("@/lib/self-healing/response-validator");
-      const data = await validateAndParseResponse(response, {
-        fallbackError: 'Unable to load assistance requests'
-      });
+      const data = await response.json();
       
       if (data.success) {
-        console.log("🔍 Assistance API data:", data);
         // Filter out HOLDS tasks - they should only appear in Holds dashboard
         const filteredRequests = (data.requests || []).filter((req: any) => req.taskType !== 'HOLDS');
-        const newRequests = filteredRequests;
-        console.log("🔍 New requests count (excluding HOLDS):", newRequests.length);
-        
-        // Check for new requests
-        const currentCount = assistanceRequests.length;
-        const newCount = newRequests.length;
-        
-        console.log("🔍 Current count:", currentCount, "New count:", newCount);
-        
-        if (newCount > currentCount) {
-          console.log("🔍 New assistance requests detected!");
-          setNewAssistanceCount(newCount - currentCount);
-          setShowNotification(true);
-          
-          // Auto-hide notification after 5 seconds
-          setTimeout(() => {
-            setShowNotification(false);
-          }, 5000);
-        }
-        
-        setAssistanceRequests(newRequests);
-      } else {
-        // Handle error response (already parsed by validator)
-        console.error("🔍 Assistance API error:", data.error || 'Unknown error');
-        
-        // Auto-retry if retryAfter is provided
-        if (data.retryAfter) {
-          console.log(`[SELF-HEAL] Auto-retrying assistance requests in ${data.retryAfter} seconds`);
-          setTimeout(() => {
-            loadAssistanceRequests();
-          }, data.retryAfter * 1000);
-        }
+        setAssistanceRequests(filteredRequests);
       }
     } catch (error) {
       console.error("Error loading assistance requests:", error);
-      
-      // Auto-retry on network errors
-      console.log("[SELF-HEAL] Network error, retrying in 5 seconds");
-      setTimeout(() => {
-        loadAssistanceRequests();
-      }, 5000);
     }
   }
 
@@ -3763,33 +3718,6 @@ function ManagerPageContent() {
 
   return (
     <DashboardLayout headerActions={headerActions}>
-
-      {/* Notification for new assistance requests */}
-      {showNotification && newAssistanceCount > 0 && (
-        <div className="fixed top-20 right-6 z-50 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-pulse">
-          <span className="text-lg">🆘</span>
-          <div>
-            <div className="font-semibold">New Assistance Request{newAssistanceCount > 1 ? 's' : ''}!</div>
-            <div className="text-sm opacity-90">{newAssistanceCount} agent{newAssistanceCount > 1 ? 's' : ''} need{newAssistanceCount === 1 ? 's' : ''} help</div>
-          </div>
-          <button
-            onClick={() => {
-              setShowNotification(false);
-              setActiveSection("assistance");
-            }}
-            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm font-medium transition-colors"
-          >
-            View
-          </button>
-          <button
-            onClick={() => setShowNotification(false)}
-            className="text-white/70 hover:text-white text-lg"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
       <div className="space-y-8">
 
       {/* Overview Section */}

@@ -577,8 +577,6 @@ function WodIvcsDashboardContent() {
     paymentMethod?: string;
     refundReason?: string;
   }>>([]);
-  const [newAssistanceCount, setNewAssistanceCount] = useState(0);
-  const [showNotification, setShowNotification] = useState(false);
 
   const [importAnalytics, setImportAnalytics] = useState<{
     dateRange: {
@@ -717,21 +715,7 @@ function WodIvcsDashboardContent() {
         
         console.log("🔍 Current pending count:", currentPendingCount, "New pending count:", newPendingCount);
         
-        // Show notification if there are pending requests
-        // Show on first load if there are any pending, or if there are new pending requests
-        if (newPendingCount > 0) {
-          if (currentPendingCount === 0 || newPendingCount > currentPendingCount) {
-            console.log("🔍 New pending assistance requests detected!");
-            setNewAssistanceCount(Math.max(1, newPendingCount - currentPendingCount));
-            setShowNotification(true);
-            
-            // Auto-hide notification after 5 seconds
-            setTimeout(() => {
-              setShowNotification(false);
-            }, 5000);
-          }
-        }
-        
+        // Notification is now handled by DashboardLayout via useAssistanceRequests hook
         setAssistanceRequests(allNonHoldsRequests);
       } else {
         console.error("Failed to load assistance requests:", data.error);
@@ -903,31 +887,6 @@ function WodIvcsDashboardContent() {
   return (
     <DashboardLayout headerActions={headerActions}>
 
-      {/* Notification for new assistance requests */}
-      {showNotification && newAssistanceCount > 0 && (
-        <div className="fixed top-20 right-6 z-50 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-pulse">
-          <span className="text-lg">🆘</span>
-          <div>
-            <div className="font-semibold">New Assistance Request{newAssistanceCount > 1 ? 's' : ''}!</div>
-            <div className="text-sm opacity-90">{newAssistanceCount} agent{newAssistanceCount > 1 ? 's' : ''} need{newAssistanceCount === 1 ? 's' : ''} help</div>
-          </div>
-          <button
-            onClick={() => {
-              setShowNotification(false);
-              setActiveSection("assistance");
-            }}
-            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm font-medium transition-colors"
-          >
-            View
-          </button>
-          <button
-            onClick={() => setShowNotification(false)}
-            className="text-white/70 hover:text-white text-lg"
-          >
-            ×
-          </button>
-        </div>
-      )}
 
       <div className="space-y-8">
         {/* Overview Section */}
@@ -1314,12 +1273,7 @@ function WodIvcsDashboardContent() {
                   const newArray = Array(count).fill({ status: 'ASSISTANCE_REQUIRED' });
                   return newArray as any[];
                 });
-                // Show notification if count increased
-                if (count > 0 && (previousCount === 0 || count > previousCount)) {
-                  setNewAssistanceCount(Math.max(1, count - previousCount));
-                  setShowNotification(true);
-                  setTimeout(() => setShowNotification(false), 5000);
-                }
+                // Notification is now handled by DashboardLayout
               }}
             />
           </div>
