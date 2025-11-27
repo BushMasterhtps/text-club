@@ -25,20 +25,11 @@ function H3({ children }: { children: React.ReactNode }) {
   );
 }
 import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell,
-  LineChart,
-  Line,
-  Area,
-  AreaChart
+  Cell
 } from 'recharts';
 
 // Types
@@ -126,25 +117,14 @@ interface TeamPerformanceData {
   totalCompleted?: number; // Total count matching Agent Status API (all tasks, no taskType filter)
 }
 
-interface DailyTrend {
-  date: string;
-  textClub: number;
-  wodIvcs: number;
-  emailRequests: number;
-  standaloneRefunds: number;
-  total: number;
-}
 
 export default function AnalyticsPage() {
   const [overviewStats, setOverviewStats] = useState<OverviewStats | null>(null);
   const [taskTypeStats, setTaskTypeStats] = useState<TaskTypeStats | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus[]>([]);
   const [allAgents, setAllAgents] = useState<Array<{ id: string; name: string; email: string }>>([]);
-  const [dailyTrends, setDailyTrends] = useState<DailyTrend[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDateRange, setSelectedDateRange] = useState<'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom'>('today');
-  const [compareMode, setCompareMode] = useState(false);
-  const [comparisonData, setComparisonData] = useState<any>(null);
+  const [selectedDateRange, setSelectedDateRange] = useState<'today' | 'custom'>('today');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   
@@ -165,7 +145,7 @@ export default function AnalyticsPage() {
   const [loadingScorecard, setLoadingScorecard] = useState(false);
 
   // Tab navigation state
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'agents' | 'trends'>('overview');
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'agents'>('overview');
   
   // Collapsible sections state
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -203,50 +183,18 @@ export default function AnalyticsPage() {
   };
 
   // Date range helper
-  const getDateRange = (range: string): { start: string; end: string } => {
+  const getDateRange = (): { start: string; end: string } => {
     const today = new Date();
-    let start: Date, end: Date;
-
-    switch (range) {
-      case 'today':
-        start = new Date(today);
-        end = new Date(today);
-        break;
-      case 'week':
-        start = new Date(today);
-        start.setDate(today.getDate() - 7);
-        end = new Date(today);
-        break;
-      case 'month':
-        start = new Date(today.getFullYear(), today.getMonth(), 1);
-        end = new Date(today);
-        break;
-      case 'quarter':
-        const quarter = Math.floor(today.getMonth() / 3);
-        start = new Date(today.getFullYear(), quarter * 3, 1);
-        end = new Date(today);
-        break;
-      case 'year':
-        start = new Date(today.getFullYear(), 0, 1);
-        end = new Date(today);
-        break;
-      case 'custom':
-        if (customStartDate && customEndDate) {
-          return {
-            start: customStartDate,
-            end: customEndDate
-          };
-        }
-        // Fallback to today if custom dates not set
-        start = new Date(today);
-        end = new Date(today);
-        break;
-      default:
-        start = new Date(today);
-        end = new Date(today);
+    
+    // If custom range is selected and dates are set, use them
+    if (selectedDateRange === 'custom' && customStartDate && customEndDate) {
+      return {
+        start: customStartDate,
+        end: customEndDate
+      };
     }
-
-    // Format dates as YYYY-MM-DD without timezone conversion
+    
+    // Otherwise, use today
     const formatDate = (date: Date): string => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -255,22 +203,21 @@ export default function AnalyticsPage() {
     };
 
     return {
-      start: formatDate(start),
-      end: formatDate(end)
+      start: formatDate(today),
+      end: formatDate(today)
     };
   };
 
   // Load overview data
   const loadOverviewData = async () => {
     try {
-      const dateRange = getDateRange(selectedDateRange);
+      const dateRange = getDateRange();
       
       // Load all analytics data in parallel
-      const [overviewRes, taskStatsRes, agentsRes, trendsRes, allAgentsRes] = await Promise.all([
+      const [overviewRes, taskStatsRes, agentsRes, allAgentsRes] = await Promise.all([
         fetch(`/api/analytics/overview?startDate=${dateRange.start}&endDate=${dateRange.end}`),
         fetch(`/api/analytics/task-types?startDate=${dateRange.start}&endDate=${dateRange.end}`),
         fetch(`/api/analytics/agent-status?startDate=${dateRange.start}&endDate=${dateRange.end}`),
-        fetch(`/api/analytics/daily-trends?startDate=${dateRange.start}&endDate=${dateRange.end}`),
         fetch('/api/manager/agents') // Fetch all agents for One-on-One Notes (includes paused agents - no date filter)
       ]);
 
@@ -292,13 +239,6 @@ export default function AnalyticsPage() {
         const agentsData = await agentsRes.json();
         if (agentsData.success) {
           setAgentStatus(agentsData.data);
-        }
-      }
-
-      if (trendsRes.ok) {
-        const trendsData = await trendsRes.json();
-        if (trendsData.success) {
-          setDailyTrends(trendsData.data);
         }
       }
 
@@ -324,7 +264,7 @@ export default function AnalyticsPage() {
   const loadTeamPerformanceData = async () => {
     setLoadingTeamPerformance(true);
     try {
-      const dateRange = getDateRange(selectedDateRange);
+      const dateRange = getDateRange();
       // Add cache-busting and timestamp to ensure fresh data
       const timestamp = new Date().getTime();
       const response = await fetch(`/api/analytics/team-performance?startDate=${dateRange.start}&endDate=${dateRange.end}&_t=${timestamp}`, {
@@ -346,7 +286,7 @@ export default function AnalyticsPage() {
   const loadScorecardData = async () => {
     setLoadingScorecard(true);
     try {
-      const dateRange = getDateRange(selectedDateRange);
+      const dateRange = getDateRange();
       const response = await fetch(
         `/api/manager/analytics/performance-scorecard?dateStart=${dateRange.start}&dateEnd=${dateRange.end}`
       );
@@ -365,7 +305,7 @@ export default function AnalyticsPage() {
   // Load agent detail data (for drill-down)
   const loadAgentDetail = async (agentId: string) => {
     try {
-      const dateRange = getDateRange(selectedDateRange);
+      const dateRange = getDateRange();
       const response = await fetch(
         `/api/manager/analytics/performance-scorecard?dateStart=${dateRange.start}&dateEnd=${dateRange.end}&agentId=${agentId}`
       );
@@ -390,7 +330,7 @@ export default function AnalyticsPage() {
       console.error('Error in useEffect:', error);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDateRange]);
+  }, [selectedDateRange, customStartDate, customEndDate]);
 
   // Also reload data when custom dates change
   useEffect(() => {
@@ -463,21 +403,19 @@ export default function AnalyticsPage() {
   };
 
   // Handle time period change - refresh all data
-  const handleTimePeriodChange = (range: 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom') => {
+  const handleTimePeriodChange = (range: 'today' | 'custom') => {
     setSelectedDateRange(range);
-    if (range !== 'custom') {
-      loadOverviewData();
-      loadTeamPerformanceData();
-      loadScorecardData();
+    if (range === 'today') {
+      setCustomStartDate('');
+      setCustomEndDate('');
     }
+    // Data will reload via useEffect when selectedDateRange changes
   };
 
   // Handle custom date range apply
   const handleCustomDateApply = () => {
     if (customStartDate && customEndDate) {
-      loadOverviewData();
-      loadTeamPerformanceData();
-      loadScorecardData();
+      // Data will reload via useEffect when customStartDate/customEndDate changes
     }
   };
 
@@ -515,33 +453,21 @@ export default function AnalyticsPage() {
           <Card className="p-4">
             <div className="flex items-center justify-between mb-4">
               <H3 className="text-lg">📅 Time Period</H3>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-white/60">Compare Mode:</label>
-                <input
-                  type="checkbox"
-                  checked={compareMode}
-                  onChange={(e) => setCompareMode(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                />
-              </div>
             </div>
             <div className="space-y-4">
               <div className="flex gap-2 flex-wrap">
-                {['today', 'week', 'month', 'quarter', 'year'].map((range) => (
-                  <button
-                    key={range}
-                    onClick={() => handleTimePeriodChange(range as any)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      selectedDateRange === range
-                        ? 'bg-blue-600 text-white shadow-lg'
-                        : 'bg-white/10 text-white/70 hover:bg-white/20'
-                    }`}
-                  >
-                    {range.charAt(0).toUpperCase() + range.slice(1)}
-                  </button>
-                ))}
                 <button
-                  onClick={() => setSelectedDateRange('custom')}
+                  onClick={() => handleTimePeriodChange('today')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    selectedDateRange === 'today'
+                      ? 'bg-blue-600 text-white shadow-lg'
+                      : 'bg-white/10 text-white/70 hover:bg-white/20'
+                  }`}
+                >
+                  Today
+                </button>
+                <button
+                  onClick={() => handleTimePeriodChange('custom')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     selectedDateRange === 'custom'
                       ? 'bg-blue-600 text-white shadow-lg'
@@ -592,7 +518,7 @@ export default function AnalyticsPage() {
           {/* Tab Navigation */}
           <div className="mb-6 border-b border-white/10">
             <div className="flex gap-1">
-              {(['overview', 'agents', 'trends'] as const).map((tab) => (
+              {(['overview', 'agents'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setSelectedTab(tab)}
@@ -745,73 +671,48 @@ export default function AnalyticsPage() {
                     <div>
                       <H3 className="mb-4">📈 Task Distribution</H3>
                       <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={Object.entries(taskTypeStats).map(([type, stats]) => ({
-                                name: type.replace(/([A-Z])/g, ' $1').trim(),
-                                value: stats.completed,
-                                color: type === 'textClub' ? '#3B82F6' : 
-                                       type === 'wodIvcs' ? '#10B981' : 
-                                       type === 'emailRequests' ? '#F59E0B' : '#8B5CF6'
-                              }))}
-                              cx="50%"
-                              cy="50%"
-                              outerRadius={80}
-                              dataKey="value"
-                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                            >
-                              {Object.entries(taskTypeStats).map(([type, stats], index) => (
-                                <Cell 
-                                  key={`cell-${index}`} 
-                                  fill={type === 'textClub' ? '#3B82F6' : 
-                                        type === 'wodIvcs' ? '#10B981' : 
-                                        type === 'emailRequests' ? '#F59E0B' : '#8B5CF6'} 
-                                />
-                              ))}
-                            </Pie>
-                            <Tooltip />
-                          </PieChart>
-                        </ResponsiveContainer>
+                        {taskTypeStats && Object.keys(taskTypeStats).length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={Object.entries(taskTypeStats)
+                                  .filter(([_, stats]) => stats.completed > 0)
+                                  .map(([type, stats]) => ({
+                                    name: type.replace(/([A-Z])/g, ' $1').trim(),
+                                    value: stats.completed,
+                                  }))}
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={80}
+                                dataKey="value"
+                                label={({ name, percent }) => percent > 0.01 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                labelLine={false}
+                              >
+                                {Object.entries(taskTypeStats)
+                                  .filter(([_, stats]) => stats.completed > 0)
+                                  .map(([type], index) => (
+                                    <Cell 
+                                      key={`cell-${type}-${index}`} 
+                                      fill={type === 'textClub' ? '#3B82F6' : 
+                                            type === 'wodIvcs' ? '#10B981' : 
+                                            type === 'emailRequests' ? '#F59E0B' : '#8B5CF6'} 
+                                    />
+                                  ))}
+                              </Pie>
+                              <Tooltip />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-white/60">
+                            No data available
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 )}
               </CollapsibleSection>
 
-              {/* Section 3: Daily Performance Trends */}
-              <CollapsibleSection id="daily-trends" title="Daily Performance Trends" icon="📈" defaultExpanded={true}>
-                {dailyTrends.length > 0 && (
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={dailyTrends}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                        <XAxis 
-                          dataKey="date" 
-                          stroke="rgba(255,255,255,0.6)"
-                          fontSize={12}
-                        />
-                        <YAxis 
-                          stroke="rgba(255,255,255,0.6)"
-                          fontSize={12}
-                        />
-                        <Tooltip 
-                          contentStyle={{
-                            backgroundColor: 'rgba(0,0,0,0.8)',
-                            border: '1px solid rgba(255,255,255,0.2)',
-                            borderRadius: '8px',
-                            color: 'white'
-                          }}
-                        />
-                        <Area type="monotone" dataKey="textClub" stackId="1" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.6} />
-                        <Area type="monotone" dataKey="wodIvcs" stackId="1" stroke="#10B981" fill="#10B981" fillOpacity={0.6} />
-                        <Area type="monotone" dataKey="emailRequests" stackId="1" stroke="#F59E0B" fill="#F59E0B" fillOpacity={0.6} />
-                        <Area type="monotone" dataKey="standaloneRefunds" stackId="1" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.6} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </CollapsibleSection>
             </div>
           )}
 
@@ -1029,42 +930,6 @@ export default function AnalyticsPage() {
             </div>
           )}
 
-          {selectedTab === 'trends' && (
-            <div className="space-y-6">
-              <CollapsibleSection id="trends-overview" title="Daily Performance Trends" icon="📈" defaultExpanded={true}>
-                {dailyTrends.length > 0 && (
-                  <div className="h-96">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={dailyTrends}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                        <XAxis 
-                          dataKey="date" 
-                          stroke="rgba(255,255,255,0.6)"
-                          fontSize={12}
-                        />
-                        <YAxis 
-                          stroke="rgba(255,255,255,0.6)"
-                          fontSize={12}
-                        />
-                        <Tooltip 
-                          contentStyle={{
-                            backgroundColor: 'rgba(0,0,0,0.8)',
-                            border: '1px solid rgba(255,255,255,0.2)',
-                            borderRadius: '8px',
-                            color: 'white'
-                          }}
-                        />
-                        <Area type="monotone" dataKey="textClub" stackId="1" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.6} />
-                        <Area type="monotone" dataKey="wodIvcs" stackId="1" stroke="#10B981" fill="#10B981" fillOpacity={0.6} />
-                        <Area type="monotone" dataKey="emailRequests" stackId="1" stroke="#F59E0B" fill="#F59E0B" fillOpacity={0.6} />
-                        <Area type="monotone" dataKey="standaloneRefunds" stackId="1" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.6} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </CollapsibleSection>
-            </div>
-          )}
 
         {/* Peek In Progress Modal */}
         {peekModalOpen && selectedAgent && (
