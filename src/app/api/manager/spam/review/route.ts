@@ -1,7 +1,7 @@
 // src/app/api/manager/spam/review/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getImprovedSpamScore } from "@/lib/spam-detection";
+import { getBatchImprovedSpamScores } from "@/lib/spam-detection";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
 export async function GET(req: Request) {
@@ -68,20 +68,31 @@ export async function GET(req: Request) {
       return [];
     };
 
-    const items = await Promise.all(rows.map(async (r) => {
-      let learningScore = 0;
-      let learningReasons: string[] = [];
+    // FIXED: Batch fetch all learning scores in a single query instead of N queries
+    // Prepare items for batch processing
+    const itemsForBatch = rows.map(r => ({
+      text: r.text || '',
+      brand: r.brand || undefined
+    }));
+    
+    // Get all learning scores in one batch query (reduces from N queries to 1 query)
+    let learningScoresMap: Map<string, { score: number; reasons: string[]; historicalConfidence: number }>;
+    try {
+      learningScoresMap = await getBatchImprovedSpamScores(itemsForBatch);
+    } catch (error) {
+      console.error('Error getting batch learning scores for spam review:', error);
+      // Fallback: create empty map if batch fails
+      learningScoresMap = new Map();
+    }
+    
+    // Process items with batched learning data
+    const items = rows.map((r) => {
+      // Generate the same key format used by getBatchImprovedSpamScores
+      const itemKey = `${(r.text || '').substring(0, 50)}|${r.brand || ''}`;
+      const learningResult = learningScoresMap.get(itemKey);
       
-      // Get learning system score for this item
-      try {
-        if (r.text) {
-          const learningResult = await getImprovedSpamScore(r.text, r.brand || undefined);
-          learningScore = learningResult.score;
-          learningReasons = learningResult.reasons;
-        }
-      } catch (error) {
-        console.error('Error getting learning score for spam review item:', error);
-      }
+      const learningScore = learningResult?.score || 0;
+      const learningReasons = learningResult?.reasons || [];
 
       // Determine spam source
       let spamSource: 'manual' | 'automatic' | 'learning' = 'automatic';
@@ -101,7 +112,7 @@ export async function GET(req: Request) {
         learningReasons: learningReasons.length > 0 ? learningReasons : undefined,
         spamSource,
       };
-    }));
+    });
 
     return NextResponse.json({
       items,
