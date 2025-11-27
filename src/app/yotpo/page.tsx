@@ -3,7 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
-import DashboardSwitcher from '@/app/_components/DashboardSwitcher';
+import DashboardLayout from '@/app/_components/DashboardLayout';
+import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
+import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import ThemeToggle from '@/app/_components/ThemeToggle';
@@ -12,6 +14,7 @@ import YotpoAnalytics from '@/app/_components/YotpoAnalytics';
 import { AssistanceRequestsSection } from '@/app/manager/_components/AssistanceRequestsSection';
 import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
 import SubmissionsReport from '@/app/yotpo/_components/SubmissionsReport';
+import SessionTimer from '@/app/_components/SessionTimer';
 
 // Utility functions
 function clamp(value: number | null | undefined): number {
@@ -990,8 +993,8 @@ function AssignTasksSection() {
 /* ========================================================================== */
 /*  Main Page Component                                                       */
 /* ========================================================================== */
-export default function YotpoPage() {
-  const [activeSection, setActiveSection] = useState("overview");
+function YotpoPageContent() {
+  const { activeSection, setActiveSection } = useDashboardNavigation();
   
   // Overview data
   const [overviewData, setOverviewData] = useState({
@@ -1131,110 +1134,43 @@ export default function YotpoPage() {
     checkPasswordChange();
   }, []);
 
-  const navigationItems = [
-    { id: "overview", label: "📊 Overview", description: "Yotpo metrics and progress" },
-    { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage Yotpo tasks" },
-    { id: "submissions", label: "📝 Form Submissions", description: "Track external rep submissions and productivity" },
-    { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.filter(r => r.status === "ASSISTANCE_REQUIRED").length },
-    { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
-    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" }
-  ];
+  // Header actions
+  const headerActions = (
+    <>
+      <button
+        onClick={() => setActiveSection("settings")}
+        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          activeSection === "settings"
+            ? "bg-blue-600 text-white"
+            : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+        }`}
+        title="System Settings & Administration"
+      >
+        ⚙️ Settings
+      </button>
+      <ThemeToggle />
+      <SessionTimer remainingMinutes={120} />
+      <SmallButton 
+        onClick={() => window.location.href = '/agent'}
+        className="bg-green-600 hover:bg-green-700"
+      >
+        Switch to Agent
+      </SmallButton>
+      <SmallButton 
+        onClick={() => {
+          localStorage.removeItem('agentEmail');
+          localStorage.removeItem('currentRole');
+          window.location.href = '/login';
+        }}
+        className="bg-red-600 hover:bg-red-700"
+      >
+        Logout
+      </SmallButton>
+    </>
+  );
 
   return (
-    <main className="mx-auto max-w-[1400px] p-6 text-white dark:text-white light:text-slate-800 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
-      <header className="sticky top-0 z-30 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 dark:from-neutral-900 dark:via-neutral-900/95 dark:to-neutral-900/80 light:from-white light:via-white/95 light:to-white/80 backdrop-blur-sm border-b border-white/10 dark:border-white/10 light:border-slate-200 shadow-lg">
-        <div className="px-6 pt-4 pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <img 
-                src="/golden-companies-logo.jpeg" 
-                alt="Golden Companies" 
-                className="h-14 w-auto"
-              />
-              <div>
-                <h1 className="text-3xl font-semibold tracking-tight">⭐ Yotpo Dashboard</h1>
-                <p className="text-sm text-white/60">Yotpo Review & Feedback Task Management</p>
-              </div>
-            </div>
-            
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3">
-              {/* Settings Button */}
-              <button
-                onClick={() => setActiveSection("settings")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeSection === "settings"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                }`}
-                title="System Settings & Administration"
-              >
-                ⚙️ Settings
-              </button>
-              
-              {/* Theme Toggle */}
-              <ThemeToggle />
-              
-              {/* Session Display */}
-              <div className="px-3 py-1.5 bg-white/10 rounded-md text-sm text-white/80">
-                Session: 2h 0m
-              </div>
-              
-              {/* Extend Session */}
-              <SmallButton className="bg-blue-600 hover:bg-blue-700">
-                Extend
-              </SmallButton>
-              
-              {/* Switch to Agent */}
-              <SmallButton 
-                onClick={() => window.location.href = '/agent'}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                Switch to Agent
-              </SmallButton>
-              
-              {/* Logout */}
-              <SmallButton 
-                onClick={() => {
-                  localStorage.removeItem('agentEmail');
-                  localStorage.removeItem('currentRole');
-                  window.location.href = '/login';
-                }}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                Logout
-              </SmallButton>
-            </div>
-          </div>
-        </div>
-        
-        {/* Main Navigation */}
-        <div className="px-6 pb-3">
-          <nav className="flex flex-wrap gap-2">
-            {navigationItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActiveSection(item.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors relative ${
-                  activeSection === item.id
-                    ? "bg-blue-600 text-white"
-                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                {item.label}
-                {item.badge && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
-          
-          {/* Dashboard Switcher */}
-          <DashboardSwitcher />
-        </div>
-      </header>
+    <DashboardLayout headerActions={headerActions}>
 
       {/* Auto Logout Warning - Handled by useAutoLogout hook */}
 
@@ -1400,6 +1336,15 @@ export default function YotpoPage() {
           window.location.reload();
         }}
       />
-    </main>
+    </DashboardLayout>
+  );
+}
+
+// Export with provider wrapper
+export default function YotpoPage() {
+  return (
+    <DashboardNavigationProvider>
+      <YotpoPageContent />
+    </DashboardNavigationProvider>
   );
 }
