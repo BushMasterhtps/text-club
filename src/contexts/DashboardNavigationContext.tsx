@@ -5,15 +5,23 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 interface DashboardNavigationContextType {
   activeSection: string;
   setActiveSection: (section: string) => void;
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 const DashboardNavigationContext = createContext<DashboardNavigationContextType | undefined>(undefined);
 
 export function DashboardNavigationProvider({ children }: { children: ReactNode }) {
   const [activeSection, setActiveSection] = useState<string>('overview');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
 
   return (
-    <DashboardNavigationContext.Provider value={{ activeSection, setActiveSection }}>
+    <DashboardNavigationContext.Provider value={{ 
+      activeSection, 
+      setActiveSection,
+      sidebarCollapsed,
+      setSidebarCollapsed
+    }}>
       {children}
     </DashboardNavigationContext.Provider>
   );

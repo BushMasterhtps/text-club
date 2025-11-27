@@ -11,7 +11,7 @@ import {
 
 export function useDashboardNavigation() {
   const pathname = usePathname();
-  const { activeSection, setActiveSection } = useDashboardNavigationContext();
+  const { activeSection, setActiveSection, sidebarCollapsed, setSidebarCollapsed } = useDashboardNavigationContext();
   const [assistanceCount, setAssistanceCount] = useState(0);
 
   // Determine current dashboard from pathname
@@ -70,6 +70,8 @@ export function useDashboardNavigation() {
     currentDashboard,
     activeSection,
     setActiveSection,
+    sidebarCollapsed,
+    setSidebarCollapsed,
     navigationItems: navigationItems.map(item => ({
       ...item,
       badge: item.id === 'assistance' 

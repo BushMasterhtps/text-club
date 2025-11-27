@@ -14,7 +14,7 @@ export default function DashboardLayout({
   children, 
   headerActions 
 }: DashboardLayoutProps) {
-  const { currentDashboard, dashboardConfigs } = useDashboardNavigation();
+  const { currentDashboard, dashboardConfigs, sidebarCollapsed } = useDashboardNavigation();
   const currentConfig = dashboardConfigs.find(d => d.id === currentDashboard);
 
   return (
@@ -23,7 +23,10 @@ export default function DashboardLayout({
       <UnifiedNavigation />
 
       {/* Main Content Area */}
-      <main className="flex-1 lg:ml-64 min-w-0">
+      <main className={`
+        flex-1 min-w-0 transition-all duration-300 ease-in-out
+        ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}
+      `}>
         {/* Header */}
         <header className="sticky top-0 z-20 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 backdrop-blur-sm border-b border-white/10 shadow-lg">
           <div className="px-6 py-4">
@@ -52,8 +55,14 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        {/* Page Content */}
-        <div className="p-6">
+        {/* Page Content - Centered with max-width when sidebar is open */}
+        <div className={`
+          p-6 mx-auto transition-all duration-300
+          ${sidebarCollapsed 
+            ? 'w-full max-w-none' 
+            : 'w-full max-w-[1400px]'
+          }
+        `}>
           {children}
         </div>
       </main>

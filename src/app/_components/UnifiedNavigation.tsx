@@ -12,9 +12,10 @@ export default function UnifiedNavigation() {
     setActiveSection,
     navigationItems,
     dashboardConfigs,
+    sidebarCollapsed,
+    setSidebarCollapsed,
   } = useDashboardNavigation();
   
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const router = useRouter();
 
   const handleNavigation = (item: NavigationItem) => {
@@ -34,9 +35,27 @@ export default function UnifiedNavigation() {
 
   return (
     <>
-      {/* Mobile Menu Button (hidden on desktop) */}
+      {/* Desktop Toggle Button */}
       <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        className="hidden lg:flex fixed top-4 left-4 z-50 p-2 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 hover:bg-white/20 transition-colors"
+        aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        {sidebarCollapsed ? (
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        )}
+      </button>
+
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
         className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 hover:bg-white/20 transition-colors"
         aria-label="Toggle sidebar"
       >
@@ -48,17 +67,18 @@ export default function UnifiedNavigation() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed lg:sticky top-0 left-0 h-screen w-64
+          fixed lg:sticky top-0 left-0 h-screen
+          ${sidebarCollapsed ? 'w-0 lg:w-16' : 'w-64'}
           bg-gradient-to-b from-neutral-900/95 to-neutral-900/90
           backdrop-blur-md border-r border-white/10
-          z-40 transition-transform duration-300 ease-in-out
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          shadow-2xl
+          z-40 transition-all duration-300 ease-in-out
+          ${sidebarCollapsed ? '-translate-x-full lg:translate-x-0' : 'translate-x-0'}
+          shadow-2xl overflow-hidden
         `}
       >
-        <div className="flex flex-col h-full p-4 space-y-6 overflow-y-auto">
+        <div className={`flex flex-col h-full ${sidebarCollapsed ? 'p-2' : 'p-4'} space-y-6 overflow-y-auto`}>
           {/* Current Dashboard Section */}
-          {currentConfig && (
+          {currentConfig && !sidebarCollapsed && (
             <div className="space-y-2">
               <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider px-3">
                 Current Dashboard
@@ -78,19 +98,30 @@ export default function UnifiedNavigation() {
               </div>
             </div>
           )}
+          
+          {/* Collapsed Dashboard Icon */}
+          {currentConfig && sidebarCollapsed && (
+            <div className="flex justify-center pt-2">
+              <div className="text-2xl" title={currentConfig.name}>
+                {currentConfig.emoji}
+              </div>
+            </div>
+          )}
 
           {/* Navigation Items */}
           <div className="space-y-1">
-            <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider px-3">
-              Sections
-            </h3>
+            {!sidebarCollapsed && (
+              <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider px-3">
+                Sections
+              </h3>
+            )}
             {navigationItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => handleNavigation(item)}
                 className={`
-                  w-full px-3 py-2.5 rounded-lg text-sm font-medium
-                  transition-all duration-200 flex items-center justify-between
+                  w-full ${sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-3 py-2.5'} rounded-lg text-sm font-medium
+                  transition-all duration-200 flex items-center ${sidebarCollapsed ? 'flex-col gap-1' : 'justify-between'}
                   relative group
                   ${
                     activeSection === item.id
@@ -98,14 +129,19 @@ export default function UnifiedNavigation() {
                       : 'text-white/70 hover:bg-white/10 hover:text-white'
                   }
                 `}
-                title={item.description}
+                title={sidebarCollapsed ? item.label : item.description}
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className={`flex items-center ${sidebarCollapsed ? 'flex-col' : 'gap-3'} min-w-0`}>
                   <span className="text-lg flex-shrink-0">{item.icon}</span>
-                  <span className="truncate">{item.label}</span>
+                  {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
                 </div>
-                {item.badge && item.badge > 0 && (
+                {!sidebarCollapsed && item.badge && item.badge > 0 && (
                   <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold flex-shrink-0 ml-2">
+                    {item.badge}
+                  </span>
+                )}
+                {sidebarCollapsed && item.badge && item.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center font-bold">
                     {item.badge}
                   </span>
                 )}
@@ -117,63 +153,93 @@ export default function UnifiedNavigation() {
           <div className="border-t border-white/10"></div>
 
           {/* Dashboard Switcher */}
-          <div className="space-y-1">
-            <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider px-3">
-              Switch Dashboard
-            </h3>
-            {dashboardConfigs.map((dashboard) => (
-              <button
-                key={dashboard.id}
-                onClick={() => handleDashboardSwitch(dashboard.path)}
-                disabled={!dashboard.available}
-                className={`
-                  w-full px-3 py-2 rounded-lg text-sm font-medium
-                  transition-all duration-200 flex items-center gap-3
-                  ${
-                    currentDashboard === dashboard.id
-                      ? 'bg-blue-600/20 border border-blue-500/30 text-white'
-                      : dashboard.available
-                      ? 'text-white/70 hover:bg-white/10 hover:text-white'
-                      : 'text-white/30 cursor-not-allowed opacity-50'
-                  }
-                `}
-                title={dashboard.description}
-              >
-                <span className="text-lg flex-shrink-0">{dashboard.emoji}</span>
-                <span className="truncate flex-1">{dashboard.name}</span>
-                {!dashboard.available && (
-                  <span className="ml-auto text-xs opacity-60 flex-shrink-0">(Soon)</span>
-                )}
-              </button>
-            ))}
-          </div>
+          {!sidebarCollapsed && (
+            <div className="space-y-1">
+              <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider px-3">
+                Switch Dashboard
+              </h3>
+              {dashboardConfigs.map((dashboard) => (
+                <button
+                  key={dashboard.id}
+                  onClick={() => handleDashboardSwitch(dashboard.path)}
+                  disabled={!dashboard.available}
+                  className={`
+                    w-full px-3 py-2 rounded-lg text-sm font-medium
+                    transition-all duration-200 flex items-center gap-3
+                    ${
+                      currentDashboard === dashboard.id
+                        ? 'bg-blue-600/20 border border-blue-500/30 text-white'
+                        : dashboard.available
+                        ? 'text-white/70 hover:bg-white/10 hover:text-white'
+                        : 'text-white/30 cursor-not-allowed opacity-50'
+                    }
+                  `}
+                  title={dashboard.description}
+                >
+                  <span className="text-lg flex-shrink-0">{dashboard.emoji}</span>
+                  <span className="truncate flex-1">{dashboard.name}</span>
+                  {!dashboard.available && (
+                    <span className="ml-auto text-xs opacity-60 flex-shrink-0">(Soon)</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          
+          {/* Collapsed Dashboard Switcher (icons only) */}
+          {sidebarCollapsed && (
+            <div className="space-y-1">
+              {dashboardConfigs.map((dashboard) => (
+                <button
+                  key={dashboard.id}
+                  onClick={() => handleDashboardSwitch(dashboard.path)}
+                  disabled={!dashboard.available}
+                  className={`
+                    w-full px-2 py-2 rounded-lg text-sm font-medium
+                    transition-all duration-200 flex items-center justify-center
+                    ${
+                      currentDashboard === dashboard.id
+                        ? 'bg-blue-600/20 border border-blue-500/30 text-white'
+                        : dashboard.available
+                        ? 'text-white/70 hover:bg-white/10 hover:text-white'
+                        : 'text-white/30 cursor-not-allowed opacity-50'
+                    }
+                  `}
+                  title={dashboard.name}
+                >
+                  <span className="text-lg">{dashboard.emoji}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Settings Link */}
           <div className="mt-auto pt-4 border-t border-white/10">
             <button
               onClick={() => setActiveSection('settings')}
               className={`
-                w-full px-3 py-2.5 rounded-lg text-sm font-medium
-                transition-all duration-200 flex items-center gap-3
+                w-full ${sidebarCollapsed ? 'px-2 py-3 justify-center flex-col gap-1' : 'px-3 py-2.5'} rounded-lg text-sm font-medium
+                transition-all duration-200 flex items-center ${sidebarCollapsed ? '' : 'gap-3'}
                 ${
                   activeSection === 'settings'
                     ? 'bg-blue-600 text-white shadow-lg'
                     : 'text-white/70 hover:bg-white/10 hover:text-white'
                 }
               `}
+              title={sidebarCollapsed ? 'Settings' : undefined}
             >
               <span className="text-lg">⚙️</span>
-              <span>Settings</span>
+              {!sidebarCollapsed && <span>Settings</span>}
             </button>
           </div>
         </div>
       </aside>
 
       {/* Overlay for mobile */}
-      {sidebarOpen && (
+      {!sidebarCollapsed && (
         <div
           className="lg:hidden fixed inset-0 bg-black/50 z-30 backdrop-blur-sm"
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => setSidebarCollapsed(true)}
         />
       )}
     </>
