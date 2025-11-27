@@ -144,9 +144,34 @@ export async function GET(req: NextRequest) {
       ...Object.keys(trelloByAgent)
     ]));
 
-    // Calculate scorecard for each agent (excluding Holds-only agents)
+    // Fetch all agent data upfront to filter out Holds-only agents
+    const allAgents = await prisma.user.findMany({
+      where: {
+        id: { in: allAgentIds }
+      },
+      select: {
+        id: true,
+        agentTypes: true
+      }
+    });
+
+    // Create a map of Holds-only agents for quick lookup
+    const holdsOnlyAgentIds = new Set(
+      allAgents
+        .filter(agent => 
+          agent.agentTypes && 
+          agent.agentTypes.length === 1 && 
+          agent.agentTypes[0] === 'HOLDS'
+        )
+        .map(agent => agent.id)
+    );
+
+    // Filter out Holds-only agents from the list
+    const filteredAgentIds = allAgentIds.filter(agentId => !holdsOnlyAgentIds.has(agentId));
+
+    // Calculate scorecard for each agent (Holds-only agents already filtered out)
     const agentScores = await Promise.all(
-      allAgentIds.map(async (agentId) => {
+      filteredAgentIds.map(async (agentId) => {
         const agentTasks = completedTasks.filter(t => t.assignedToId === agentId);
         let agent = agentTasks[0]?.assignedTo;
         
@@ -157,18 +182,6 @@ export async function GET(req: NextRequest) {
         }
         
         if (!agent) return null;
-
-        // Fetch full agent data to check agentTypes
-        const fullAgent = await prisma.user.findUnique({
-          where: { id: agentId },
-          select: { id: true, agentTypes: true }
-        });
-
-        // Exclude agents who ONLY have HOLDS in their agentTypes
-        // Holds-only agents should not appear in Performance Scorecard
-        if (fullAgent && fullAgent.agentTypes && fullAgent.agentTypes.length === 1 && fullAgent.agentTypes[0] === 'HOLDS') {
-          return null; // Skip Holds-only agents
-        }
 
         const trelloCount = trelloByAgent[agentId] || 0;
         const trelloWorkDates = trelloDates[agentId] || new Set();
