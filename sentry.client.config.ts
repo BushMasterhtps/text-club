@@ -4,6 +4,15 @@
 
 import * as Sentry from "@sentry/nextjs";
 
+// Log DSN status at initialization time
+if (typeof window !== 'undefined') {
+  console.log('[Sentry Init] DSN Status:', {
+    hasDsn: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
+    dsnLength: process.env.NEXT_PUBLIC_SENTRY_DSN?.length,
+    dsnPreview: process.env.NEXT_PUBLIC_SENTRY_DSN?.substring(0, 20) + '...'
+  });
+}
+
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
@@ -11,7 +20,7 @@ Sentry.init({
   tracesSampleRate: 1.0,
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
-  debug: false, // Set to true temporarily to see Sentry initialization logs
+  debug: true, // Enable debug mode to see Sentry initialization and event sending
 
   // Only send errors in production (or set to true for all environments)
   // TEMPORARILY: Enable for all environments to test
