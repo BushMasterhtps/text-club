@@ -18,18 +18,20 @@ export default function DashboardLayout({
   const currentConfig = dashboardConfigs.find(d => d.id === currentDashboard);
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-neutral-900 to-black">
+    <div className="flex min-h-screen bg-neutral-900">
       {/* Sidebar Navigation */}
       <UnifiedNavigation />
 
       {/* Main Content Area */}
       <main className={`
         flex-1 min-w-0 transition-all duration-300 ease-in-out
+        bg-neutral-900
         ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}
       `}>
         {/* Content Wrapper - Centers content with balanced spacing */}
         <div className={`
           transition-all duration-300 w-full
+          bg-neutral-900
           ${sidebarCollapsed 
             ? '' 
             : 'max-w-[1400px] mx-auto'
