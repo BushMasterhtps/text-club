@@ -88,6 +88,7 @@ export async function GET(request: NextRequest) {
     });
 
     // FIX 2: Get all current tasks in progress in a single query (fixes N+1)
+    // Fetch all tasks, then get the first one per agent in memory
     const allCurrentTasks = await prisma.task.findMany({
       where: {
         assignedToId: { in: agentIds },
@@ -97,14 +98,16 @@ export async function GET(request: NextRequest) {
         assignedToId: true,
         taskType: true
       },
-      // Get only the first task per agent (matching findFirst behavior)
-      distinct: ['assignedToId']
+      orderBy: {
+        startTime: 'asc' // Get oldest task first (matching findFirst behavior)
+      }
     });
 
-    // Create map for current tasks
+    // Create map for current tasks (get first task per agent)
     const currentTaskMap = new Map<string, string | null>();
     allCurrentTasks.forEach(task => {
-      if (task.assignedToId) {
+      if (task.assignedToId && !currentTaskMap.has(task.assignedToId)) {
+        // Only set if we haven't seen this agent yet (first task wins)
         currentTaskMap.set(task.assignedToId, task.taskType);
       }
     });
