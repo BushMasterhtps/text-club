@@ -59,17 +59,40 @@ export default function SentryExamplePage() {
   };
 
   const triggerTestLog = () => {
-    if (typeof Sentry !== 'undefined' && Sentry.logger) {
-      // Send a test log to Sentry
-      Sentry.logger.info('User triggered test log', { 
-        log_source: 'sentry_test',
-        timestamp: new Date().toISOString(),
-        page: 'sentry-example-page'
-      });
-      setLogSent(true);
-      console.log('[Test] Sentry log sent successfully');
+    console.log('[Test] Attempting to send Sentry log...', {
+      sentryExists: typeof Sentry !== 'undefined',
+      hasLogger: typeof Sentry?.logger !== 'undefined',
+      loggerInfo: typeof Sentry?.logger?.info === 'function'
+    });
+
+    if (typeof Sentry !== 'undefined' && Sentry.logger && Sentry.logger.info) {
+      try {
+        // Send a test log to Sentry with a unique message
+        const uniqueId = Date.now();
+        const logMessage = `User triggered test log - ${uniqueId}`;
+        
+        Sentry.logger.info(logMessage, { 
+          log_source: 'sentry_test',
+          timestamp: new Date().toISOString(),
+          page: 'sentry-example-page',
+          test_id: uniqueId,
+          test_type: 'manual_trigger'
+        });
+        
+        setLogSent(true);
+        console.log('[Test] Sentry log sent successfully', {
+          message: logMessage,
+          test_id: uniqueId
+        });
+      } catch (error) {
+        console.error('[Test] Error sending Sentry log:', error);
+      }
     } else {
-      console.error('[Test] Sentry logger is not available!');
+      console.error('[Test] Sentry logger is not available!', {
+        sentry: typeof Sentry,
+        logger: typeof Sentry?.logger,
+        loggerInfo: typeof Sentry?.logger?.info
+      });
     }
   };
 
@@ -179,15 +202,24 @@ export default function SentryExamplePage() {
                 ✅ Test log sent! Check your Sentry Logs page to see it.
               </p>
               <p className="text-white/70 text-sm mt-2">
-                <strong>How to view logs:</strong>
+                <strong>How to find your log:</strong>
               </p>
               <ol className="list-decimal list-inside text-white/70 text-sm mt-2 space-y-1">
-                <li>Go to your Sentry dashboard: <a href="https://selftaughtorg.sentry.io" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">selftaughtorg.sentry.io</a></li>
-                <li>Click <strong>"Explore"</strong> in the left sidebar</li>
-                <li>Click <strong>"Logs"</strong> (it has a "Beta" tag)</li>
-                <li>Look for a log with message: <code className="bg-black/30 px-1 rounded">"User triggered test log"</code></li>
-                <li>You should see it appear within 10-30 seconds</li>
+                <li>Go to: <a href="https://selftaughtorg.sentry.io/organizations/selftaughtorg/explore/logs/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline font-semibold">Sentry Logs Page</a></li>
+                <li>In the search bar at the top, type: <code className="bg-black/30 px-1 rounded text-yellow-300">log_source:sentry_test</code></li>
+                <li>OR search for: <code className="bg-black/30 px-1 rounded text-yellow-300">"User triggered test log"</code></li>
+                <li>Make sure the time filter is set to <strong>"24H"</strong> or <strong>"1H"</strong> (not just "24H")</li>
+                <li>Wait 10-30 seconds and refresh the page if needed</li>
               </ol>
+              <div className="mt-3 p-2 bg-yellow-500/20 border border-yellow-500/50 rounded text-yellow-300 text-xs">
+                <p className="font-semibold mb-1">⚠️ If you don't see it:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Check the browser console Network tab for requests to <code>sentry.io</code></li>
+                  <li>Make sure you're on the <strong>"Logs"</strong> page (not "Issues")</li>
+                  <li>Try clicking the search bar and pressing Enter to refresh results</li>
+                  <li>Check that the project filter shows <strong>"javascript-nextjs"</strong></li>
+                </ul>
+              </div>
               <p className="text-white/70 text-xs mt-3">
                 Direct link: <a href="https://selftaughtorg.sentry.io/organizations/selftaughtorg/explore/logs/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">selftaughtorg.sentry.io/explore/logs/</a>
               </p>
