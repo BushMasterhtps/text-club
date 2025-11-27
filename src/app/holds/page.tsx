@@ -238,6 +238,15 @@ function HoldsPageContent() {
         onExtend={extendSession}
         onLogout={forceLogout}
       />
-    </div>
+    </DashboardLayout>
+  );
+}
+
+// Export with provider wrapper
+export default function HoldsPage() {
+  return (
+    <DashboardNavigationProvider>
+      <HoldsPageContent />
+    </DashboardNavigationProvider>
   );
 }
