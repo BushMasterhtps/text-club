@@ -102,7 +102,7 @@ async function backfillCompletedBy() {
       updated: 0,
       skipped: 0,
       errors: 0,
-      details: [] as any[]
+      details: []
     };
 
     for (const task of tasksToBackfill) {
