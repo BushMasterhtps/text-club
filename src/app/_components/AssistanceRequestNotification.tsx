@@ -53,18 +53,7 @@ export default function AssistanceRequestNotification({
       `}
     >
       <div
-        className="
-          relative
-          bg-gradient-to-br from-red-600 via-red-500 to-orange-500
-          backdrop-blur-md
-          border border-red-400/50
-          rounded-xl
-          shadow-2xl
-          shadow-red-500/50
-          overflow-hidden
-          min-w-[320px]
-          max-w-[400px]
-        "
+        className="relative bg-gradient-to-br from-red-600 via-red-500 to-orange-500 backdrop-blur-md border border-red-400/50 rounded-xl shadow-2xl shadow-red-500/50 overflow-hidden min-w-[320px] max-w-[400px]"
       >
         {/* Animated background pulse */}
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
@@ -98,15 +87,7 @@ export default function AssistanceRequestNotification({
               {/* Close button */}
               <button
                 onClick={onDismiss}
-                className="
-                  flex-shrink-0
-                  text-white/70 hover:text-white
-                  hover:bg-white/20
-                  rounded-lg
-                  p-1
-                  transition-colors
-                  focus:outline-none focus:ring-2 focus:ring-white/50
-                "
+                className="flex-shrink-0 text-white/70 hover:text-white hover:bg-white/20 rounded-lg p-1 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
                 aria-label="Dismiss notification"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,21 +100,7 @@ export default function AssistanceRequestNotification({
             <div className="flex items-center gap-2 mt-3">
               <button
                 onClick={handleView}
-                className="
-                  flex-1
-                  bg-white/20 hover:bg-white/30
-                  backdrop-blur-sm
-                  border border-white/30
-                  text-white
-                  font-semibold
-                  text-sm
-                  px-4 py-2
-                  rounded-lg
-                  transition-all
-                  hover:scale-105
-                  active:scale-95
-                  focus:outline-none focus:ring-2 focus:ring-white/50
-                "
+                className="flex-1 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white font-semibold text-sm px-4 py-2 rounded-lg transition-all hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-white/50"
               >
                 View Requests
               </button>
