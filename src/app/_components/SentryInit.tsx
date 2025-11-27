@@ -14,10 +14,10 @@ export default function SentryInit() {
     const client = Sentry.getClient();
     
     if (client) {
-      console.log('[SentryInit] Sentry already initialized', {
-        dsn: client.getDsn()?.toString(),
-        enabled: client.getOptions().enabled
-      });
+      // Sentry is already initialized, nothing to do
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[SentryInit] Sentry already initialized');
+      }
       return;
     }
 
@@ -25,19 +25,15 @@ export default function SentryInit() {
     // This will execute the Sentry.init() call in sentry.client.config.ts
     import('../../../sentry.client.config')
       .then(() => {
-        console.log('[SentryInit] Client config loaded successfully');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[SentryInit] Client config loaded successfully');
+        }
         
         // Verify initialization after a short delay
         setTimeout(() => {
           const newClient = Sentry.getClient();
-          if (newClient) {
-            console.log('[SentryInit] Sentry initialized after loading config', {
-              dsn: newClient.getDsn()?.toString(),
-              enabled: newClient.getOptions().enabled
-            });
-          } else {
+          if (!newClient && process.env.NODE_ENV === 'development') {
             console.warn('[SentryInit] Sentry still not initialized after loading config');
-            console.warn('[SentryInit] DSN available:', !!process.env.NEXT_PUBLIC_SENTRY_DSN);
           }
         }, 100);
       })
