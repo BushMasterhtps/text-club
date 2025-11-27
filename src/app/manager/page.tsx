@@ -4082,6 +4082,14 @@ export default function ManagerPage() {
         }}
       />
       </DashboardLayout>
+  );
+}
+
+// Export with provider wrapper
+export default function ManagerPage() {
+  return (
+    <DashboardNavigationProvider>
+      <ManagerPageContent />
     </DashboardNavigationProvider>
   );
 }
