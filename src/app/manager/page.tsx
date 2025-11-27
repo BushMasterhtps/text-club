@@ -15,6 +15,7 @@ import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import TextClubAnalytics from '@/app/_components/TextClubAnalytics';
 import DashboardLayout from '@/app/_components/DashboardLayout';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
+import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
 
 /* ========== Shared types ========== */
 type AssignResult = Record<string, string[]>;
@@ -3343,7 +3344,7 @@ export default function ManagerPage() {
   });
 
   // Navigation state
-  // Use navigation hook instead of local state
+  // Use navigation hook - provider wraps this component
   const { activeSection, setActiveSection } = useDashboardNavigation();
   const [showPendingTasks, setShowPendingTasks] = useState(true);
   
@@ -3761,7 +3762,8 @@ export default function ManagerPage() {
   );
 
   return (
-    <DashboardLayout headerActions={headerActions}>
+    <DashboardNavigationProvider>
+      <DashboardLayout headerActions={headerActions}>
 
       {/* Notification for new assistance requests */}
       {showNotification && newAssistanceCount > 0 && (
@@ -4079,6 +4081,7 @@ export default function ManagerPage() {
           window.location.href = '/login';
         }}
       />
-    </DashboardLayout>
+      </DashboardLayout>
+    </DashboardNavigationProvider>
   );
 }

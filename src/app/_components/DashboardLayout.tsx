@@ -18,10 +18,9 @@ export default function DashboardLayout({
   const currentConfig = dashboardConfigs.find(d => d.id === currentDashboard);
 
   return (
-    <DashboardNavigationProvider>
-      <div className="flex min-h-screen bg-gradient-to-br from-neutral-900 to-black">
-        {/* Sidebar Navigation */}
-        <UnifiedNavigation />
+    <div className="flex min-h-screen bg-gradient-to-br from-neutral-900 to-black">
+      {/* Sidebar Navigation */}
+      <UnifiedNavigation />
 
       {/* Main Content Area */}
       <main className="flex-1 lg:ml-64 min-w-0">
@@ -59,7 +58,6 @@ export default function DashboardLayout({
         </div>
       </main>
     </div>
-    </DashboardNavigationProvider>
   );
 }
 
