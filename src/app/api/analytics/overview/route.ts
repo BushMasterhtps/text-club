@@ -139,19 +139,8 @@ export async function GET(request: NextRequest) {
     const holdsPending = pendingCountsMap.get('HOLDS') || 0;
     const yotpoPending = pendingCountsMap.get('YOTPO') || 0;
 
-    // Get pending tasks (both Task PENDING and RawMessage READY)
-    const [taskPending, rawMessageReady] = await Promise.all([
-      prisma.task.count({
-        where: {
-          status: "PENDING"
-        }
-      }),
-      prisma.rawMessage.count({
-        where: {
-          status: "READY"
-        }
-      })
-    ]);
+    // Calculate total pending tasks from the groupBy results (no need for another query)
+    const taskPending = Array.from(pendingCountsMap.values()).reduce((sum, count) => sum + count, 0);
     const pendingTasks = taskPending + rawMessageReady;
 
     const data = {
