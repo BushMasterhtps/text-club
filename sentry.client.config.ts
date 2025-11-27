@@ -14,7 +14,8 @@ Sentry.init({
   debug: false, // Set to true temporarily to see Sentry initialization logs
 
   // Only send errors in production (or set to true for all environments)
-  enabled: process.env.NODE_ENV === "production",
+  // TEMPORARILY: Enable for all environments to test
+  enabled: true,
 
   replaysOnErrorSampleRate: 1.0,
 
@@ -38,14 +39,13 @@ Sentry.init({
       hasDsn: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
       dsnLength: process.env.NEXT_PUBLIC_SENTRY_DSN?.length,
       eventType: event.type,
-      error: event.exception?.values?.[0]?.value
+      error: event.exception?.values?.[0]?.value,
+      environment: process.env.NODE_ENV
     });
     
-    // Don't send errors in development
-    if (process.env.NODE_ENV === "development") {
-      console.log('[Sentry] Skipping - development mode');
-      return null;
-    }
+    // TEMPORARILY: Allow all errors through for testing
+    // Don't filter out any errors - we want to see if they're being sent
+    console.log('[Sentry] Allowing event through (testing mode)');
     
     // Remove sensitive data from request
     if (event.request) {
@@ -56,7 +56,7 @@ Sentry.init({
       }
     }
     
-    console.log('[Sentry] Sending event to Sentry');
+    console.log('[Sentry] Returning event to be sent');
     return event;
   },
 });
