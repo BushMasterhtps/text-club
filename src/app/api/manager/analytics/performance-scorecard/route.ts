@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
     ]));
 
     // Fetch all agent data upfront to filter out Holds-only agents
-    const allAgents = await prisma.user.findMany({
+    const agentsWithTypes = await prisma.user.findMany({
       where: {
         id: { in: allAgentIds }
       },
@@ -157,7 +157,7 @@ export async function GET(req: NextRequest) {
 
     // Create a map of Holds-only agents for quick lookup
     const holdsOnlyAgentIds = new Set(
-      allAgents
+      agentsWithTypes
         .filter(agent => 
           agent.agentTypes && 
           agent.agentTypes.length === 1 && 
