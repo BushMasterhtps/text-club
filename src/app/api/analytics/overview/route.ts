@@ -28,22 +28,15 @@ export async function GET(request: NextRequest) {
     const utcDateStart = dateStart;
     const utcDateEnd = dateEnd;
 
-    // Get completed tasks for the date range (including sent-back tasks and Holds with completedBy)
-    // For Holds: include tasks with completedBy (even if unassigned)
-    // For other types: standard COMPLETED status
+    // Get completed tasks for the date range (including sent-back tasks)
+    // For Holds: count ALL COMPLETED tasks (status = COMPLETED, endTime in range)
+    // This matches the Holds resolved report logic - completedBy is for attribution, not counting
     const completedTasks = await prisma.task.count({
       where: {
         OR: [
           {
             status: "COMPLETED",
-            endTime: { gte: utcDateStart, lte: utcDateEnd },
-            taskType: { not: "HOLDS" } // Non-Holds completed tasks
-          },
-          {
-            status: "COMPLETED",
-            endTime: { gte: utcDateStart, lte: utcDateEnd },
-            taskType: "HOLDS",
-            completedBy: { not: null } // Holds completed tasks (including unassigned)
+            endTime: { gte: utcDateStart, lte: utcDateEnd }
           },
           {
             status: "PENDING",
@@ -54,19 +47,11 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get total completed tasks (all time) - including Holds with completedBy
+    // Get total completed tasks (all time) - count ALL COMPLETED tasks
     const totalCompleted = await prisma.task.count({
       where: {
         OR: [
-          {
-            status: "COMPLETED",
-            taskType: { not: "HOLDS" } // Non-Holds completed tasks
-          },
-          {
-            status: "COMPLETED",
-            taskType: "HOLDS",
-            completedBy: { not: null } // Holds completed tasks (including unassigned)
-          },
+          { status: "COMPLETED" },
           { 
             status: "PENDING",
             sentBackBy: { not: null },
@@ -76,22 +61,14 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get average handle time for completed tasks in date range (including Holds with completedBy)
+    // Get average handle time for completed tasks in date range
     const avgHandleTimeResult = await prisma.task.aggregate({
       where: {
         OR: [
           {
             status: "COMPLETED",
             endTime: { gte: utcDateStart, lte: utcDateEnd },
-            durationSec: { not: null },
-            taskType: { not: "HOLDS" } // Non-Holds completed tasks
-          },
-          {
-            status: "COMPLETED",
-            endTime: { gte: utcDateStart, lte: utcDateEnd },
-            durationSec: { not: null },
-            taskType: "HOLDS",
-            completedBy: { not: null } // Holds completed tasks (including unassigned)
+            durationSec: { not: null }
           },
           {
             status: "PENDING",
