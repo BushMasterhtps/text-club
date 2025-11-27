@@ -512,10 +512,10 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Main Content: Two-Column Layout */}
-      <div className="flex gap-6 p-6">
-        {/* Left Column: Tabs */}
-        <div className="flex-1 min-w-0" style={{ width: '65%' }}>
+      {/* Main Content */}
+      <div className="p-6">
+        {/* Tabs Content */}
+        <div className="max-w-[1600px] mx-auto">
           {/* Tab Navigation */}
           <div className="mb-6 border-b border-white/10">
             <div className="flex gap-1">
@@ -726,6 +726,31 @@ export default function AnalyticsPage() {
                   </div>
                 )}
               </CollapsibleSection>
+
+              {/* Section 3: Performance Scorecard & One-on-One Notes */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Performance Scorecard */}
+                <div>
+                  <PerformanceScorecard
+                    scorecardData={scorecardData}
+                    loading={loadingScorecard}
+                    onRefresh={loadScorecardData}
+                    onLoadAgentDetail={loadAgentDetail}
+                    dateRange={selectedDateRange === 'custom' && customStartDate && customEndDate 
+                      ? { start: customStartDate, end: customEndDate }
+                      : selectedDateRange !== 'custom'
+                      ? getDateRange()
+                      : undefined}
+                  />
+                </div>
+
+                {/* One-on-One Notes */}
+                <div>
+                  <OneOnOneNotes 
+                    agents={allAgents}
+                  />
+                </div>
+              </div>
 
             </div>
           )}
@@ -1039,29 +1064,6 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        </div>
-
-        {/* Right Column: Sticky Sidebar */}
-        <div className="sticky top-6 self-start" style={{ width: '35%' }}>
-          <div className="space-y-6">
-            {/* Performance Scorecard */}
-            <PerformanceScorecard
-              scorecardData={scorecardData}
-              loading={loadingScorecard}
-              onRefresh={loadScorecardData}
-              onLoadAgentDetail={loadAgentDetail}
-              dateRange={selectedDateRange === 'custom' && customStartDate && customEndDate 
-                ? { start: customStartDate, end: customEndDate }
-                : selectedDateRange !== 'custom'
-                ? getDateRange(selectedDateRange)
-                : undefined}
-            />
-
-            {/* One-on-One Notes */}
-            <OneOnOneNotes 
-              agents={allAgents}
-            />
-          </div>
         </div>
       </div>
     </main>
