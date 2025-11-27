@@ -108,18 +108,37 @@ export async function GET(request: NextRequest) {
       isCurrentSprint = sprintNumber === getCurrentSprint().number;
     }
 
-    // Get all agents (including seniors for tracking)
+    // Get all agents (including seniors for tracking, but excluding Holds-only agents)
     const allAgents = await prisma.user.findMany({
       where: {
         role: { in: ['AGENT', 'MANAGER_AGENT'] },
         isLive: true
       },
-      select: { id: true, name: true, email: true }
+      select: { id: true, name: true, email: true, agentTypes: true }
     });
+    
+    // Filter out Holds-only agents (agents who ONLY have HOLDS in agentTypes)
+    const holdsOnlyAgentIds = new Set(
+      allAgents
+        .filter(agent => 
+          agent.agentTypes && 
+          Array.isArray(agent.agentTypes) && 
+          agent.agentTypes.length === 1 && 
+          agent.agentTypes[0] === 'HOLDS'
+        )
+        .map(agent => agent.id)
+    );
+    
+    console.log(`[Sprint Rankings] Total agents: ${allAgents.length}, Holds-only agents: ${holdsOnlyAgentIds.size}`);
+    
+    // Filter out Holds-only agents
+    const filteredAgents = allAgents.filter(agent => !holdsOnlyAgentIds.has(agent.id));
+    
+    console.log(`[Sprint Rankings] Filtered agents (excluding Holds-only): ${filteredAgents.length}`);
 
     const agentScorecards: AgentScorecard[] = [];
 
-    for (const agent of allAgents) {
+    for (const agent of filteredAgents) {
       const isSenior = isSeniorAgent(agent.email);
 
       // Get portal tasks completed in sprint (or lifetime)
