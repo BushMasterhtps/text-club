@@ -96,7 +96,11 @@ export async function GET(req: NextRequest) {
     // Include both assignedToId and completedBy to catch all agents
     const agentIdsFromAssigned = completedTasks.map(t => t.assignedToId).filter(Boolean) as string[];
     const agentIdsFromCompletedBy = completedTasks.map(t => t.completedBy).filter(Boolean) as string[];
-    const agentIds = Array.from(new Set([...agentIdsFromAssigned, ...agentIdsFromCompletedBy])) as string[];
+    const allUniqueAgentIds = Array.from(new Set([...agentIdsFromAssigned, ...agentIdsFromCompletedBy])) as string[];
+    
+    console.log(`[Performance Scorecard] Agent IDs from assignedToId: ${agentIdsFromAssigned.length}`);
+    console.log(`[Performance Scorecard] Agent IDs from completedBy: ${agentIdsFromCompletedBy.length}`);
+    console.log(`[Performance Scorecard] Total unique agent IDs: ${allUniqueAgentIds.length}`);
     
     if (allUniqueAgentIds.length === 0) {
       return NextResponse.json({
