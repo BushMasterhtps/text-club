@@ -187,10 +187,24 @@ export async function GET(req: NextRequest) {
             return false;
           }
           // That type must be "HOLDS" (case-sensitive match)
-          return agent.agentTypes[0] === 'HOLDS';
+          const isHoldsOnly = agent.agentTypes[0] === 'HOLDS';
+          
+          // Debug logging for Holds-only agents
+          if (isHoldsOnly) {
+            console.log(`[Performance Scorecard] Found Holds-only agent: ${agent.id}, agentTypes:`, agent.agentTypes);
+          }
+          
+          return isHoldsOnly;
         })
         .map(agent => agent.id)
     );
+    
+    // Debug: Log all agents and their types
+    console.log(`[Performance Scorecard] Total agents with types: ${agentsWithTypes.length}`);
+    console.log(`[Performance Scorecard] Holds-only agents found: ${holdsOnlyAgentIds.size}`);
+    agentsWithTypes.forEach(agent => {
+      console.log(`[Performance Scorecard] Agent ${agent.id}: agentTypes =`, agent.agentTypes || 'null/undefined');
+    });
 
     // Filter out Holds-only agents from the list
     const filteredAgentIds = allAgentIds.filter(agentId => !holdsOnlyAgentIds.has(agentId));
@@ -293,22 +307,36 @@ export async function GET(req: NextRequest) {
     const finalAgentIds = allAgents.map(a => a.id);
     const finalAgentTypesCheck = await prisma.user.findMany({
       where: { id: { in: finalAgentIds } },
-      select: { id: true, agentTypes: true }
+      select: { id: true, email: true, name: true, agentTypes: true }
     });
 
     const finalHoldsOnlySet = new Set(
       finalAgentTypesCheck
-        .filter(agent => 
-          agent.agentTypes && 
-          Array.isArray(agent.agentTypes) && 
-          agent.agentTypes.length === 1 && 
-          agent.agentTypes[0] === 'HOLDS'
-        )
+        .filter(agent => {
+          if (!agent.agentTypes || !Array.isArray(agent.agentTypes) || agent.agentTypes.length === 0) {
+            return false; // Empty = TEXT_CLUB, not Holds-only
+          }
+          const isHoldsOnly = agent.agentTypes.length === 1 && agent.agentTypes[0] === 'HOLDS';
+          
+          // Debug logging
+          if (isHoldsOnly) {
+            console.log(`[Performance Scorecard] FINAL CHECK: Removing Holds-only agent: ${agent.email} (${agent.name}), agentTypes:`, agent.agentTypes);
+          }
+          
+          return isHoldsOnly;
+        })
         .map(agent => agent.id)
     );
 
+    // Debug: Log what we're filtering
+    console.log(`[Performance Scorecard] Final check: ${allAgents.length} agents before filter, ${finalHoldsOnlySet.size} Holds-only to remove`);
+
     // Remove any Holds-only agents from the final list
+    const beforeCount = allAgents.length;
     allAgents = allAgents.filter(agent => !finalHoldsOnlySet.has(agent.id));
+    const afterCount = allAgents.length;
+    
+    console.log(`[Performance Scorecard] Final filter: ${beforeCount} -> ${afterCount} agents (removed ${beforeCount - afterCount})`);
 
     // Recalculate eligible/ineligible counts after final filter
     const finalEligibleCount = allAgents.filter(a => a.rank !== null).length;
