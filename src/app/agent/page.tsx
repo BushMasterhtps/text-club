@@ -754,7 +754,13 @@ export default function AgentPage() {
         // Load sprint history when scorecard loads
         loadSprintHistory();
       } else {
-        console.error('❌ Failed to load scorecard:', data.error);
+        // If user is Holds-only agent, don't show error - just don't display scorecard
+        if (data.isHoldsOnlyAgent) {
+          console.log("ℹ️ Holds-only agent - Performance Scorecard not available");
+          setScorecardData(null);
+        } else {
+          console.error('❌ Failed to load scorecard:', data.error);
+        }
       }
     } catch (error) {
       console.error('❌ Error loading scorecard:', error);

@@ -49,7 +49,8 @@ export async function GET(req: NextRequest) {
         id: true,
         name: true,
         email: true,
-        role: true
+        role: true,
+        agentTypes: true
       }
     });
 
@@ -58,6 +59,20 @@ export async function GET(req: NextRequest) {
         success: false,
         error: "User not found"
       }, { status: 404 });
+    }
+
+    // Check if user is a Holds-only agent (only has HOLDS in agentTypes)
+    // Holds-only agents should not see the Performance Scorecard
+    const isHoldsOnlyAgent = currentUser.agentTypes && 
+                             currentUser.agentTypes.length === 1 && 
+                             currentUser.agentTypes[0] === 'HOLDS';
+    
+    if (isHoldsOnlyAgent) {
+      return NextResponse.json({
+        success: false,
+        error: "Performance Scorecard is not available for Holds-only agents",
+        isHoldsOnlyAgent: true
+      }, { status: 403 });
     }
 
     // Calculate 7-day rolling average (this week vs last week)
