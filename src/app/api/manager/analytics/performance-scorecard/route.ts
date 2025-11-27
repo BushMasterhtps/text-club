@@ -231,20 +231,33 @@ export async function GET(req: NextRequest) {
           t.assignedToId === agentId || t.completedBy === agentId
         );
         
-        // ADDITIONAL CHECK: If agent only completed Holds tasks (and no Trello), exclude them
+        // CRITICAL CHECK: Exclude agents who are Holds-only OR who only completed Holds tasks
         // This catches cases where agentTypes might be empty/incorrect but they only work on Holds
-        const taskTypes = new Set(agentTasks.map(t => t.taskType));
-        const hasOnlyHoldsTasks = taskTypes.size === 1 && taskTypes.has('HOLDS') && !trelloByAgent[agentId];
         
-        // Also check if agent is in the holdsOnlyAgentIds set (double-check)
+        // First check: Is agent in the holdsOnlyAgentIds set?
         if (holdsOnlyAgentIds.has(agentId)) {
-          console.log(`[Performance Scorecard] Excluding agent ${agentId}: Found in holdsOnlyAgentIds set`);
+          console.log(`[Performance Scorecard] Excluding agent ${agentId}: Found in holdsOnlyAgentIds set (agentTypes = HOLDS only)`);
           return null; // Skip Holds-only agents
         }
         
+        // Second check: Did agent only complete Holds tasks in this period?
+        const taskTypes = new Set(agentTasks.map(t => t.taskType));
+        const hasOnlyHoldsTasks = taskTypes.size === 1 && taskTypes.has('HOLDS') && !trelloByAgent[agentId];
+        
         if (hasOnlyHoldsTasks) {
-          console.log(`[Performance Scorecard] Excluding agent ${agentId}: Only completed Holds tasks (no other task types, no Trello)`);
+          console.log(`[Performance Scorecard] Excluding agent ${agentId}: Only completed Holds tasks (${agentTasks.length} tasks, no other task types, no Trello)`);
           return null; // Skip agents who only did Holds work
+        }
+        
+        // Third check: If agent has any Holds tasks AND no other task types, exclude them
+        // This is more aggressive - even if they have Trello, if all portal tasks are Holds, exclude
+        const hasHoldsTasks = taskTypes.has('HOLDS');
+        const hasOtherTaskTypes = taskTypes.size > 1 || (taskTypes.size === 1 && !taskTypes.has('HOLDS'));
+        
+        if (hasHoldsTasks && !hasOtherTaskTypes && agentTasks.length > 0) {
+          // Agent only has Holds tasks (no TEXT_CLUB, WOD_IVCS, EMAIL_REQUESTS, YOTPO)
+          console.log(`[Performance Scorecard] Excluding agent ${agentId}: Only has Holds tasks (${agentTasks.length} tasks, taskTypes: ${Array.from(taskTypes).join(', ')})`);
+          return null; // Skip agents who only have Holds tasks
         }
         
         // Try to get agent from assigned tasks first

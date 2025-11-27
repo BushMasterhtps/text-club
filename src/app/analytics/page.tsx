@@ -288,8 +288,11 @@ export default function AnalyticsPage() {
     setLoadingScorecard(true);
     try {
       const dateRange = getDateRange();
+      // Add cache-busting parameter to ensure fresh data
+      const cacheBuster = `&_t=${Date.now()}`;
       const response = await fetch(
-        `/api/manager/analytics/performance-scorecard?dateStart=${dateRange.start}&dateEnd=${dateRange.end}`
+        `/api/manager/analytics/performance-scorecard?dateStart=${dateRange.start}&dateEnd=${dateRange.end}${cacheBuster}`,
+        { cache: 'no-store' }
       );
       const data = await response.json();
       
