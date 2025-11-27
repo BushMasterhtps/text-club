@@ -13,6 +13,8 @@ import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader'
 import SpamInsights from '@/app/_components/SpamInsights';
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import TextClubAnalytics from '@/app/_components/TextClubAnalytics';
+import DashboardLayout from '@/app/_components/DashboardLayout';
+import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 
 /* ========== Shared types ========== */
 type AssignResult = Record<string, string[]>;
@@ -3341,7 +3343,8 @@ export default function ManagerPage() {
   });
 
   // Navigation state
-  const [activeSection, setActiveSection] = useState<string>("overview");
+  // Use navigation hook instead of local state
+  const { activeSection, setActiveSection } = useDashboardNavigation();
   const [showPendingTasks, setShowPendingTasks] = useState(true);
   
   // Summary counters
@@ -3707,148 +3710,58 @@ export default function ManagerPage() {
 
   const totalAll = (pending ?? 0) + (spamReview ?? 0) + (completed ?? 0) + (inProgress ?? 0) + (assistanceRequired ?? 0);
 
-  const navigationItems = [
-    { id: "overview", label: "📊 Overview", description: "Dashboard metrics and progress" },
-    { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage tasks" },
-    { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.filter(r => r.status === "ASSISTANCE_REQUIRED").length },
-    { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
-    { id: "analytics", label: "📈 Analytics", description: "Text Club specific analytics and insights" },
-    { id: "team-analytics", label: "📊 Team Analytics", description: "Team-wide performance and task insights", external: true, href: "/analytics" }
-  ];
+  // Header actions for DashboardLayout
+  const headerActions = (
+    <>
+      <ThemeToggle />
+      <SessionTimer 
+        timeLeft={timeLeft} 
+        onExtend={extendSession} 
+      />
+      {/* Switch to Agent Button (only if user has MANAGER_AGENT role) */}
+      {currentUserRole === 'MANAGER_AGENT' && (
+        <button
+          onClick={async () => {
+            try {
+              // Get current user's email from the auth endpoint
+              const response = await fetch('/api/auth/me', { cache: 'no-store' });
+              if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.user?.email) {
+                  // Store current role and email, then switch to agent
+                  localStorage.setItem('currentRole', 'MANAGER');
+                  localStorage.setItem('agentEmail', data.user.email);
+                  window.location.href = '/agent';
+                }
+              }
+            } catch (error) {
+              console.error('Error getting user email:', error);
+              // Fallback: just switch to agent
+              localStorage.setItem('currentRole', 'MANAGER');
+              window.location.href = '/agent';
+            }
+          }}
+          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+        >
+          Switch to Agent
+        </button>
+      )}
+      {/* Logout Button */}
+      <button
+        onClick={() => {
+          localStorage.removeItem('currentRole');
+          fetch('/api/auth/logout', { method: 'POST' });
+          window.location.href = '/login';
+        }}
+        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+      >
+        Logout
+      </button>
+    </>
+  );
 
   return (
-    <main className="mx-auto max-w-[1400px] p-6 text-white dark:text-white light:text-slate-800 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
-      <header className="sticky top-0 z-30 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 dark:from-neutral-900 dark:via-neutral-900/95 dark:to-neutral-900/80 light:from-white light:via-white/95 light:to-white/80 backdrop-blur-sm border-b border-white/10 dark:border-white/10 light:border-slate-200 shadow-lg">
-        <div className="px-6 pt-4 pb-3">
-          <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-            <img 
-              src="/golden-companies-logo.jpeg" 
-              alt="Golden Companies" 
-              className="h-14 w-auto"
-            />
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight">Text Club Dashboard</h1>
-              <p className="text-sm text-white/60">Text Club Task Management & Analytics</p>
-            </div>
-          </div>
-          
-          {/* Action Buttons */}
-          <div className="flex items-center gap-3">
-            {/* Settings Button */}
-            <button
-              onClick={() => setActiveSection("settings")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeSection === "settings"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-              }`}
-              title="System Settings & Administration"
-            >
-              ⚙️ Settings
-            </button>
-            
-            {/* Theme Toggle */}
-            <ThemeToggle />
-            
-            {/* Session Timer */}
-            <SessionTimer 
-              timeLeft={timeLeft} 
-              onExtend={extendSession} 
-            />
-            
-            {/* Switch to Agent Button (only if user has MANAGER_AGENT role) */}
-            {currentUserRole === 'MANAGER_AGENT' && (
-              <button
-                onClick={async () => {
-                  try {
-                    // Get current user's email from the auth endpoint
-                    const response = await fetch('/api/auth/me', { cache: 'no-store' });
-                    if (response.ok) {
-                      const data = await response.json();
-                      if (data.success && data.user?.email) {
-                        // Store current role and email, then switch to agent
-                        localStorage.setItem('currentRole', 'MANAGER');
-                        localStorage.setItem('agentEmail', data.user.email);
-                        window.location.href = '/agent';
-                      }
-                    }
-                  } catch (error) {
-                    console.error('Error getting user email:', error);
-                    // Fallback: just switch to agent
-                    localStorage.setItem('currentRole', 'MANAGER');
-                    window.location.href = '/agent';
-                  }
-                }}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                Switch to Agent
-              </button>
-            )}
-            
-            {/* Logout Button */}
-            <button
-              onClick={() => {
-                localStorage.removeItem('currentRole');
-                fetch('/api/auth/logout', { method: 'POST' });
-                window.location.href = '/login';
-              }}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-          </div>
-          
-          {/* Navigation */}
-          <nav className="mt-4 flex flex-wrap gap-2">
-          {navigationItems.map((item) => {
-            if (item.external && item.href) {
-              return (
-                <a
-                  key={item.id}
-                  href={item.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 rounded-lg text-sm font-medium transition-colors relative bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                  title={item.description}
-                >
-                  {item.label}
-                  {(item as any).badge && (item as any).badge > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
-                      {(item as any).badge}
-                    </span>
-                  )}
-                </a>
-              );
-            }
-            
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveSection(item.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors relative ${
-                  activeSection === item.id
-                    ? "bg-blue-600 text-white"
-                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                }`}
-                title={item.description}
-              >
-                {item.label}
-                {item.badge && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-        
-        {/* Dashboard Switcher */}
-        <DashboardSwitcher />
-        </div>
-      </header>
+    <DashboardLayout headerActions={headerActions}>
 
       {/* Notification for new assistance requests */}
       {showNotification && newAssistanceCount > 0 && (
@@ -3876,7 +3789,7 @@ export default function ManagerPage() {
         </div>
       )}
 
-      <div className="mt-6 space-y-8">
+      <div className="space-y-8">
 
       {/* Overview Section */}
       {activeSection === "overview" && (
@@ -4166,6 +4079,6 @@ export default function ManagerPage() {
           window.location.href = '/login';
         }}
       />
-    </main>
+    </DashboardLayout>
   );
 }

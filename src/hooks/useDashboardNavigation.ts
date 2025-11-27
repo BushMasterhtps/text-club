@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
+import { useDashboardNavigationContext } from '@/contexts/DashboardNavigationContext';
 import { 
   DashboardType, 
   NavigationItem, 
@@ -10,7 +11,7 @@ import {
 
 export function useDashboardNavigation() {
   const pathname = usePathname();
-  const [activeSection, setActiveSection] = useState<string>('overview');
+  const { activeSection, setActiveSection } = useDashboardNavigationContext();
   const [assistanceCount, setAssistanceCount] = useState(0);
 
   // Determine current dashboard from pathname
