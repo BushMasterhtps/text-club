@@ -26,50 +26,48 @@ export default function DashboardLayout({
       <main className={`
         flex-1 min-w-0 transition-all duration-300 ease-in-out
         ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}
+        ${sidebarCollapsed ? '' : 'lg:pr-64'}
       `}>
-        {/* Header */}
-        <header className="sticky top-0 z-20 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 backdrop-blur-sm border-b border-white/10 shadow-lg">
-          <div className={`
-            px-6 py-4 transition-all duration-300
-            ${sidebarCollapsed 
-              ? 'max-w-none' 
-              : 'max-w-[1400px] mx-auto'
-            }
-          `}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4 min-w-0">
-                <img 
-                  src="/golden-companies-logo.jpeg" 
-                  alt="Golden Companies" 
-                  className="h-14 w-auto flex-shrink-0"
-                />
-                <div className="min-w-0">
-                  <h1 className="text-3xl font-semibold tracking-tight text-white truncate">
-                    {currentConfig?.name || 'Dashboard'} Dashboard
-                  </h1>
-                  <p className="text-sm text-white/60 truncate">
-                    {currentConfig?.description || 'Task Management & Analytics'}
-                  </p>
-                </div>
-              </div>
-              
-              {/* Header Actions */}
-              <div className="flex items-center gap-3 flex-shrink-0">
-                {headerActions}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Page Content - Centered with max-width when sidebar is open */}
+        {/* Content Wrapper - Centers content with balanced spacing */}
         <div className={`
           transition-all duration-300
           ${sidebarCollapsed 
-            ? 'w-full max-w-none p-6' 
-            : 'max-w-[1400px] mx-auto px-6 py-6'
+            ? 'w-full' 
+            : 'w-full max-w-[1400px] mx-auto'
           }
         `}>
-          {children}
+          {/* Header */}
+          <header className="sticky top-0 z-20 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 backdrop-blur-sm border-b border-white/10 shadow-lg">
+            <div className="px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4 min-w-0">
+                  <img 
+                    src="/golden-companies-logo.jpeg" 
+                    alt="Golden Companies" 
+                    className="h-14 w-auto flex-shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <h1 className="text-3xl font-semibold tracking-tight text-white truncate">
+                      {currentConfig?.name || 'Dashboard'} Dashboard
+                    </h1>
+                    <p className="text-sm text-white/60 truncate">
+                      {currentConfig?.description || 'Task Management & Analytics'}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Header Actions */}
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  {headerActions}
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* Page Content */}
+          <div className="p-6">
+            {children}
+          </div>
         </div>
       </main>
     </div>
