@@ -192,8 +192,18 @@ export async function GET(req: NextRequest) {
     // Calculate scorecard for each agent (Holds-only agents already filtered out)
     const agentScores = await Promise.all(
       filteredAgentIds.map(async (agentId) => {
-        const agentTasks = completedTasks.filter(t => t.assignedToId === agentId);
-        let agent = agentTasks[0]?.assignedTo;
+        // Include tasks where agent is assigned OR where agent completed it (for Holds unassigning dispos)
+        const agentTasks = completedTasks.filter(t => 
+          t.assignedToId === agentId || t.completedBy === agentId
+        );
+        
+        // Try to get agent from assigned tasks first
+        let agent = agentTasks.find(t => t.assignedToId === agentId)?.assignedTo;
+        
+        // If not found, try from completedBy
+        if (!agent) {
+          agent = agentTasks.find(t => t.completedBy === agentId)?.completedByUser;
+        }
         
         // If agent has no portal tasks, fetch from Trello completion
         if (!agent && trelloByAgent[agentId]) {
