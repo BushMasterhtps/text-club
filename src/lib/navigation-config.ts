@@ -68,16 +68,7 @@ export const commonNavigationItems: NavigationItem[] = [
 
 // Dashboard-specific navigation items
 export const dashboardSpecificItems: Record<DashboardType, NavigationItem[]> = {
-  'text-club': [
-    {
-      id: 'team-analytics',
-      label: 'Team Analytics',
-      icon: '📊',
-      description: 'Team-wide performance and task insights',
-      external: true,
-      href: '/analytics',
-    },
-  ],
+  'text-club': [],
   'wod-ivcs': [],
   'email-requests': [],
   'yotpo': [
