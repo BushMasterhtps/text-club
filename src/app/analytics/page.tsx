@@ -45,7 +45,8 @@ interface OverviewStats {
     textClub: number;
     wodIvcs: number;
     emailRequests: number;
-    standaloneRefunds: number;
+    holds: number;
+    yotpo: number;
   };
 }
 
@@ -625,10 +626,16 @@ export default function AnalyticsPage() {
                               {overviewStats.pendingByTaskType?.emailRequests || 0}
                             </div>
                           </div>
-                          <div className="bg-orange-500/10 rounded-lg p-3 border border-orange-500/20">
-                            <div className="text-orange-300 text-xs font-medium">Standalone Refunds</div>
+                          <div className="bg-yellow-500/10 rounded-lg p-3 border border-yellow-500/20">
+                            <div className="text-yellow-300 text-xs font-medium">Holds</div>
                             <div className="text-xl font-bold text-white mt-1">
-                              {overviewStats.pendingByTaskType?.standaloneRefunds || 0}
+                              {overviewStats.pendingByTaskType?.holds || 0}
+                            </div>
+                          </div>
+                          <div className="bg-indigo-500/10 rounded-lg p-3 border border-indigo-500/20">
+                            <div className="text-indigo-300 text-xs font-medium">Yotpo</div>
+                            <div className="text-xl font-bold text-white mt-1">
+                              {overviewStats.pendingByTaskType?.yotpo || 0}
                             </div>
                           </div>
                         </div>
@@ -652,7 +659,8 @@ export default function AnalyticsPage() {
                                 {type === 'textClub' && '💬'}
                                 {type === 'wodIvcs' && '📋'}
                                 {type === 'emailRequests' && '📧'}
-                                {type === 'standaloneRefunds' && '💰'}
+                                {type === 'holds' && '🔒'}
+                                {type === 'yotpo' && '⭐'}
                               </div>
                               <div>
                                 <p className="font-semibold text-white capitalize">
@@ -699,7 +707,9 @@ export default function AnalyticsPage() {
                                       key={`cell-${type}-${index}`} 
                                       fill={type === 'textClub' ? '#3B82F6' : 
                                             type === 'wodIvcs' ? '#10B981' : 
-                                            type === 'emailRequests' ? '#F59E0B' : '#8B5CF6'} 
+                                            type === 'emailRequests' ? '#F59E0B' : 
+                                            type === 'holds' ? '#F59E0B' : 
+                                            type === 'yotpo' ? '#8B5CF6' : '#8B5CF6'} 
                                     />
                                   ))}
                               </Pie>

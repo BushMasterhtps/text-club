@@ -28,13 +28,22 @@ export async function GET(request: NextRequest) {
     const utcDateStart = dateStart;
     const utcDateEnd = dateEnd;
 
-    // Get completed tasks for the date range (including sent-back tasks)
+    // Get completed tasks for the date range (including sent-back tasks and Holds with completedBy)
+    // For Holds: include tasks with completedBy (even if unassigned)
+    // For other types: standard COMPLETED status
     const completedTasks = await prisma.task.count({
       where: {
         OR: [
           {
             status: "COMPLETED",
-            endTime: { gte: utcDateStart, lte: utcDateEnd }
+            endTime: { gte: utcDateStart, lte: utcDateEnd },
+            taskType: { not: "HOLDS" } // Non-Holds completed tasks
+          },
+          {
+            status: "COMPLETED",
+            endTime: { gte: utcDateStart, lte: utcDateEnd },
+            taskType: "HOLDS",
+            completedBy: { not: null } // Holds completed tasks (including unassigned)
           },
           {
             status: "PENDING",
@@ -45,11 +54,19 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get total completed tasks (all time)
+    // Get total completed tasks (all time) - including Holds with completedBy
     const totalCompleted = await prisma.task.count({
       where: {
         OR: [
-          { status: "COMPLETED" },
+          {
+            status: "COMPLETED",
+            taskType: { not: "HOLDS" } // Non-Holds completed tasks
+          },
+          {
+            status: "COMPLETED",
+            taskType: "HOLDS",
+            completedBy: { not: null } // Holds completed tasks (including unassigned)
+          },
           { 
             status: "PENDING",
             sentBackBy: { not: null },
@@ -59,14 +76,22 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get average handle time for completed tasks in date range
+    // Get average handle time for completed tasks in date range (including Holds with completedBy)
     const avgHandleTimeResult = await prisma.task.aggregate({
       where: {
         OR: [
           {
             status: "COMPLETED",
             endTime: { gte: utcDateStart, lte: utcDateEnd },
-            durationSec: { not: null }
+            durationSec: { not: null },
+            taskType: { not: "HOLDS" } // Non-Holds completed tasks
+          },
+          {
+            status: "COMPLETED",
+            endTime: { gte: utcDateStart, lte: utcDateEnd },
+            durationSec: { not: null },
+            taskType: "HOLDS",
+            completedBy: { not: null } // Holds completed tasks (including unassigned)
           },
           {
             status: "PENDING",
@@ -106,7 +131,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Get pending tasks by task type (both Task table and RawMessage table)
-    const [textClubPending, wodIvcsPending, emailRequestsPending, standaloneRefundsPending] = await Promise.all([
+    const [textClubPending, wodIvcsPending, emailRequestsPending, holdsPending, yotpoPending] = await Promise.all([
       // Text Club: Count both Task PENDING and RawMessage READY
       Promise.all([
         prisma.task.count({
@@ -138,11 +163,19 @@ export async function GET(request: NextRequest) {
         }
       }),
       
-      // Standalone Refunds: Only count Task PENDING (no RawMessage equivalent)
+      // Holds: Only count Task PENDING
       prisma.task.count({
         where: {
           status: "PENDING",
-          taskType: "STANDALONE_REFUNDS"
+          taskType: "HOLDS"
+        }
+      }),
+      
+      // Yotpo: Only count Task PENDING
+      prisma.task.count({
+        where: {
+          status: "PENDING",
+          taskType: "YOTPO"
         }
       })
     ]);
@@ -174,7 +207,8 @@ export async function GET(request: NextRequest) {
         textClub: textClubPending,
         wodIvcs: wodIvcsPending,
         emailRequests: emailRequestsPending,
-        standaloneRefunds: standaloneRefundsPending
+        holds: holdsPending,
+        yotpo: yotpoPending
       }
     };
 

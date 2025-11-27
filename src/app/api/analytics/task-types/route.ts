@@ -29,27 +29,50 @@ export async function GET(request: NextRequest) {
     const utcDateEnd = dateEnd;
 
     // Get stats for each task type
-    const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'STANDALONE_REFUNDS'];
+    const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'HOLDS', 'YOTPO'];
     const taskTypeStats: any = {};
 
     for (const taskType of taskTypes) {
-      // Get completed tasks for this type (including sent-back tasks)
-      const completed = await prisma.task.count({
-        where: {
-          taskType: taskType as any,
-          OR: [
-            {
-              status: "COMPLETED",
-              endTime: { gte: utcDateStart, lte: utcDateEnd }
-            },
-            {
-              status: "PENDING",
-              sentBackBy: { not: null },
-              endTime: { gte: utcDateStart, lte: utcDateEnd }
-            }
-          ]
-        }
-      });
+      // Get completed tasks for this type
+      // For Holds: include tasks with completedBy (even if unassigned)
+      // For other types: standard COMPLETED status
+      let completed;
+      if (taskType === 'HOLDS') {
+        completed = await prisma.task.count({
+          where: {
+            taskType: taskType as any,
+            OR: [
+              {
+                status: "COMPLETED",
+                endTime: { gte: utcDateStart, lte: utcDateEnd },
+                completedBy: { not: null } // Holds completed tasks (including unassigned)
+              },
+              {
+                status: "PENDING",
+                sentBackBy: { not: null },
+                endTime: { gte: utcDateStart, lte: utcDateEnd }
+              }
+            ]
+          }
+        });
+      } else {
+        completed = await prisma.task.count({
+          where: {
+            taskType: taskType as any,
+            OR: [
+              {
+                status: "COMPLETED",
+                endTime: { gte: utcDateStart, lte: utcDateEnd }
+              },
+              {
+                status: "PENDING",
+                sentBackBy: { not: null },
+                endTime: { gte: utcDateStart, lte: utcDateEnd }
+              }
+            ]
+          }
+        });
+      }
 
       // Get pending tasks for this type
       const pending = await prisma.task.count({
@@ -60,27 +83,54 @@ export async function GET(request: NextRequest) {
       });
 
       // Get average duration for completed tasks
-      const avgDurationResult = await prisma.task.aggregate({
-        where: {
-          taskType: taskType as any,
-          OR: [
-            {
-              status: "COMPLETED",
-              endTime: { gte: utcDateStart, lte: utcDateEnd },
-              durationSec: { not: null }
-            },
-            {
-              status: "PENDING",
-              sentBackBy: { not: null },
-              endTime: { gte: utcDateStart, lte: utcDateEnd },
-              durationSec: { not: null }
-            }
-          ]
-        },
-        _avg: {
-          durationSec: true
-        }
-      });
+      // For Holds: include tasks with completedBy
+      let avgDurationResult;
+      if (taskType === 'HOLDS') {
+        avgDurationResult = await prisma.task.aggregate({
+          where: {
+            taskType: taskType as any,
+            OR: [
+              {
+                status: "COMPLETED",
+                endTime: { gte: utcDateStart, lte: utcDateEnd },
+                durationSec: { not: null },
+                completedBy: { not: null } // Holds completed tasks (including unassigned)
+              },
+              {
+                status: "PENDING",
+                sentBackBy: { not: null },
+                endTime: { gte: utcDateStart, lte: utcDateEnd },
+                durationSec: { not: null }
+              }
+            ]
+          },
+          _avg: {
+            durationSec: true
+          }
+        });
+      } else {
+        avgDurationResult = await prisma.task.aggregate({
+          where: {
+            taskType: taskType as any,
+            OR: [
+              {
+                status: "COMPLETED",
+                endTime: { gte: utcDateStart, lte: utcDateEnd },
+                durationSec: { not: null }
+              },
+              {
+                status: "PENDING",
+                sentBackBy: { not: null },
+                endTime: { gte: utcDateStart, lte: utcDateEnd },
+                durationSec: { not: null }
+              }
+            ]
+          },
+          _avg: {
+            durationSec: true
+          }
+        });
+      }
 
       const key = taskType.toLowerCase().replace(/_/g, '');
       taskTypeStats[key] = {
