@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/nextjs';
 export default function SentryExamplePage() {
   const [errorTriggered, setErrorTriggered] = useState(false);
   const [errorSent, setErrorSent] = useState(false);
+  const [logSent, setLogSent] = useState(false);
   const [sentryStatus, setSentryStatus] = useState<any>(null);
 
   // Check Sentry status on mount
@@ -54,6 +55,21 @@ export default function SentryExamplePage() {
       
       // Re-throw to show in console
       throw error;
+    }
+  };
+
+  const triggerTestLog = () => {
+    if (typeof Sentry !== 'undefined' && Sentry.logger) {
+      // Send a test log to Sentry
+      Sentry.logger.info('User triggered test log', { 
+        log_source: 'sentry_test',
+        timestamp: new Date().toISOString(),
+        page: 'sentry-example-page'
+      });
+      setLogSent(true);
+      console.log('[Test] Sentry log sent successfully');
+    } else {
+      console.error('[Test] Sentry logger is not available!');
     }
   };
 
@@ -106,14 +122,31 @@ export default function SentryExamplePage() {
           </ul>
         </div>
 
-        <div className="text-center">
-          <button
-            onClick={triggerTestError}
-            disabled={errorTriggered}
-            className="px-8 py-4 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105 disabled:transform-none"
-          >
-            {errorTriggered ? '✅ Error Triggered!' : '🚨 Trigger Test Error'}
-          </button>
+        <div className="text-center space-y-4">
+          <div>
+            <button
+              onClick={triggerTestError}
+              disabled={errorTriggered}
+              className="px-8 py-4 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105 disabled:transform-none"
+            >
+              {errorTriggered ? '✅ Error Triggered!' : '🚨 Trigger Test Error'}
+            </button>
+          </div>
+          
+          <div className="text-white/60 text-sm">OR</div>
+          
+          <div>
+            <button
+              onClick={triggerTestLog}
+              disabled={logSent}
+              className="px-8 py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105 disabled:transform-none"
+            >
+              {logSent ? '✅ Test Log Sent!' : '📝 Trigger Test Log'}
+            </button>
+            <p className="text-white/60 text-xs mt-2">
+              This sends a log to Sentry Logs (not an error)
+            </p>
+          </div>
 
           {errorTriggered && (
             <div className="mt-6 p-4 bg-green-500/20 border border-green-500/50 rounded-lg">
@@ -137,6 +170,27 @@ export default function SentryExamplePage() {
                   <li>Refresh the Sentry dashboard</li>
                 </ul>
               </div>
+            </div>
+          )}
+
+          {logSent && (
+            <div className="mt-6 p-4 bg-blue-500/20 border border-blue-500/50 rounded-lg">
+              <p className="text-blue-400 font-semibold">
+                ✅ Test log sent! Check your Sentry Logs page to see it.
+              </p>
+              <p className="text-white/70 text-sm mt-2">
+                <strong>How to view logs:</strong>
+              </p>
+              <ol className="list-decimal list-inside text-white/70 text-sm mt-2 space-y-1">
+                <li>Go to your Sentry dashboard: <a href="https://selftaughtorg.sentry.io" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">selftaughtorg.sentry.io</a></li>
+                <li>Click <strong>"Explore"</strong> in the left sidebar</li>
+                <li>Click <strong>"Logs"</strong> (it has a "Beta" tag)</li>
+                <li>Look for a log with message: <code className="bg-black/30 px-1 rounded">"User triggered test log"</code></li>
+                <li>You should see it appear within 10-30 seconds</li>
+              </ol>
+              <p className="text-white/70 text-xs mt-3">
+                Direct link: <a href="https://selftaughtorg.sentry.io/organizations/selftaughtorg/explore/logs/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">selftaughtorg.sentry.io/explore/logs/</a>
+              </p>
             </div>
           )}
 
