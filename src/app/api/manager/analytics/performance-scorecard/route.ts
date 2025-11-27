@@ -217,6 +217,16 @@ export async function GET(req: NextRequest) {
           t.assignedToId === agentId || t.completedBy === agentId
         );
         
+        // ADDITIONAL CHECK: If agent only completed Holds tasks (and no Trello), exclude them
+        // This catches cases where agentTypes might be empty/incorrect but they only work on Holds
+        const taskTypes = new Set(agentTasks.map(t => t.taskType));
+        const hasOnlyHoldsTasks = taskTypes.size === 1 && taskTypes.has('HOLDS') && !trelloByAgent[agentId];
+        
+        if (hasOnlyHoldsTasks) {
+          console.log(`[Performance Scorecard] Excluding agent ${agentId}: Only completed Holds tasks (no other task types, no Trello)`);
+          return null; // Skip agents who only did Holds work
+        }
+        
         // Try to get agent from assigned tasks first
         let agent = agentTasks.find(t => t.assignedToId === agentId)?.assignedTo;
         
