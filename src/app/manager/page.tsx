@@ -3323,7 +3323,7 @@ function UsersAdminSection() {
 /* ========================================================================== */
 /*  PAGE                                                                       */
 /* ========================================================================== */
-export default function ManagerPage() {
+function ManagerPageContent() {
   // SECURITY: Middleware handles auth - client-side guard removed to prevent login loops
   // The middleware already verifies JWT and role, which is sufficient protection
   
@@ -3343,8 +3343,7 @@ export default function ManagerPage() {
     }
   });
 
-  // Navigation state
-  // Use navigation hook - provider wraps this component
+  // Navigation state - now inside provider wrapper
   const { activeSection, setActiveSection } = useDashboardNavigation();
   const [showPendingTasks, setShowPendingTasks] = useState(true);
   
