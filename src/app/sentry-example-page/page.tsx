@@ -1,15 +1,27 @@
 'use client';
 
 import { useState } from 'react';
+import * as Sentry from '@sentry/nextjs';
 
 export default function SentryExamplePage() {
   const [errorTriggered, setErrorTriggered] = useState(false);
+  const [errorSent, setErrorSent] = useState(false);
 
   const triggerTestError = () => {
     setErrorTriggered(true);
-    // This will trigger a Sentry error
-    // @ts-ignore - Intentionally calling undefined function
-    myUndefinedFunction();
+    
+    try {
+      // This will trigger a Sentry error
+      // @ts-ignore - Intentionally calling undefined function
+      myUndefinedFunction();
+    } catch (error) {
+      // Explicitly capture the error with Sentry
+      Sentry.captureException(error);
+      setErrorSent(true);
+      console.log('Error captured by Sentry:', error);
+      // Re-throw to show in console
+      throw error;
+    }
   };
 
   return (
@@ -48,9 +60,23 @@ export default function SentryExamplePage() {
               <p className="text-green-400 font-semibold">
                 ✅ Error triggered! Check your Sentry dashboard to see the issue.
               </p>
+              {errorSent && (
+                <p className="text-green-300 text-sm mt-2">
+                  ✅ Error explicitly captured by Sentry.captureException()
+                </p>
+              )}
               <p className="text-white/70 text-sm mt-2">
                 Go to: <a href="https://selftaughtorg.sentry.io/issues/" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">selftaughtorg.sentry.io/issues/</a>
               </p>
+              <div className="mt-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded text-yellow-300 text-sm">
+                <p className="font-semibold mb-1">Troubleshooting:</p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>Check browser console Network tab for requests to sentry.io</li>
+                  <li>Verify NEXT_PUBLIC_SENTRY_DSN is set in Netlify environment variables</li>
+                  <li>Wait 10-30 seconds for Sentry to process the error</li>
+                  <li>Refresh the Sentry dashboard</li>
+                </ul>
+              </div>
             </div>
           )}
 
