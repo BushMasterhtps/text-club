@@ -258,7 +258,33 @@ export async function GET(req: NextRequest) {
     }));
 
     // Combine: eligible agents first (ranked), then ineligible
-    const allAgents = [...rankedAgents, ...ineligibleRanked];
+    let allAgents = [...rankedAgents, ...ineligibleRanked];
+
+    // FINAL SAFETY CHECK: Filter out any Holds-only agents that somehow got through
+    // Fetch agentTypes for all agents in the final list to ensure none are Holds-only
+    const finalAgentIds = allAgents.map(a => a.id);
+    const finalAgentTypesCheck = await prisma.user.findMany({
+      where: { id: { in: finalAgentIds } },
+      select: { id: true, agentTypes: true }
+    });
+
+    const finalHoldsOnlySet = new Set(
+      finalAgentTypesCheck
+        .filter(agent => 
+          agent.agentTypes && 
+          Array.isArray(agent.agentTypes) && 
+          agent.agentTypes.length === 1 && 
+          agent.agentTypes[0] === 'HOLDS'
+        )
+        .map(agent => agent.id)
+    );
+
+    // Remove any Holds-only agents from the final list
+    allAgents = allAgents.filter(agent => !finalHoldsOnlySet.has(agent.id));
+
+    // Recalculate eligible/ineligible counts after final filter
+    const finalEligibleCount = allAgents.filter(a => a.rank !== null).length;
+    const finalIneligibleCount = allAgents.filter(a => a.rank === null).length;
 
     // If specific agent requested, include detailed breakdown
     if (agentId) {
@@ -284,8 +310,8 @@ export async function GET(req: NextRequest) {
       period: { start: dateStart.toISOString(), end: dateEnd.toISOString(), days: daysDiff },
       targets,
       agents: allAgents,
-      eligibleCount: eligibleAgents.length,
-      ineligibleCount: ineligibleAgents.length,
+      eligibleCount: finalEligibleCount,
+      ineligibleCount: finalIneligibleCount,
       weightIndex: {
         summary: WEIGHT_SUMMARY,
         dispositions: getAllWeights()
