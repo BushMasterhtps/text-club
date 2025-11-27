@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
-import DashboardSwitcher from '@/app/_components/DashboardSwitcher';
+import DashboardLayout from '@/app/_components/DashboardLayout';
+import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
+import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 
 // Import existing components we'll reuse
 import { AssistanceRequestsSection } from "@/app/manager/_components/AssistanceRequestsSection";
@@ -11,6 +13,8 @@ import { CsvImportSection } from "./_components/CsvImportSection";
 import { WodIvcsTasksSection } from "./_components/WodIvcsTasksSection";
 import { AnalyticsSection } from "./_components/AnalyticsSection";
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
+import SessionTimer from '@/app/_components/SessionTimer';
+import ThemeToggle from '@/app/_components/ThemeToggle';
 
 // Utility functions
 function clamp(value: number | null | undefined): number {
@@ -503,8 +507,8 @@ function UsersAdminSection() {
   );
 }
 
-export default function WodIvcsDashboard() {
-  const [activeSection, setActiveSection] = useState("overview");
+function WodIvcsDashboardContent() {
+  const { activeSection, setActiveSection } = useDashboardNavigation();
   const [loading, setLoading] = useState(false);
   const [overviewData, setOverviewData] = useState({
     pendingCount: 0,
@@ -868,95 +872,43 @@ export default function WodIvcsDashboard() {
     }
   }
 
-  const navigationItems = [
-    { id: "overview", label: "📊 Overview", description: "WOD/IVCS metrics and progress" },
-    { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage WOD/IVCS tasks" },
-    { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.filter(r => r.status === "ASSISTANCE_REQUIRED").length },
-    { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
-    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" }
-  ];
+  // Header actions
+  const headerActions = (
+    <>
+      <button
+        onClick={() => setActiveSection("settings")}
+        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          activeSection === "settings"
+            ? "bg-blue-600 text-white"
+            : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+        }`}
+        title="System Settings & Administration"
+      >
+        ⚙️ Settings
+      </button>
+      <ThemeToggle />
+      <SessionTimer remainingMinutes={120} />
+      <SmallButton 
+        onClick={() => window.location.href = '/agent'}
+        className="bg-green-600 hover:bg-green-700 text-white"
+      >
+        Switch to Agent
+      </SmallButton>
+      <SmallButton 
+        onClick={() => {
+          localStorage.removeItem('agentEmail');
+          localStorage.removeItem('currentRole');
+          window.location.href = '/login';
+        }}
+        className="bg-red-600 hover:bg-red-700 text-white"
+      >
+        Logout
+      </SmallButton>
+    </>
+  );
 
   return (
-    <main className="mx-auto max-w-[1400px] p-6 text-white dark:text-white light:text-slate-800 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
-      <header className="sticky top-0 z-30 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 dark:from-neutral-900 dark:via-neutral-900/95 dark:to-neutral-900/80 light:from-white light:via-white/95 light:to-white/80 backdrop-blur-sm border-b border-white/10 dark:border-white/10 light:border-slate-200 shadow-lg">
-        <div className="px-6 pt-4 pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <img 
-                src="/golden-companies-logo.jpeg" 
-                alt="Golden Companies" 
-                className="h-14 w-auto"
-              />
-              <div>
-                <h1 className="text-3xl font-semibold tracking-tight">WOD/IVCS Dashboard</h1>
-                <p className="text-sm text-white/60">NetSuite Integration & Task Management</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              {/* Settings Button */}
-              <button
-                onClick={() => setActiveSection("settings")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeSection === "settings"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                }`}
-                title="System Settings & Administration"
-              >
-                ⚙️ Settings
-              </button>
-              
-              <div className="flex items-center gap-2 text-sm text-white/60">
-                <span>🌞</span>
-                <span>Session: 2h 0m</span>
-                <SmallButton>Extend</SmallButton>
-              </div>
-              <SmallButton 
-                onClick={() => window.location.href = '/agent'}
-                className="bg-green-600 hover:bg-green-700 text-white"
-              >
-                Switch to Agent
-              </SmallButton>
-              <SmallButton 
-                onClick={() => {
-                  localStorage.removeItem('agentEmail');
-                  localStorage.removeItem('currentRole');
-                  // Redirect to login page
-                  window.location.href = '/login';
-                }}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                Logout
-              </SmallButton>
-            </div>
-          </div>
-          </div>
-          
-          {/* Navigation */}
-          <nav className="mt-4 flex flex-wrap gap-2">
-          {navigationItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveSection(item.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors relative ${
-                activeSection === item.id
-                  ? "bg-blue-600 text-white"
-                  : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-              }`}
-            >
-              {item.label}
-              {item.badge && item.badge > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
-        
-        {/* Dashboard Switcher */}
-        <DashboardSwitcher />
-      </header>
+    <DashboardLayout headerActions={headerActions}>
 
       {/* Notification for new assistance requests */}
       {showNotification && newAssistanceCount > 0 && (
@@ -984,7 +936,7 @@ export default function WodIvcsDashboard() {
         </div>
       )}
 
-      <div className="px-6 pb-6 space-y-8">
+      <div className="space-y-8">
         {/* Overview Section */}
         {activeSection === "overview" && (
           <div className="space-y-8">
@@ -1626,6 +1578,15 @@ export default function WodIvcsDashboard() {
           </div>
         </div>
       )}
-    </main>
+    </DashboardLayout>
+  );
+}
+
+// Export with provider wrapper
+export default function WodIvcsDashboard() {
+  return (
+    <DashboardNavigationProvider>
+      <WodIvcsDashboardContent />
+    </DashboardNavigationProvider>
   );
 }
