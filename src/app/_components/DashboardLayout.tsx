@@ -32,6 +32,7 @@ export default function DashboardLayout({
         {/* Content Wrapper - Centers content with balanced spacing */}
         <div className={`
           transition-all duration-300
+          bg-gradient-to-br from-neutral-900 to-black
           ${sidebarCollapsed 
             ? 'w-full' 
             : 'w-full max-w-[1400px] mx-auto'
