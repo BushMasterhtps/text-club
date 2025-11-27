@@ -1,11 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as Sentry from '@sentry/nextjs';
 
 export default function SentryExamplePage() {
   const [errorTriggered, setErrorTriggered] = useState(false);
   const [errorSent, setErrorSent] = useState(false);
+  const [sentryStatus, setSentryStatus] = useState<any>(null);
+
+  // Check Sentry status on mount
+  useEffect(() => {
+    const checkSentry = () => {
+      const status = {
+        sentryLoaded: typeof Sentry !== 'undefined',
+        hasCaptureException: typeof Sentry?.captureException === 'function',
+        hasInit: typeof Sentry?.init === 'function',
+        // Check if DSN is set (it should be embedded in the bundle)
+        dsnSet: typeof window !== 'undefined' && (window as any).__SENTRY_DSN__ ? true : 'unknown'
+      };
+      setSentryStatus(status);
+      console.log('[Sentry Status Check]', status);
+    };
+    checkSentry();
+  }, []);
 
   const triggerTestError = () => {
     setErrorTriggered(true);
@@ -51,6 +68,33 @@ export default function SentryExamplePage() {
             Click the button below to trigger a test error and verify Sentry is working
           </p>
         </div>
+
+        {/* Sentry Status Check */}
+        {sentryStatus && (
+          <div className={`mb-6 p-4 rounded-lg border ${
+            sentryStatus.sentryLoaded && sentryStatus.hasCaptureException
+              ? 'bg-green-500/20 border-green-500/50'
+              : 'bg-red-500/20 border-red-500/50'
+          }`}>
+            <h3 className="text-lg font-semibold text-white mb-2">Sentry Status:</h3>
+            <ul className="space-y-1 text-sm">
+              <li className={sentryStatus.sentryLoaded ? 'text-green-400' : 'text-red-400'}>
+                {sentryStatus.sentryLoaded ? '✅' : '❌'} Sentry SDK Loaded: {sentryStatus.sentryLoaded ? 'Yes' : 'No'}
+              </li>
+              <li className={sentryStatus.hasCaptureException ? 'text-green-400' : 'text-red-400'}>
+                {sentryStatus.hasCaptureException ? '✅' : '❌'} captureException Available: {sentryStatus.hasCaptureException ? 'Yes' : 'No'}
+              </li>
+              <li className="text-white/70">
+                DSN Status: {sentryStatus.dsnSet === true ? '✅ Set' : sentryStatus.dsnSet === false ? '❌ Not Set' : '⚠️ Unknown'}
+              </li>
+            </ul>
+            {!sentryStatus.sentryLoaded && (
+              <p className="text-red-400 text-xs mt-2">
+                ⚠️ Sentry is not loaded. Check browser console for errors. The DSN might not be embedded in the build.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="bg-white/5 rounded-lg p-6 mb-6 border border-white/10">
           <h2 className="text-xl font-semibold text-white mb-4">What This Does:</h2>
