@@ -131,6 +131,15 @@ main {
   background: linear-gradient(to bottom right, #0f172a, #000000);
 }
 
+/* Remove left border from overview/content area in dark mode */
+.dark main > div > div {
+  border-left: none !important;
+}
+
+.dark [class*="space-y-8"] {
+  border-left: none !important;
+}
+
 /* Theme-aware component styles */
 .theme-card {
   background: var(--card-bg);
