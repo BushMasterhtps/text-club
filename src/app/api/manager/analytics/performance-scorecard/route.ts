@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
     const daysDiff = Math.ceil((dateEnd.getTime() - dateStart.getTime()) / (1000 * 60 * 60 * 24));
 
     // Get all completed tasks in the date range
+    // Include both assignedToId and completedBy to catch all completions (especially for Holds)
     const completedTasks = await prisma.task.findMany({
       where: {
         status: "COMPLETED",
@@ -65,12 +66,20 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         assignedToId: true,
+        completedBy: true, // Include completedBy for Holds tasks that were unassigned
         taskType: true,
         disposition: true, // Added for weighted scoring
         durationSec: true,
         endTime: true,
         createdAt: true,
         assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        completedByUser: {
           select: {
             id: true,
             name: true,
@@ -84,7 +93,10 @@ export async function GET(req: NextRequest) {
     const targets = calculateDynamicTargets(completedTasks, dateStart, dateEnd);
 
     // Get unique agents who completed tasks in this period
-    const agentIds = Array.from(new Set(completedTasks.map(t => t.assignedToId).filter(Boolean))) as string[];
+    // Include both assignedToId and completedBy to catch all agents
+    const agentIdsFromAssigned = completedTasks.map(t => t.assignedToId).filter(Boolean) as string[];
+    const agentIdsFromCompletedBy = completedTasks.map(t => t.completedBy).filter(Boolean) as string[];
+    const agentIds = Array.from(new Set([...agentIdsFromAssigned, ...agentIdsFromCompletedBy])) as string[];
     
     if (agentIds.length === 0) {
       return NextResponse.json({
