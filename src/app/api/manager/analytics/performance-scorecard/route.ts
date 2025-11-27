@@ -412,6 +412,21 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Final debug: Log all agents being returned
+    console.log(`[Performance Scorecard] FINAL RESULT: Returning ${allAgents.length} agents`);
+    allAgents.forEach((agent, index) => {
+      console.log(`[Performance Scorecard] Agent #${index + 1}: ${agent.name || agent.email} (ID: ${agent.id})`);
+    });
+    
+    // Verify no Holds-only agents in final list
+    const finalAgentIdsCheck = allAgents.map(a => a.id);
+    const holdsOnlyInFinal = finalAgentIdsCheck.filter(id => holdsOnlyAgentIds.has(id));
+    if (holdsOnlyInFinal.length > 0) {
+      console.error(`[Performance Scorecard] ERROR: Found ${holdsOnlyInFinal.length} Holds-only agents in final list!`, holdsOnlyInFinal);
+    } else {
+      console.log(`[Performance Scorecard] SUCCESS: No Holds-only agents in final list ✓`);
+    }
+
     return NextResponse.json({
       success: true,
       period: { start: dateStart.toISOString(), end: dateEnd.toISOString(), days: daysDiff },
