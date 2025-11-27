@@ -3957,7 +3957,13 @@ function ManagerPageContent() {
           </div>
           <AssistanceRequestsSection 
             requests={assistanceRequests} 
-            onRequestsChange={setAssistanceRequests} 
+            onRequestsChange={setAssistanceRequests}
+            taskType="TEXT_CLUB"
+            onResponseSent={async () => {
+              // Refresh the notification hook when manager responds
+              // The hook will automatically update when we reload assistance requests
+              await loadAssistanceRequests();
+            }}
           />
         </div>
       )}

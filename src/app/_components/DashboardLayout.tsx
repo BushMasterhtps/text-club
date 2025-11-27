@@ -6,6 +6,7 @@ import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import UnifiedSettings from './UnifiedSettings';
 import AssistanceRequestNotification from './AssistanceRequestNotification';
 import { useAssistanceRequests } from '@/hooks/useAssistanceRequests';
+import { AssistanceRequestsProvider } from '@/contexts/AssistanceRequestsContext';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -20,18 +21,22 @@ function DashboardLayoutContent({
   const currentConfig = dashboardConfigs.find(d => d.id === currentDashboard);
   const [showSettings, setShowSettings] = useState(false);
   
-  // Unified assistance request management
+  // Unified assistance request management (only for non-Holds dashboards)
+  // Holds has its own notification system
+  const isHoldsDashboard = currentDashboard === 'holds';
   const {
     pendingCount,
     showNotification,
     newAssistanceCount,
     setShowNotification,
+    refresh: refreshAssistanceRequests,
   } = useAssistanceRequests();
 
   return (
-    <div className="flex min-h-screen bg-neutral-900">
-      {/* Sidebar Navigation */}
-      <UnifiedNavigation />
+    <AssistanceRequestsProvider refresh={refreshAssistanceRequests}>
+      <div className="flex min-h-screen bg-neutral-900">
+        {/* Sidebar Navigation */}
+        <UnifiedNavigation />
 
       {/* Main Content Area */}
       <main className={`
@@ -97,13 +102,15 @@ function DashboardLayoutContent({
         </div>
       </main>
 
-      {/* Unified Assistance Request Notification */}
-      <AssistanceRequestNotification
-        show={showNotification}
-        count={newAssistanceCount}
-        onDismiss={() => setShowNotification(false)}
-        onView={() => setShowNotification(false)}
-      />
+      {/* Unified Assistance Request Notification (only for non-Holds dashboards) */}
+      {!isHoldsDashboard && (
+        <AssistanceRequestNotification
+          show={showNotification}
+          count={newAssistanceCount}
+          onDismiss={() => setShowNotification(false)}
+          onView={() => setShowNotification(false)}
+        />
+      )}
 
       {/* Unified Settings Modal */}
       {showSettings && (
@@ -112,7 +119,8 @@ function DashboardLayoutContent({
           asModal={true}
         />
       )}
-    </div>
+      </div>
+    </AssistanceRequestsProvider>
   );
 }
 

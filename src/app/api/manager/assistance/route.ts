@@ -10,19 +10,14 @@ export async function GET(req: Request) {
     // Use self-healing wrapper for database operations
     // If database connection fails, will retry automatically
     const tasks = await withSelfHealing(async () => {
-      // Fetch all tasks that have assistance notes and are either pending assistance or have been responded to
+      // Fetch only tasks that have assistance notes and are pending assistance (not yet responded to)
       // Exclude unassigned tasks (assignedToId must not be null)
+      // Once a manager responds, the task is removed from this list
       return await prisma.task.findMany({
       where: {
         assistanceNotes: { not: null },
         assignedToId: { not: null }, // Only show tasks that are assigned to an agent
-        OR: [
-          { status: "ASSISTANCE_REQUIRED" }, // Pending assistance requests
-          { 
-            status: "IN_PROGRESS", 
-            managerResponse: { not: null } // Tasks that have been responded to but not completed
-          }
-        ]
+        status: "ASSISTANCE_REQUIRED" // Only show pending assistance requests (not responded to)
       },
       select: {
         id: true,

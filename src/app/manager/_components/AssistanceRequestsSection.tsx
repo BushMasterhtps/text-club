@@ -3,10 +3,12 @@
 import { useState, useEffect, useRef } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
+import { useAssistanceRequestsContext } from "@/contexts/AssistanceRequestsContext";
 
 interface AssistanceRequestsSectionProps {
   taskType?: "TEXT_CLUB" | "WOD_IVCS" | "EMAIL_REQUESTS" | "STANDALONE_REFUNDS" | "YOTPO" | "HOLDS";
   onPendingCountChange?: (count: number) => void; // Callback to notify parent of pending count changes
+  onResponseSent?: () => void; // Callback to refresh notification hook when manager responds
 }
 
 interface AssistanceRequest {
@@ -60,12 +62,15 @@ interface AssistanceRequest {
   holdsDaysInSystem?: number;
 }
 
-export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCountChange }: AssistanceRequestsSectionProps) {
+export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCountChange, onResponseSent }: AssistanceRequestsSectionProps) {
   const [requests, setRequests] = useState<AssistanceRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [responseText, setResponseText] = useState<Record<string, string>>({});
   const previousPendingCountRef = useRef(0);
+  
+  // Get refresh function from context (for non-Holds dashboards)
+  const assistanceContext = useAssistanceRequestsContext();
 
   const loadRequests = async () => {
     setLoading(true);
@@ -143,14 +148,20 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCou
       
       const data = await res.json();
       if (data.success) {
-        // Update the request in the list
-        setRequests(prev => prev.map(req => 
-          req.id === requestId 
-            ? { ...req, managerResponse: response, status: "IN_PROGRESS" }
-            : req
-        ));
+        // Remove the request from the list (since it's been responded to, it won't appear in API anymore)
+        setRequests(prev => prev.filter(req => req.id !== requestId));
         // Clear the response text
         setResponseText(prev => ({ ...prev, [requestId]: "" }));
+        // Refresh the notification hook to update counts immediately
+        if (assistanceContext) {
+          // For non-Holds dashboards, use context refresh
+          await assistanceContext.refresh();
+        } else if (onResponseSent) {
+          // For Holds dashboard, use callback
+          onResponseSent();
+        }
+        // Reload requests to get updated list
+        loadRequests();
       } else {
         alert(data.error || "Failed to send response");
       }

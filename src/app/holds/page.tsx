@@ -16,13 +16,20 @@ import AgentAssignmentSection from './_components/AgentAssignmentSection';
 import HoldsAnalytics from './_components/HoldsAnalytics';
 import HoldsOverview from './_components/HoldsOverview';
 import { SmallButton } from '@/app/_components/SmallButton';
+import AssistanceRequestNotification from '@/app/_components/AssistanceRequestNotification';
+import { useHoldsAssistanceRequests } from '@/hooks/useHoldsAssistanceRequests';
 
 function HoldsPageContent() {
   const { activeSection, setActiveSection } = useDashboardNavigation();
   const activeTab = activeSection as 'overview' | 'tasks' | 'assistance' | 'agents' | 'analytics';
-  const [assistanceRequests, setAssistanceRequests] = useState<any[]>([]);
-  const [newAssistanceCount, setNewAssistanceCount] = useState(0);
-  const [showNotification, setShowNotification] = useState(false);
+  
+  // Holds-specific assistance request management
+  const {
+    showNotification,
+    newAssistanceCount,
+    setShowNotification,
+    refresh: refreshHoldsAssistance,
+  } = useHoldsAssistanceRequests();
   
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -60,53 +67,7 @@ function HoldsPageContent() {
     checkPassword();
   }, []);
 
-  // Load assistance requests
-  const loadAssistanceRequests = async () => {
-    try {
-      console.log("🔍 [Holds] Loading assistance requests...");
-      const response = await fetch('/api/manager/assistance', { cache: 'no-store' });
-      console.log("🔍 [Holds] Assistance API response status:", response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log("🔍 [Holds] Assistance API data:", data);
-        
-        if (data.success) {
-          // Filter for HOLDS tasks only
-          const holdsRequests = data.requests.filter((req: any) => req.taskType === 'HOLDS');
-          console.log("🔍 [Holds] Holds requests count:", holdsRequests.length);
-          
-          setAssistanceRequests(holdsRequests);
-          
-          // Check for pending requests
-          const pendingRequests = holdsRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
-          const currentPendingCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
-          const newPendingCount = pendingRequests.length;
-          
-          console.log("🔍 [Holds] Current pending count:", currentPendingCount, "New pending count:", newPendingCount);
-          
-          // Show notification if there are pending requests
-          if (pendingRequests.length > 0 && (newAssistanceCount === 0 || pendingRequests.length > newAssistanceCount)) {
-            console.log("🔍 [Holds] New pending assistance requests detected!");
-            setShowNotification(true);
-            setTimeout(() => setShowNotification(false), 5000);
-          }
-          
-          setNewAssistanceCount(pendingRequests.length);
-        }
-      } else {
-        console.error("🔍 [Holds] Assistance API error:", response.status, response.statusText);
-      }
-    } catch (error) {
-      console.error("🔍 [Holds] Error loading assistance requests:", error);
-    }
-  };
-
-  useEffect(() => {
-    loadAssistanceRequests();
-    const interval = setInterval(loadAssistanceRequests, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
-  }, []);
+  // Assistance requests are now managed by useHoldsAssistanceRequests hook
 
   // Handle logout
   const handleLogout = () => {
@@ -149,33 +110,13 @@ function HoldsPageContent() {
 
   return (
     <DashboardLayout headerActions={headerActions}>
-      {/* Notification for new assistance requests */}
-      {showNotification && newAssistanceCount > 0 && (
-        <div className="fixed top-20 right-6 z-50 bg-gradient-to-r from-orange-600 to-red-600 text-white px-6 py-4 rounded-lg shadow-2xl border border-orange-400/30 animate-bounce">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🆘</span>
-            <div>
-              <p className="font-semibold text-lg">New Holds Assistance Requests!</p>
-              <p className="text-sm text-white/90">{newAssistanceCount} agent{newAssistanceCount > 1 ? 's' : ''} need help</p>
-            </div>
-            <button
-              onClick={() => {
-                setShowNotification(false);
-                setActiveSection('assistance');
-              }}
-              className="ml-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors"
-            >
-              View
-            </button>
-            <button
-              onClick={() => setShowNotification(false)}
-              className="ml-2 text-white/70 hover:text-white text-xl"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Unified Holds Assistance Request Notification */}
+      <AssistanceRequestNotification
+        show={showNotification}
+        count={newAssistanceCount}
+        onDismiss={() => setShowNotification(false)}
+        onView={() => setShowNotification(false)}
+      />
 
       {/* Main content */}
       <div className="space-y-6">
@@ -197,7 +138,13 @@ function HoldsPageContent() {
         {/* Assistance Requests Tab */}
         {activeTab === 'assistance' && (
           <div className="space-y-6">
-            <AssistanceRequestsSection taskType="HOLDS" />
+            <AssistanceRequestsSection 
+              taskType="HOLDS"
+              onResponseSent={async () => {
+                // Refresh the notification hook when manager responds
+                await refreshHoldsAssistance();
+              }}
+            />
           </div>
         )}
 
