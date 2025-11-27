@@ -22,23 +22,16 @@ export async function GET(request: NextRequest) {
     const take = parseInt(searchParams.get('take') || '100', 10);
     const skip = parseInt(searchParams.get('skip') || '0', 10);
     
-    // Build where clause - Match what the queues API does: filter by holdsStatus = 'Completed'
-    // Exclude dispositions that just move to another queue (not truly resolved)
-    const excludedDispositions = [
-      'Unable to Resolve', // Moves to Customer Contact
-      'Duplicate'          // Moves to Duplicates queue
-    ];
-    
+    // Build where clause - Include ALL completed tasks, including unassigning dispositions
+    // These dispositions count as completed work for agents even if they move to another queue
     const where: any = {
       taskType: 'HOLDS',
-      holdsStatus: 'Completed', // Match the Completed queue filter
-      disposition: { 
-        not: null,
-        notIn: excludedDispositions
-      }
+      status: 'COMPLETED', // Use status instead of holdsStatus to include all completions
+      disposition: { not: null }
     };
     
     // Date range filter - Convert PST dates to UTC boundaries
+    // Use endTime for completed tasks (when they were actually completed)
     if (startDate && endDate) {
       const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
       const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
@@ -48,31 +41,33 @@ export async function GET(request: NextRequest) {
       // End of day in PST = 7:59:59.999 AM UTC next day
       const pstEndUTC = new Date(Date.UTC(endYear, endMonth - 1, endDay + 1, 7, 59, 59, 999));
       
-      // Use endTime if available, otherwise use updatedAt
-      where.OR = [
-        {
-          endTime: {
-            gte: pstStartUTC,
-            lte: pstEndUTC
-          }
-        },
-        {
-          AND: [
-            { endTime: null },
-            {
-              updatedAt: {
-                gte: pstStartUTC,
-                lte: pstEndUTC
-              }
-            }
-          ]
-        }
-      ];
+      // Filter by endTime (when task was completed)
+      where.endTime = {
+        gte: pstStartUTC,
+        lte: pstEndUTC
+      };
     }
     
-    // Agent filter
+    // Agent filter - include both assignedToId and completedBy
+    // Build OR condition that works with existing where clause
     if (agentId && agentId !== 'all') {
-      where.assignedToId = agentId;
+      const agentFilter = {
+        OR: [
+          { assignedToId: agentId },
+          { completedBy: agentId }
+        ]
+      };
+      
+      // If date filter exists, combine with AND
+      if (where.endTime) {
+        where.AND = [
+          { endTime: where.endTime },
+          agentFilter
+        ];
+        delete where.endTime;
+      } else {
+        Object.assign(where, agentFilter);
+      }
     }
     
     // Disposition filter
@@ -129,6 +124,13 @@ export async function GET(request: NextRequest) {
             name: true,
             email: true
           }
+        },
+        completedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
         }
       },
       orderBy: {
@@ -162,8 +164,9 @@ export async function GET(request: NextRequest) {
         priority: task.holdsPriority,
         finalQueue: task.holdsStatus,
         disposition: task.disposition,
-        agentName: task.assignedTo?.name || 'Unassigned',
-        agentEmail: task.assignedTo?.email || '',
+        // Use completedBy if available (for unassigned completions), otherwise use assignedTo
+        agentName: task.completedByUser?.name || task.assignedTo?.name || 'Unassigned',
+        agentEmail: task.completedByUser?.email || task.assignedTo?.email || '',
         completedDate: task.endTime?.toISOString() || null,
         duration: task.durationSec,
         queueTimes,
