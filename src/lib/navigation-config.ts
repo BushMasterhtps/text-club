@@ -86,7 +86,14 @@ export const dashboardSpecificItems: Record<DashboardType, NavigationItem[]> = {
   ],
   'wod-ivcs': [],
   'email-requests': [],
-  'yotpo': [],
+  'yotpo': [
+    {
+      id: 'submissions',
+      label: 'Form Submissions',
+      icon: '📝',
+      description: 'Track external rep submissions and productivity',
+    },
+  ],
   'holds': [],
   'standalone-refunds': [],
 };
