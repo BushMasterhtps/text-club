@@ -70,7 +70,7 @@ export default function AutoLogoutWarning({
           
           {/* Info */}
           <p className="text-xs text-white/50">
-            Click "Stay Logged In" to extend your session for another 2 hours
+            Click "Stay Logged In" to extend your session for another 50 minutes
           </p>
         </div>
       </div>

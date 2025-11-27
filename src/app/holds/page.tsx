@@ -9,7 +9,6 @@ import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
 import SessionTimer from '@/app/_components/SessionTimer';
 import ThemeToggle from '@/app/_components/ThemeToggle';
-import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import { AssistanceRequestsSection } from '@/app/manager/_components/AssistanceRequestsSection';
 import CsvImportSection from './_components/CsvImportSection';
 import AssemblyLineQueues from './_components/AssemblyLineQueues';
@@ -30,14 +29,17 @@ function HoldsPageContent() {
   const [passwordCheckDone, setPasswordCheckDone] = useState(false);
   
   const {
-    warningOpen,
-    remainingTime: timeUntilWarning,
-    extendSession,
-    forceLogout
-  } = useAutoLogout({ inactivityMinutes: 120 });
+    timeLeft,
+    showWarning: warningOpen,
+    extendSession
+  } = useAutoLogout({ 
+    timeoutMinutes: 50,
+    onLogout: () => {
+      localStorage.removeItem('authToken');
+      window.location.href = '/login';
+    }
+  });
 
-  // Settings modal
-  const [showSettings, setShowSettings] = useState(false);
 
   // Check password requirement
   React.useEffect(() => {
@@ -128,20 +130,8 @@ function HoldsPageContent() {
   // Header actions
   const headerActions = (
     <>
-      <button
-        onClick={() => setShowSettings(true)}
-        className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-all text-sm font-medium"
-      >
-        ⚙️ Settings
-      </button>
       <ThemeToggle />
-      <SessionTimer remainingMinutes={Math.floor(timeUntilWarning / 60)} />
-      <SmallButton
-        onClick={extendSession}
-        className="bg-blue-600 hover:bg-blue-700 text-white"
-      >
-        Extend
-      </SmallButton>
+      <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
       <SmallButton
         onClick={goToAgent}
         className="bg-green-600 hover:bg-green-700 text-white"
@@ -230,13 +220,14 @@ function HoldsPageContent() {
       {showPasswordModal && (
         <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
       )}
-      {showSettings && (
-        <UnifiedSettings onClose={() => setShowSettings(false)} />
-      )}
       <AutoLogoutWarning
         isOpen={warningOpen}
+        timeLeft={timeLeft}
         onExtend={extendSession}
-        onLogout={forceLogout}
+        onLogout={() => {
+          localStorage.removeItem('authToken');
+          window.location.href = '/login';
+        }}
       />
     </DashboardLayout>
   );

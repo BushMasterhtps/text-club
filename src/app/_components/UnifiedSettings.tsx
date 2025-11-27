@@ -796,10 +796,15 @@ function AgentSpecializationsSection() {
 }
 
 // Main Unified Settings Component
-export default function UnifiedSettings() {
+interface UnifiedSettingsProps {
+  onClose?: () => void;
+  asModal?: boolean;
+}
+
+export default function UnifiedSettings({ onClose, asModal = false }: UnifiedSettingsProps = {}) {
   const [activeTab, setActiveTab] = useState<"users" | "blocked" | "spam" | "import" | "trello" | "specializations" | "knowledge">("users");
 
-  return (
+  const content = (
     <div className="space-y-6">
       {/* Tab Navigation */}
       <div className="flex space-x-1 bg-white/5 rounded-lg p-1">
@@ -885,4 +890,32 @@ export default function UnifiedSettings() {
       {activeTab === "knowledge" && <KnowledgeBaseSection />}
     </div>
   );
+
+  // If modal mode, wrap in modal overlay
+  if (asModal) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-neutral-900 border border-white/10 rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-neutral-900 border-b border-white/10 px-6 py-4 flex items-center justify-between">
+            <h2 className="text-2xl font-semibold text-white">Settings</h2>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="text-white/60 hover:text-white transition-colors text-2xl leading-none"
+                aria-label="Close settings"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <div className="p-6">
+            {content}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Regular inline mode
+  return content;
 }

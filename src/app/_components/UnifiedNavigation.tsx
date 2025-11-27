@@ -189,7 +189,7 @@ export default function UnifiedNavigation() {
           {/* Collapsed Dashboard Switcher (icons only) */}
           {sidebarCollapsed && (
             <div className="space-y-1">
-              {dashboardConfigs.map((dashboard) => (
+              {dashboardConfigs.filter(d => d.available).map((dashboard) => (
                 <button
                   key={dashboard.id}
                   onClick={() => handleDashboardSwitch(dashboard.path)}
@@ -213,25 +213,6 @@ export default function UnifiedNavigation() {
             </div>
           )}
 
-          {/* Settings Link */}
-          <div className="mt-auto pt-4 border-t border-white/10">
-            <button
-              onClick={() => setActiveSection('settings')}
-              className={`
-                w-full ${sidebarCollapsed ? 'px-2 py-3 justify-center flex-col gap-1' : 'px-3 py-2.5'} rounded-lg text-sm font-medium
-                transition-all duration-200 flex items-center ${sidebarCollapsed ? '' : 'gap-3'}
-                ${
-                  activeSection === 'settings'
-                    ? 'bg-blue-600 text-white shadow-lg'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                }
-              `}
-              title={sidebarCollapsed ? 'Settings' : undefined}
-            >
-              <span className="text-lg">⚙️</span>
-              {!sidebarCollapsed && <span>Settings</span>}
-            </button>
-          </div>
         </div>
       </aside>
 

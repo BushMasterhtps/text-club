@@ -6,6 +6,7 @@ import { SmallButton } from "@/app/_components/SmallButton";
 import DashboardLayout from '@/app/_components/DashboardLayout';
 import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
+import { useAutoLogout } from '@/hooks/useAutoLogout';
 
 // Import existing components we'll reuse
 import { AssistanceRequestsSection } from "@/app/manager/_components/AssistanceRequestsSection";
@@ -873,21 +874,13 @@ function WodIvcsDashboardContent() {
   }
 
   // Header actions
+  // Auto logout hook
+  const { timeLeft, extendSession } = useAutoLogout({ timeoutMinutes: 50 });
+
   const headerActions = (
     <>
-      <button
-        onClick={() => setActiveSection("settings")}
-        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-          activeSection === "settings"
-            ? "bg-blue-600 text-white"
-            : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-        }`}
-        title="System Settings & Administration"
-      >
-        ⚙️ Settings
-      </button>
       <ThemeToggle />
-      <SessionTimer remainingMinutes={120} />
+      <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
       <SmallButton 
         onClick={() => window.location.href = '/agent'}
         className="bg-green-600 hover:bg-green-700 text-white"
@@ -1345,11 +1338,6 @@ function WodIvcsDashboardContent() {
         )}
 
         {/* Settings Section */}
-        {activeSection === "settings" && (
-          <div className="space-y-8">
-            <UnifiedSettings />
-          </div>
-        )}
       </div>
 
       {/* Detailed Breakdown Modal */}

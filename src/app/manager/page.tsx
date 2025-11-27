@@ -3334,7 +3334,7 @@ function ManagerPageContent() {
     extendSession,
     formatTime
   } = useAutoLogout({
-    timeoutMinutes: 120, // 2 hours
+    timeoutMinutes: 50, // 50 minutes
     warningMinutes: 5,   // 5 minutes warning
     onLogout: () => {
       localStorage.removeItem('currentRole');
@@ -4048,12 +4048,6 @@ function ManagerPageContent() {
         </div>
       )}
 
-      {/* Settings Section */}
-      {activeSection === "settings" && (
-        <div className="space-y-8">
-          <UnifiedSettings />
-        </div>
-      )}
 
       </div>
 

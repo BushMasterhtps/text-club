@@ -1023,7 +1023,7 @@ function YotpoPageContent() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // Auto logout hook
-  useAutoLogout();
+  const { timeLeft, extendSession } = useAutoLogout({ timeoutMinutes: 50 });
 
   // Load overview data
   const loadOverviewData = async () => {
@@ -1137,19 +1137,8 @@ function YotpoPageContent() {
   // Header actions
   const headerActions = (
     <>
-      <button
-        onClick={() => setActiveSection("settings")}
-        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-          activeSection === "settings"
-            ? "bg-blue-600 text-white"
-            : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-        }`}
-        title="System Settings & Administration"
-      >
-        ⚙️ Settings
-      </button>
       <ThemeToggle />
-      <SessionTimer remainingMinutes={120} />
+      <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
       <SmallButton 
         onClick={() => window.location.href = '/agent'}
         className="bg-green-600 hover:bg-green-700"
@@ -1320,11 +1309,6 @@ function YotpoPageContent() {
         )}
 
         {/* Settings Section */}
-        {activeSection === "settings" && (
-          <div className="space-y-8">
-            <UnifiedSettings />
-          </div>
-        )}
       </div>
 
       {/* Password Change Modal */}

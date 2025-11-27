@@ -797,7 +797,7 @@ function EmailRequestsPageContent() {
   const [showNotification, setShowNotification] = useState(false);
 
   // Auto logout hook
-  useAutoLogout();
+  const { timeLeft, extendSession } = useAutoLogout({ timeoutMinutes: 50 });
 
   // Load overview data
   const loadOverviewData = async () => {
@@ -815,10 +815,33 @@ function EmailRequestsPageContent() {
           setOverviewData(data.data);
         }
       } else {
-        console.error("🔍 [Email Requests] Overview API error:", response.status, response.statusText);
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error("🔍 [Email Requests] Overview API error:", response.status, response.statusText, errorData);
+        // Set default values on error
+        setOverviewData({
+          pendingCount: 0,
+          inProgressCount: 0,
+          completedTodayCount: 0,
+          totalCompletedCount: 0,
+          progressPercentage: 0,
+          totalTasks: 0,
+          requestTypeBreakdown: [],
+          lastImport: null
+        });
       }
     } catch (error) {
       console.error("🔍 [Email Requests] Error loading overview data:", error);
+      // Set default values on error
+      setOverviewData({
+        pendingCount: 0,
+        inProgressCount: 0,
+        completedTodayCount: 0,
+        totalCompletedCount: 0,
+        progressPercentage: 0,
+        totalTasks: 0,
+        requestTypeBreakdown: [],
+        lastImport: null
+      });
     } finally {
       setOverviewLoading(false);
     }
@@ -894,19 +917,8 @@ function EmailRequestsPageContent() {
   // Header actions
   const headerActions = (
     <>
-      <button
-        onClick={() => setActiveSection("settings")}
-        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-          activeSection === "settings"
-            ? "bg-blue-600 text-white"
-            : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-        }`}
-        title="System Settings & Administration"
-      >
-        ⚙️ Settings
-      </button>
       <ThemeToggle />
-      <SessionTimer />
+      <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
       <SmallButton 
         onClick={() => window.location.href = '/agent'}
         className="bg-green-600 hover:bg-green-700"
@@ -1084,12 +1096,6 @@ function EmailRequestsPageContent() {
           </div>
         )}
 
-        {/* Settings Section */}
-        {activeSection === "settings" && (
-          <div className="space-y-8">
-            <UnifiedSettings />
-          </div>
-        )}
       </div>
     </DashboardLayout>
   );

@@ -64,12 +64,6 @@ export const commonNavigationItems: NavigationItem[] = [
     icon: '📈',
     description: 'Task-specific analytics and insights',
   },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: '⚙️',
-    description: 'Dashboard settings and configuration',
-  },
 ];
 
 // Dashboard-specific navigation items
@@ -139,14 +133,6 @@ export const dashboardConfigs: DashboardConfig[] = [
     emoji: '🚧',
     description: 'Holds Assembly Line Management & Analytics',
     available: true,
-  },
-  {
-    id: 'standalone-refunds',
-    name: 'Standalone Refunds',
-    path: '/standalone-refunds',
-    emoji: '💰',
-    description: 'Standalone Refund Task Management & Analytics',
-    available: false,
   },
 ];
 

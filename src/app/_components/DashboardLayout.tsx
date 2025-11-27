@@ -1,9 +1,10 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import UnifiedNavigation from './UnifiedNavigation';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
+import UnifiedSettings from './UnifiedSettings';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -16,6 +17,7 @@ export default function DashboardLayout({
 }: DashboardLayoutProps) {
   const { currentDashboard, dashboardConfigs, sidebarCollapsed } = useDashboardNavigation();
   const currentConfig = dashboardConfigs.find(d => d.id === currentDashboard);
+  const [showSettings, setShowSettings] = useState(false);
 
   return (
     <div className="flex min-h-screen bg-neutral-900">
@@ -59,6 +61,13 @@ export default function DashboardLayout({
                 
                 {/* Header Actions */}
                 <div className="flex items-center gap-3 flex-shrink-0">
+                  <button
+                    onClick={() => setShowSettings(true)}
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                    title="System Settings & Administration"
+                  >
+                    ⚙️ Settings
+                  </button>
                   {headerActions}
                 </div>
               </div>
@@ -71,6 +80,14 @@ export default function DashboardLayout({
           </div>
         </div>
       </main>
+
+      {/* Unified Settings Modal */}
+      {showSettings && (
+        <UnifiedSettings 
+          onClose={() => setShowSettings(false)} 
+          asModal={true}
+        />
+      )}
     </div>
   );
 }
