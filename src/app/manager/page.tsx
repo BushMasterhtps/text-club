@@ -3761,8 +3761,7 @@ function ManagerPageContent() {
   );
 
   return (
-    <DashboardNavigationProvider>
-      <DashboardLayout headerActions={headerActions}>
+    <DashboardLayout headerActions={headerActions}>
 
       {/* Notification for new assistance requests */}
       {showNotification && newAssistanceCount > 0 && (
