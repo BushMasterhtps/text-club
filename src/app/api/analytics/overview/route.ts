@@ -107,55 +107,37 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get pending tasks by task type (both Task table and RawMessage table)
-    const [textClubPending, wodIvcsPending, emailRequestsPending, holdsPending, yotpoPending] = await Promise.all([
-      // Text Club: Count both Task PENDING and RawMessage READY
-      Promise.all([
-        prisma.task.count({
-          where: {
-            status: "PENDING",
-            taskType: "TEXT_CLUB"
-          }
-        }),
-        prisma.rawMessage.count({
-          where: {
-            status: "READY"
-          }
-        })
-      ]).then(([taskPending, rawMessageReady]) => taskPending + rawMessageReady),
-      
-      // WOD/IVCS: Only count Task PENDING (no RawMessage equivalent)
-      prisma.task.count({
+    // Get pending tasks by task type - FIXED: Single groupBy query instead of N separate queries
+    // Use groupBy to get all task type counts in one query
+    const [pendingByTaskType, rawMessageReady] = await Promise.all([
+      prisma.task.groupBy({
+        by: ['taskType'],
         where: {
-          status: "PENDING",
-          taskType: "WOD_IVCS"
+          status: "PENDING"
+        },
+        _count: {
+          id: true
         }
       }),
-      
-      // Email Requests: Only count Task PENDING (no RawMessage equivalent)
-      prisma.task.count({
+      // RawMessage count (only for Text Club)
+      prisma.rawMessage.count({
         where: {
-          status: "PENDING",
-          taskType: "EMAIL_REQUESTS"
-        }
-      }),
-      
-      // Holds: Only count Task PENDING
-      prisma.task.count({
-        where: {
-          status: "PENDING",
-          taskType: "HOLDS"
-        }
-      }),
-      
-      // Yotpo: Only count Task PENDING
-      prisma.task.count({
-        where: {
-          status: "PENDING",
-          taskType: "YOTPO"
+          status: "READY"
         }
       })
     ]);
+
+    // Create a map from the groupBy results
+    const pendingCountsMap = new Map(
+      pendingByTaskType.map(item => [item.taskType, item._count.id])
+    );
+
+    // Extract counts for each task type
+    const textClubPending = (pendingCountsMap.get('TEXT_CLUB') || 0) + rawMessageReady;
+    const wodIvcsPending = pendingCountsMap.get('WOD_IVCS') || 0;
+    const emailRequestsPending = pendingCountsMap.get('EMAIL_REQUESTS') || 0;
+    const holdsPending = pendingCountsMap.get('HOLDS') || 0;
+    const yotpoPending = pendingCountsMap.get('YOTPO') || 0;
 
     // Get pending tasks (both Task PENDING and RawMessage READY)
     const [taskPending, rawMessageReady] = await Promise.all([

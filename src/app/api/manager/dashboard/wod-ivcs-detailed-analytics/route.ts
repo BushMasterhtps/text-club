@@ -49,9 +49,11 @@ export async function GET(request: NextRequest) {
         .filter((id): id is string => !!id);
       
       // Batch fetch ALL original tasks in a single query (instead of N individual queries)
+      // FIXED: Also batch fetch users separately to avoid N+1 on assignedTo relation
       const originalTasksMap = new Map<string, any>();
       if (originalTaskIds.length > 0) {
         try {
+          // First, fetch tasks without relation to avoid N+1
           const originalTasks = await prisma.task.findMany({
             where: { id: { in: originalTaskIds } },
             select: {
@@ -66,17 +68,39 @@ export async function GET(request: NextRequest) {
               purchaseDate: true,
               disposition: true,
               endTime: true,
-              assignedTo: {
-                select: {
-                  name: true,
-                  email: true
-                }
-              }
+              assignedToId: true // Get the ID instead of relation
             }
           });
           
-          // Create a map for O(1) lookup
+          // Batch fetch all unique users in a single query
+          const uniqueUserIds = Array.from(new Set(
+            originalTasks
+              .map(t => t.assignedToId)
+              .filter((id): id is string => !!id)
+          ));
+          
+          const usersMap = new Map<string, { name: string | null; email: string }>();
+          if (uniqueUserIds.length > 0) {
+            const users = await prisma.user.findMany({
+              where: { id: { in: uniqueUserIds } },
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            });
+            
+            for (const user of users) {
+              usersMap.set(user.id, {
+                name: user.name,
+                email: user.email
+              });
+            }
+          }
+          
+          // Create a map for O(1) lookup, using batched user data
           for (const task of originalTasks) {
+            const user = task.assignedToId ? usersMap.get(task.assignedToId) : null;
             originalTasksMap.set(task.id, {
               amount: task.amount ? Number(task.amount) : null,
               webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
@@ -88,8 +112,8 @@ export async function GET(request: NextRequest) {
               purchaseDate: task.purchaseDate?.toISOString() || null,
               disposition: task.disposition,
               completedAt: task.endTime?.toISOString() || null,
-              completedBy: task.assignedTo?.name || null,
-              completedByEmail: task.assignedTo?.email || null
+              completedBy: user?.name || null,
+              completedByEmail: user?.email || null
             });
           }
         } catch (error) {

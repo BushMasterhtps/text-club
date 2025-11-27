@@ -52,52 +52,52 @@ export async function GET(request: NextRequest) {
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    // Get completed tasks by day and task type
-    for (const taskType of taskTypes) {
-      const tasks = await prisma.task.findMany({
-        where: {
-          taskType: taskType as any,
-          OR: [
-            {
-              status: "COMPLETED",
-              endTime: { gte: utcDateStart, lte: utcDateEnd }
-            },
-            {
-              status: "PENDING",
-              sentBackBy: { not: null },
-              endTime: { gte: utcDateStart, lte: utcDateEnd }
-            }
-          ]
-        },
-        select: {
-          endTime: true
-        }
-      });
+    // Get completed tasks by day and task type - FIXED: Single query instead of N queries
+    // Fetch all task types in one query to avoid N+1 pattern
+    const allTasks = await prisma.task.findMany({
+      where: {
+        taskType: { in: taskTypes as any[] },
+        OR: [
+          {
+            status: "COMPLETED",
+            endTime: { gte: utcDateStart, lte: utcDateEnd }
+          },
+          {
+            status: "PENDING",
+            sentBackBy: { not: null },
+            endTime: { gte: utcDateStart, lte: utcDateEnd }
+          }
+        ]
+      },
+      select: {
+        taskType: true,
+        endTime: true
+      }
+    });
 
-      // Group by date - use local date to avoid timezone issues
-      tasks.forEach(task => {
-        if (task.endTime) {
-          const taskDate = new Date(task.endTime);
-          // Use local date components to avoid timezone conversion
-          const year = taskDate.getFullYear();
-          const month = String(taskDate.getMonth() + 1).padStart(2, '0');
-          const day = String(taskDate.getDate()).padStart(2, '0');
-          const dateKey = `${year}-${month}-${day}`;
-          
-          if (dailyTrends[dateKey]) {
-            const key = taskType === 'WOD_IVCS' ? 'wodIvcs' : 
-                       taskType === 'TEXT_CLUB' ? 'textClub' :
-                       taskType === 'EMAIL_REQUESTS' ? 'emailRequests' :
-                       taskType === 'STANDALONE_REFUNDS' ? 'standaloneRefunds' :
-                       taskType.toLowerCase().replace(/_/g, '');
-            if (dailyTrends[dateKey].hasOwnProperty(key)) {
-              dailyTrends[dateKey][key]++;
-              dailyTrends[dateKey].total++;
-            }
+    // Group by date and task type - use local date to avoid timezone issues
+    allTasks.forEach(task => {
+      if (task.endTime) {
+        const taskDate = new Date(task.endTime);
+        // Use local date components to avoid timezone conversion
+        const year = taskDate.getFullYear();
+        const month = String(taskDate.getMonth() + 1).padStart(2, '0');
+        const day = String(taskDate.getDate()).padStart(2, '0');
+        const dateKey = `${year}-${month}-${day}`;
+        
+        if (dailyTrends[dateKey]) {
+          const key = task.taskType === 'WOD_IVCS' ? 'wodIvcs' : 
+                     task.taskType === 'TEXT_CLUB' ? 'textClub' :
+                     task.taskType === 'EMAIL_REQUESTS' ? 'emailRequests' :
+                     task.taskType === 'STANDALONE_REFUNDS' ? 'standaloneRefunds' :
+                     task.taskType.toLowerCase().replace(/_/g, '');
+          if (dailyTrends[dateKey].hasOwnProperty(key)) {
+            dailyTrends[dateKey][key]++;
+            dailyTrends[dateKey].total++;
           }
         }
-      });
-    }
+      }
+    });
 
     // Convert to array and sort by date
     const trendsArray = Object.values(dailyTrends).sort((a: any, b: any) => 
