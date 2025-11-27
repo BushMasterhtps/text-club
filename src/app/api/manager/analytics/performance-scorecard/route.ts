@@ -169,11 +169,17 @@ export async function GET(req: NextRequest) {
 
     // Create a map of Holds-only agents for quick lookup
     // An agent is "Holds-only" if their agentTypes array contains ONLY "HOLDS" (case-sensitive)
+    // IMPORTANT: Empty agentTypes arrays default to TEXT_CLUB (legacy agents), so they are NOT Holds-only
     const holdsOnlyAgentIds = new Set(
       agentsWithTypes
         .filter(agent => {
           // Must have agentTypes array
           if (!agent.agentTypes || !Array.isArray(agent.agentTypes)) {
+            // Empty/null agentTypes = legacy agent = TEXT_CLUB, NOT Holds-only
+            return false;
+          }
+          // Empty array = legacy agent = TEXT_CLUB, NOT Holds-only
+          if (agent.agentTypes.length === 0) {
             return false;
           }
           // Must have exactly 1 type

@@ -708,7 +708,8 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   const resetSelection = () => setSelected({});
 
   async function loadAgents() {
-    const res = await fetch("/api/manager/agents", { cache: "no-store" });
+    // Filter to only TEXT_CLUB agents (excludes Holds-only agents)
+    const res = await fetch("/api/manager/agents?filter=TEXT_CLUB", { cache: "no-store" });
     const data = await res.json().catch(() => null);
     if (data?.success && Array.isArray(data.agents)) {
       setAgents(data.agents.map((a: any) => ({ 
