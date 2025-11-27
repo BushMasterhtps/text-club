@@ -156,13 +156,21 @@ export async function GET(req: NextRequest) {
     });
 
     // Create a map of Holds-only agents for quick lookup
+    // An agent is "Holds-only" if their agentTypes array contains ONLY "HOLDS" (case-sensitive)
     const holdsOnlyAgentIds = new Set(
       agentsWithTypes
-        .filter(agent => 
-          agent.agentTypes && 
-          agent.agentTypes.length === 1 && 
-          agent.agentTypes[0] === 'HOLDS'
-        )
+        .filter(agent => {
+          // Must have agentTypes array
+          if (!agent.agentTypes || !Array.isArray(agent.agentTypes)) {
+            return false;
+          }
+          // Must have exactly 1 type
+          if (agent.agentTypes.length !== 1) {
+            return false;
+          }
+          // That type must be "HOLDS" (case-sensitive match)
+          return agent.agentTypes[0] === 'HOLDS';
+        })
         .map(agent => agent.id)
     );
 
@@ -193,9 +201,14 @@ export async function GET(req: NextRequest) {
     const validScores = agentScores.filter(Boolean) as AgentScorecard[];
     
     // Filter out Holds-only agents (similar to how seniors are filtered in sprint-rankings)
-    // Double-check agentTypes to ensure Holds-only agents are excluded
-    const holdsOnlyAgentIdsSet = new Set(holdsOnlyAgentIds);
-    const nonHoldsAgents = validScores.filter(agent => !holdsOnlyAgentIdsSet.has(agent.id));
+    // This is a double-check to ensure Holds-only agents are excluded even if they somehow got through
+    const nonHoldsAgents = validScores.filter(agent => {
+      // Check if this agent is in the holdsOnlyAgentIds set
+      if (holdsOnlyAgentIds.has(agent.id)) {
+        return false; // Exclude Holds-only agents
+      }
+      return true; // Include all other agents
+    });
     
     const eligibleAgents = nonHoldsAgents.filter(a => a.isEligible);
     const ineligibleAgents = nonHoldsAgents.filter(a => !a.isEligible);
