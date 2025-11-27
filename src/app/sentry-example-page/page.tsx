@@ -10,15 +10,31 @@ export default function SentryExamplePage() {
   const triggerTestError = () => {
     setErrorTriggered(true);
     
+    // Check if Sentry is loaded
+    console.log('[Test] Checking Sentry...', {
+      sentryExists: typeof Sentry !== 'undefined',
+      hasCaptureException: typeof Sentry?.captureException === 'function',
+      dsn: process.env.NEXT_PUBLIC_SENTRY_DSN ? 'SET' : 'NOT SET',
+      dsnLength: process.env.NEXT_PUBLIC_SENTRY_DSN?.length
+    });
+    
     try {
       // This will trigger a Sentry error
       // @ts-ignore - Intentionally calling undefined function
       myUndefinedFunction();
     } catch (error) {
+      console.log('[Test] Error caught:', error);
+      
       // Explicitly capture the error with Sentry
-      Sentry.captureException(error);
-      setErrorSent(true);
-      console.log('Error captured by Sentry:', error);
+      if (typeof Sentry !== 'undefined' && Sentry.captureException) {
+        console.log('[Test] Calling Sentry.captureException...');
+        Sentry.captureException(error);
+        setErrorSent(true);
+        console.log('[Test] Sentry.captureException called');
+      } else {
+        console.error('[Test] Sentry is not available!');
+      }
+      
       // Re-throw to show in console
       throw error;
     }

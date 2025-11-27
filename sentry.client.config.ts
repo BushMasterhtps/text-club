@@ -33,8 +33,17 @@ Sentry.init({
 
   // Filter out sensitive data
   beforeSend(event, hint) {
+    // Log to console for debugging
+    console.log('[Sentry] beforeSend called', {
+      hasDsn: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
+      dsnLength: process.env.NEXT_PUBLIC_SENTRY_DSN?.length,
+      eventType: event.type,
+      error: event.exception?.values?.[0]?.value
+    });
+    
     // Don't send errors in development
     if (process.env.NODE_ENV === "development") {
+      console.log('[Sentry] Skipping - development mode');
       return null;
     }
     
@@ -47,6 +56,7 @@ Sentry.init({
       }
     }
     
+    console.log('[Sentry] Sending event to Sentry');
     return event;
   },
 });
