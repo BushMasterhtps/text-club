@@ -158,16 +158,43 @@ export default function SentryExamplePage() {
           
           <div className="text-white/60 text-sm">OR</div>
           
-          <div>
+          <div className="space-y-2">
             <button
               onClick={triggerTestLog}
               disabled={logSent}
               className="px-8 py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105 disabled:transform-none"
             >
-              {logSent ? '✅ Test Log Sent!' : '📝 Trigger Test Log'}
+              {logSent ? '✅ Test Log Sent!' : '📝 Trigger Test Log (Client)'}
             </button>
-            <p className="text-white/60 text-xs mt-2">
-              This sends a log to Sentry Logs (not an error)
+            <p className="text-white/60 text-xs">
+              This sends a log from the browser
+            </p>
+            
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch('/api/test-sentry-log');
+                  const data = await response.json();
+                  if (data.success) {
+                    setLogSent(true);
+                    console.log('[Test] Server-side log sent:', data);
+                    alert(`✅ Server-side log sent!\n\nTest ID: ${data.testId}\n\nCheck Sentry Logs page in 10-30 seconds.`);
+                  } else {
+                    console.error('[Test] Failed to send server log:', data);
+                    alert('❌ Failed to send server log. Check console for details.');
+                  }
+                } catch (error) {
+                  console.error('[Test] Error calling server log endpoint:', error);
+                  alert('❌ Error sending server log. Check console for details.');
+                }
+              }}
+              disabled={logSent}
+              className="px-8 py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105 disabled:transform-none"
+            >
+              {logSent ? '✅ Server Log Sent!' : '🖥️ Trigger Test Log (Server)'}
+            </button>
+            <p className="text-white/60 text-xs">
+              This sends a log from the server (recommended for unlocking Logs UI)
             </p>
           </div>
 
