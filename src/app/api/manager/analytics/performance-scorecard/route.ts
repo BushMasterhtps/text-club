@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
     const agentIdsFromCompletedBy = completedTasks.map(t => t.completedBy).filter(Boolean) as string[];
     const agentIds = Array.from(new Set([...agentIdsFromAssigned, ...agentIdsFromCompletedBy])) as string[];
     
-    if (agentIds.length === 0) {
+    if (allUniqueAgentIds.length === 0) {
       return NextResponse.json({
         success: true,
         period: { start: dateStart.toISOString(), end: dateEnd.toISOString(), days: daysDiff },
@@ -152,9 +152,11 @@ export async function GET(req: NextRequest) {
 
     // Combine portal agents with Trello-only agents
     const allAgentIds = Array.from(new Set([
-      ...agentIds,
+      ...allUniqueAgentIds,
       ...Object.keys(trelloByAgent)
     ]));
+    
+    console.log(`[Performance Scorecard] Total agent IDs (including Trello): ${allAgentIds.length}`);
 
     // Fetch all agent data upfront to filter out Holds-only agents
     const agentsWithTypes = await prisma.user.findMany({
@@ -222,6 +224,12 @@ export async function GET(req: NextRequest) {
         const taskTypes = new Set(agentTasks.map(t => t.taskType));
         const hasOnlyHoldsTasks = taskTypes.size === 1 && taskTypes.has('HOLDS') && !trelloByAgent[agentId];
         
+        // Also check if agent is in the holdsOnlyAgentIds set (double-check)
+        if (holdsOnlyAgentIds.has(agentId)) {
+          console.log(`[Performance Scorecard] Excluding agent ${agentId}: Found in holdsOnlyAgentIds set`);
+          return null; // Skip Holds-only agents
+        }
+        
         if (hasOnlyHoldsTasks) {
           console.log(`[Performance Scorecard] Excluding agent ${agentId}: Only completed Holds tasks (no other task types, no Trello)`);
           return null; // Skip agents who only did Holds work
@@ -252,15 +260,20 @@ export async function GET(req: NextRequest) {
     // Filter out nulls and separate eligible vs ineligible agents
     const validScores = agentScores.filter(Boolean) as AgentScorecard[];
     
+    console.log(`[Performance Scorecard] Valid scores after filtering nulls: ${validScores.length}`);
+    
     // Filter out Holds-only agents (similar to how seniors are filtered in sprint-rankings)
     // This is a double-check to ensure Holds-only agents are excluded even if they somehow got through
     const nonHoldsAgents = validScores.filter(agent => {
       // Check if this agent is in the holdsOnlyAgentIds set
       if (holdsOnlyAgentIds.has(agent.id)) {
+        console.log(`[Performance Scorecard] Removing Holds-only agent from validScores: ${agent.id} (${agent.name || agent.email})`);
         return false; // Exclude Holds-only agents
       }
       return true; // Include all other agents
     });
+    
+    console.log(`[Performance Scorecard] Non-Holds agents after filter: ${nonHoldsAgents.length} (removed ${validScores.length - nonHoldsAgents.length})`);
     
     const eligibleAgents = nonHoldsAgents.filter(a => a.isEligible);
     const ineligibleAgents = nonHoldsAgents.filter(a => !a.isEligible);
