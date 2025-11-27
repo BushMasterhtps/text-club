@@ -191,8 +191,14 @@ export async function GET(req: NextRequest) {
 
     // Filter out nulls and separate eligible vs ineligible agents
     const validScores = agentScores.filter(Boolean) as AgentScorecard[];
-    const eligibleAgents = validScores.filter(a => a.isEligible);
-    const ineligibleAgents = validScores.filter(a => !a.isEligible);
+    
+    // Filter out Holds-only agents (similar to how seniors are filtered in sprint-rankings)
+    // Double-check agentTypes to ensure Holds-only agents are excluded
+    const holdsOnlyAgentIdsSet = new Set(holdsOnlyAgentIds);
+    const nonHoldsAgents = validScores.filter(agent => !holdsOnlyAgentIdsSet.has(agent.id));
+    
+    const eligibleAgents = nonHoldsAgents.filter(a => a.isEligible);
+    const ineligibleAgents = nonHoldsAgents.filter(a => !a.isEligible);
     
     // Sort eligible agents by overall score descending
     eligibleAgents.sort((a, b) => b.overallScore - a.overallScore);
