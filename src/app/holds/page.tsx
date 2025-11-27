@@ -1,22 +1,25 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import DashboardSwitcher from '@/app/_components/DashboardSwitcher';
+import DashboardLayout from '@/app/_components/DashboardLayout';
+import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
+import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
 import SessionTimer from '@/app/_components/SessionTimer';
 import ThemeToggle from '@/app/_components/ThemeToggle';
-import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import { AssistanceRequestsSection } from '@/app/manager/_components/AssistanceRequestsSection';
 import CsvImportSection from './_components/CsvImportSection';
 import AssemblyLineQueues from './_components/AssemblyLineQueues';
 import AgentAssignmentSection from './_components/AgentAssignmentSection';
 import HoldsAnalytics from './_components/HoldsAnalytics';
 import HoldsOverview from './_components/HoldsOverview';
+import { SmallButton } from '@/app/_components/SmallButton';
 
-export default function HoldsPage() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'assistance' | 'agents' | 'analytics'>('overview');
+function HoldsPageContent() {
+  const { activeSection, setActiveSection } = useDashboardNavigation();
+  const activeTab = activeSection as 'overview' | 'tasks' | 'assistance' | 'agents' | 'analytics';
   const [assistanceRequests, setAssistanceRequests] = useState<any[]>([]);
   const [newAssistanceCount, setNewAssistanceCount] = useState(0);
   const [showNotification, setShowNotification] = useState(false);
@@ -26,14 +29,17 @@ export default function HoldsPage() {
   const [passwordCheckDone, setPasswordCheckDone] = useState(false);
   
   const {
-    warningOpen,
-    remainingTime: timeUntilWarning,
-    extendSession,
-    forceLogout
-  } = useAutoLogout({ inactivityMinutes: 120 });
+    timeLeft,
+    showWarning: warningOpen,
+    extendSession
+  } = useAutoLogout({ 
+    timeoutMinutes: 50,
+    onLogout: () => {
+      localStorage.removeItem('authToken');
+      window.location.href = '/login';
+    }
+  });
 
-  // Settings modal
-  const [showSettings, setShowSettings] = useState(false);
 
   // Check password requirement
   React.useEffect(() => {
@@ -121,11 +127,31 @@ export default function HoldsPage() {
     );
   }
 
+  // Header actions
+  const headerActions = (
+    <>
+      <ThemeToggle />
+      <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
+      <SmallButton
+        onClick={goToAgent}
+        className="bg-green-600 hover:bg-green-700 text-white"
+      >
+        Switch to Agent
+      </SmallButton>
+      <SmallButton
+        onClick={handleLogout}
+        className="bg-red-600 hover:bg-red-700 text-white"
+      >
+        Logout
+      </SmallButton>
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-neutral-900 to-black text-white">
+    <DashboardLayout headerActions={headerActions}>
       {/* Notification for new assistance requests */}
       {showNotification && newAssistanceCount > 0 && (
-        <div className="fixed top-4 right-4 z-50 bg-gradient-to-r from-orange-600 to-red-600 text-white px-6 py-4 rounded-lg shadow-2xl border border-orange-400/30 animate-bounce">
+        <div className="fixed top-20 right-6 z-50 bg-gradient-to-r from-orange-600 to-red-600 text-white px-6 py-4 rounded-lg shadow-2xl border border-orange-400/30 animate-bounce">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🆘</span>
             <div>
@@ -135,7 +161,7 @@ export default function HoldsPage() {
             <button
               onClick={() => {
                 setShowNotification(false);
-                setActiveTab('assistance');
+                setActiveSection('assistance');
               }}
               className="ml-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors"
             >
@@ -151,124 +177,8 @@ export default function HoldsPage() {
         </div>
       )}
 
-      {/* Top header with logo and title */}
-      <div className="bg-neutral-900/50 border-b border-white/10">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left: Logo + Title */}
-            <div className="flex items-center gap-3">
-              <img 
-                src="/golden-companies-logo.jpeg" 
-                alt="Golden Companies" 
-                className="h-14 w-auto"
-              />
-              <div>
-                <h1 className="text-2xl font-bold text-white/90">Holds Dashboard</h1>
-                <p className="text-sm text-white/50">Holds Assembly Line Management & Analytics</p>
-              </div>
-            </div>
-
-            {/* Right: Controls */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowSettings(true)}
-                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-all text-sm font-medium"
-              >
-                ⚙️ Settings
-              </button>
-              <ThemeToggle />
-              <SessionTimer remainingMinutes={Math.floor(timeUntilWarning / 60)} />
-              <button
-                onClick={extendSession}
-                className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium"
-              >
-                Extend
-              </button>
-              <button
-                onClick={goToAgent}
-                className="px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-all text-sm font-medium"
-              >
-                Switch to Agent
-              </button>
-              <button
-                onClick={handleLogout}
-                className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-all text-sm font-medium"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main navigation tabs */}
-      <div className="bg-white/5 border-b border-white/10">
-        <div className="px-6">
-          <div className="flex items-center gap-1 overflow-x-auto">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`px-4 py-3 text-sm font-medium transition-all border-b-2 ${
-                activeTab === 'overview'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-white/70 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              📊 Overview
-            </button>
-            <button
-              onClick={() => setActiveTab('tasks')}
-              className={`px-4 py-3 text-sm font-medium transition-all border-b-2 ${
-                activeTab === 'tasks'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-white/70 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              📋 Task Management
-            </button>
-            <button
-              onClick={() => setActiveTab('assistance')}
-              className={`px-4 py-3 text-sm font-medium transition-all border-b-2 relative ${
-                activeTab === 'assistance'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-white/70 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              🆘 Assistance Requests
-              {newAssistanceCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                  {newAssistanceCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('agents')}
-              className={`px-4 py-3 text-sm font-medium transition-all border-b-2 ${
-                activeTab === 'agents'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-white/70 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              👥 Agent Management
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`px-4 py-3 text-sm font-medium transition-all border-b-2 ${
-                activeTab === 'analytics'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-white/70 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              📈 Analytics
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Dashboard switcher */}
-      <DashboardSwitcher />
-
       {/* Main content */}
-      <div className="container mx-auto p-6 space-y-6">
+      <div className="space-y-6">
         {/* Overview Tab - Only stats and live agent status */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
@@ -310,14 +220,24 @@ export default function HoldsPage() {
       {showPasswordModal && (
         <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
       )}
-      {showSettings && (
-        <UnifiedSettings onClose={() => setShowSettings(false)} />
-      )}
       <AutoLogoutWarning
         isOpen={warningOpen}
+        timeLeft={timeLeft}
         onExtend={extendSession}
-        onLogout={forceLogout}
+        onLogout={() => {
+          localStorage.removeItem('authToken');
+          window.location.href = '/login';
+        }}
       />
-    </div>
+    </DashboardLayout>
+  );
+}
+
+// Export with provider wrapper
+export default function HoldsPage() {
+  return (
+    <DashboardNavigationProvider>
+      <HoldsPageContent />
+    </DashboardNavigationProvider>
   );
 }

@@ -38,7 +38,7 @@ export default function SessionTimer({ timeLeft, onExtend }: SessionTimerProps) 
       <button
         onClick={onExtend}
         className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-        title="Extend session by 2 hours"
+        title="Extend session by 50 minutes"
       >
         Extend
       </button>

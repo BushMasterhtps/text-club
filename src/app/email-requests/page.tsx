@@ -3,7 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
-import DashboardSwitcher from '@/app/_components/DashboardSwitcher';
+import DashboardLayout from '@/app/_components/DashboardLayout';
+import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
+import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import { AssistanceRequestsSection } from "@/app/manager/_components/AssistanceRequestsSection";
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
@@ -765,8 +767,8 @@ function AdminSection() {
 /* ========================================================================== */
 /*  Main Component                                                            */
 /* ========================================================================== */
-export default function EmailRequestsPage() {
-  const [activeSection, setActiveSection] = useState("overview");
+function EmailRequestsPageContent() {
+  const { activeSection, setActiveSection } = useDashboardNavigation();
   
   // Overview data
   const [overviewData, setOverviewData] = useState({
@@ -795,7 +797,7 @@ export default function EmailRequestsPage() {
   const [showNotification, setShowNotification] = useState(false);
 
   // Auto logout hook
-  useAutoLogout();
+  const { timeLeft, extendSession } = useAutoLogout({ timeoutMinutes: 50 });
 
   // Load overview data
   const loadOverviewData = async () => {
@@ -813,10 +815,33 @@ export default function EmailRequestsPage() {
           setOverviewData(data.data);
         }
       } else {
-        console.error("🔍 [Email Requests] Overview API error:", response.status, response.statusText);
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error("🔍 [Email Requests] Overview API error:", response.status, response.statusText, errorData);
+        // Set default values on error
+        setOverviewData({
+          pendingCount: 0,
+          inProgressCount: 0,
+          completedTodayCount: 0,
+          totalCompletedCount: 0,
+          progressPercentage: 0,
+          totalTasks: 0,
+          requestTypeBreakdown: [],
+          lastImport: null
+        });
       }
     } catch (error) {
       console.error("🔍 [Email Requests] Error loading overview data:", error);
+      // Set default values on error
+      setOverviewData({
+        pendingCount: 0,
+        inProgressCount: 0,
+        completedTodayCount: 0,
+        totalCompletedCount: 0,
+        progressPercentage: 0,
+        totalTasks: 0,
+        requestTypeBreakdown: [],
+        lastImport: null
+      });
     } finally {
       setOverviewLoading(false);
     }
@@ -889,108 +914,32 @@ export default function EmailRequestsPage() {
     }
   }, [activeSection]);
 
-  const navigationItems = [
-    { id: "overview", label: "📊 Overview", description: "Email Requests metrics and progress" },
-    { id: "tasks", label: "📋 Task Management", description: "Import, assign, and manage Email Request tasks" },
-    { id: "assistance", label: "🆘 Assistance Requests", description: "Respond to agent assistance requests", badge: assistanceRequests.filter(r => r.status === "ASSISTANCE_REQUIRED").length },
-    { id: "agents", label: "👥 Agent Management", description: "Monitor agent progress and performance" },
-    { id: "analytics", label: "📈 Analytics", description: "Completed work and performance insights" }
-  ];
+  // Header actions
+  const headerActions = (
+    <>
+      <ThemeToggle />
+      <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
+      <SmallButton 
+        onClick={() => window.location.href = '/agent'}
+        className="bg-green-600 hover:bg-green-700"
+      >
+        Switch to Agent
+      </SmallButton>
+      <SmallButton 
+        onClick={() => {
+          localStorage.removeItem('agentEmail');
+          localStorage.removeItem('currentRole');
+          window.location.href = '/login';
+        }}
+        className="bg-red-600 hover:bg-red-700"
+      >
+        Logout
+      </SmallButton>
+    </>
+  );
 
   return (
-    <main className="mx-auto max-w-[1400px] p-6 text-white dark:text-white light:text-slate-800 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
-      <header className="sticky top-0 z-30 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 dark:from-neutral-900 dark:via-neutral-900/95 dark:to-neutral-900/80 light:from-white light:via-white/95 light:to-white/80 backdrop-blur-sm border-b border-white/10 dark:border-white/10 light:border-slate-200 shadow-lg">
-        <div className="px-6 pt-4 pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <img 
-                src="/golden-companies-logo.jpeg" 
-                alt="Golden Companies" 
-                className="h-14 w-auto"
-              />
-              <div>
-                <h1 className="text-3xl font-semibold tracking-tight">Email Requests Dashboard</h1>
-                <p className="text-sm text-white/60">Email Request Task Management & Analytics</p>
-              </div>
-            </div>
-            
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3">
-              {/* Settings Button */}
-              <button
-                onClick={() => setActiveSection("settings")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeSection === "settings"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                }`}
-                title="System Settings & Administration"
-              >
-                ⚙️ Settings
-              </button>
-              
-              {/* Theme Toggle */}
-              <ThemeToggle />
-              
-              {/* Session Timer */}
-              <SessionTimer />
-              
-              {/* Extend Session */}
-              <SmallButton className="bg-blue-600 hover:bg-blue-700">
-                Extend
-              </SmallButton>
-              
-              {/* Switch to Agent */}
-              <SmallButton 
-                onClick={() => window.location.href = '/agent'}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                Switch to Agent
-              </SmallButton>
-              
-              {/* Logout */}
-              <SmallButton 
-                onClick={() => {
-                  localStorage.removeItem('agentEmail');
-                  localStorage.removeItem('currentRole');
-                  // Redirect to login page
-                  window.location.href = '/login';
-                }}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                Logout
-              </SmallButton>
-            </div>
-          </div>
-        </div>
-        
-        {/* Main Navigation */}
-        <div className="px-6 pb-3">
-          <nav className="flex flex-wrap gap-2">
-            {navigationItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActiveSection(item.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors relative ${
-                  activeSection === item.id
-                    ? "bg-blue-600 text-white"
-                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                {item.label}
-                {item.badge && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
-          
-          {/* Dashboard Switcher */}
-          <DashboardSwitcher />
-        </div>
-      </header>
+    <DashboardLayout headerActions={headerActions}>
 
       {/* Auto Logout Warning */}
       <AutoLogoutWarning />
@@ -1147,14 +1096,17 @@ export default function EmailRequestsPage() {
           </div>
         )}
 
-        {/* Settings Section */}
-        {activeSection === "settings" && (
-          <div className="space-y-8">
-            <UnifiedSettings />
-          </div>
-        )}
       </div>
-    </main>
+    </DashboardLayout>
+  );
+}
+
+// Export with provider wrapper
+export default function EmailRequestsPage() {
+  return (
+    <DashboardNavigationProvider>
+      <EmailRequestsPageContent />
+    </DashboardNavigationProvider>
   );
 }
 
