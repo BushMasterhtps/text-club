@@ -547,7 +547,11 @@ export default function AnalyticsPage() {
                         <Card className="p-6 bg-gradient-to-br from-blue-500/20 to-blue-600/20 border-blue-500/30">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-blue-200 text-sm font-medium">Completed Today</p>
+                              <p className="text-blue-200 text-sm font-medium">
+                                {selectedDateRange === 'custom' && customStartDate && customEndDate
+                                  ? `${new Date(customStartDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${new Date(customEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                  : 'Completed Today'}
+                              </p>
                               <p className="text-3xl font-bold text-white mt-1">{overviewStats?.totalCompletedToday || 0}</p>
                             </div>
                             <div className="text-4xl">✅</div>
