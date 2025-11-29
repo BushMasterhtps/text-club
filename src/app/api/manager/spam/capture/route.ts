@@ -228,6 +228,16 @@ export async function POST() {
       });
     } catch (error: any) {
       console.error("[SPAM CAPTURE FAST] Error:", error);
+      // Capture to Sentry
+      const Sentry = await import('@sentry/nextjs');
+      Sentry.captureException(error, {
+        tags: { endpoint: 'spam-capture', service: 'spam-capture' },
+        extra: { 
+          messageCount: allMessages?.length || 0, 
+          rulesCount: rules?.length || 0,
+          elapsed: Date.now() - startTime
+        }
+      });
       return NextResponse.json({
         success: false,
         error: error?.message || "Failed to capture spam",

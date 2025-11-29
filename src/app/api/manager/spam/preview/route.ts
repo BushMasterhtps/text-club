@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SpamMode, RawStatus } from "@prisma/client";
-import { getImprovedSpamScore, analyzeSpamPatterns } from "@/lib/spam-detection";
+import { getBatchImprovedSpamScores, analyzeSpamPatterns } from "@/lib/spam-detection";
 import { fuzzyContains } from "@/lib/fuzzy-matching";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
@@ -113,16 +113,19 @@ export async function GET() {
     learningReasons?: string[];
   }> = [];
 
+  // Collect items that need learning system check (no phrase/pattern matches)
+  const itemsForLearning: Array<{ text: string; brand?: string; id: string; batchIndex: number }> = [];
+
   // Process in batches to prevent timeout and connection exhaustion
   const PROCESSING_BATCH_SIZE = 100;
+  const MAX_LEARNING_CHECKS = 200; // Limit learning checks to prevent timeout
   for (let i = 0; i < raws.length; i += PROCESSING_BATCH_SIZE) {
     const batch = raws.slice(i, i + PROCESSING_BATCH_SIZE);
+    const batchIndex = Math.floor(i / PROCESSING_BATCH_SIZE);
     
     for (const rm of batch) {
       const hits: string[] = [];
       let patternScore = 0;
-      let learningScore = 0;
-      let learningReasons: string[] = [];
       
       // Check simple phrase rules
       for (const r of rules) {
@@ -149,36 +152,63 @@ export async function GET() {
         }
       }
       
-      // Check learning system (only if no simple rule or pattern matches for efficiency)
-      // Limit learning system checks to prevent timeout (only check first 200 items)
-      if (hits.length === 0 && rm.text && i < 200) {
-        try {
-          const learningResult = await getImprovedSpamScore(rm.text, rm.brand || undefined);
-          learningScore = learningResult.score;
-          learningReasons = learningResult.reasons;
-          
-          // Lower threshold to 60% for learning system too (was 70%)
-          if (learningScore >= 60) {
-            learningMatchedCount++;
-          }
-        } catch (error) {
-          console.error('Error getting learning score:', error);
-          // Continue processing even if learning system fails
-        }
+      // If no matches yet, add to learning batch (only first 200 items)
+      if (hits.length === 0 && rm.text && itemsForLearning.length < MAX_LEARNING_CHECKS) {
+        itemsForLearning.push({
+          text: rm.text,
+          brand: rm.brand || undefined,
+          id: rm.id,
+          batchIndex
+        });
       }
       
-      // Count as matched if either simple rules, patterns, OR learning system catches it
-      if (hits.length > 0 || learningScore >= 60) {
+      // Count as matched if simple rules or patterns caught it
+      if (hits.length > 0) {
         matchedCount++;
         matches.push({
-          taskId: rm.id, // kept name "taskId" for your existing UI type
+          taskId: rm.id,
           brand: rm.brand,
           text: rm.text,
           matchedPatterns: hits,
-          learningScore: learningScore > 0 ? learningScore : undefined,
-          learningReasons: learningReasons.length > 0 ? learningReasons : undefined,
         });
       }
+    }
+  }
+
+  // FIXED: Batch fetch all learning scores in one query instead of N individual queries
+  let learningScoresMap: Map<string, { score: number; reasons: string[] }> = new Map();
+  if (itemsForLearning.length > 0) {
+    try {
+      const itemsForBatch = itemsForLearning.map(item => ({
+        text: item.text,
+        brand: item.brand
+      }));
+      learningScoresMap = await getBatchImprovedSpamScores(itemsForBatch);
+    } catch (error) {
+      console.error('Error batch fetching learning scores:', error);
+      // Continue without learning scores if batch fails
+    }
+  }
+
+  // Process learning results and add to matches
+  for (const item of itemsForLearning) {
+    const itemKey = `${item.text.substring(0, 50)}|${item.brand || ''}`;
+    const learningResult = learningScoresMap.get(itemKey);
+    const learningScore = learningResult?.score || 0;
+    const learningReasons = learningResult?.reasons || [];
+
+    // Lower threshold to 60% for learning system
+    if (learningScore >= 60) {
+      learningMatchedCount++;
+      matchedCount++;
+      matches.push({
+        taskId: item.id,
+        brand: item.brand || null,
+        text: item.text,
+        matchedPatterns: [],
+        learningScore: learningScore > 0 ? learningScore : undefined,
+        learningReasons: learningReasons.length > 0 ? learningReasons : undefined,
+      });
     }
   }
 
@@ -193,6 +223,12 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error("Spam preview error:", error);
+    // Capture to Sentry
+    const Sentry = await import('@sentry/nextjs');
+    Sentry.captureException(error, {
+      tags: { endpoint: 'spam-preview', service: 'spam-detection' },
+      extra: { messageCount: raws.length, rulesCount: rules.length }
+    });
     return NextResponse.json(
       {
         success: false,

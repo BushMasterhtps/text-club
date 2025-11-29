@@ -34,50 +34,60 @@ export async function GET(request: NextRequest) {
     // Use all sprint numbers (database + current range)
     const sprintNumbers = Array.from(new Set([...allSprintNumbers, ...dbSprintNumbers])).sort((a, b) => b - a).slice(0, limit);
 
-    // Get detailed results for each sprint
-    const sprintHistory = await Promise.all(
-      sprintNumbers.map(async (sprintNum) => {
-        const { start, end } = getSprintDates(sprintNum);
+    // FIXED: Batch fetch all sprint rankings in one query instead of N queries
+    // Fetch all rankings for all sprints at once
+    const allRankings = await prisma.sprintRanking.findMany({
+      where: {
+        sprintNumber: { in: sprintNumbers },
+        isSenior: false // Exclude seniors from competitive view
+      },
+      orderBy: [
+        { sprintNumber: 'desc' },
+        { rankByPtsPerDay: 'asc' }
+      ]
+    });
 
-        // Get all rankings for this sprint
-        const rankings = await prisma.sprintRanking.findMany({
-          where: {
-            sprintNumber: sprintNum,
-            isSenior: false // Exclude seniors from competitive view
-          },
-          orderBy: {
-            rankByPtsPerDay: 'asc'
-          }
-        });
+    // Group rankings by sprint number
+    const rankingsBySprint = new Map<number, typeof allRankings>();
+    for (const ranking of allRankings) {
+      if (!rankingsBySprint.has(ranking.sprintNumber)) {
+        rankingsBySprint.set(ranking.sprintNumber, []);
+      }
+      rankingsBySprint.get(ranking.sprintNumber)!.push(ranking);
+    }
 
-        const champion = rankings.find(r => r.isChampion);
-        const topThree = rankings.filter(r => r.isTopThree).slice(0, 3);
+    // Process each sprint using pre-fetched data
+    const sprintHistory = sprintNumbers.map((sprintNum) => {
+      const { start, end } = getSprintDates(sprintNum);
+      const rankings = rankingsBySprint.get(sprintNum) || [];
 
-        return {
-          sprintNumber: sprintNum,
-          period: formatSprintPeriod(sprintNum),
-          start: start.toISOString(),
-          end: end.toISOString(),
-          isCurrent: sprintNum === currentSprintNum,
-          champion: champion ? {
-            name: champion.agentName,
-            email: champion.agentEmail,
-            ptsPerDay: champion.ptsPerDay,
-            tasksPerDay: champion.tasksPerDay,
-            totalPoints: champion.weightedPoints,
-            daysWorked: champion.daysWorked
-          } : null,
-          topThree: topThree.map(r => ({
-            rank: r.rankByPtsPerDay,
-            name: r.agentName,
-            email: r.agentEmail,
-            ptsPerDay: r.ptsPerDay,
-            tier: r.tier
-          })),
-          totalParticipants: rankings.length
-        };
-      })
-    );
+      const champion = rankings.find(r => r.isChampion);
+      const topThree = rankings.filter(r => r.isTopThree).slice(0, 3);
+
+      return {
+        sprintNumber: sprintNum,
+        period: formatSprintPeriod(sprintNum),
+        start: start.toISOString(),
+        end: end.toISOString(),
+        isCurrent: sprintNum === currentSprintNum,
+        champion: champion ? {
+          name: champion.agentName,
+          email: champion.agentEmail,
+          ptsPerDay: champion.ptsPerDay,
+          tasksPerDay: champion.tasksPerDay,
+          totalPoints: champion.weightedPoints,
+          daysWorked: champion.daysWorked
+        } : null,
+        topThree: topThree.map(r => ({
+          rank: r.rankByPtsPerDay,
+          name: r.agentName,
+          email: r.agentEmail,
+          ptsPerDay: r.ptsPerDay,
+          tier: r.tier
+        })),
+        totalParticipants: rankings.length
+      };
+    });
 
     return NextResponse.json({
       success: true,
