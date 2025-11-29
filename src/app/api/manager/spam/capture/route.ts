@@ -86,10 +86,12 @@ function similarity(str1: string, str2: string): number {
 export async function POST() {
   return await withSelfHealing(async () => {
     const startTime = Date.now();
+    let rules: any[] = [];
+    let allMessages: any[] = [];
     
     try {
       // 1) Load rules once
-      const rules = await prisma.spamRule.findMany({
+      rules = await prisma.spamRule.findMany({
         where: { enabled: true },
         select: { id: true, pattern: true, patternNorm: true, mode: true, brand: true },
       });
@@ -103,7 +105,7 @@ export async function POST() {
       const PREVIEW_SCOPE = 1000;
       
       // Fetch all messages in preview scope
-      const allMessages = await prisma.rawMessage.findMany({
+      allMessages = await prisma.rawMessage.findMany({
         where: { 
           status: RawStatus.READY
         },
