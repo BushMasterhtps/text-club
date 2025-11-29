@@ -311,10 +311,10 @@ export async function GET(request: NextRequest) {
         agentName: task.assignedTo || '',
         disposition: task.disposition || '',
         notes: task.details || '',
-        createdAt: task.createdAt.toISOString(),
+        createdAt: task.createdAt || null, // Already converted to ISO string in emailDetails mapping
         duration: task.duration,
         startTime: null, // Not available in current data
-        endTime: task.endTime?.toISOString() || null
+        endTime: task.completedAt || null // Already converted to ISO string in emailDetails mapping
       }))
     };
 
