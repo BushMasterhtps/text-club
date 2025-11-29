@@ -8,49 +8,35 @@ export async function GET() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Get counts for Email Request tasks
-    const [
-      pendingCount,
-      inProgressCount,
-      completedTodayCount,
-      totalCompletedCount,
-    ] = await Promise.all([
-      // Pending tasks
-      prisma.task.count({
-        where: {
-          taskType: 'EMAIL_REQUESTS',
-          status: 'PENDING'
+    // FIXED: Get counts for Email Request tasks using groupBy to reduce from 4 queries to 2 queries
+    // First, get all status counts in one query
+    const statusCounts = await prisma.task.groupBy({
+      by: ['status'],
+      where: {
+        taskType: 'EMAIL_REQUESTS'
+      },
+      _count: {
+        id: true
+      }
+    });
+    
+    // Get completed today count separately (needs date filter)
+    const completedTodayCount = await prisma.task.count({
+      where: {
+        taskType: 'EMAIL_REQUESTS',
+        status: 'COMPLETED',
+        endTime: {
+          gte: today,
+          lt: tomorrow
         }
-      }),
-      
-      // In progress tasks
-      prisma.task.count({
-        where: {
-          taskType: 'EMAIL_REQUESTS',
-          status: 'IN_PROGRESS'
-        }
-      }),
-      
-      // Completed today
-      prisma.task.count({
-        where: {
-          taskType: 'EMAIL_REQUESTS',
-          status: 'COMPLETED',
-          endTime: {
-            gte: today,
-            lt: tomorrow
-          }
-        }
-      }),
-      
-      // Total completed
-      prisma.task.count({
-        where: {
-          taskType: 'EMAIL_REQUESTS',
-          status: 'COMPLETED'
-        }
-      })
-    ]);
+      }
+    });
+    
+    // Map status counts to variables
+    const statusMap = new Map(statusCounts.map(item => [item.status, item._count.id]));
+    const pendingCount = statusMap.get('PENDING') || 0;
+    const inProgressCount = statusMap.get('IN_PROGRESS') || 0;
+    const totalCompletedCount = statusMap.get('COMPLETED') || 0;
 
     // Calculate progress percentage
     const totalTasks = pendingCount + inProgressCount + totalCompletedCount;

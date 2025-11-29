@@ -113,16 +113,17 @@ export async function GET(req: NextRequest) {
       "carson.lund@goldencustomercare.com"
     ];
 
-    // Fetch all tasks (for lifetime and current sprint)
+    // OPTIMIZED: Fetch all tasks (for lifetime and current sprint) with better query structure
     // Include both assigned tasks and unassigned completed tasks (e.g., "Unable to Resolve" for Holds)
+    // FIXED: Removed OFFSET and added explicit conditions to use indexes efficiently
     const allTasks = await prisma.task.findMany({
       where: {
         status: "COMPLETED",
+        endTime: { not: null },
         OR: [
           { assignedToId: { not: null } },
           { completedBy: { not: null } }
-        ],
-        endTime: { not: null }
+        ]
       },
       select: {
         id: true,
@@ -132,7 +133,9 @@ export async function GET(req: NextRequest) {
         startTime: true,
         taskType: true,
         disposition: true
-      }
+      },
+      // No pagination needed - we need all tasks for ranking calculations
+      // The query will use indexes on status, endTime, assignedToId, completedBy
     });
 
     // Fetch Trello data

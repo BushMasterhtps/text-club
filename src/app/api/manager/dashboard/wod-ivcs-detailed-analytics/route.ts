@@ -36,90 +36,89 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Process import sessions (async to fetch original task details)
-    const processedSessions = await Promise.all(importSessions.map(async (session) => {
+    // FIXED: Batch fetch ALL tasks and users across ALL sessions to prevent N+1 queries
+    // Collect all unique original task IDs from all sessions
+    const allOriginalTaskIds = Array.from(new Set(
+      importSessions
+        .flatMap(session => session.duplicateRecords.map(d => d.originalTaskId))
+        .filter((id): id is string => !!id)
+    ));
+    
+    // Batch fetch ALL original tasks in a single query
+    const allOriginalTasks = allOriginalTaskIds.length > 0
+      ? await prisma.task.findMany({
+          where: { id: { in: allOriginalTaskIds } },
+          select: {
+            id: true,
+            amount: true,
+            webOrderDifference: true,
+            netSuiteTotal: true,
+            webTotal: true,
+            webVsNsDifference: true,
+            nsVsWebDiscrepancy: true,
+            warehouseEdgeStatus: true,
+            purchaseDate: true,
+            disposition: true,
+            endTime: true,
+            assignedToId: true
+          }
+        })
+      : [];
+    
+    // Batch fetch ALL unique users in a single query (prevents N+1 across all sessions)
+    const allUniqueUserIds = Array.from(new Set(
+      allOriginalTasks
+        .map(t => t.assignedToId)
+        .filter((id): id is string => !!id)
+    ));
+    
+    const globalUsersMap = new Map<string, { name: string | null; email: string }>();
+    if (allUniqueUserIds.length > 0) {
+      const allUsers = await prisma.user.findMany({
+        where: { id: { in: allUniqueUserIds } },
+        select: {
+          id: true,
+          name: true,
+          email: true
+        }
+      });
+      
+      for (const user of allUsers) {
+        globalUsersMap.set(user.id, {
+          name: user.name,
+          email: user.email
+        });
+      }
+    }
+    
+    // Create a global map of all tasks for O(1) lookup
+    const globalTasksMap = new Map<string, any>();
+    for (const task of allOriginalTasks) {
+      const user = task.assignedToId ? globalUsersMap.get(task.assignedToId) : null;
+      globalTasksMap.set(task.id, {
+        amount: task.amount ? Number(task.amount) : null,
+        webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
+        netSuiteTotal: task.netSuiteTotal ? Number(task.netSuiteTotal) : null,
+        webTotal: task.webTotal ? Number(task.webTotal) : null,
+        webVsNsDifference: task.webVsNsDifference ? Number(task.webVsNsDifference) : null,
+        nsVsWebDiscrepancy: task.nsVsWebDiscrepancy ? Number(task.nsVsWebDiscrepancy) : null,
+        warehouseEdgeStatus: task.warehouseEdgeStatus,
+        purchaseDate: task.purchaseDate?.toISOString() || null,
+        disposition: task.disposition,
+        completedAt: task.endTime?.toISOString() || null,
+        completedBy: user?.name || null,
+        completedByEmail: user?.email || null
+      });
+    }
+
+    // Process import sessions (now using pre-fetched global data)
+    const processedSessions = importSessions.map((session) => {
       const sources: Record<string, any> = {};
       let totalTasks = session.imported || 0;
       let totalDuplicates = session.duplicates || 0;
       let totalPreviouslyCompleted = session.filtered || 0;
 
-      // Collect all unique original task IDs to batch fetch (CRITICAL: Prevents connection pool exhaustion)
-      const originalTaskIds = session.duplicateRecords
-        .map(d => d.originalTaskId)
-        .filter((id): id is string => !!id);
-      
-      // Batch fetch ALL original tasks in a single query (instead of N individual queries)
-      // FIXED: Also batch fetch users separately to avoid N+1 on assignedTo relation
-      const originalTasksMap = new Map<string, any>();
-      if (originalTaskIds.length > 0) {
-        try {
-          // First, fetch tasks without relation to avoid N+1
-          const originalTasks = await prisma.task.findMany({
-            where: { id: { in: originalTaskIds } },
-            select: {
-              id: true,
-              amount: true,
-              webOrderDifference: true,
-              netSuiteTotal: true,
-              webTotal: true,
-              webVsNsDifference: true,
-              nsVsWebDiscrepancy: true,
-              warehouseEdgeStatus: true,
-              purchaseDate: true,
-              disposition: true,
-              endTime: true,
-              assignedToId: true // Get the ID instead of relation
-            }
-          });
-          
-          // Batch fetch all unique users in a single query
-          const uniqueUserIds = Array.from(new Set(
-            originalTasks
-              .map(t => t.assignedToId)
-              .filter((id): id is string => !!id)
-          ));
-          
-          const usersMap = new Map<string, { name: string | null; email: string }>();
-          if (uniqueUserIds.length > 0) {
-            const users = await prisma.user.findMany({
-              where: { id: { in: uniqueUserIds } },
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
-            });
-            
-            for (const user of users) {
-              usersMap.set(user.id, {
-                name: user.name,
-                email: user.email
-              });
-            }
-          }
-          
-          // Create a map for O(1) lookup, using batched user data
-          for (const task of originalTasks) {
-            const user = task.assignedToId ? usersMap.get(task.assignedToId) : null;
-            originalTasksMap.set(task.id, {
-              amount: task.amount ? Number(task.amount) : null,
-              webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
-              netSuiteTotal: task.netSuiteTotal ? Number(task.netSuiteTotal) : null,
-              webTotal: task.webTotal ? Number(task.webTotal) : null,
-              webVsNsDifference: task.webVsNsDifference ? Number(task.webVsNsDifference) : null,
-              nsVsWebDiscrepancy: task.nsVsWebDiscrepancy ? Number(task.nsVsWebDiscrepancy) : null,
-              warehouseEdgeStatus: task.warehouseEdgeStatus,
-              purchaseDate: task.purchaseDate?.toISOString() || null,
-              disposition: task.disposition,
-              completedAt: task.endTime?.toISOString() || null,
-              completedBy: user?.name || null,
-              completedByEmail: user?.email || null
-            });
-          }
-        } catch (error) {
-          console.error(`Error batch fetching original tasks:`, error);
-        }
-      }
+      // Use the pre-fetched global tasks map (no additional queries needed)
 
       // Group duplicates by source and map to original task details
       const duplicateDetails = session.duplicateRecords.map((duplicate) => {
@@ -135,9 +134,9 @@ export async function GET(request: NextRequest) {
 
         sources[source].duplicates += 1;
         
-        // Look up original task details from the batch-fetched map
+        // Look up original task details from the global pre-fetched map
         const originalTaskDetails = duplicate.originalTaskId 
-          ? originalTasksMap.get(duplicate.originalTaskId) 
+          ? globalTasksMap.get(duplicate.originalTaskId) 
           : null;
         
         return {
