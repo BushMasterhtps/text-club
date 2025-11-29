@@ -314,7 +314,7 @@ export async function GET(request: NextRequest) {
         createdAt: task.createdAt.toISOString(),
         duration: task.duration,
         startTime: null, // Not available in current data
-        endTime: task.completedAt?.toISOString() || null
+        endTime: task.endTime?.toISOString() || null
       }))
     };
 
