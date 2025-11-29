@@ -97,16 +97,29 @@ export default function EmailRequestsAnalytics() {
       const response = await fetch(
         `/api/manager/dashboard/email-requests-analytics?startDate=${startDate}&endDate=${endDate}&comparePeriod=${comparePeriod}`
       );
+      
+      // Check if response is ok
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('Email Requests Analytics API error:', response.status, errorText);
+        setError(`Failed to fetch analytics (${response.status}): ${errorText.substring(0, 200)}`);
+        return;
+      }
+
       const data = await response.json();
 
       if (data.success && data.analytics) {
         setAnalytics(data.analytics);
+        setError(null);
       } else {
-        setError(data.error || 'Failed to load analytics');
+        const errorMsg = data.error || 'Failed to load analytics';
+        console.error('Email Requests Analytics API returned error:', errorMsg);
+        setError(errorMsg);
       }
     } catch (err) {
-      setError('Failed to load analytics data');
-      console.error('Error loading analytics:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load analytics data';
+      console.error('Error loading Email Requests analytics:', err);
+      setError(`Failed to fetch analytics: ${errorMsg}`);
     } finally {
       setLoading(false);
     }

@@ -321,6 +321,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, analytics });
   } catch (error) {
     console.error('Error fetching email requests analytics:', error);
-    return NextResponse.json({ success: false, error: 'Failed to fetch analytics' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('Error details:', { errorMessage, errorStack });
+    return NextResponse.json({ 
+      success: false, 
+      error: `Failed to fetch analytics: ${errorMessage}` 
+    }, { status: 500 });
   }
 }
