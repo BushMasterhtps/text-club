@@ -207,6 +207,7 @@ model Task {
   @@index([assignedToId])
   @@index([status, createdAt])
   @@index([rawMessageId])
+  @@index([status, endTime, assignedToId, completedBy]) // Performance index for personal-scorecard query
 }
 
 model AssistanceRequest {
