@@ -119,6 +119,13 @@ export async function GET(request: NextRequest) {
             name: true,
             email: true
           }
+        },
+        completedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
         }
       },
       orderBy: {
@@ -269,7 +276,8 @@ export async function GET(request: NextRequest) {
             customerEmail: task.holdsCustomerEmail,
             status: task.status,
             disposition: task.disposition,
-            agentName: task.assignedTo?.name || 'Unassigned',
+            // Use completedBy if available (for unassigned completions like "Unable to Resolve"), otherwise use assignedTo
+            agentName: task.completedByUser?.name || task.assignedTo?.name || 'Unassigned',
             createdAt: task.createdAt,
             endTime: task.endTime
           });
@@ -366,7 +374,8 @@ export async function GET(request: NextRequest) {
             customerEmail: t.holdsCustomerEmail,
             status: t.status,
             disposition: t.disposition,
-            agentName: t.assignedTo?.name || 'Unassigned',
+            // Use completedBy if available (for unassigned completions like "Unable to Resolve"), otherwise use assignedTo
+            agentName: t.completedByUser?.name || t.assignedTo?.name || 'Unassigned',
             createdAt: t.createdAt,
             endTime: t.endTime
           })),
@@ -376,7 +385,8 @@ export async function GET(request: NextRequest) {
             customerEmail: t.holdsCustomerEmail,
             status: t.status,
             disposition: t.disposition,
-            agentName: t.assignedTo?.name || 'Unassigned',
+            // Use completedBy if available (for unassigned completions like "Unable to Resolve"), otherwise use assignedTo
+            agentName: t.completedByUser?.name || t.assignedTo?.name || 'Unassigned',
             createdAt: t.createdAt,
             endTime: t.endTime
           })),
@@ -386,7 +396,8 @@ export async function GET(request: NextRequest) {
             customerEmail: t.holdsCustomerEmail,
             status: t.status,
             disposition: t.disposition,
-            agentName: t.assignedTo?.name || 'Unassigned',
+            // Use completedBy if available (for unassigned completions like "Unable to Resolve"), otherwise use assignedTo
+            agentName: t.completedByUser?.name || t.assignedTo?.name || 'Unassigned',
             createdAt: t.createdAt,
             endTime: t.endTime,
             queueHistory: t.holdsQueueHistory,
