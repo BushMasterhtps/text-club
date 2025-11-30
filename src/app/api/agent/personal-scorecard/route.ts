@@ -7,6 +7,15 @@ import { getCurrentSprint } from "@/lib/sprint-utils";
 const MINIMUM_TASKS_FOR_RANKING = 20;
 const MINIMUM_DAYS_FOR_SPRINT = 3;
 
+type LifetimeAggregatedStats = {
+  tasksCompleted: number;
+  trelloCompleted: number;
+  totalCompleted: number;
+  daysWorked: number;
+  weightedPoints: number;
+  totalTimeSec: number;
+};
+
 /**
  * GET /api/agent/personal-scorecard
  * Returns the logged-in agent's personal scorecard with rankings and daily comparison
@@ -105,6 +114,48 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const allUserIds = allUsers.map(u => u.id);
+    const lifetimeBaseStats = new Map<string, LifetimeAggregatedStats>();
+
+    if (allUserIds.length > 0 && currentSprint.number > 0) {
+      const historicalRankings = await prisma.sprintRanking.groupBy({
+        by: ["agentId"],
+        where: {
+          sprintNumber: { lt: currentSprint.number },
+          agentId: { in: allUserIds }
+        },
+        _sum: {
+          tasksCompleted: true,
+          trelloCompleted: true,
+          totalCompleted: true,
+          daysWorked: true,
+          weightedPoints: true,
+          totalTimeSec: true
+        },
+        orderBy: {
+          agentId: "asc"
+        }
+      });
+
+      for (const row of historicalRankings) {
+        lifetimeBaseStats.set(row.agentId, {
+          tasksCompleted: row._sum.tasksCompleted || 0,
+          trelloCompleted: row._sum.trelloCompleted || 0,
+          totalCompleted: row._sum.totalCompleted || 0,
+          daysWorked: row._sum.daysWorked || 0,
+          weightedPoints: Number(row._sum.weightedPoints || 0),
+          totalTimeSec: row._sum.totalTimeSec || 0
+        });
+      }
+    }
+
+    const hasHistoricalStats = lifetimeBaseStats.size > 0;
+    const lifetimeRecentStart = hasHistoricalStats
+      ? currentSprint.start
+      : new Date(Date.UTC(2020, 0, 1, 0, 0, 0, 0));
+    const recentDataStart = new Date(Math.min(lifetimeRecentStart.getTime(), lastWeekStart.getTime()));
+    const recentDataEnd = thisWeekEnd;
+
     // Senior agents (excluded from competitive rankings)
     const seniorEmails = [
       "daniel.murcia@goldencustomercare.com",
@@ -113,13 +164,14 @@ export async function GET(req: NextRequest) {
       "carson.lund@goldencustomercare.com"
     ];
 
-    // OPTIMIZED: Fetch all tasks (for lifetime and current sprint) with better query structure
-    // Include both assigned tasks and unassigned completed tasks (e.g., "Unable to Resolve" for Holds)
-    // FIXED: Removed OFFSET and added explicit conditions to use indexes efficiently
+    // Fetch only the tasks needed for the current calculations
     const allTasks = await prisma.task.findMany({
       where: {
         status: "COMPLETED",
-        endTime: { not: null },
+        endTime: {
+          gte: recentDataStart,
+          lte: recentDataEnd
+        },
         OR: [
           { assignedToId: { not: null } },
           { completedBy: { not: null } }
@@ -133,13 +185,17 @@ export async function GET(req: NextRequest) {
         startTime: true,
         taskType: true,
         disposition: true
-      },
-      // No pagination needed - we need all tasks for ranking calculations
-      // The query will use indexes on status, endTime, assignedToId, completedBy
+      }
     });
 
-    // Fetch Trello data
-    const allTrello = await prisma.trelloCompletion.findMany({
+    // Fetch Trello data for the active window (historical totals come from SprintRanking aggregation)
+    const recentTrello = await prisma.trelloCompletion.findMany({
+      where: {
+        date: {
+          gte: recentDataStart,
+          lte: recentDataEnd
+        }
+      },
       select: {
         agentId: true,
         date: true,
@@ -154,31 +210,31 @@ export async function GET(req: NextRequest) {
 
     // Build agent scorecards for ALL agents (lifetime and current sprint)
     const buildAgentScorecard = (userId: string, userEmail: string, userName: string, startDate: Date | null, endDate: Date | null) => {
+      const isLifetimeView = !startDate && !endDate;
+      const effectiveStart = startDate ?? (isLifetimeView ? lifetimeRecentStart : null);
+      const effectiveEnd = endDate ?? null;
+
       // Filter tasks by date range if provided
-      // Include tasks assigned to user OR completed by user (for unassigned completions)
       const tasks = allTasks.filter(t => {
         const isAssignedToUser = t.assignedToId === userId;
         const isCompletedByUser = t.completedBy === userId;
         if (!isAssignedToUser && !isCompletedByUser) return false;
         if (!t.endTime) return false;
-        if (startDate && t.endTime < startDate) return false;
-        if (endDate && t.endTime > endDate) return false;
+        if (effectiveStart && t.endTime < effectiveStart) return false;
+        if (effectiveEnd && t.endTime > effectiveEnd) return false;
         return true;
       });
 
-      const trello = allTrello.filter(t => {
+      const trello = recentTrello.filter(t => {
         if (t.agent.email !== userEmail) return false;
         if (!t.date) return false;
-        if (startDate && t.date < startDate) return false;
-        if (endDate && t.date > endDate) return false;
+        if (effectiveStart && t.date < effectiveStart) return false;
+        if (effectiveEnd && t.date > effectiveEnd) return false;
         return true;
       });
 
-      const tasksCompleted = tasks.length;
-      const trelloCompleted = trello.reduce((sum, t) => sum + t.cardsCount, 0);
-      const totalCompleted = tasksCompleted + trelloCompleted;
-
-      // Calculate weighted points
+      let tasksCompleted = tasks.length;
+      let trelloCompleted = trello.reduce((sum, t) => sum + t.cardsCount, 0);
       let totalWeightedPoints = 0;
       let totalTimeSec = 0;
       const breakdown: Record<string, any> = {};
@@ -223,8 +279,20 @@ export async function GET(req: NextRequest) {
           .map(t => t.date.toISOString().split('T')[0])
       );
       const allWorkDates = new Set([...portalWorkedDates, ...trelloWorkDates]);
-      const daysWorked = allWorkDates.size;
+      let daysWorked = allWorkDates.size;
 
+      if (isLifetimeView && hasHistoricalStats) {
+        const historical = lifetimeBaseStats.get(userId);
+        if (historical) {
+          tasksCompleted += historical.tasksCompleted;
+          trelloCompleted += historical.trelloCompleted;
+          totalWeightedPoints += historical.weightedPoints;
+          totalTimeSec += historical.totalTimeSec;
+          daysWorked += historical.daysWorked;
+        }
+      }
+
+      const totalCompleted = tasksCompleted + trelloCompleted;
       const tasksPerDay = daysWorked > 0 ? totalCompleted / daysWorked : 0;
       const weightedDailyAvg = daysWorked > 0 ? totalWeightedPoints / daysWorked : 0;
       const avgHandleTimeSec = tasksCompleted > 0 ? Math.floor(totalTimeSec / tasksCompleted) : 0;
