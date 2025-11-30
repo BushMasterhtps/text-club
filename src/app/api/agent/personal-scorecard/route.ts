@@ -113,13 +113,21 @@ export async function GET(req: NextRequest) {
       "carson.lund@goldencustomercare.com"
     ];
 
-    // OPTIMIZED: Fetch all tasks (for lifetime and current sprint) with better query structure
+    // OPTIMIZED: Fetch tasks from last 3 years only (instead of all time)
+    // This dramatically reduces the dataset size while still covering all relevant historical data
+    // For lifetime rankings, we'll use 3 years as "lifetime" (reasonable for performance)
+    const threeYearsAgo = new Date();
+    threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+    
     // Include both assigned tasks and unassigned completed tasks (e.g., "Unable to Resolve" for Holds)
-    // FIXED: Removed OFFSET and added explicit conditions to use indexes efficiently
+    // Using date filter to leverage index on (status, endTime, assignedToId, completedBy)
     const allTasks = await prisma.task.findMany({
       where: {
         status: "COMPLETED",
-        endTime: { not: null },
+        endTime: { 
+          not: null,
+          gte: threeYearsAgo // Only fetch tasks from last 3 years
+        },
         OR: [
           { assignedToId: { not: null } },
           { completedBy: { not: null } }
@@ -134,12 +142,15 @@ export async function GET(req: NextRequest) {
         taskType: true,
         disposition: true
       },
-      // No pagination needed - we need all tasks for ranking calculations
-      // The query will use indexes on status, endTime, assignedToId, completedBy
+      // The query will use the composite index on (status, endTime, assignedToId, completedBy)
+      // Adding date filter helps PostgreSQL use the index more efficiently
     });
 
-    // Fetch Trello data
+    // Fetch Trello data (also limit to last 3 years for consistency)
     const allTrello = await prisma.trelloCompletion.findMany({
+      where: {
+        date: { gte: threeYearsAgo }
+      },
       select: {
         agentId: true,
         date: true,
@@ -151,28 +162,59 @@ export async function GET(req: NextRequest) {
         }
       }
     });
+    
+    // OPTIMIZED: Pre-group Trello data by user email for O(1) lookups
+    const trelloByEmail = new Map<string, typeof allTrello>();
+    for (const trello of allTrello) {
+      const email = trello.agent.email;
+      if (!trelloByEmail.has(email)) {
+        trelloByEmail.set(email, []);
+      }
+      trelloByEmail.get(email)!.push(trello);
+    }
 
+    // OPTIMIZED: Pre-filter tasks by user to avoid O(N*M) filtering
+    // Create Map for O(1) lookups instead of O(N) array filters
+    const tasksByUser = new Map<string, typeof allTasks>();
+    
+    // Pre-group tasks by user (assignedToId or completedBy)
+    for (const task of allTasks) {
+      const userId = task.assignedToId || task.completedBy;
+      if (!userId) continue;
+      
+      if (!tasksByUser.has(userId)) {
+        tasksByUser.set(userId, []);
+      }
+      tasksByUser.get(userId)!.push(task);
+    }
+    
     // Build agent scorecards for ALL agents (lifetime and current sprint)
     const buildAgentScorecard = (userId: string, userEmail: string, userName: string, startDate: Date | null, endDate: Date | null) => {
-      // Filter tasks by date range if provided
-      // Include tasks assigned to user OR completed by user (for unassigned completions)
-      const tasks = allTasks.filter(t => {
-        const isAssignedToUser = t.assignedToId === userId;
-        const isCompletedByUser = t.completedBy === userId;
-        if (!isAssignedToUser && !isCompletedByUser) return false;
-        if (!t.endTime) return false;
-        if (startDate && t.endTime < startDate) return false;
-        if (endDate && t.endTime > endDate) return false;
-        return true;
-      });
+      // Get pre-filtered tasks for this user (O(1) lookup)
+      const userTasks = tasksByUser.get(userId) || [];
+      
+      // Filter by date range if provided (only filter the user's tasks, not all tasks)
+      const tasks = startDate || endDate
+        ? userTasks.filter(t => {
+            if (!t.endTime) return false;
+            if (startDate && t.endTime < startDate) return false;
+            if (endDate && t.endTime > endDate) return false;
+            return true;
+          })
+        : userTasks; // No date filter = use all user's tasks
 
-      const trello = allTrello.filter(t => {
-        if (t.agent.email !== userEmail) return false;
-        if (!t.date) return false;
-        if (startDate && t.date < startDate) return false;
-        if (endDate && t.date > endDate) return false;
-        return true;
-      });
+      // Get pre-filtered Trello data for this user (O(1) lookup)
+      const userTrello = trelloByEmail.get(userEmail) || [];
+      
+      // Filter by date range if provided
+      const trello = startDate || endDate
+        ? userTrello.filter(t => {
+            if (!t.date) return false;
+            if (startDate && t.date < startDate) return false;
+            if (endDate && t.date > endDate) return false;
+            return true;
+          })
+        : userTrello; // No date filter = use all user's Trello data
 
       const tasksCompleted = tasks.length;
       const trelloCompleted = trello.reduce((sum, t) => sum + t.cardsCount, 0);
