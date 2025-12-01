@@ -1,6 +1,25 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+type SummaryRow = {
+  pendingCount: number;
+  inProgressCount: number;
+  completedTodayCount: number;
+  totalCompletedCount: number;
+  mediumCount: number;
+  highCount: number;
+  urgentCount: number;
+};
+
+type DetailedRow = {
+  bucket: 'medium' | 'high' | 'urgent';
+  purchaseDate: Date;
+  wodIvcsSource: string | null;
+  count: number;
+};
+
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
 export async function GET() {
   try {
     const today = new Date();
@@ -8,141 +27,88 @@ export async function GET() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Get counts for WOD/IVCS tasks
-    const [
-      pendingCount,
-      inProgressCount,
-      completedTodayCount,
-      totalCompletedCount,
-    ] = await Promise.all([
-      // Pending tasks
-      prisma.task.count({
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'PENDING'
-        }
-      }),
-      
-      // In progress tasks
-      prisma.task.count({
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'IN_PROGRESS'
-        }
-      }),
-      
-      // Completed today
-      prisma.task.count({
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'COMPLETED',
-          endTime: {
-            gte: today,
-            lt: tomorrow
-          }
-        }
-      }),
-      
-      // Total completed
-      prisma.task.count({
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'COMPLETED'
-        }
-      })
-    ]);
-
-    // Calculate progress percentage
-    const totalTasks = pendingCount + inProgressCount + totalCompletedCount;
-    const progressPercentage = totalTasks > 0 ? Math.round((totalCompletedCount / totalTasks) * 100) : 0;
-
-    // FIXED: Get age breakdown for pending tasks in a single query instead of 3 separate queries
-    // Use groupBy with conditional aggregation to reduce from 3 queries to 1
     const now = Date.now();
-    const twoDaysAgo = new Date(now - 2 * 24 * 60 * 60 * 1000);
-    const oneDayAgo = new Date(now - 1 * 24 * 60 * 60 * 1000);
-    const fourDaysAgo = new Date(now - 4 * 24 * 60 * 60 * 1000);
-    
-    // Fetch all pending WOD/IVCS tasks with purchaseDate
-    const pendingTasks = await prisma.task.findMany({
-      where: {
-        taskType: 'WOD_IVCS',
-        status: 'PENDING',
-        purchaseDate: { not: null }
-      },
-      select: {
-        purchaseDate: true
-      }
-    });
-    
-    // Calculate age breakdown in memory (much faster than 3 separate queries)
-    let mediumCount = 0; // 1-2 days old
-    let highCount = 0; // 3-4 days old
-    let urgentCount = 0; // 5+ days old
-    
-    for (const task of pendingTasks) {
-      if (!task.purchaseDate) continue;
-      const purchaseTime = task.purchaseDate.getTime();
-      const ageInDays = (now - purchaseTime) / (24 * 60 * 60 * 1000);
-      
-      if (ageInDays >= 1 && ageInDays < 2) {
-        mediumCount++;
-      } else if (ageInDays >= 2 && ageInDays < 4) {
-        highCount++;
-      } else if (ageInDays >= 4) {
-        urgentCount++;
-      }
-    }
-    
-    const ageBreakdown = [mediumCount, highCount, urgentCount];
+    const oneDayAgo = new Date(now - DAY_IN_MS);
+    const twoDaysAgo = new Date(now - 2 * DAY_IN_MS);
+    const fourDaysAgo = new Date(now - 4 * DAY_IN_MS);
 
-    // Get detailed breakdown by date and report for each priority range
-    const detailedBreakdown = await Promise.all([
-      // 1-2 days old detailed breakdown
-      prisma.task.groupBy({
-        by: ['purchaseDate', 'wodIvcsSource'],
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'PENDING',
-          AND: [
-            { purchaseDate: { gte: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } },
-            { purchaseDate: { lt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) } }
-          ]
-        },
-        _count: {
-          id: true
-        }
-      }),
-      // 3-4 days old detailed breakdown
-      prisma.task.groupBy({
-        by: ['purchaseDate', 'wodIvcsSource'],
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'PENDING',
-          AND: [
-            { purchaseDate: { gte: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000) } },
-            { purchaseDate: { lt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } }
-          ]
-        },
-        _count: {
-          id: true
-        }
-      }),
-      // 5+ days old detailed breakdown
-      prisma.task.groupBy({
-        by: ['purchaseDate', 'wodIvcsSource'],
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'PENDING',
-          purchaseDate: {
-            lt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
-          }
-        },
-        _count: {
-          id: true
-        }
-      })
-    ]);
+    const [summary] = await prisma.$queryRaw<SummaryRow[]>`
+      SELECT
+        CAST(COUNT(*) FILTER (WHERE "status" = 'PENDING') AS INTEGER) AS "pendingCount",
+        CAST(COUNT(*) FILTER (WHERE "status" = 'IN_PROGRESS') AS INTEGER) AS "inProgressCount",
+        CAST(COUNT(*) FILTER (WHERE "status" = 'COMPLETED' AND "endTime" >= ${today} AND "endTime" < ${tomorrow}) AS INTEGER) AS "completedTodayCount",
+        CAST(COUNT(*) FILTER (WHERE "status" = 'COMPLETED') AS INTEGER) AS "totalCompletedCount",
+        CAST(COUNT(*) FILTER (
+          WHERE "status" = 'PENDING'
+          AND "purchaseDate" >= ${twoDaysAgo}
+          AND "purchaseDate" < ${oneDayAgo}
+        ) AS INTEGER) AS "mediumCount",
+        CAST(COUNT(*) FILTER (
+          WHERE "status" = 'PENDING'
+          AND "purchaseDate" >= ${fourDaysAgo}
+          AND "purchaseDate" < ${twoDaysAgo}
+        ) AS INTEGER) AS "highCount",
+        CAST(COUNT(*) FILTER (
+          WHERE "status" = 'PENDING'
+          AND "purchaseDate" < ${fourDaysAgo}
+        ) AS INTEGER) AS "urgentCount"
+      FROM "public"."Task"
+      WHERE "taskType" = 'WOD_IVCS';
+    `;
+
+    const {
+      pendingCount = 0,
+      inProgressCount = 0,
+      completedTodayCount = 0,
+      totalCompletedCount = 0,
+      mediumCount = 0,
+      highCount = 0,
+      urgentCount = 0,
+    } = summary ?? {};
+
+    const totalTasks = pendingCount + inProgressCount + totalCompletedCount;
+    const progressPercentage =
+      totalTasks > 0 ? Math.round((totalCompletedCount / totalTasks) * 100) : 0;
+
+    const detailedRows = await prisma.$queryRaw<DetailedRow[]>`
+      SELECT
+        CASE
+          WHEN "purchaseDate" >= ${twoDaysAgo} AND "purchaseDate" < ${oneDayAgo} THEN 'medium'
+          WHEN "purchaseDate" >= ${fourDaysAgo} AND "purchaseDate" < ${twoDaysAgo} THEN 'high'
+          WHEN "purchaseDate" < ${fourDaysAgo} THEN 'urgent'
+        END AS bucket,
+        "purchaseDate",
+        "wodIvcsSource",
+        CAST(COUNT(*) AS INTEGER) AS count
+      FROM "public"."Task"
+      WHERE
+        "taskType" = 'WOD_IVCS'
+        AND "status" = 'PENDING'
+        AND "purchaseDate" IS NOT NULL
+        AND (
+          ("purchaseDate" >= ${twoDaysAgo} AND "purchaseDate" < ${oneDayAgo}) OR
+          ("purchaseDate" >= ${fourDaysAgo} AND "purchaseDate" < ${twoDaysAgo}) OR
+          ("purchaseDate" < ${fourDaysAgo})
+        )
+      GROUP BY bucket, "purchaseDate", "wodIvcsSource"
+      HAVING bucket IS NOT NULL
+      ORDER BY bucket, "purchaseDate" DESC;
+    `;
+
+    const detailedBreakdown = {
+      medium: [] as Array<{ purchaseDate: Date; wodIvcsSource: string | null; _count: { id: number } }>,
+      high: [] as Array<{ purchaseDate: Date; wodIvcsSource: string | null; _count: { id: number } }>,
+      urgent: [] as Array<{ purchaseDate: Date; wodIvcsSource: string | null; _count: { id: number } }>,
+    };
+
+    for (const row of detailedRows) {
+      const purchaseDate = new Date(row.purchaseDate);
+      detailedBreakdown[row.bucket].push({
+        purchaseDate,
+        wodIvcsSource: row.wodIvcsSource,
+        _count: { id: row.count },
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -154,16 +120,12 @@ export async function GET() {
         progressPercentage,
         totalTasks,
         ageBreakdown: {
-          medium: ageBreakdown[0], // 1-2 days
-          high: ageBreakdown[1], // 3-4 days
-          urgent: ageBreakdown[2] // 5+ days
+          medium: mediumCount,
+          high: highCount,
+          urgent: urgentCount,
         },
-        detailedBreakdown: {
-          medium: detailedBreakdown[0], // 1-2 days detailed
-          high: detailedBreakdown[1], // 3-4 days detailed
-          urgent: detailedBreakdown[2] // 5+ days detailed
-        }
-      }
+        detailedBreakdown,
+      },
     });
   } catch (error) {
     console.error('WOD/IVCS overview API error:', error);
