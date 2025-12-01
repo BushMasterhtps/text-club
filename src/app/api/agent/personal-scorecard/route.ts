@@ -105,6 +105,8 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const scorecardUserIds = allUsers.map(u => u.id);
+
     // Senior agents (excluded from competitive rankings)
     const seniorEmails = [
       "daniel.murcia@goldencustomercare.com",
@@ -149,28 +151,24 @@ export async function GET(req: NextRequest) {
     // Fetch Trello data (also limit to last 3 years for consistency)
     const allTrello = await prisma.trelloCompletion.findMany({
       where: {
-        date: { gte: threeYearsAgo }
+        date: { gte: threeYearsAgo },
+        agentId: { in: scorecardUserIds }
       },
       select: {
         agentId: true,
         date: true,
-        cardsCount: true,
-        agent: {
-          select: {
-            email: true
-          }
-        }
+        cardsCount: true
       }
     });
     
-    // OPTIMIZED: Pre-group Trello data by user email for O(1) lookups
-    const trelloByEmail = new Map<string, typeof allTrello>();
+    // OPTIMIZED: Pre-group Trello data by user ID for O(1) lookups
+    const trelloByUserId = new Map<string, typeof allTrello>();
     for (const trello of allTrello) {
-      const email = trello.agent.email;
-      if (!trelloByEmail.has(email)) {
-        trelloByEmail.set(email, []);
+      if (!trello.agentId) continue;
+      if (!trelloByUserId.has(trello.agentId)) {
+        trelloByUserId.set(trello.agentId, []);
       }
-      trelloByEmail.get(email)!.push(trello);
+      trelloByUserId.get(trello.agentId)!.push(trello);
     }
 
     // OPTIMIZED: Pre-filter tasks by user to avoid O(N*M) filtering
@@ -204,7 +202,7 @@ export async function GET(req: NextRequest) {
         : userTasks; // No date filter = use all user's tasks
 
       // Get pre-filtered Trello data for this user (O(1) lookup)
-      const userTrello = trelloByEmail.get(userEmail) || [];
+      const userTrello = trelloByUserId.get(userId) || [];
       
       // Filter by date range if provided
       const trello = startDate || endDate
