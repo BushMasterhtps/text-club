@@ -17,32 +17,42 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const agentId = searchParams.get('agentId'); // Optional: filter by specific agent
 
-    // Build date filter - use endTime for completed tasks
-    let dateFilter: any = {};
+    // Build date filter - we'll use this to filter queue history entries
+    let dateStart: Date | null = null;
+    let dateEnd: Date | null = null;
     if (startDate && endDate) {
       const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
       const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
       
       // Start of day in PST = 8:00 AM UTC (PST is UTC-8)
-      const pstStartUTC = new Date(Date.UTC(startYear, startMonth - 1, startDay, 8, 0, 0, 0));
+      dateStart = new Date(Date.UTC(startYear, startMonth - 1, startDay, 8, 0, 0, 0));
       // End of day in PST = 7:59:59.999 AM UTC next day
-      const pstEndUTC = new Date(Date.UTC(endYear, endMonth - 1, endDay + 1, 7, 59, 59, 999));
-      
-      dateFilter = {
-        gte: pstStartUTC,
-        lte: pstEndUTC
-      };
+      dateEnd = new Date(Date.UTC(endYear, endMonth - 1, endDay + 1, 7, 59, 59, 999));
     }
 
-    // Query all completed Holds tasks in the date range
-    // We'll use completedBy to identify which agent completed work in each queue
+    // Query ALL completed Holds tasks that might have work in the date range
+    // We'll parse queue history to find work done in the date range
+    // Use OR condition to catch tasks where:
+    // 1. Final endTime is in range, OR
+    // 2. Any queue history entry is in range
     const where: any = {
       taskType: 'HOLDS',
       status: 'COMPLETED',
-      endTime: dateFilter,
       completedBy: { not: null }, // Only tasks where an agent completed work
-      disposition: { not: null }
+      disposition: { not: null },
+      holdsQueueHistory: { not: null } // Must have queue history
     };
+
+    // If date range is specified, expand the query to catch tasks with work in that range
+    if (dateStart && dateEnd) {
+      where.OR = [
+        // Tasks where final completion (endTime) is in range
+        { endTime: { gte: dateStart, lte: dateEnd } },
+        // Tasks where queue history might have entries in range
+        // (We'll filter these in memory since Prisma can't query JSON fields easily)
+        { endTime: { not: null } } // Get all completed tasks, we'll filter by queue history
+      ];
+    }
 
     if (agentId && agentId !== 'all') {
       where.completedBy = agentId;
@@ -88,49 +98,84 @@ export async function GET(request: NextRequest) {
 
     for (const task of tasks) {
       if (!task.completedBy || !task.completedByUser) continue;
+      if (!task.holdsQueueHistory || !Array.isArray(task.holdsQueueHistory)) continue;
 
-      const agentId = task.completedBy;
-      const agentName = task.completedByUser.name;
-      const agentEmail = task.completedByUser.email;
-      
-      // Get the queue where this agent completed work
-      // This is the queue the task was in when the agent completed it
-      const queue = task.holdsStatus || 'Unknown';
-      
-      // Create key for this agent-queue combination
-      const key = `${agentId}-${queue}`;
-      
-      if (!agentWorkMap.has(key)) {
-        agentWorkMap.set(key, {
-          agentId,
-          agentName,
-          agentEmail,
-          queue,
-          count: 0,
-          totalAmount: 0,
-          totalDuration: 0,
-          dispositions: {}
-        });
-      }
-
-      const work = agentWorkMap.get(key)!;
-      work.count++;
-      
-      // Add order amount
+      const queueHistory = task.holdsQueueHistory as Array<any>;
       const amount = task.holdsOrderAmount ? Number(task.holdsOrderAmount) : 0;
-      work.totalAmount += amount;
-      
-      // Add duration
       const duration = task.durationSec || 0;
-      work.totalDuration += duration;
-      
-      // Track disposition
       const disp = task.disposition || 'Unknown';
-      if (!work.dispositions[disp]) {
-        work.dispositions[disp] = { count: 0, amount: 0 };
+
+      // Parse queue history to find work done in the date range
+      // Each queue entry represents work done by an agent in that queue
+      for (let i = 0; i < queueHistory.length; i++) {
+        const entry = queueHistory[i];
+        if (!entry.queue || !entry.enteredAt) continue;
+
+        // Check if this queue entry falls within the date range
+        const enteredAt = new Date(entry.enteredAt);
+        const exitedAt = entry.exitedAt ? new Date(entry.exitedAt) : (task.endTime ? new Date(task.endTime) : new Date());
+        
+        // If date filter is set, check if this work was done in the date range
+        if (dateStart && dateEnd) {
+          // Work is in range if enteredAt or exitedAt falls within the range
+          const workInRange = 
+            (enteredAt >= dateStart && enteredAt <= dateEnd) ||
+            (exitedAt >= dateStart && exitedAt <= dateEnd) ||
+            (enteredAt <= dateStart && exitedAt >= dateEnd); // Work spans the entire range
+          
+          if (!workInRange) continue;
+        }
+
+        // Try to identify the agent who worked in this queue
+        // Strategy: Use completedBy if this is the last queue entry (final completion)
+        // Otherwise, we need to infer from the queue history or use the current completedBy
+        let workAgentId: string | null = null;
+        let workAgentName: string | null = null;
+        let workAgentEmail: string | null = null;
+
+        if (i === queueHistory.length - 1) {
+          // Last queue entry - use completedBy (this is the final completion)
+          workAgentId = task.completedBy;
+          workAgentName = task.completedByUser.name;
+          workAgentEmail = task.completedByUser.email;
+        } else {
+          // Intermediate queue entry - check if we can infer from movedBy or use completedBy
+          // For now, we'll use completedBy as a fallback, but this might not be accurate
+          // TODO: Track agent assignments per queue entry in the future
+          // For now, we'll only count the final completion to avoid double-counting
+          // Actually, let's skip intermediate entries for now since we don't have agent tracking
+          continue;
+        }
+
+        if (!workAgentId) continue;
+
+        const queue = entry.queue;
+        const key = `${workAgentId}-${queue}`;
+        
+        if (!agentWorkMap.has(key)) {
+          agentWorkMap.set(key, {
+            agentId: workAgentId,
+            agentName: workAgentName!,
+            agentEmail: workAgentEmail!,
+            queue,
+            count: 0,
+            totalAmount: 0,
+            totalDuration: 0,
+            dispositions: {}
+          });
+        }
+
+        const work = agentWorkMap.get(key)!;
+        work.count++;
+        work.totalAmount += amount;
+        work.totalDuration += duration;
+        
+        if (!work.dispositions[disp]) {
+          work.dispositions[disp] = { count: 0, amount: 0 };
+        }
+        work.dispositions[disp].count++;
+        work.dispositions[disp].amount += amount;
       }
-      work.dispositions[disp].count++;
-      work.dispositions[disp].amount += amount;
     }
 
     // Convert map to array and group by agent
