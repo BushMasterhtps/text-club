@@ -8,141 +8,111 @@ export async function GET() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Get counts for WOD/IVCS tasks
-    const [
-      pendingCount,
-      inProgressCount,
-      completedTodayCount,
-      totalCompletedCount,
-    ] = await Promise.all([
-      // Pending tasks
-      prisma.task.count({
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'PENDING'
-        }
-      }),
-      
-      // In progress tasks
-      prisma.task.count({
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'IN_PROGRESS'
-        }
-      }),
-      
-      // Completed today
-      prisma.task.count({
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'COMPLETED',
-          endTime: {
-            gte: today,
-            lt: tomorrow
-          }
-        }
-      }),
-      
-      // Total completed
-      prisma.task.count({
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'COMPLETED'
-        }
-      })
-    ]);
+    // OPTIMIZED: Consolidate 4 count queries + 3 groupBy queries into 2 raw SQL queries
+    // First query: Aggregate all status counts and age bucket counts in a single database trip
+    const statusAndAgeQuery = await prisma.$queryRaw<Array<{
+      status: string;
+      pending_count: bigint;
+      in_progress_count: bigint;
+      completed_today_count: bigint;
+      total_completed_count: bigint;
+      medium_count: bigint;
+      high_count: bigint;
+      urgent_count: bigint;
+    }>>`
+      SELECT 
+        'WOD_IVCS' as task_type,
+        COUNT(*) FILTER (WHERE status = 'PENDING')::bigint as pending_count,
+        COUNT(*) FILTER (WHERE status = 'IN_PROGRESS')::bigint as in_progress_count,
+        COUNT(*) FILTER (WHERE status = 'COMPLETED' AND "endTime" >= ${today} AND "endTime" < ${tomorrow})::bigint as completed_today_count,
+        COUNT(*) FILTER (WHERE status = 'COMPLETED')::bigint as total_completed_count,
+        COUNT(*) FILTER (
+          WHERE status = 'PENDING' 
+          AND "purchaseDate" IS NOT NULL
+          AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 1
+          AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 < 2
+        )::bigint as medium_count,
+        COUNT(*) FILTER (
+          WHERE status = 'PENDING' 
+          AND "purchaseDate" IS NOT NULL
+          AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 2
+          AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 < 4
+        )::bigint as high_count,
+        COUNT(*) FILTER (
+          WHERE status = 'PENDING' 
+          AND "purchaseDate" IS NOT NULL
+          AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 4
+        )::bigint as urgent_count
+      FROM "Task"
+      WHERE "taskType" = 'WOD_IVCS'
+    `;
+
+    const result = statusAndAgeQuery[0];
+    const pendingCount = Number(result.pending_count);
+    const inProgressCount = Number(result.in_progress_count);
+    const completedTodayCount = Number(result.completed_today_count);
+    const totalCompletedCount = Number(result.total_completed_count);
+    const mediumCount = Number(result.medium_count);
+    const highCount = Number(result.high_count);
+    const urgentCount = Number(result.urgent_count);
 
     // Calculate progress percentage
     const totalTasks = pendingCount + inProgressCount + totalCompletedCount;
     const progressPercentage = totalTasks > 0 ? Math.round((totalCompletedCount / totalTasks) * 100) : 0;
-
-    // FIXED: Get age breakdown for pending tasks in a single query instead of 3 separate queries
-    // Use groupBy with conditional aggregation to reduce from 3 queries to 1
-    const now = Date.now();
-    const twoDaysAgo = new Date(now - 2 * 24 * 60 * 60 * 1000);
-    const oneDayAgo = new Date(now - 1 * 24 * 60 * 60 * 1000);
-    const fourDaysAgo = new Date(now - 4 * 24 * 60 * 60 * 1000);
-    
-    // Fetch all pending WOD/IVCS tasks with purchaseDate
-    const pendingTasks = await prisma.task.findMany({
-      where: {
-        taskType: 'WOD_IVCS',
-        status: 'PENDING',
-        purchaseDate: { not: null }
-      },
-      select: {
-        purchaseDate: true
-      }
-    });
-    
-    // Calculate age breakdown in memory (much faster than 3 separate queries)
-    let mediumCount = 0; // 1-2 days old
-    let highCount = 0; // 3-4 days old
-    let urgentCount = 0; // 5+ days old
-    
-    for (const task of pendingTasks) {
-      if (!task.purchaseDate) continue;
-      const purchaseTime = task.purchaseDate.getTime();
-      const ageInDays = (now - purchaseTime) / (24 * 60 * 60 * 1000);
-      
-      if (ageInDays >= 1 && ageInDays < 2) {
-        mediumCount++;
-      } else if (ageInDays >= 2 && ageInDays < 4) {
-        highCount++;
-      } else if (ageInDays >= 4) {
-        urgentCount++;
-      }
-    }
     
     const ageBreakdown = [mediumCount, highCount, urgentCount];
 
-    // Get detailed breakdown by date and report for each priority range
-    const detailedBreakdown = await Promise.all([
-      // 1-2 days old detailed breakdown
-      prisma.task.groupBy({
-        by: ['purchaseDate', 'wodIvcsSource'],
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'PENDING',
-          AND: [
-            { purchaseDate: { gte: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } },
-            { purchaseDate: { lt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) } }
-          ]
-        },
-        _count: {
-          id: true
-        }
-      }),
-      // 3-4 days old detailed breakdown
-      prisma.task.groupBy({
-        by: ['purchaseDate', 'wodIvcsSource'],
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'PENDING',
-          AND: [
-            { purchaseDate: { gte: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000) } },
-            { purchaseDate: { lt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } }
-          ]
-        },
-        _count: {
-          id: true
-        }
-      }),
-      // 5+ days old detailed breakdown
-      prisma.task.groupBy({
-        by: ['purchaseDate', 'wodIvcsSource'],
-        where: {
-          taskType: 'WOD_IVCS',
-          status: 'PENDING',
-          purchaseDate: {
-            lt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
-          }
-        },
-        _count: {
-          id: true
-        }
-      })
-    ]);
+    // Second query: Use CASE statements and GROUP BY to fetch detailed age breakdown
+    const detailedBreakdownQuery = await prisma.$queryRaw<Array<{
+      purchase_date: Date;
+      wod_ivcs_source: string | null;
+      age_bucket: string;
+      count: bigint;
+    }>>`
+      SELECT 
+        DATE("purchaseDate") as purchase_date,
+        "wodIvcsSource" as wod_ivcs_source,
+        CASE
+          WHEN EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 1 
+           AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 < 2 THEN 'medium'
+          WHEN EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 2 
+           AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 < 4 THEN 'high'
+          WHEN EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 4 THEN 'urgent'
+        END as age_bucket,
+        COUNT(*)::bigint as count
+      FROM "Task"
+      WHERE "taskType" = 'WOD_IVCS'
+        AND status = 'PENDING'
+        AND "purchaseDate" IS NOT NULL
+        AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 1
+      GROUP BY DATE("purchaseDate"), "wodIvcsSource", age_bucket
+      ORDER BY purchase_date DESC, wod_ivcs_source
+    `;
+
+    // Normalize detailed breakdown to match original API response structure
+    const detailedBreakdown = {
+      medium: detailedBreakdownQuery
+        .filter(r => r.age_bucket === 'medium')
+        .map(r => ({
+          purchaseDate: r.purchase_date,
+          wodIvcsSource: r.wod_ivcs_source,
+          _count: { id: Number(r.count) }
+        })),
+      high: detailedBreakdownQuery
+        .filter(r => r.age_bucket === 'high')
+        .map(r => ({
+          purchaseDate: r.purchase_date,
+          wodIvcsSource: r.wod_ivcs_source,
+          _count: { id: Number(r.count) }
+        })),
+      urgent: detailedBreakdownQuery
+        .filter(r => r.age_bucket === 'urgent')
+        .map(r => ({
+          purchaseDate: r.purchase_date,
+          wodIvcsSource: r.wod_ivcs_source,
+          _count: { id: Number(r.count) }
+        }))
+    };
 
     return NextResponse.json({
       success: true,
@@ -158,11 +128,7 @@ export async function GET() {
           high: ageBreakdown[1], // 3-4 days
           urgent: ageBreakdown[2] // 5+ days
         },
-        detailedBreakdown: {
-          medium: detailedBreakdown[0], // 1-2 days detailed
-          high: detailedBreakdown[1], // 3-4 days detailed
-          urgent: detailedBreakdown[2] // 5+ days detailed
-        }
+        detailedBreakdown
       }
     });
   } catch (error) {

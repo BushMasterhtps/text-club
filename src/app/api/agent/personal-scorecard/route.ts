@@ -146,7 +146,8 @@ export async function GET(req: NextRequest) {
       // Adding date filter helps PostgreSQL use the index more efficiently
     });
 
-    // Fetch Trello data (also limit to last 3 years for consistency)
+    // OPTIMIZED: Fetch Trello data without nested select to avoid slow database joins
+    // Select agentId directly instead of nested agent.email relationship
     const allTrello = await prisma.trelloCompletion.findMany({
       where: {
         date: { gte: threeYearsAgo }
@@ -154,19 +155,21 @@ export async function GET(req: NextRequest) {
       select: {
         agentId: true,
         date: true,
-        cardsCount: true,
-        agent: {
-          select: {
-            email: true
-          }
-        }
+        cardsCount: true
       }
     });
-    
+
+    // Create a map of agentId to email for O(1) lookups
+    const agentIdToEmail = new Map<string, string>();
+    for (const user of allUsers) {
+      agentIdToEmail.set(user.id, user.email);
+    }
+
     // OPTIMIZED: Pre-group Trello data by user email for O(1) lookups
-    const trelloByEmail = new Map<string, typeof allTrello>();
+    const trelloByEmail = new Map<string, Array<{ agentId: string; date: Date; cardsCount: number }>>();
     for (const trello of allTrello) {
-      const email = trello.agent.email;
+      const email = agentIdToEmail.get(trello.agentId);
+      if (!email) continue; // Skip if agent not found
       if (!trelloByEmail.has(email)) {
         trelloByEmail.set(email, []);
       }
