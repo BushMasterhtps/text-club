@@ -18,9 +18,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search'); // Search by order number, email
     const exportCsv = searchParams.get('export') === 'true';
     
-    // Pagination
-    const take = parseInt(searchParams.get('take') || '100', 10);
-    const skip = parseInt(searchParams.get('skip') || '0', 10);
+    // Pagination - Use large limit for UI, no limit for CSV export
+    const take = exportCsv ? undefined : parseInt(searchParams.get('take') || '10000', 10); // Large limit for UI to get all tasks
+    const skip = exportCsv ? undefined : parseInt(searchParams.get('skip') || '0', 10);
     
     // Build where clause - Include ALL completed tasks, including unassigning dispositions
     // These dispositions count as completed work for agents even if they move to another queue
@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
       orderBy: {
         endTime: 'desc'
       },
-      take: exportCsv ? undefined : take,
+      take: exportCsv ? undefined : (take > 10000 ? 10000 : take), // Cap at 10k for UI
       skip: exportCsv ? undefined : skip
     });
     

@@ -27,11 +27,14 @@ export async function GET(request: NextRequest) {
       dateEnd = new Date(Date.UTC(endYear, endMonth - 1, endDay + 1, 7, 59, 59, 999));
     }
 
-    // Build where clause
+    // Build where clause - Include tasks with either completedBy or assignedTo
     const where: any = {
       taskType: 'HOLDS',
       status: 'COMPLETED',
-      completedBy: { not: null }, // Must have a completedBy agent
+      OR: [
+        { completedBy: { not: null } },
+        { assignedToId: { not: null } }
+      ]
     };
 
     // Add date filter if provided
@@ -44,7 +47,16 @@ export async function GET(request: NextRequest) {
 
     // Add agent filter if specified
     if (agentId && agentId !== 'all') {
-      where.completedBy = agentId;
+      where.AND = [
+        { OR: where.OR },
+        {
+          OR: [
+            { completedBy: agentId },
+            { assignedToId: agentId }
+          ]
+        }
+      ];
+      delete where.OR;
     }
 
     // Query completed Holds tasks
@@ -58,6 +70,14 @@ export async function GET(request: NextRequest) {
         durationSec: true,
         completedBy: true,
         completedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        assignedToId: true,
+        assignedTo: {
           select: {
             id: true,
             name: true,
@@ -82,9 +102,12 @@ export async function GET(request: NextRequest) {
     }>();
 
     for (const task of tasks) {
-      if (!task.completedBy || !task.completedByUser) continue;
+      // Use completedBy if available, otherwise fall back to assignedTo
+      const agentId = task.completedBy || task.assignedToId;
+      const agentInfo = task.completedByUser || task.assignedTo;
+      
+      if (!agentId || !agentInfo) continue;
 
-      const agentId = task.completedBy;
       const amount = task.holdsOrderAmount ? Number(task.holdsOrderAmount) : 0;
       const duration = task.durationSec || 0;
       const disposition = task.disposition || 'Unknown';
@@ -93,8 +116,8 @@ export async function GET(request: NextRequest) {
       if (!agentMap.has(agentId)) {
         agentMap.set(agentId, {
           agentId,
-          agentName: task.completedByUser.name,
-          agentEmail: task.completedByUser.email,
+          agentName: agentInfo.name,
+          agentEmail: agentInfo.email,
           totalCount: 0,
           totalAmount: 0,
           totalDuration: 0,
