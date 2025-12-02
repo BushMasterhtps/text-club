@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Batch fetch all agent info
-    const agents = await prisma.user.findMany({
+    const agentUsers = await prisma.user.findMany({
       where: {
         id: { in: Array.from(agentIdsToLookup) }
       },
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
 
     // Create a map of agent IDs to agent info for quick lookup
     const agentInfoMap = new Map<string, { id: string; name: string; email: string }>();
-    for (const agent of agents) {
+    for (const agent of agentUsers) {
       agentInfoMap.set(agent.id, agent);
     }
 
