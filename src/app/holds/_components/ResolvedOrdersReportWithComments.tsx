@@ -219,21 +219,10 @@ export default function ResolvedOrdersReportWithComments() {
     ? agentWorkBreakdown.agents.map((agent: any) => ({
         agentName: agent.agentName,
         agentEmail: agent.agentEmail,
-        totalResolved: agent.totalCount, // Use totalCount from breakdown (includes all queues)
+        totalResolved: agent.totalCount,
         totalAmountSaved: agent.totalAmount,
         avgResolutionTime: agent.avgResolutionTime,
-        dispositions: agent.queues.reduce((acc: any, queue: any) => {
-          // Merge dispositions from all queues
-          Object.entries(queue.dispositions).forEach(([disp, data]: [string, any]) => {
-            if (!acc[disp]) {
-              acc[disp] = { count: 0, amount: 0 };
-            }
-            acc[disp].count += data.count;
-            acc[disp].amount += data.amount;
-          });
-          return acc;
-        }, {} as Record<string, { count: number; amount: number }>),
-        queues: agent.queues // Include queue breakdown
+        dispositions: agent.dispositions || {} // Direct dispositions from simplified API
       }))
     : Object.entries(
         tasks.reduce((acc, task) => {
@@ -453,35 +442,32 @@ export default function ResolvedOrdersReportWithComments() {
                       </td>
                       <td className="px-3 py-2 text-white/80">{formatDuration(Math.round(stat.avgResolutionTime))}</td>
                       <td className="px-3 py-2">
-                        {stat.queues && stat.queues.length > 0 ? (
+                        {stat.dispositions && Object.keys(stat.dispositions).length > 0 ? (
                           <button
                             onClick={() => toggleRow(`agent-${stat.agentEmail}`)}
                             className="text-blue-400 hover:text-blue-300 text-xs underline"
                           >
-                            {expandedRows.has(`agent-${stat.agentEmail}`) ? 'Hide' : 'Show'} Queues ({stat.queues.length})
+                            {expandedRows.has(`agent-${stat.agentEmail}`) ? 'Hide' : 'Show'} Dispositions ({Object.keys(stat.dispositions).length})
                           </button>
                         ) : (
                           <span className="text-white/40 text-xs">No breakdown</span>
                         )}
                       </td>
                     </tr>
-                    {expandedRows.has(`agent-${stat.agentEmail}`) && stat.queues && stat.queues.length > 0 && (
+                    {expandedRows.has(`agent-${stat.agentEmail}`) && stat.dispositions && Object.keys(stat.dispositions).length > 0 && (
                       <tr>
                         <td colSpan={5} className="px-3 py-3 bg-white/5">
                           <div className="text-sm">
-                            <div className="text-white font-semibold mb-2">Queue Breakdown:</div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                              {stat.queues.map((queue, idx) => (
-                                <div key={idx} className="p-2 bg-blue-900/20 rounded border border-blue-500/30">
-                                  <div className="text-white font-semibold text-xs">{queue.queue}</div>
+                            <div className="text-white font-semibold mb-2">Disposition Breakdown:</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {Object.entries(stat.dispositions).map(([disp, data]: [string, any]) => (
+                                <div key={disp} className="p-2 bg-blue-900/20 rounded border border-blue-500/30">
+                                  <div className="text-white font-semibold text-xs">{disp}</div>
                                   <div className="text-white/80 text-xs mt-1">
-                                    Count: {queue.count}
+                                    Count: {data.count}
                                   </div>
                                   <div className="text-green-300 text-xs mt-1">
-                                    Amount: ${queue.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </div>
-                                  <div className="text-white/60 text-xs mt-1">
-                                    Avg Time: {formatDuration(Math.round(queue.avgDuration))}
+                                    Amount: ${data.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </div>
                                 </div>
                               ))}
