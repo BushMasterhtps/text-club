@@ -36,6 +36,13 @@ interface AgentStats {
   totalAmountSaved: number;
   avgResolutionTime: number;
   dispositions: Record<string, { count: number; amount: number }>;
+  queues?: Array<{
+    queue: string;
+    count: number;
+    totalAmount: number;
+    avgDuration: number;
+    dispositions: Record<string, { count: number; amount: number }>;
+  }>;
 }
 
 export default function ResolvedOrdersReportWithComments() {
@@ -46,6 +53,8 @@ export default function ResolvedOrdersReportWithComments() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [selectedTask, setSelectedTask] = useState<ResolvedTask | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [agentWorkBreakdown, setAgentWorkBreakdown] = useState<any>(null);
+  const [loadingBreakdown, setLoadingBreakdown] = useState(false);
   
   // Filters
   const [startDate, setStartDate] = useState(() => {
@@ -69,6 +78,7 @@ export default function ResolvedOrdersReportWithComments() {
 
   useEffect(() => {
     loadData();
+    loadAgentWorkBreakdown();
   }, [startDate, endDate, selectedAgent, selectedDisposition]);
 
   const loadAgents = async () => {
@@ -104,6 +114,27 @@ export default function ResolvedOrdersReportWithComments() {
       console.error('Error loading resolved orders:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAgentWorkBreakdown = async () => {
+    setLoadingBreakdown(true);
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (selectedAgent !== 'all') params.append('agentId', selectedAgent);
+      
+      const response = await fetch(`/api/holds/agent-work-breakdown?${params.toString()}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setAgentWorkBreakdown(data.data);
+      }
+    } catch (error) {
+      console.error('Error loading agent work breakdown:', error);
+    } finally {
+      setLoadingBreakdown(false);
     }
   };
 
@@ -183,43 +214,63 @@ export default function ResolvedOrdersReportWithComments() {
     avgAmount: data.count > 0 ? data.totalAmount / data.count : 0
   })).sort((a, b) => b.totalAmount - a.totalAmount);
 
-  // Calculate agent stats
-  const agentStats: AgentStats[] = Object.entries(
-    tasks.reduce((acc, task) => {
-      const agentKey = task.agentEmail || 'unassigned';
-      if (!acc[agentKey]) {
-        acc[agentKey] = {
-          agentName: task.agentName || 'Unassigned',
-          agentEmail: task.agentEmail || '',
-          totalResolved: 0,
-          totalAmountSaved: 0,
-          totalDuration: 0,
-          dispositions: {}
-        };
-      }
-      acc[agentKey].totalResolved++;
-      // Ensure orderAmount is parsed as a number
-      const amount = typeof task.orderAmount === 'number' ? task.orderAmount : parseFloat(String(task.orderAmount || 0)) || 0;
-      acc[agentKey].totalAmountSaved += amount;
-      acc[agentKey].totalDuration += typeof task.duration === 'number' ? task.duration : parseFloat(String(task.duration || 0)) || 0;
-      
-      const disp = task.disposition || 'Unknown';
-      if (!acc[agentKey].dispositions[disp]) {
-        acc[agentKey].dispositions[disp] = { count: 0, amount: 0 };
-      }
-      acc[agentKey].dispositions[disp].count++;
-      acc[agentKey].dispositions[disp].amount += amount;
-      
-      return acc;
-    }, {} as Record<string, any>)
-  ).map(([_, data]) => ({
-    agentName: data.agentName,
-    agentEmail: data.agentEmail,
-    totalResolved: data.totalResolved,
-    totalAmountSaved: data.totalAmountSaved,
-    avgResolutionTime: data.totalResolved > 0 ? data.totalDuration / data.totalResolved : 0,
-    dispositions: data.dispositions
-  })).sort((a, b) => b.totalResolved - a.totalResolved);
+  // Calculate agent stats - use breakdown data if available, otherwise fall back to task-based calculation
+  const agentStats: AgentStats[] = agentWorkBreakdown?.agents 
+    ? agentWorkBreakdown.agents.map((agent: any) => ({
+        agentName: agent.agentName,
+        agentEmail: agent.agentEmail,
+        totalResolved: agent.totalCount, // Use totalCount from breakdown (includes all queues)
+        totalAmountSaved: agent.totalAmount,
+        avgResolutionTime: agent.avgResolutionTime,
+        dispositions: agent.queues.reduce((acc: any, queue: any) => {
+          // Merge dispositions from all queues
+          Object.entries(queue.dispositions).forEach(([disp, data]: [string, any]) => {
+            if (!acc[disp]) {
+              acc[disp] = { count: 0, amount: 0 };
+            }
+            acc[disp].count += data.count;
+            acc[disp].amount += data.amount;
+          });
+          return acc;
+        }, {} as Record<string, { count: number; amount: number }>),
+        queues: agent.queues // Include queue breakdown
+      }))
+    : Object.entries(
+        tasks.reduce((acc, task) => {
+          const agentKey = task.agentEmail || 'unassigned';
+          if (!acc[agentKey]) {
+            acc[agentKey] = {
+              agentName: task.agentName || 'Unassigned',
+              agentEmail: task.agentEmail || '',
+              totalResolved: 0,
+              totalAmountSaved: 0,
+              totalDuration: 0,
+              dispositions: {}
+            };
+          }
+          acc[agentKey].totalResolved++;
+          // Ensure orderAmount is parsed as a number
+          const amount = typeof task.orderAmount === 'number' ? task.orderAmount : parseFloat(String(task.orderAmount || 0)) || 0;
+          acc[agentKey].totalAmountSaved += amount;
+          acc[agentKey].totalDuration += typeof task.duration === 'number' ? task.duration : parseFloat(String(task.duration || 0)) || 0;
+          
+          const disp = task.disposition || 'Unknown';
+          if (!acc[agentKey].dispositions[disp]) {
+            acc[agentKey].dispositions[disp] = { count: 0, amount: 0 };
+          }
+          acc[agentKey].dispositions[disp].count++;
+          acc[agentKey].dispositions[disp].amount += amount;
+          
+          return acc;
+        }, {} as Record<string, any>)
+      ).map(([_, data]) => ({
+        agentName: data.agentName,
+        agentEmail: data.agentEmail,
+        totalResolved: data.totalResolved,
+        totalAmountSaved: data.totalAmountSaved,
+        avgResolutionTime: data.totalResolved > 0 ? data.totalDuration / data.totalResolved : 0,
+        dispositions: data.dispositions
+      })).sort((a, b) => b.totalResolved - a.totalResolved);
 
   const uniqueDispositions = Array.from(new Set(tasks.map(t => t.disposition))).filter(Boolean);
 
@@ -377,6 +428,9 @@ export default function ResolvedOrdersReportWithComments() {
       {agentStats.length > 0 && (
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-white mb-3">👥 Agent Performance Stats</h3>
+          <p className="text-sm text-white/60 mb-3">
+            {loadingBreakdown ? 'Loading breakdown...' : 'Includes work from all queues (Agent Research, Customer Contact, Escalated Call, Completed)'}
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-white/5">
@@ -385,18 +439,58 @@ export default function ResolvedOrdersReportWithComments() {
                   <th className="px-3 py-2">Total Resolved</th>
                   <th className="px-3 py-2">Total Amount Saved</th>
                   <th className="px-3 py-2">Avg Resolution Time</th>
+                  <th className="px-3 py-2">Queue Breakdown</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {agentStats.map((stat) => (
-                  <tr key={stat.agentEmail} className="hover:bg-white/5">
-                    <td className="px-3 py-2 text-white">{stat.agentName}</td>
-                    <td className="px-3 py-2 text-white">{stat.totalResolved}</td>
-                    <td className="px-3 py-2 text-green-300 font-semibold">
-                      ${stat.totalAmountSaved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-3 py-2 text-white/80">{formatDuration(Math.round(stat.avgResolutionTime))}</td>
-                  </tr>
+                  <React.Fragment key={stat.agentEmail}>
+                    <tr className="hover:bg-white/5">
+                      <td className="px-3 py-2 text-white font-semibold">{stat.agentName}</td>
+                      <td className="px-3 py-2 text-white font-semibold">{stat.totalResolved}</td>
+                      <td className="px-3 py-2 text-green-300 font-semibold">
+                        ${stat.totalAmountSaved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-3 py-2 text-white/80">{formatDuration(Math.round(stat.avgResolutionTime))}</td>
+                      <td className="px-3 py-2">
+                        {stat.queues && stat.queues.length > 0 ? (
+                          <button
+                            onClick={() => toggleRow(`agent-${stat.agentEmail}`)}
+                            className="text-blue-400 hover:text-blue-300 text-xs underline"
+                          >
+                            {expandedRows.has(`agent-${stat.agentEmail}`) ? 'Hide' : 'Show'} Queues ({stat.queues.length})
+                          </button>
+                        ) : (
+                          <span className="text-white/40 text-xs">No breakdown</span>
+                        )}
+                      </td>
+                    </tr>
+                    {expandedRows.has(`agent-${stat.agentEmail}`) && stat.queues && stat.queues.length > 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-3 bg-white/5">
+                          <div className="text-sm">
+                            <div className="text-white font-semibold mb-2">Queue Breakdown:</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                              {stat.queues.map((queue, idx) => (
+                                <div key={idx} className="p-2 bg-blue-900/20 rounded border border-blue-500/30">
+                                  <div className="text-white font-semibold text-xs">{queue.queue}</div>
+                                  <div className="text-white/80 text-xs mt-1">
+                                    Count: {queue.count}
+                                  </div>
+                                  <div className="text-green-300 text-xs mt-1">
+                                    Amount: ${queue.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </div>
+                                  <div className="text-white/60 text-xs mt-1">
+                                    Avg Time: {formatDuration(Math.round(queue.avgDuration))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
