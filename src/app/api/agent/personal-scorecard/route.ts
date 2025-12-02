@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTaskWeight } from "@/lib/task-weights";
 import { getCurrentSprint } from "@/lib/sprint-utils";
+import { cache } from "@/lib/cache";
 
 // Minimum thresholds
 const MINIMUM_TASKS_FOR_RANKING = 20;
@@ -21,6 +22,13 @@ export async function GET(req: NextRequest) {
         success: false,
         error: "Email is required"
       }, { status: 400 });
+    }
+
+    // Check cache first (5 minute TTL to prevent repeated slow queries)
+    const cacheKey = `personal-scorecard:${email}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached);
     }
 
     // Get current date boundaries (today in PST)
@@ -121,6 +129,7 @@ export async function GET(req: NextRequest) {
     
     // Include both assigned tasks and unassigned completed tasks (e.g., "Unable to Resolve" for Holds)
     // Using date filter to leverage index on (status, endTime, assignedToId, completedBy)
+    // EXPLICITLY set no pagination to prevent Prisma from adding OFFSET
     const allTasks = await prisma.task.findMany({
       where: {
         status: "COMPLETED",
@@ -142,8 +151,8 @@ export async function GET(req: NextRequest) {
         taskType: true,
         disposition: true
       },
+      // EXPLICITLY no skip/take to prevent OFFSET from being added
       // The query will use the composite index on (status, endTime, assignedToId, completedBy)
-      // Adding date filter helps PostgreSQL use the index more efficiently
     });
 
     // OPTIMIZED: Fetch Trello data without nested select to avoid slow database joins
@@ -534,7 +543,7 @@ export async function GET(req: NextRequest) {
     const nextRankLifetime = getNextRankAgentLifetime(lifetimeRanked, myLifetime);
     const nextRankSprint = getNextRankAgentSprint(sprintRanked, mySprint);
 
-    return NextResponse.json({
+    const response = {
       success: true,
       agent: {
         name: myLifetime.name,
@@ -564,7 +573,12 @@ export async function GET(req: NextRequest) {
         teamAverages: todayRanked.teamAverages
       },
       weeklyTrend
-    });
+    };
+
+    // Cache the response for 5 minutes to prevent repeated slow queries
+    cache.set(cacheKey, response, 300); // 5 minutes
+
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error('Personal Scorecard API Error:', error);
