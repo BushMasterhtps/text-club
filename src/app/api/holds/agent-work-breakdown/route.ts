@@ -217,9 +217,6 @@ export async function GET(request: NextRequest) {
         if (!workAgentId) {
           continue;
         }
-        }
-
-        if (!workAgentId) continue;
 
         // Look up agent info
         const agentInfo = agentInfoMap.get(workAgentId);
