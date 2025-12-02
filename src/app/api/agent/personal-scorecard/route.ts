@@ -154,23 +154,17 @@ export async function GET(req: NextRequest) {
       select: {
         agentId: true,
         date: true,
-        cardsCount: true,
-        agent: {
-          select: {
-            email: true
-          }
-        }
+        cardsCount: true
       }
     });
     
-    // OPTIMIZED: Pre-group Trello data by user email for O(1) lookups
-    const trelloByEmail = new Map<string, typeof allTrello>();
+    // OPTIMIZED: Pre-group Trello data by user (agentId) for O(1) lookups without extra joins
+    const trelloByUserId = new Map<string, typeof allTrello>();
     for (const trello of allTrello) {
-      const email = trello.agent.email;
-      if (!trelloByEmail.has(email)) {
-        trelloByEmail.set(email, []);
+      if (!trelloByUserId.has(trello.agentId)) {
+        trelloByUserId.set(trello.agentId, []);
       }
-      trelloByEmail.get(email)!.push(trello);
+      trelloByUserId.get(trello.agentId)!.push(trello);
     }
 
     // OPTIMIZED: Pre-filter tasks by user to avoid O(N*M) filtering
@@ -204,7 +198,7 @@ export async function GET(req: NextRequest) {
         : userTasks; // No date filter = use all user's tasks
 
       // Get pre-filtered Trello data for this user (O(1) lookup)
-      const userTrello = trelloByEmail.get(userEmail) || [];
+      const userTrello = trelloByUserId.get(userId) || [];
       
       // Filter by date range if provided
       const trello = startDate || endDate
