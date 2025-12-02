@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
+import { calculateFinancialImpact } from "@/lib/holds-disposition-impact";
 
 interface ResolvedTask {
   id: string;
@@ -25,7 +26,10 @@ interface ResolvedTask {
 interface DispositionStats {
   disposition: string;
   count: number;
-  totalAmount: number;
+  totalAmount: number; // Total order amount (for reference)
+  savedAmount: number; // Amount saved (positive dispositions)
+  lostAmount: number; // Amount lost (negative dispositions)
+  netAmount: number; // Saved - Lost
   avgAmount: number;
 }
 
@@ -33,9 +37,17 @@ interface AgentStats {
   agentName: string;
   agentEmail: string;
   totalResolved: number;
-  totalAmountSaved: number;
+  totalAmountSaved: number; // Amount saved (positive dispositions)
+  totalAmountLost: number; // Amount lost (negative dispositions)
+  netAmount: number; // Saved - Lost
   avgResolutionTime: number;
-  dispositions: Record<string, { count: number; amount: number }>;
+  dispositions: Record<string, { 
+    count: number; 
+    amount: number; // Total order amount
+    savedAmount: number; // Amount saved
+    lostAmount: number; // Amount lost
+    netAmount: number; // Saved - Lost
+  }>;
   queues?: Array<{
     queue: string;
     count: number;
@@ -194,25 +206,35 @@ export default function ResolvedOrdersReportWithComments() {
     setShowModal(true);
   };
 
-  // Calculate disposition stats
+  // Calculate disposition stats with saved/lost/net amounts
   const dispositionStats: DispositionStats[] = Object.entries(
     tasks.reduce((acc, task) => {
       const disp = task.disposition || 'Unknown';
       if (!acc[disp]) {
-        acc[disp] = { count: 0, totalAmount: 0 };
+        acc[disp] = { count: 0, totalAmount: 0, savedAmount: 0, lostAmount: 0, netAmount: 0 };
       }
       acc[disp].count++;
       // Ensure orderAmount is parsed as a number
-      const amount = typeof task.orderAmount === 'number' ? task.orderAmount : parseFloat(String(task.orderAmount || 0)) || 0;
-      acc[disp].totalAmount += amount;
+      const orderAmount = typeof task.orderAmount === 'number' ? task.orderAmount : parseFloat(String(task.orderAmount || 0)) || 0;
+      acc[disp].totalAmount += orderAmount;
+      
+      // Calculate financial impact using disposition configuration
+      const financialImpact = calculateFinancialImpact(disp, orderAmount);
+      acc[disp].savedAmount += financialImpact.savedAmount;
+      acc[disp].lostAmount += financialImpact.lostAmount;
+      acc[disp].netAmount += financialImpact.netAmount;
+      
       return acc;
-    }, {} as Record<string, { count: number; totalAmount: number }>)
+    }, {} as Record<string, { count: number; totalAmount: number; savedAmount: number; lostAmount: number; netAmount: number }>)
   ).map(([disposition, data]) => ({
     disposition,
     count: data.count,
     totalAmount: data.totalAmount,
+    savedAmount: data.savedAmount,
+    lostAmount: data.lostAmount,
+    netAmount: data.netAmount,
     avgAmount: data.count > 0 ? data.totalAmount / data.count : 0
-  })).sort((a, b) => b.totalAmount - a.totalAmount);
+  })).sort((a, b) => Math.abs(b.netAmount) - Math.abs(a.netAmount)); // Sort by absolute net amount
 
   // Calculate agent stats - use breakdown data if available, otherwise fall back to task-based calculation
   const agentStats: AgentStats[] = agentWorkBreakdown?.agents 
@@ -220,7 +242,9 @@ export default function ResolvedOrdersReportWithComments() {
         agentName: agent.agentName,
         agentEmail: agent.agentEmail,
         totalResolved: agent.totalCount,
-        totalAmountSaved: agent.totalAmount,
+        totalAmountSaved: agent.totalAmountSaved || 0,
+        totalAmountLost: agent.totalAmountLost || 0,
+        netAmount: agent.netAmount || 0,
         avgResolutionTime: agent.avgResolutionTime,
         dispositions: agent.dispositions || {} // Direct dispositions from simplified API
       }))
@@ -233,22 +257,31 @@ export default function ResolvedOrdersReportWithComments() {
               agentEmail: task.agentEmail || '',
               totalResolved: 0,
               totalAmountSaved: 0,
+              totalAmountLost: 0,
+              netAmount: 0,
               totalDuration: 0,
               dispositions: {}
             };
           }
           acc[agentKey].totalResolved++;
           // Ensure orderAmount is parsed as a number
-          const amount = typeof task.orderAmount === 'number' ? task.orderAmount : parseFloat(String(task.orderAmount || 0)) || 0;
-          acc[agentKey].totalAmountSaved += amount;
+          const orderAmount = typeof task.orderAmount === 'number' ? task.orderAmount : parseFloat(String(task.orderAmount || 0)) || 0;
           acc[agentKey].totalDuration += typeof task.duration === 'number' ? task.duration : parseFloat(String(task.duration || 0)) || 0;
           
           const disp = task.disposition || 'Unknown';
+          const financialImpact = calculateFinancialImpact(disp, orderAmount);
+          acc[agentKey].totalAmountSaved += financialImpact.savedAmount;
+          acc[agentKey].totalAmountLost += financialImpact.lostAmount;
+          acc[agentKey].netAmount += financialImpact.netAmount;
+          
           if (!acc[agentKey].dispositions[disp]) {
-            acc[agentKey].dispositions[disp] = { count: 0, amount: 0 };
+            acc[agentKey].dispositions[disp] = { count: 0, amount: 0, savedAmount: 0, lostAmount: 0, netAmount: 0 };
           }
           acc[agentKey].dispositions[disp].count++;
-          acc[agentKey].dispositions[disp].amount += amount;
+          acc[agentKey].dispositions[disp].amount += orderAmount;
+          acc[agentKey].dispositions[disp].savedAmount += financialImpact.savedAmount;
+          acc[agentKey].dispositions[disp].lostAmount += financialImpact.lostAmount;
+          acc[agentKey].dispositions[disp].netAmount += financialImpact.netAmount;
           
           return acc;
         }, {} as Record<string, any>)
@@ -257,6 +290,8 @@ export default function ResolvedOrdersReportWithComments() {
         agentEmail: data.agentEmail,
         totalResolved: data.totalResolved,
         totalAmountSaved: data.totalAmountSaved,
+        totalAmountLost: data.totalAmountLost,
+        netAmount: data.netAmount,
         avgResolutionTime: data.totalResolved > 0 ? data.totalDuration / data.totalResolved : 0,
         dispositions: data.dispositions
       })).sort((a, b) => b.totalResolved - a.totalResolved);
@@ -355,7 +390,7 @@ export default function ResolvedOrdersReportWithComments() {
       </div>
 
       {/* Stats Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
           <h3 className="text-sm font-medium text-blue-200 mb-1">Total Resolved</h3>
           <p className="text-2xl font-bold text-white">{total}</p>
@@ -363,10 +398,19 @@ export default function ResolvedOrdersReportWithComments() {
         <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
           <h3 className="text-sm font-medium text-green-200 mb-1">Total Amount Saved</h3>
           <p className="text-2xl font-bold text-white">
-            ${tasks.reduce((sum, t) => {
-              const amount = typeof t.orderAmount === 'number' ? t.orderAmount : parseFloat(String(t.orderAmount || 0)) || 0;
-              return sum + amount;
-            }, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ${dispositionStats.reduce((sum, stat) => sum + stat.savedAmount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+        </div>
+        <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+          <h3 className="text-sm font-medium text-red-200 mb-1">Total Amount Lost</h3>
+          <p className="text-2xl font-bold text-white">
+            -${dispositionStats.reduce((sum, stat) => sum + stat.lostAmount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+        </div>
+        <div className="p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
+          <h3 className="text-sm font-medium text-yellow-200 mb-1">Net Amount</h3>
+          <p className={`text-2xl font-bold ${dispositionStats.reduce((sum, stat) => sum + stat.netAmount, 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+            ${dispositionStats.reduce((sum, stat) => sum + stat.netAmount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>
         <div className="p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
@@ -383,15 +427,20 @@ export default function ResolvedOrdersReportWithComments() {
       {/* Disposition Breakdown */}
       {dispositionStats.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-white mb-3">💰 Dollar Amount Saved by Disposition</h3>
+          <h3 className="text-lg font-semibold text-white mb-3">💰 Dollar Amount by Disposition</h3>
+          <p className="text-sm text-white/60 mb-3">
+            Shows saved/lost amounts based on disposition type. Dispositions that don't complete the task (e.g., "Duplicate", "Unable to Resolve") show $0 saved/lost.
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-white/5">
                 <tr className="text-left text-white/60">
                   <th className="px-3 py-2">Disposition</th>
                   <th className="px-3 py-2">Count</th>
-                  <th className="px-3 py-2">Total Amount</th>
-                  <th className="px-3 py-2">Avg Amount</th>
+                  <th className="px-3 py-2">Total Order Amount</th>
+                  <th className="px-3 py-2">Amount Saved</th>
+                  <th className="px-3 py-2">Amount Lost</th>
+                  <th className="px-3 py-2">Net Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -399,11 +448,17 @@ export default function ResolvedOrdersReportWithComments() {
                   <tr key={stat.disposition} className="hover:bg-white/5">
                     <td className="px-3 py-2 text-white">{stat.disposition}</td>
                     <td className="px-3 py-2 text-white">{stat.count}</td>
-                    <td className="px-3 py-2 text-green-300 font-semibold">
+                    <td className="px-3 py-2 text-white/80">
                       ${stat.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
-                    <td className="px-3 py-2 text-white/80">
-                      ${stat.avgAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <td className={`px-3 py-2 font-semibold ${stat.savedAmount > 0 ? 'text-green-300' : 'text-white/40'}`}>
+                      {stat.savedAmount > 0 ? `$${stat.savedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00'}
+                    </td>
+                    <td className={`px-3 py-2 font-semibold ${stat.lostAmount > 0 ? 'text-red-300' : 'text-white/40'}`}>
+                      {stat.lostAmount > 0 ? `-$${stat.lostAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00'}
+                    </td>
+                    <td className={`px-3 py-2 font-semibold ${stat.netAmount > 0 ? 'text-green-300' : stat.netAmount < 0 ? 'text-red-300' : 'text-white/80'}`}>
+                      ${stat.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}
@@ -426,9 +481,11 @@ export default function ResolvedOrdersReportWithComments() {
                 <tr className="text-left text-white/60">
                   <th className="px-3 py-2">Agent</th>
                   <th className="px-3 py-2">Total Resolved</th>
-                  <th className="px-3 py-2">Total Amount Saved</th>
+                  <th className="px-3 py-2">Amount Saved</th>
+                  <th className="px-3 py-2">Amount Lost</th>
+                  <th className="px-3 py-2">Net Amount</th>
                   <th className="px-3 py-2">Avg Resolution Time</th>
-                  <th className="px-3 py-2">Queue Breakdown</th>
+                  <th className="px-3 py-2">Disposition Breakdown</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -437,8 +494,14 @@ export default function ResolvedOrdersReportWithComments() {
                     <tr className="hover:bg-white/5">
                       <td className="px-3 py-2 text-white font-semibold">{stat.agentName}</td>
                       <td className="px-3 py-2 text-white font-semibold">{stat.totalResolved}</td>
-                      <td className="px-3 py-2 text-green-300 font-semibold">
-                        ${stat.totalAmountSaved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td className={`px-3 py-2 font-semibold ${stat.totalAmountSaved > 0 ? 'text-green-300' : 'text-white/40'}`}>
+                        {stat.totalAmountSaved > 0 ? `$${stat.totalAmountSaved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00'}
+                      </td>
+                      <td className={`px-3 py-2 font-semibold ${stat.totalAmountLost > 0 ? 'text-red-300' : 'text-white/40'}`}>
+                        {stat.totalAmountLost > 0 ? `-$${stat.totalAmountLost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00'}
+                      </td>
+                      <td className={`px-3 py-2 font-semibold ${stat.netAmount > 0 ? 'text-green-300' : stat.netAmount < 0 ? 'text-red-300' : 'text-white/80'}`}>
+                        ${stat.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className="px-3 py-2 text-white/80">{formatDuration(Math.round(stat.avgResolutionTime))}</td>
                       <td className="px-3 py-2">
@@ -456,7 +519,7 @@ export default function ResolvedOrdersReportWithComments() {
                     </tr>
                     {expandedRows.has(`agent-${stat.agentEmail}`) && stat.dispositions && Object.keys(stat.dispositions).length > 0 && (
                       <tr>
-                        <td colSpan={5} className="px-3 py-3 bg-white/5">
+                        <td colSpan={7} className="px-3 py-3 bg-white/5">
                           <div className="text-sm">
                             <div className="text-white font-semibold mb-2">Disposition Breakdown:</div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -466,9 +529,29 @@ export default function ResolvedOrdersReportWithComments() {
                                   <div className="text-white/80 text-xs mt-1">
                                     Count: {data.count}
                                   </div>
-                                  <div className="text-green-300 text-xs mt-1">
-                                    Amount: ${data.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  <div className="text-white/60 text-xs mt-1">
+                                    Order Amount: ${(data.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </div>
+                                  {data.savedAmount > 0 && (
+                                    <div className="text-green-300 text-xs mt-1">
+                                      Saved: ${data.savedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                  )}
+                                  {data.lostAmount > 0 && (
+                                    <div className="text-red-300 text-xs mt-1">
+                                      Lost: -${data.lostAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                  )}
+                                  {data.savedAmount === 0 && data.lostAmount === 0 && (
+                                    <div className="text-white/40 text-xs mt-1">
+                                      No financial impact
+                                    </div>
+                                  )}
+                                  {(data.savedAmount > 0 || data.lostAmount > 0) && (
+                                    <div className={`text-xs mt-1 font-semibold ${data.netAmount >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                                      Net: ${data.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>

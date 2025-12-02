@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { calculateFinancialImpact } from '@/lib/holds-disposition-impact';
 
 /**
  * API for Agent Work Breakdown
@@ -90,15 +91,24 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Group by agent
+    // Group by agent with saved/lost/net amounts
     const agentMap = new Map<string, {
       agentId: string;
       agentName: string;
       agentEmail: string;
       totalCount: number;
-      totalAmount: number;
+      totalAmount: number; // Total order amount (for reference)
+      totalAmountSaved: number; // Amount saved (positive dispositions)
+      totalAmountLost: number; // Amount lost (negative dispositions)
+      netAmount: number; // Saved - Lost
       totalDuration: number;
-      dispositions: Record<string, { count: number; amount: number }>;
+      dispositions: Record<string, { 
+        count: number; 
+        amount: number; // Total order amount
+        savedAmount: number; // Amount saved
+        lostAmount: number; // Amount lost
+        netAmount: number; // Saved - Lost
+      }>;
     }>();
 
     for (const task of tasks) {
@@ -108,9 +118,12 @@ export async function GET(request: NextRequest) {
       
       if (!agentId || !agentInfo) continue;
 
-      const amount = task.holdsOrderAmount ? Number(task.holdsOrderAmount) : 0;
+      const orderAmount = task.holdsOrderAmount ? Number(task.holdsOrderAmount) : 0;
       const duration = task.durationSec || 0;
       const disposition = task.disposition || 'Unknown';
+
+      // Calculate financial impact using disposition configuration
+      const financialImpact = calculateFinancialImpact(disposition, orderAmount);
 
       // Initialize agent if not exists
       if (!agentMap.has(agentId)) {
@@ -120,6 +133,9 @@ export async function GET(request: NextRequest) {
           agentEmail: agentInfo.email,
           totalCount: 0,
           totalAmount: 0,
+          totalAmountSaved: 0,
+          totalAmountLost: 0,
+          netAmount: 0,
           totalDuration: 0,
           dispositions: {}
         });
@@ -129,15 +145,27 @@ export async function GET(request: NextRequest) {
       
       // Update totals
       agent.totalCount++;
-      agent.totalAmount += amount;
+      agent.totalAmount += orderAmount;
+      agent.totalAmountSaved += financialImpact.savedAmount;
+      agent.totalAmountLost += financialImpact.lostAmount;
+      agent.netAmount += financialImpact.netAmount;
       agent.totalDuration += duration;
 
       // Update disposition breakdown
       if (!agent.dispositions[disposition]) {
-        agent.dispositions[disposition] = { count: 0, amount: 0 };
+        agent.dispositions[disposition] = { 
+          count: 0, 
+          amount: 0,
+          savedAmount: 0,
+          lostAmount: 0,
+          netAmount: 0
+        };
       }
       agent.dispositions[disposition].count++;
-      agent.dispositions[disposition].amount += amount;
+      agent.dispositions[disposition].amount += orderAmount;
+      agent.dispositions[disposition].savedAmount += financialImpact.savedAmount;
+      agent.dispositions[disposition].lostAmount += financialImpact.lostAmount;
+      agent.dispositions[disposition].netAmount += financialImpact.netAmount;
     }
 
     // Convert to array and calculate averages
@@ -151,6 +179,9 @@ export async function GET(request: NextRequest) {
       totalTasks: tasks.length,
       totalAgents: agents.length,
       totalAmount: agents.reduce((sum, a) => sum + a.totalAmount, 0),
+      totalAmountSaved: agents.reduce((sum, a) => sum + a.totalAmountSaved, 0),
+      totalAmountLost: agents.reduce((sum, a) => sum + a.totalAmountLost, 0),
+      netAmount: agents.reduce((sum, a) => sum + a.netAmount, 0),
       totalCount: agents.reduce((sum, a) => sum + a.totalCount, 0)
     };
 

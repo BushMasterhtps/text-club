@@ -121,11 +121,11 @@ export async function GET(req: NextRequest) {
       "carson.lund@goldencustomercare.com"
     ];
 
-    // OPTIMIZED: Fetch tasks from last 3 years only (instead of all time)
+    // OPTIMIZED: Fetch tasks from last 3 months (quarter) only (instead of all time)
     // This dramatically reduces the dataset size while still covering all relevant historical data
-    // For lifetime rankings, we'll use 3 years as "lifetime" (reasonable for performance)
-    const threeYearsAgo = new Date();
-    threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+    // For lifetime rankings, we'll use 3 months as "lifetime" (reasonable for performance)
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
     
     // Include both assigned tasks and unassigned completed tasks (e.g., "Unable to Resolve" for Holds)
     // Using date filter to leverage index on (status, endTime, assignedToId, completedBy)
@@ -135,7 +135,7 @@ export async function GET(req: NextRequest) {
         status: "COMPLETED",
         endTime: { 
           not: null,
-          gte: threeYearsAgo // Only fetch tasks from last 3 years
+          gte: threeMonthsAgo // Only fetch tasks from last 3 months (quarter)
         },
         OR: [
           { assignedToId: { not: null } },
@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
     // Select agentId directly instead of nested agent.email relationship
     const allTrello = await prisma.trelloCompletion.findMany({
       where: {
-        date: { gte: threeYearsAgo }
+        date: { gte: threeMonthsAgo }
       },
       select: {
         agentId: true,
