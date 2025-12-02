@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { calculateFinancialImpact } from "@/lib/wod-ivcs-disposition-impact";
 
 export async function GET(request: NextRequest) {
   try {
@@ -93,27 +94,37 @@ export async function GET(request: NextRequest) {
         amount: true,
         webOrderDifference: true,
         purchaseDate: true,
-        sentBackBy: true
+        sentBackBy: true,
+        brand: true
       },
       orderBy: { endTime: "desc" }
       // No take/skip limits - get ALL data
     });
 
-    // Format completed work data for CSV
-    const csvData = completedTasks.map(task => ({
-      'Task ID': task.id,
-      'Completed Date': task.endTime ? new Date(task.endTime).toLocaleDateString() : 'N/A',
-      'Duration': task.durationSec ? `${Math.floor(task.durationSec / 60)}:${(task.durationSec % 60).toString().padStart(2, '0')}` : 'N/A',
-      'Disposition': task.disposition || 'Unknown',
-      'Agent': (task.assignedTo?.name || task.sentBackByUser?.name) || 'Unassigned',
-      'Source': task.wodIvcsSource || 'Unknown',
-      'Document Number': task.documentNumber || 'N/A',
-      'Web Order': task.webOrder || 'N/A',
-      'Customer': task.customerName || 'N/A',
-      'Amount': task.amount || 'N/A',
-      'Difference': task.webOrderDifference || 'N/A',
-      'Order Date': task.purchaseDate ? new Date(task.purchaseDate).toLocaleDateString() : 'N/A'
-    }));
+    // Format completed work data for CSV with financial impact
+    const csvData = completedTasks.map(task => {
+      const amount = task.amount ? Number(task.amount) : 0;
+      const { savedAmount, lostAmount, netAmount } = calculateFinancialImpact(task.disposition, amount);
+      
+      return {
+        'Task ID': task.id,
+        'Completed Date': task.endTime ? new Date(task.endTime).toLocaleDateString() : 'N/A',
+        'Duration': task.durationSec ? `${Math.floor(task.durationSec / 60)}:${(task.durationSec % 60).toString().padStart(2, '0')}` : 'N/A',
+        'Disposition': task.disposition || 'Unknown',
+        'Agent': (task.assignedTo?.name || task.sentBackByUser?.name) || 'Unassigned',
+        'Source': task.wodIvcsSource || 'Unknown',
+        'Brand': task.brand || 'Unknown',
+        'Document Number': task.documentNumber || 'N/A',
+        'Web Order': task.webOrder || 'N/A',
+        'Customer': task.customerName || 'N/A',
+        'Amount': task.amount ? Number(task.amount).toFixed(2) : '0.00',
+        'Amount Saved': savedAmount.toFixed(2),
+        'Amount Lost': lostAmount.toFixed(2),
+        'Net Amount': netAmount.toFixed(2),
+        'Difference': task.webOrderDifference ? Number(task.webOrderDifference).toFixed(2) : '0.00',
+        'Order Date': task.purchaseDate ? new Date(task.purchaseDate).toLocaleDateString() : 'N/A'
+      };
+    });
 
     // Convert to CSV format
     if (csvData.length === 0) {

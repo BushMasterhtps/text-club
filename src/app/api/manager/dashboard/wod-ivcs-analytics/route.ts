@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { calculateFinancialImpact } from "@/lib/wod-ivcs-disposition-impact";
 
 export async function GET(request: NextRequest) {
   try {
@@ -71,7 +72,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Get completed tasks with all necessary data
-    const [completedTasks, totalCount] = await Promise.all([
+    // Fetch ALL tasks for accurate financial calculations (not just paginated subset)
+    const [completedTasks, allTasksForCalculations, totalCount] = await Promise.all([
+      // Paginated tasks for display
       prisma.task.findMany({
         where,
         select: {
@@ -82,13 +85,15 @@ export async function GET(request: NextRequest) {
           assignedTo: {
             select: {
               name: true,
-              email: true
+              email: true,
+              id: true
             }
           },
           sentBackByUser: {
             select: {
               name: true,
-              email: true
+              email: true,
+              id: true
             }
           },
           wodIvcsSource: true,
@@ -98,11 +103,41 @@ export async function GET(request: NextRequest) {
           amount: true,
           webOrderDifference: true,
           purchaseDate: true,
-          sentBackBy: true
+          sentBackBy: true,
+          assignedToId: true,
+          brand: true // Include brand for breakdown
         },
         orderBy: { endTime: "desc" },
         take: limit,
         skip: offset
+      }),
+      // All tasks for financial calculations (no pagination)
+      prisma.task.findMany({
+        where,
+        select: {
+          id: true,
+          disposition: true,
+          amount: true,
+          assignedToId: true,
+          sentBackBy: true,
+          assignedTo: {
+            select: {
+              name: true,
+              email: true,
+              id: true
+            }
+          },
+          sentBackByUser: {
+            select: {
+              name: true,
+              email: true,
+              id: true
+            }
+          },
+          wodIvcsSource: true,
+          brand: true,
+          durationSec: true
+        }
       }),
       prisma.task.count({ where })
     ]);
@@ -158,54 +193,160 @@ export async function GET(request: NextRequest) {
       })
     ]);
 
-    // Process agent analytics
-    const agentBreakdown: Record<string, { name: string; count: number; totalDuration: number; avgDuration: number; dispositions: Record<string, number> }> = {};
-    
-    for (const agent of agentAnalytics) {
-      const agentId = agent.assignedToId || agent.sentBackBy;
-      if (!agentId) continue;
-      
-      if (!agentBreakdown[agentId]) {
-        agentBreakdown[agentId] = {
-          name: '',
-          count: 0,
-          totalDuration: 0,
-          avgDuration: 0,
-          dispositions: {}
-        };
-      }
-      
-      agentBreakdown[agentId].count += agent._count.id;
-      agentBreakdown[agentId].totalDuration += (agent._avg.durationSec || 0) * agent._count.id;
-    }
+    // Calculate financial impact metrics using ALL tasks (not just paginated)
+    let totalSaved = 0;
+    let totalLost = 0;
+    let netAmount = 0;
 
-    // Get agent names
-    const agentIds = Object.keys(agentBreakdown);
-    if (agentIds.length > 0) {
-      const agents = await prisma.user.findMany({
-        where: { id: { in: agentIds } },
-        select: { id: true, name: true }
-      });
+    // Process agent analytics with financial impact
+    const agentBreakdown: Record<string, { 
+      name: string; 
+      email: string;
+      count: number; 
+      totalDuration: number; 
+      avgDuration: number; 
+      totalSaved: number;
+      totalLost: number;
+      netAmount: number;
+      dispositions: Record<string, { count: number; savedAmount: number; lostAmount: number; netAmount: number }> 
+    }> = {};
+    
+    // Process brand breakdown with financial impact
+    const brandBreakdown: Record<string, {
+      count: number;
+      totalSaved: number;
+      totalLost: number;
+      netAmount: number;
+    }> = {};
+
+    // Process source breakdown with financial impact
+    const sourceBreakdown: Record<string, {
+      count: number;
+      totalSaved: number;
+      totalLost: number;
+      netAmount: number;
+    }> = {};
+
+    // Process all tasks for financial calculations
+    for (const task of allTasksForCalculations) {
+      const amount = task.amount ? Number(task.amount) : 0;
+      const { savedAmount, lostAmount, netAmount: taskNetAmount } = calculateFinancialImpact(task.disposition, amount);
       
-      for (const agent of agents) {
-        if (agentBreakdown[agent.id]) {
-          agentBreakdown[agent.id].name = agent.name || 'Unknown';
-          agentBreakdown[agent.id].avgDuration = agentBreakdown[agent.id].totalDuration / agentBreakdown[agent.id].count;
+      // Update totals
+      totalSaved += savedAmount;
+      totalLost += lostAmount;
+      netAmount += taskNetAmount;
+
+      // Update agent breakdown
+      const agentId = task.assignedToId || task.sentBackBy;
+      const agentInfo = task.assignedTo || task.sentBackByUser;
+      if (agentId && agentInfo) {
+        if (!agentBreakdown[agentId]) {
+          agentBreakdown[agentId] = {
+            name: agentInfo.name || 'Unknown',
+            email: agentInfo.email || '',
+            count: 0,
+            totalDuration: 0,
+            avgDuration: 0,
+            totalSaved: 0,
+            totalLost: 0,
+            netAmount: 0,
+            dispositions: {}
+          };
         }
+        agentBreakdown[agentId].count++;
+        agentBreakdown[agentId].totalSaved += savedAmount;
+        agentBreakdown[agentId].totalLost += lostAmount;
+        agentBreakdown[agentId].netAmount += taskNetAmount;
+        agentBreakdown[agentId].totalDuration += task.durationSec || 0;
+
+        // Update disposition breakdown per agent
+        const disp = task.disposition || 'Unknown';
+        if (!agentBreakdown[agentId].dispositions[disp]) {
+          agentBreakdown[agentId].dispositions[disp] = { count: 0, savedAmount: 0, lostAmount: 0, netAmount: 0 };
+        }
+        agentBreakdown[agentId].dispositions[disp].count++;
+        agentBreakdown[agentId].dispositions[disp].savedAmount += savedAmount;
+        agentBreakdown[agentId].dispositions[disp].lostAmount += lostAmount;
+        agentBreakdown[agentId].dispositions[disp].netAmount += taskNetAmount;
+      }
+
+      // Update brand breakdown
+      const brand = task.brand || 'Unknown';
+      if (!brandBreakdown[brand]) {
+        brandBreakdown[brand] = {
+          count: 0,
+          totalSaved: 0,
+          totalLost: 0,
+          netAmount: 0
+        };
+      }
+      brandBreakdown[brand].count++;
+      brandBreakdown[brand].totalSaved += savedAmount;
+      brandBreakdown[brand].totalLost += lostAmount;
+      brandBreakdown[brand].netAmount += taskNetAmount;
+
+      // Update source breakdown
+      const source = task.wodIvcsSource || 'Unknown';
+      if (!sourceBreakdown[source]) {
+        sourceBreakdown[source] = {
+          count: 0,
+          totalSaved: 0,
+          totalLost: 0,
+          netAmount: 0
+        };
+      }
+      sourceBreakdown[source].count++;
+      sourceBreakdown[source].totalSaved += savedAmount;
+      sourceBreakdown[source].totalLost += lostAmount;
+      sourceBreakdown[source].netAmount += taskNetAmount;
+    }
+
+    // Calculate average durations for agents
+    for (const agentId in agentBreakdown) {
+      const agent = agentBreakdown[agentId];
+      agent.avgDuration = agent.count > 0 ? agent.totalDuration / agent.count : 0;
+    }
+
+    // Process disposition analytics with financial impact
+    const dispositionBreakdown: Record<string, { 
+      count: number; 
+      totalDuration: number; 
+      avgDuration: number;
+      totalSaved: number;
+      totalLost: number;
+      netAmount: number;
+    }> = {};
+    
+    for (const task of allTasksForCalculations) {
+      const disp = task.disposition;
+      if (disp) {
+        if (!dispositionBreakdown[disp]) {
+          dispositionBreakdown[disp] = {
+            count: 0,
+            totalDuration: 0,
+            avgDuration: 0,
+            totalSaved: 0,
+            totalLost: 0,
+            netAmount: 0
+          };
+        }
+        
+        const amount = task.amount ? Number(task.amount) : 0;
+        const { savedAmount, lostAmount, netAmount: taskNetAmount } = calculateFinancialImpact(disp, amount);
+        
+        dispositionBreakdown[disp].count++;
+        dispositionBreakdown[disp].totalDuration += task.durationSec || 0;
+        dispositionBreakdown[disp].totalSaved += savedAmount;
+        dispositionBreakdown[disp].totalLost += lostAmount;
+        dispositionBreakdown[disp].netAmount += taskNetAmount;
       }
     }
 
-    // Process disposition analytics
-    const dispositionBreakdown: Record<string, { count: number; totalDuration: number; avgDuration: number }> = {};
-    
-    for (const disp of dispositionAnalytics) {
-      if (disp.disposition) {
-        dispositionBreakdown[disp.disposition] = {
-          count: disp._count.id,
-          totalDuration: (disp._avg.durationSec || 0) * disp._count.id,
-          avgDuration: disp._avg.durationSec || 0
-        };
-      }
+    // Calculate average durations for dispositions
+    for (const disp in dispositionBreakdown) {
+      const dispData = dispositionBreakdown[disp];
+      dispData.avgDuration = dispData.count > 0 ? dispData.totalDuration / dispData.count : 0;
     }
 
     // Process daily trends
@@ -286,22 +427,32 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    // Format completed work data
-    const completedWork = completedTasks.map(task => ({
-      id: task.id,
-      endTime: task.endTime?.toISOString() || '',
-      durationSec: task.durationSec,
-      disposition: task.disposition,
-      assignedTo: task.assignedTo || task.sentBackByUser,
-      wodIvcsSource: task.wodIvcsSource,
-      documentNumber: task.documentNumber,
-      webOrder: task.webOrder,
-      customerName: task.customerName,
-      // Convert Decimal fields to numbers for JSON serialization
-      amount: task.amount ? Number(task.amount) : null,
-      webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
-      purchaseDate: task.purchaseDate?.toISOString() || null
-    }));
+    // Format completed work data with financial impact
+    const completedWork = completedTasks.map(task => {
+      const amount = task.amount ? Number(task.amount) : 0;
+      const { savedAmount, lostAmount, netAmount: taskNetAmount } = calculateFinancialImpact(task.disposition, amount);
+      
+      return {
+        id: task.id,
+        endTime: task.endTime?.toISOString() || '',
+        durationSec: task.durationSec,
+        disposition: task.disposition,
+        assignedTo: task.assignedTo || task.sentBackByUser,
+        wodIvcsSource: task.wodIvcsSource,
+        documentNumber: task.documentNumber,
+        webOrder: task.webOrder,
+        customerName: task.customerName,
+        brand: task.brand,
+        // Convert Decimal fields to numbers for JSON serialization
+        amount: task.amount ? Number(task.amount) : null,
+        webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
+        purchaseDate: task.purchaseDate?.toISOString() || null,
+        // Financial impact
+        savedAmount,
+        lostAmount,
+        netAmount: taskNetAmount
+      };
+    });
 
     // Format daily trends
     const dailyTrendsArray = Object.entries(dailyTrendsMap)
@@ -318,11 +469,17 @@ export async function GET(request: NextRequest) {
       summary: {
         totalCompleted,
         avgDuration,
-        totalCount
+        totalCount,
+        // Financial impact summary
+        totalSaved,
+        totalLost,
+        netAmount
       },
       completedWork,
       dispositionBreakdown,
       agentBreakdown,
+      brandBreakdown, // New: Brand breakdown with financial metrics
+      sourceBreakdown, // New: Source breakdown with financial metrics
       dailyTrends: dailyTrendsArray,
       comparisonData,
       pagination: {

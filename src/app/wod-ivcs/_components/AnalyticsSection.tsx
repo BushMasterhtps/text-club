@@ -31,6 +31,9 @@ interface AnalyticsData {
     totalCompleted: number;
     avgDuration: number;
     totalCount: number;
+    totalSaved: number;
+    totalLost: number;
+    netAmount: number;
   };
   completedWork: Array<{
     id: string;
@@ -48,9 +51,42 @@ interface AnalyticsData {
     amount: number | null;
     webOrderDifference: number | null;
     purchaseDate: string | null;
+    brand: string | null;
+    savedAmount: number;
+    lostAmount: number;
+    netAmount: number;
   }>;
-  dispositionBreakdown: Record<string, { count: number; totalDuration: number; avgDuration: number }>;
-  agentBreakdown: Record<string, { name: string; count: number; totalDuration: number; avgDuration: number; dispositions: Record<string, number> }>;
+  dispositionBreakdown: Record<string, { 
+    count: number; 
+    totalDuration: number; 
+    avgDuration: number;
+    totalSaved: number;
+    totalLost: number;
+    netAmount: number;
+  }>;
+  agentBreakdown: Record<string, { 
+    name: string; 
+    email: string;
+    count: number; 
+    totalDuration: number; 
+    avgDuration: number; 
+    totalSaved: number;
+    totalLost: number;
+    netAmount: number;
+    dispositions: Record<string, { count: number; savedAmount: number; lostAmount: number; netAmount: number }> 
+  }>;
+  brandBreakdown: Record<string, {
+    count: number;
+    totalSaved: number;
+    totalLost: number;
+    netAmount: number;
+  }>;
+  sourceBreakdown: Record<string, {
+    count: number;
+    totalSaved: number;
+    totalLost: number;
+    netAmount: number;
+  }>;
   dailyTrends: Array<{ date: string; count: number; totalDuration: number; avgDuration: number; dispositions: Record<string, number> }>;
   comparisonData: {
     totalCompleted: number;
@@ -578,46 +614,239 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
             </div>
           </div>
 
-          {/* Disposition Breakdown */}
-          <div className="bg-white/5 rounded-lg p-4">
-            <h3 className="text-lg font-semibold mb-4">📊 Disposition Breakdown</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {Object.entries(analyticsData.dispositionBreakdown).map(([disposition, data]) => (
-                <div key={disposition} className="bg-white/5 rounded-lg p-3">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">{disposition}</span>
-                    <span className="text-blue-400 font-bold">{data.count}</span>
-                  </div>
-                  <div className="text-sm text-white/60 mt-1">
-                    Avg: {formatDuration(data.avgDuration)}
-                  </div>
+          {/* Financial Impact Summary */}
+          <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-lg p-6">
+            <h3 className="text-lg font-semibold mb-4">💰 Financial Impact Summary</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white/5 rounded-lg p-4 text-center border-2 border-green-500/30">
+                <div className="text-3xl font-bold text-green-400">
+                  ${analyticsData.summary.totalSaved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
-              ))}
+                <div className="text-sm text-white/80 mt-1">💚 Total Amount Saved</div>
+                <div className="text-xs text-white/60 mt-1">Orders successfully fixed</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-4 text-center border-2 border-red-500/30">
+                <div className="text-3xl font-bold text-red-400">
+                  ${analyticsData.summary.totalLost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-sm text-white/80 mt-1">💔 Total Amount Lost</div>
+                <div className="text-xs text-white/60 mt-1">Unable to complete / High risk</div>
+              </div>
+              <div className={`bg-white/5 rounded-lg p-4 text-center border-2 ${analyticsData.summary.netAmount >= 0 ? 'border-green-500/30' : 'border-red-500/30'}`}>
+                <div className={`text-3xl font-bold ${analyticsData.summary.netAmount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  ${analyticsData.summary.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-sm text-white/80 mt-1">📊 Net Amount</div>
+                <div className="text-xs text-white/60 mt-1">Saved - Lost</div>
+              </div>
+            </div>
+            <div className="mt-4 text-xs text-white/50 text-center">
+              Note: "Lost" indicates orders with higher risk of shipping errors or customer-requested refunds, negatively impacting customer experience.
             </div>
           </div>
 
-          {/* Agent Performance */}
+          {/* Disposition Breakdown with Financial Impact */}
+          <div className="bg-white/5 rounded-lg p-4">
+            <h3 className="text-lg font-semibold mb-4">📊 Disposition Breakdown</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left py-2 px-3 font-semibold">Disposition</th>
+                    <th className="text-center py-2 px-3 font-semibold">Count</th>
+                    <th className="text-center py-2 px-3 font-semibold">Avg Duration</th>
+                    <th className="text-right py-2 px-3 font-semibold text-green-400">💚 Saved</th>
+                    <th className="text-right py-2 px-3 font-semibold text-red-400">💔 Lost</th>
+                    <th className="text-right py-2 px-3 font-semibold">Net Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(analyticsData.dispositionBreakdown)
+                    .sort(([, a], [, b]) => b.netAmount - a.netAmount)
+                    .map(([disposition, data]) => (
+                      <tr key={disposition} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="py-2 px-3 font-medium">{disposition}</td>
+                        <td className="py-2 px-3 text-center text-blue-400">{data.count}</td>
+                        <td className="py-2 px-3 text-center text-white/60">{formatDuration(data.avgDuration)}</td>
+                        <td className="py-2 px-3 text-right text-green-400">
+                          {data.totalSaved > 0 ? `$${data.totalSaved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="py-2 px-3 text-right text-red-400">
+                          {data.totalLost > 0 ? `$${data.totalLost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className={`py-2 px-3 text-right font-semibold ${data.netAmount > 0 ? 'text-green-400' : data.netAmount < 0 ? 'text-red-400' : 'text-white/60'}`}>
+                          ${data.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Agent Performance with Financial Impact */}
           <div className="bg-white/5 rounded-lg p-4">
             <h3 className="text-lg font-semibold mb-4">👥 Agent Performance</h3>
             <div className="space-y-3">
-              {Object.entries(analyticsData.agentBreakdown).map(([agentId, data]) => (
-                <div key={agentId} className="bg-white/5 rounded-lg p-3">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-medium">{data.name}</span>
-                    <span className="text-green-400 font-bold">{data.count} tasks</span>
-                  </div>
-                  <div className="text-sm text-white/60">
-                    Avg Duration: {formatDuration(data.avgDuration)}
-                  </div>
-                  <div className="flex gap-2 mt-2">
-                    {Object.entries(data.dispositions).map(([disposition, count]) => (
-                      <span key={disposition} className="text-xs bg-white/10 px-2 py-1 rounded">
-                        {disposition}: {count}
-                      </span>
+              {Object.entries(analyticsData.agentBreakdown)
+                .sort(([, a], [, b]) => b.count - a.count)
+                .map(([agentId, data]) => {
+                  const [expanded, setExpanded] = React.useState(false);
+                  
+                  return (
+                    <div key={agentId} className="bg-white/5 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <div className="font-medium text-lg">{data.name}</div>
+                          <div className="text-xs text-white/60">{data.email}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-green-400 font-bold text-lg">{data.count} tasks</div>
+                          <div className="text-xs text-white/60">Avg: {formatDuration(data.avgDuration)}</div>
+                        </div>
+                      </div>
+                      
+                      {/* Financial Summary */}
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        <div className="bg-green-500/10 border border-green-500/20 rounded p-2 text-center">
+                          <div className="text-sm font-semibold text-green-400">
+                            ${data.totalSaved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-xs text-white/60">Saved</div>
+                        </div>
+                        <div className="bg-red-500/10 border border-red-500/20 rounded p-2 text-center">
+                          <div className="text-sm font-semibold text-red-400">
+                            ${data.totalLost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-xs text-white/60">Lost</div>
+                        </div>
+                        <div className={`${data.netAmount >= 0 ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'} border rounded p-2 text-center`}>
+                          <div className={`text-sm font-semibold ${data.netAmount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            ${data.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-xs text-white/60">Net</div>
+                        </div>
+                      </div>
+
+                      {/* Disposition Breakdown Toggle */}
+                      <button
+                        onClick={() => setExpanded(!expanded)}
+                        className="w-full text-sm text-blue-400 hover:text-blue-300 flex items-center justify-center gap-1"
+                      >
+                        {expanded ? '▼' : '▶'} {expanded ? 'Hide' : 'Show'} Disposition Breakdown
+                      </button>
+
+                      {/* Expanded Disposition Details */}
+                      {expanded && (
+                        <div className="mt-3 space-y-2">
+                          {Object.entries(data.dispositions)
+                            .sort(([, a], [, b]) => b.netAmount - a.netAmount)
+                            .map(([disposition, dispData]) => (
+                              <div key={disposition} className="bg-white/5 rounded p-2 text-xs">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="font-medium">{disposition}</span>
+                                  <span className="text-blue-400">{dispData.count} tasks</span>
+                                </div>
+                                <div className="flex gap-3 text-xs">
+                                  {dispData.savedAmount > 0 && (
+                                    <span className="text-green-400">
+                                      💚 ${dispData.savedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                  )}
+                                  {dispData.lostAmount > 0 && (
+                                    <span className="text-red-400">
+                                      💔 ${dispData.lostAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                  )}
+                                  <span className={dispData.netAmount >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                    Net: ${dispData.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          {/* Brand Breakdown with Financial Impact */}
+          <div className="bg-white/5 rounded-lg p-4">
+            <h3 className="text-lg font-semibold mb-4">🏷️ Brand Breakdown</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left py-2 px-3 font-semibold">Brand</th>
+                    <th className="text-center py-2 px-3 font-semibold">Count</th>
+                    <th className="text-right py-2 px-3 font-semibold text-green-400">💚 Saved</th>
+                    <th className="text-right py-2 px-3 font-semibold text-red-400">💔 Lost</th>
+                    <th className="text-right py-2 px-3 font-semibold">Net Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(analyticsData.brandBreakdown)
+                    .sort(([, a], [, b]) => b.count - a.count)
+                    .map(([brand, data]) => (
+                      <tr key={brand} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="py-2 px-3 font-medium">{brand}</td>
+                        <td className="py-2 px-3 text-center text-blue-400">{data.count}</td>
+                        <td className="py-2 px-3 text-right text-green-400">
+                          {data.totalSaved > 0 ? `$${data.totalSaved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="py-2 px-3 text-right text-red-400">
+                          {data.totalLost > 0 ? `$${data.totalLost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className={`py-2 px-3 text-right font-semibold ${data.netAmount > 0 ? 'text-green-400' : data.netAmount < 0 ? 'text-red-400' : 'text-white/60'}`}>
+                          ${data.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
                     ))}
-                  </div>
-                </div>
-              ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Source Breakdown with Financial Impact */}
+          <div className="bg-white/5 rounded-lg p-4">
+            <h3 className="text-lg font-semibold mb-4">📂 Source Breakdown</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left py-2 px-3 font-semibold">Source</th>
+                    <th className="text-center py-2 px-3 font-semibold">Count</th>
+                    <th className="text-right py-2 px-3 font-semibold text-green-400">💚 Saved</th>
+                    <th className="text-right py-2 px-3 font-semibold text-red-400">💔 Lost</th>
+                    <th className="text-right py-2 px-3 font-semibold">Net Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(analyticsData.sourceBreakdown)
+                    .sort(([, a], [, b]) => b.count - a.count)
+                    .map(([source, data]) => (
+                      <tr key={source} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="py-2 px-3 font-medium">
+                          {source === 'SO_VS_WEB_DIFFERENCE' ? 'SO vs Web Difference' :
+                           source === 'ORDERS_NOT_DOWNLOADING' ? 'Orders Not Downloading' :
+                           source === 'INVALID_CASH_SALE' ? 'Invalid Cash Sale' : source}
+                        </td>
+                        <td className="py-2 px-3 text-center text-blue-400">{data.count}</td>
+                        <td className="py-2 px-3 text-right text-green-400">
+                          {data.totalSaved > 0 ? `$${data.totalSaved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="py-2 px-3 text-right text-red-400">
+                          {data.totalLost > 0 ? `$${data.totalLost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className={`py-2 px-3 text-right font-semibold ${data.netAmount > 0 ? 'text-green-400' : data.netAmount < 0 ? 'text-red-400' : 'text-white/60'}`}>
+                          ${data.netAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
