@@ -114,6 +114,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
   const [error, setError] = useState<string | null>(null);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null); // Separate error for main analytics
   const [detailedAnalyticsError, setDetailedAnalyticsError] = useState<string | null>(null); // Separate error for detailed analytics
+  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({}); // Track expanded state for all agents
   
   // Date range state
   const [dateMode, setDateMode] = useState<'single' | 'compare'>('single');
@@ -691,7 +692,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
               {Object.entries(analyticsData.agentBreakdown)
                 .sort(([, a], [, b]) => b.count - a.count)
                 .map(([agentId, data]) => {
-                  const [expanded, setExpanded] = React.useState(false);
+                  const isExpanded = expandedAgents[agentId] || false;
                   
                   return (
                     <div key={agentId} className="bg-white/5 rounded-lg p-4">
@@ -730,14 +731,14 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
 
                       {/* Disposition Breakdown Toggle */}
                       <button
-                        onClick={() => setExpanded(!expanded)}
+                        onClick={() => setExpandedAgents(prev => ({ ...prev, [agentId]: !isExpanded }))}
                         className="w-full text-sm text-blue-400 hover:text-blue-300 flex items-center justify-center gap-1"
                       >
-                        {expanded ? '▼' : '▶'} {expanded ? 'Hide' : 'Show'} Disposition Breakdown
+                        {isExpanded ? '▼' : '▶'} {isExpanded ? 'Hide' : 'Show'} Disposition Breakdown
                       </button>
 
                       {/* Expanded Disposition Details */}
-                      {expanded && (
+                      {isExpanded && (
                         <div className="mt-3 space-y-2">
                           {Object.entries(data.dispositions)
                             .sort(([, a], [, b]) => b.netAmount - a.netAmount)
