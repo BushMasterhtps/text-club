@@ -205,28 +205,18 @@ export async function GET(request: NextRequest) {
           }
 
           // Fallback: If we can't find from history, use completedBy as a last resort
-          // This isn't perfect but better than losing the data entirely
-          // Note: This might attribute intermediate work to the final agent, but it's better than nothing
+          // This ensures we don't lose data - better to attribute to final agent than skip entirely
           if (!workAgentId && task.completedBy && task.completedByUser) {
-            // Only use this fallback if the exit time is close to the final endTime
-            // (suggests it might be the same agent)
-            if (task.endTime) {
-              const endTime = new Date(task.endTime);
-              const timeDiff = Math.abs(endTime.getTime() - exitedAt.getTime());
-              // If exit was within 1 hour of final completion, use completedBy
-              if (timeDiff < 60 * 60 * 1000) {
-                workAgentId = task.completedBy;
-                workAgentName = task.completedByUser.name;
-                workAgentEmail = task.completedByUser.email;
-              }
-            }
+            workAgentId = task.completedBy;
+            workAgentName = task.completedByUser.name;
+            workAgentEmail = task.completedByUser.email;
           }
+        }
 
-          // If we still can't identify the agent, skip this entry
-          // (Better to skip than attribute incorrectly)
-          if (!workAgentId) {
-            continue;
-          }
+        // If we still can't identify the agent, skip this entry
+        if (!workAgentId) {
+          continue;
+        }
         }
 
         if (!workAgentId) continue;
