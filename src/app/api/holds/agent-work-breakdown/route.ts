@@ -189,9 +189,9 @@ export async function GET(request: NextRequest) {
             const relevantHistory = task.history
               .filter((h: any) => {
                 const histTime = new Date(h.createdAt);
-                // History entry should be within 5 minutes of queue exit
+                // History entry should be within 10 minutes of queue exit (more lenient)
                 const timeDiff = Math.abs(histTime.getTime() - exitedAt.getTime());
-                return timeDiff < 5 * 60 * 1000; // 5 minutes
+                return timeDiff < 10 * 60 * 1000; // 10 minutes
               })
               .sort((a: any, b: any) => {
                 const aTime = Math.abs(new Date(a.createdAt).getTime() - exitedAt.getTime());
@@ -201,12 +201,29 @@ export async function GET(request: NextRequest) {
 
             if (relevantHistory.length > 0 && relevantHistory[0].actorId) {
               workAgentId = relevantHistory[0].actorId;
-              // We'll look up agent info later
             }
           }
 
-          // If we couldn't find from history, we can't accurately track this work
-          // Skip it to avoid incorrect attribution
+          // Fallback: If we can't find from history, use completedBy as a last resort
+          // This isn't perfect but better than losing the data entirely
+          // Note: This might attribute intermediate work to the final agent, but it's better than nothing
+          if (!workAgentId && task.completedBy && task.completedByUser) {
+            // Only use this fallback if the exit time is close to the final endTime
+            // (suggests it might be the same agent)
+            if (task.endTime) {
+              const endTime = new Date(task.endTime);
+              const timeDiff = Math.abs(endTime.getTime() - exitedAt.getTime());
+              // If exit was within 1 hour of final completion, use completedBy
+              if (timeDiff < 60 * 60 * 1000) {
+                workAgentId = task.completedBy;
+                workAgentName = task.completedByUser.name;
+                workAgentEmail = task.completedByUser.email;
+              }
+            }
+          }
+
+          // If we still can't identify the agent, skip this entry
+          // (Better to skip than attribute incorrectly)
           if (!workAgentId) {
             continue;
           }
