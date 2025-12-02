@@ -30,34 +30,19 @@ export async function GET(request: NextRequest) {
       dateEnd = new Date(Date.UTC(endYear, endMonth - 1, endDay + 1, 7, 59, 59, 999));
     }
 
-    // Query ALL completed Holds tasks that might have work in the date range
-    // We'll parse queue history to find work done in the date range
-    // Use OR condition to catch tasks where:
-    // 1. Final endTime is in range, OR
-    // 2. Any queue history entry is in range
+    // Query ALL completed Holds tasks - we'll parse queue history to find all work done
+    // We need to get all tasks, not just those with final endTime in range,
+    // because work might have been done in the date range even if final completion was later
     const where: any = {
       taskType: 'HOLDS',
       status: 'COMPLETED',
-      completedBy: { not: null }, // Only tasks where an agent completed work
-      disposition: { not: null },
       holdsQueueHistory: { not: null } // Must have queue history
     };
 
-    // If date range is specified, expand the query to catch tasks with work in that range
-    if (dateStart && dateEnd) {
-      where.OR = [
-        // Tasks where final completion (endTime) is in range
-        { endTime: { gte: dateStart, lte: dateEnd } },
-        // Tasks where queue history might have entries in range
-        // (We'll filter these in memory since Prisma can't query JSON fields easily)
-        { endTime: { not: null } } // Get all completed tasks, we'll filter by queue history
-      ];
-    }
+    // If agent filter is specified, we'll filter in memory after parsing queue history
+    // (since we need to look at all queue entries, not just final completedBy)
 
-    if (agentId && agentId !== 'all') {
-      where.completedBy = agentId;
-    }
-
+    // Get a broader set of tasks - we'll filter by date range in memory using queue history
     const tasks = await prisma.task.findMany({
       where,
       select: {
@@ -76,12 +61,62 @@ export async function GET(request: NextRequest) {
             name: true,
             email: true
           }
+        },
+        // Also get all task history to help identify which agent did work in each queue
+        history: {
+          select: {
+            id: true,
+            actorId: true,
+            action: true,
+            createdAt: true,
+            prevStatus: true,
+            newStatus: true
+          },
+          orderBy: {
+            createdAt: 'asc'
+          }
         }
       },
       orderBy: {
         endTime: 'desc'
       }
     });
+
+    // First, collect all unique agent IDs we'll need to look up
+    const agentIdsToLookup = new Set<string>();
+    
+    // Pre-populate with completedBy agents from tasks
+    for (const task of tasks) {
+      if (task.completedBy && task.completedByUser) {
+        agentIdsToLookup.add(task.completedBy);
+      }
+      // Also collect from task history
+      if (task.history && Array.isArray(task.history)) {
+        for (const hist of task.history) {
+          if (hist.actorId) {
+            agentIdsToLookup.add(hist.actorId);
+          }
+        }
+      }
+    }
+
+    // Batch fetch all agent info
+    const agents = await prisma.user.findMany({
+      where: {
+        id: { in: Array.from(agentIdsToLookup) }
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true
+      }
+    });
+
+    // Create a map of agent IDs to agent info for quick lookup
+    const agentInfoMap = new Map<string, { id: string; name: string; email: string }>();
+    for (const agent of agents) {
+      agentInfoMap.set(agent.id, agent);
+    }
 
     // Build agent work breakdown
     // Key: agentId-queue (e.g., "agent123-Agent Research")
@@ -97,57 +132,100 @@ export async function GET(request: NextRequest) {
     }>();
 
     for (const task of tasks) {
-      if (!task.completedBy || !task.completedByUser) continue;
       if (!task.holdsQueueHistory || !Array.isArray(task.holdsQueueHistory)) continue;
 
       const queueHistory = task.holdsQueueHistory as Array<any>;
       const amount = task.holdsOrderAmount ? Number(task.holdsOrderAmount) : 0;
-      const duration = task.durationSec || 0;
       const disp = task.disposition || 'Unknown';
 
-      // Parse queue history to find work done in the date range
-      // Each queue entry represents work done by an agent in that queue
+      // Parse queue history to find ALL work done (not just final completion)
+      // Each queue entry with an exitedAt represents work completed in that queue
       for (let i = 0; i < queueHistory.length; i++) {
         const entry = queueHistory[i];
         if (!entry.queue || !entry.enteredAt) continue;
 
-        // Check if this queue entry falls within the date range
+        // Only count entries where work was completed (has exitedAt)
+        // This represents an agent completing work in this queue
+        if (!entry.exitedAt) {
+          // Still in this queue - hasn't been completed yet, skip
+          continue;
+        }
+
         const enteredAt = new Date(entry.enteredAt);
-        const exitedAt = entry.exitedAt ? new Date(entry.exitedAt) : (task.endTime ? new Date(task.endTime) : new Date());
+        const exitedAt = new Date(entry.exitedAt);
         
         // If date filter is set, check if this work was done in the date range
         if (dateStart && dateEnd) {
-          // Work is in range if enteredAt or exitedAt falls within the range
+          // Work is in range if exitedAt (when work was completed) falls within the range
           const workInRange = 
-            (enteredAt >= dateStart && enteredAt <= dateEnd) ||
             (exitedAt >= dateStart && exitedAt <= dateEnd) ||
             (enteredAt <= dateStart && exitedAt >= dateEnd); // Work spans the entire range
           
           if (!workInRange) continue;
         }
 
-        // Try to identify the agent who worked in this queue
-        // Strategy: Use completedBy if this is the last queue entry (final completion)
-        // Otherwise, we need to infer from the queue history or use the current completedBy
+        // Identify the agent who completed work in this queue
+        // Strategy:
+        // 1. If this is the last queue entry, use completedBy (final completion)
+        // 2. For intermediate entries, we need to infer from task history
+        //    - Look for task history entries around the exitedAt time
+        //    - Find the agent who completed the task (action = "COMPLETED" or status change)
         let workAgentId: string | null = null;
         let workAgentName: string | null = null;
         let workAgentEmail: string | null = null;
 
         if (i === queueHistory.length - 1) {
           // Last queue entry - use completedBy (this is the final completion)
-          workAgentId = task.completedBy;
-          workAgentName = task.completedByUser.name;
-          workAgentEmail = task.completedByUser.email;
+          if (task.completedBy && task.completedByUser) {
+            workAgentId = task.completedBy;
+            workAgentName = task.completedByUser.name;
+            workAgentEmail = task.completedByUser.email;
+          }
         } else {
-          // Intermediate queue entry - check if we can infer from movedBy or use completedBy
-          // For now, we'll use completedBy as a fallback, but this might not be accurate
-          // TODO: Track agent assignments per queue entry in the future
-          // For now, we'll only count the final completion to avoid double-counting
-          // Actually, let's skip intermediate entries for now since we don't have agent tracking
-          continue;
+          // Intermediate queue entry - try to find agent from task history
+          // Look for history entries around the time this queue was exited
+          if (task.history && Array.isArray(task.history)) {
+            // Find history entry closest to when this queue was exited
+            const relevantHistory = task.history
+              .filter((h: any) => {
+                const histTime = new Date(h.createdAt);
+                // History entry should be within 5 minutes of queue exit
+                const timeDiff = Math.abs(histTime.getTime() - exitedAt.getTime());
+                return timeDiff < 5 * 60 * 1000; // 5 minutes
+              })
+              .sort((a: any, b: any) => {
+                const aTime = Math.abs(new Date(a.createdAt).getTime() - exitedAt.getTime());
+                const bTime = Math.abs(new Date(b.createdAt).getTime() - exitedAt.getTime());
+                return aTime - bTime;
+              });
+
+            if (relevantHistory.length > 0 && relevantHistory[0].actorId) {
+              workAgentId = relevantHistory[0].actorId;
+              // We'll look up agent info later
+            }
+          }
+
+          // If we couldn't find from history, we can't accurately track this work
+          // Skip it to avoid incorrect attribution
+          if (!workAgentId) {
+            continue;
+          }
         }
 
         if (!workAgentId) continue;
+
+        // Look up agent info
+        const agentInfo = agentInfoMap.get(workAgentId);
+        if (!agentInfo) {
+          continue; // Agent not found, skip
+        }
+        workAgentName = agentInfo.name;
+        workAgentEmail = agentInfo.email;
+
+        // Apply agent filter if specified
+        if (agentId && agentId !== 'all' && workAgentId !== agentId) {
+          continue;
+        }
 
         const queue = entry.queue;
         const key = `${workAgentId}-${queue}`;
@@ -168,13 +246,18 @@ export async function GET(request: NextRequest) {
         const work = agentWorkMap.get(key)!;
         work.count++;
         work.totalAmount += amount;
-        work.totalDuration += duration;
         
-        if (!work.dispositions[disp]) {
-          work.dispositions[disp] = { count: 0, amount: 0 };
+        // Calculate duration for this queue entry
+        const queueDuration = Math.round((exitedAt.getTime() - enteredAt.getTime()) / 1000);
+        work.totalDuration += queueDuration;
+        
+        // Track disposition from this queue entry (if available) or final disposition
+        const entryDisp = entry.disposition || disp;
+        if (!work.dispositions[entryDisp]) {
+          work.dispositions[entryDisp] = { count: 0, amount: 0 };
         }
-        work.dispositions[disp].count++;
-        work.dispositions[disp].amount += amount;
+        work.dispositions[entryDisp].count++;
+        work.dispositions[entryDisp].amount += amount;
       }
     }
 
