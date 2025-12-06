@@ -31,36 +31,6 @@ export async function GET(request: NextRequest) {
 
     const taskIds = matchingTaskIds.map(t => t.id);
 
-    // Fetch full task details with relations
-    const allTasks = taskIds.length > 0
-      ? await prisma.task.findMany({
-          where: {
-            id: {
-              in: taskIds,
-            },
-          },
-          include: {
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            completedByUser: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: "desc", // Most recent first
-          },
-        })
-      : [];
-
     // 2. Find ALL duplicate records for this order number (case-insensitive)
     const matchingDuplicateIds = await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id
@@ -85,6 +55,77 @@ export async function GET(request: NextRequest) {
                 importedAt: true,
                 importedBy: true,
                 source: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        })
+      : [];
+
+    // 2b. Get original task IDs from duplicate records
+    const originalTaskIds = duplicateRecords
+      .map(dup => dup.originalTaskId)
+      .filter((id): id is string => id !== null);
+
+    // 2c. Fetch original tasks that were referenced in duplicates
+    const originalTasksFromDuplicates = originalTaskIds.length > 0
+      ? await prisma.task.findMany({
+          where: {
+            id: {
+              in: originalTaskIds,
+            },
+            taskType: "WOD_IVCS",
+          },
+          include: {
+            assignedTo: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            completedByUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        })
+      : [];
+
+    // 2d. Combine all tasks (direct matches + original tasks from duplicates)
+    const allTaskIdsSet = new Set([
+      ...taskIds,
+      ...originalTasksFromDuplicates.map(t => t.id),
+    ]);
+    
+    const allTasksCombined = Array.from(allTaskIdsSet).length > 0
+      ? await prisma.task.findMany({
+          where: {
+            id: {
+              in: Array.from(allTaskIdsSet),
+            },
+          },
+          include: {
+            assignedTo: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            completedByUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
               },
             },
           },
@@ -119,6 +160,9 @@ export async function GET(request: NextRequest) {
           },
         })
       : [];
+
+    // Use the combined tasks list (includes direct matches + original tasks from duplicates)
+    const allTasks = allTasksCombined;
 
     // Also check if any tasks were successfully imported (not duplicates)
     const successfullyImportedCount = allTasks.filter(
