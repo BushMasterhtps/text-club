@@ -116,6 +116,12 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
   const [detailedAnalyticsError, setDetailedAnalyticsError] = useState<string | null>(null); // Separate error for detailed analytics
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({}); // Track expanded state for all agents
   
+  // Order number search state
+  const [searchOrderNumber, setSearchOrderNumber] = useState<string>('');
+  const [searchResults, setSearchResults] = useState<any>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  
   // Date range state
   const [dateMode, setDateMode] = useState<'single' | 'compare'>('single');
   const [startDate, setStartDate] = useState<string>('');
@@ -182,6 +188,44 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
       }
     } catch (error) {
       console.error('Error loading import analytics:', error);
+    }
+  };
+
+  // Search order number
+  const handleSearchOrder = async () => {
+    if (!searchOrderNumber.trim()) {
+      setSearchError('Please enter an order number');
+      return;
+    }
+
+    setSearchLoading(true);
+    setSearchError(null);
+    setSearchResults(null);
+
+    try {
+      const response = await fetch(
+        `/api/wod-ivcs/search-order?orderNumber=${encodeURIComponent(searchOrderNumber.trim())}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setSearchResults(data);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to search' }));
+        setSearchError(errorData.error || 'Failed to search order number');
+      }
+    } catch (error) {
+      console.error('Error searching order number:', error);
+      setSearchError('Failed to search order number');
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Handle Enter key in search input
+  const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearchOrder();
     }
   };
 
@@ -469,6 +513,212 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
           )}
         </div>
       </div>
+
+      {/* Order Number Search */}
+      <div className="bg-white/5 rounded-lg p-4">
+        <h3 className="text-lg font-semibold mb-3">🔍 Search by Order Number</h3>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={searchOrderNumber}
+            onChange={(e) => setSearchOrderNumber(e.target.value)}
+            onKeyPress={handleSearchKeyPress}
+            placeholder="Enter order number (e.g., DP9264017)"
+            className="flex-1 px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+          />
+          <PrimaryButton onClick={handleSearchOrder} disabled={searchLoading}>
+            {searchLoading ? 'Searching...' : '🔍 Search'}
+          </PrimaryButton>
+        </div>
+        {searchError && (
+          <div className="mt-2 text-sm text-red-400">{searchError}</div>
+        )}
+      </div>
+
+      {/* Search Results */}
+      {searchResults && (
+        <div className="bg-white/5 rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">
+              📋 Search Results for: <span className="font-mono text-sky-400">{searchResults.orderNumber}</span>
+            </h3>
+            <button
+              onClick={() => {
+                setSearchResults(null);
+                setSearchOrderNumber('');
+              }}
+              className="text-sm text-white/60 hover:text-white"
+            >
+              ✕ Clear
+            </button>
+          </div>
+
+          {/* Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white/5 rounded p-3">
+              <div className="text-xs text-white/60 mb-1">Total Tasks</div>
+              <div className="text-xl font-bold text-white">{searchResults.summary.totalTasks}</div>
+            </div>
+            <div className="bg-white/5 rounded p-3">
+              <div className="text-xs text-white/60 mb-1">Total Imports</div>
+              <div className="text-xl font-bold text-white">{searchResults.summary.totalImports}</div>
+            </div>
+            <div className="bg-white/5 rounded p-3">
+              <div className="text-xs text-white/60 mb-1">Duplicates Prevented</div>
+              <div className="text-xl font-bold text-yellow-400">{searchResults.summary.totalDuplicatesPrevented}</div>
+            </div>
+            <div className="bg-white/5 rounded p-3">
+              <div className="text-xs text-white/60 mb-1">Completed Tasks</div>
+              <div className="text-xl font-bold text-green-400">{searchResults.summary.completedTasks}</div>
+            </div>
+          </div>
+
+          {/* Completed Tasks */}
+          {searchResults.completedTasks.length > 0 && (
+            <div>
+              <h4 className="text-md font-semibold mb-2 text-green-400">✅ Completed Tasks</h4>
+              <div className="space-y-3">
+                {searchResults.completedTasks.map((task: any) => (
+                  <div key={task.id} className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                      <div>
+                        <div className="text-white/60 text-xs">Completed At</div>
+                        <div className="text-white">
+                          {task.completedAt 
+                            ? new Date(task.completedAt).toLocaleString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric', 
+                                year: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                              })
+                            : 'N/A'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-white/60 text-xs">Completed By</div>
+                        <div className="text-white">
+                          {task.completedBy 
+                            ? `${task.completedBy.name} (${task.completedBy.email})`
+                            : task.assignedTo
+                            ? `${task.assignedTo.name} (${task.assignedTo.email})`
+                            : 'N/A'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-white/60 text-xs">Disposition</div>
+                        <div className="text-white font-medium">{task.disposition || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div className="text-white/60 text-xs">Amount</div>
+                        <div className="text-white">
+                          {task.amount 
+                            ? `$${Number(task.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+                    {task.brand && (
+                      <div className="mt-2 text-xs text-white/60">
+                        Brand: {task.brand} | Customer: {task.customerName || 'N/A'} | Source: {task.wodIvcsSource || 'N/A'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* All Tasks (including non-completed) */}
+          {searchResults.allTasks.length > 0 && (
+            <div>
+              <h4 className="text-md font-semibold mb-2">📝 All Tasks</h4>
+              <div className="space-y-2">
+                {searchResults.allTasks.map((task: any) => (
+                  <div key={task.id} className="bg-white/5 border border-white/10 rounded p-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-4">
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          task.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400' :
+                          task.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
+                          task.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-400' :
+                          'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {task.status}
+                        </span>
+                        <span className="text-white/60">
+                          Created: {new Date(task.createdAt).toLocaleDateString()}
+                        </span>
+                        {task.assignedTo && (
+                          <span className="text-white/60">
+                            Assigned to: {task.assignedTo.name}
+                          </span>
+                        )}
+                        {task.disposition && (
+                          <span className="text-white/60">
+                            Disposition: {task.disposition}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Duplicate Records */}
+          {searchResults.duplicateRecords.length > 0 && (
+            <div>
+              <h4 className="text-md font-semibold mb-2 text-yellow-400">
+                ⚠️ Duplicate Import Attempts ({searchResults.duplicateRecords.length})
+              </h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {searchResults.duplicateRecords.map((dup: any) => (
+                  <div key={dup.id} className="bg-yellow-500/10 border border-yellow-500/20 rounded p-2 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <div>
+                        <div className="text-white/60 text-xs">Import Date</div>
+                        <div className="text-white">
+                          {new Date(dup.importSession.importedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-white/60 text-xs">File Name</div>
+                        <div className="text-white font-mono text-xs">{dup.importSession.fileName}</div>
+                      </div>
+                      <div>
+                        <div className="text-white/60 text-xs">Original Completed</div>
+                        <div className="text-white">
+                          {dup.originalCompletedAt 
+                            ? new Date(dup.originalCompletedAt).toLocaleDateString()
+                            : 'Not completed'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-white/60 text-xs">Original Disposition</div>
+                        <div className="text-white">{dup.originalDisposition || 'N/A'}</div>
+                      </div>
+                    </div>
+                    {dup.originalCompletedBy && (
+                      <div className="mt-1 text-xs text-white/60">
+                        Original completed by: {dup.originalCompletedBy} | Age: {dup.ageInDays} days
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* No Results Message */}
+          {searchResults.summary.totalTasks === 0 && (
+            <div className="text-center py-8 text-white/60">
+              No tasks found for order number: <span className="font-mono text-white">{searchResults.orderNumber}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Date Range Controls */}
       <div className="bg-white/5 rounded-lg p-4 space-y-4">
