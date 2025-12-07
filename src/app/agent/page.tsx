@@ -507,7 +507,9 @@ export default function AgentPage() {
           // Use ref to get current value (closure-safe)
           if (selectedSprintRef.current === 'current') {
             console.log("📊 Auto-refreshing scorecard (current sprint)...");
-            loadScorecard(currentEmail).catch(err => console.error("Failed to refresh scorecard:", err));
+            // Skip cache during polling refresh to ensure we get fresh data
+            // This prevents stale cached data from overwriting recent task completions
+            loadScorecard(currentEmail, true).catch(err => console.error("Failed to refresh scorecard:", err));
           } else {
             console.log("📊 Skipping scorecard auto-refresh (viewing historical sprint)");
           }
@@ -1591,8 +1593,8 @@ export default function AgentPage() {
                       if (newSprint !== 'current' && typeof newSprint === 'number') {
                         await loadHistoricalSprintData(newSprint);
                       } else if (newSprint === 'current') {
-                        // Reload current sprint data
-                        await loadScorecard();
+                        // Reload current sprint data - skip cache to get fresh data
+                        await loadScorecard(undefined, true);
                       }
                     }}
                     className="w-full px-3 py-2 rounded-md text-sm font-medium bg-gray-800/50 text-white border border-white/20 hover:bg-gray-700/50 transition-colors"
