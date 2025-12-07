@@ -733,17 +733,22 @@ export default function AgentPage() {
     }
   };
 
-  const loadScorecard = async (emailToUse?: string) => {
+  const loadScorecard = async (emailToUse?: string, skipCache: boolean = false) => {
     const currentEmail = emailToUse || email;
     if (!currentEmail) {
       console.log("⚠️ No email provided to loadScorecard");
       return;
     }
 
-    console.log("📊 Loading scorecard for:", currentEmail);
+    console.log("📊 Loading scorecard for:", currentEmail, skipCache ? "(skipping cache)" : "");
     setLoadingScorecard(true);
     try {
-      const response = await fetch(`/api/agent/personal-scorecard?email=${encodeURIComponent(currentEmail)}`);
+      const cacheParam = skipCache ? "&skipCache=true" : "";
+      // Add cache-busting timestamp when skipping cache, and use no-store to prevent browser caching
+      const timestamp = skipCache ? `&_t=${Date.now()}` : "";
+      const response = await fetch(`/api/agent/personal-scorecard?email=${encodeURIComponent(currentEmail)}${cacheParam}${timestamp}`, {
+        cache: skipCache ? 'no-store' : 'default' // Prevent browser caching when refreshing after task completion
+      });
       const data = await response.json();
 
       console.log("📊 Scorecard API response:", data);
@@ -853,8 +858,9 @@ export default function AgentPage() {
         // Remove task from local state for instant UI update
         setTasks(prev => prev.filter(t => t.id !== taskId));
         // Update stats AND scorecard to reflect the completion
+        // Skip cache to get fresh data immediately after task completion
         await loadStats();
-        await loadScorecard(); // ← Add this to refresh scorecard!
+        await loadScorecard(undefined, true); // Skip cache to get fresh data
       }
     } catch (error) {
       console.error("Failed to complete task:", error);

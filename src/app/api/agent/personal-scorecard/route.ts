@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const email = searchParams.get("email");
+    const skipCache = searchParams.get("skipCache") === "true";
 
     if (!email) {
       return NextResponse.json({
@@ -25,10 +26,16 @@ export async function GET(req: NextRequest) {
     }
 
     // Check cache first (5 minute TTL to prevent repeated slow queries)
+    // Skip cache if skipCache=true (used when refreshing after task completion)
     const cacheKey = `personal-scorecard:${email}`;
-    const cached = cache.get(cacheKey);
-    if (cached) {
-      return NextResponse.json(cached);
+    if (!skipCache) {
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached);
+      }
+    } else {
+      // If skipping cache, also clear it to ensure fresh data on next request
+      cache.delete(cacheKey);
     }
 
     // Get current date boundaries (today in PST)

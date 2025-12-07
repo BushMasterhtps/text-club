@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { learnFromSpamDecision } from "@/lib/spam-detection";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
+import { cache } from "@/lib/cache";
 
 export async function POST(
   req: Request,
@@ -213,6 +214,17 @@ export async function POST(
     } catch (error) {
       console.error('Failed to learn from agent decision:', error);
       // Don't fail the task completion if learning fails
+    }
+
+    // Clear scorecard cache for this user to ensure fresh data on next fetch
+    // This ensures the performance scorecard updates immediately after task completion
+    try {
+      const cacheKey = `personal-scorecard:${email.toLowerCase().trim()}`;
+      cache.delete(cacheKey);
+      console.log(`✅ Cleared scorecard cache for ${email}`);
+    } catch (error) {
+      console.error('Failed to clear scorecard cache:', error);
+      // Don't fail the task completion if cache clearing fails
     }
 
     return NextResponse.json({ 
