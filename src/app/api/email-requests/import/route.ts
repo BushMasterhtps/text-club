@@ -50,7 +50,42 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Process each record
+    // Helper function to extract column value with multiple fallbacks
+    const findColumnValue = (record: any, possibleKeys: string[], caseInsensitive = false): string | null => {
+      for (const key of possibleKeys) {
+        if (record[key]) return record[key];
+      }
+      if (caseInsensitive) {
+        const foundKey = Object.keys(record).find(k => 
+          possibleKeys.some(pk => k.toLowerCase() === pk.toLowerCase())
+        );
+        if (foundKey) return record[foundKey];
+      }
+      return null;
+    };
+
+    // Helper function to find column by partial match (case-insensitive)
+    const findColumnByPartialMatch = (record: any, searchTerms: string[]): string | null => {
+      const foundKey = Object.keys(record).find(key => {
+        const lowerKey = key.toLowerCase();
+        return searchTerms.every(term => lowerKey.includes(term.toLowerCase()));
+      });
+      return foundKey ? record[foundKey] : null;
+    };
+
+    // Process all records first to collect valid task data
+    const validTaskData: Array<{
+      taskType: 'EMAIL_REQUESTS';
+      status: 'PENDING';
+      completionTime: Date | null;
+      salesforceCaseNumber: string | null;
+      emailRequestFor: string | null;
+      details: string | null;
+      email: string | null;
+      text: string | null;
+      brand: string;
+    }> = [];
+
     for (const [index, record] of records.entries()) {
       try {
         // Parse completion time
@@ -67,51 +102,28 @@ export async function POST(request: NextRequest) {
         }
 
         // Find Salesforce Case Number column - try multiple variations
-        // The column name can vary: "SaleForce Case Number (please DO NOT include any other system number) I.E. 1234567"
-        const sfCaseNum = record['SaleForce Case Num'] || 
-                         record['SaleForce Case Number (please DO NOT include any other system number) I.E 1234567'] || 
-                         record['SaleForce Case Number (please DO NOT include any other system number) I.E. 1234567'] ||
-                         record['SaleForce Case Number'] ||
-                         // Try case-insensitive search
-                         Object.keys(record).find(key => 
-                           key.toLowerCase().includes('saleforce') && 
-                           key.toLowerCase().includes('case')
-                         ) ? record[Object.keys(record).find(key => 
-                           key.toLowerCase().includes('saleforce') && 
-                           key.toLowerCase().includes('case')
-                         )!] : null;
+        const sfCaseNum = findColumnValue(record, [
+          'SaleForce Case Num',
+          'SaleForce Case Number (please DO NOT include any other system number) I.E 1234567',
+          'SaleForce Case Number (please DO NOT include any other system number) I.E. 1234567',
+          'SaleForce Case Number'
+        ]) || findColumnByPartialMatch(record, ['saleforce', 'case']);
         
         // Find Email column - try variations
-        const email = record['Email'] || 
-                     record['email'] ||
-                     Object.keys(record).find(key => key.toLowerCase() === 'email') 
-                       ? record[Object.keys(record).find(key => key.toLowerCase() === 'email')!] 
-                       : null;
+        const email = findColumnValue(record, ['Email', 'email'], true);
         
         // Find Name column - try variations
-        const name = record['Name'] || 
-                    record['name'] ||
-                    Object.keys(record).find(key => key.toLowerCase() === 'name') 
-                      ? record[Object.keys(record).find(key => key.toLowerCase() === 'name')!] 
-                      : null;
+        const name = findColumnValue(record, ['Name', 'name'], true);
         
         // Find "What is the email request for?" column - try variations
-        const emailRequestFor = record['What is the email request for?'] ||
-                               record['what is the email request for?'] ||
-                               Object.keys(record).find(key => 
-                                 key.toLowerCase().includes('email request for') ||
-                                 key.toLowerCase().includes('request for')
-                               ) ? record[Object.keys(record).find(key => 
-                                 key.toLowerCase().includes('email request for') ||
-                                 key.toLowerCase().includes('request for')
-                               )!] : null;
+        const emailRequestFor = findColumnValue(record, [
+          'What is the email request for?',
+          'what is the email request for?'
+        ]) || findColumnByPartialMatch(record, ['email request for']) ||
+            findColumnByPartialMatch(record, ['request for']);
         
         // Find Details column
-        const details = record['Details'] ||
-                       record['details'] ||
-                       Object.keys(record).find(key => key.toLowerCase() === 'details') 
-                         ? record[Object.keys(record).find(key => key.toLowerCase() === 'details')!] 
-                         : null;
+        const details = findColumnValue(record, ['Details', 'details'], true);
         
         if (index < 3) { // Log first 3 records for debugging
           console.log(`📋 Record ${index + 1}:`, {
@@ -136,11 +148,7 @@ export async function POST(request: NextRequest) {
           brand: 'Email Request', // Default brand for email requests
         };
 
-        await prisma.task.create({
-          data: taskData,
-        });
-
-        results.imported++;
+        validTaskData.push(taskData);
       } catch (error) {
         console.error(`Error processing row ${index + 1}:`, error);
         results.errors++;
@@ -149,6 +157,28 @@ export async function POST(request: NextRequest) {
           record: record,
           error: error instanceof Error ? error.message : "Unknown error",
         });
+      }
+    }
+
+    // Batch insert all valid tasks in a single operation (fixes N+1 query issue)
+    if (validTaskData.length > 0) {
+      try {
+        await prisma.task.createMany({
+          data: validTaskData,
+        });
+        results.imported = validTaskData.length;
+        console.log(`✅ Batch inserted ${validTaskData.length} tasks in a single operation`);
+      } catch (error) {
+        console.error('Error batch inserting tasks:', error);
+        // If batch insert fails, fall back to individual inserts for error tracking
+        results.errors += validTaskData.length;
+        for (let i = 0; i < validTaskData.length; i++) {
+          results.errorDetails.push({
+            row: i + 1,
+            record: records[i],
+            error: error instanceof Error ? error.message : "Batch insert failed",
+          });
+        }
       }
     }
 
