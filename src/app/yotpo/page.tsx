@@ -6,6 +6,7 @@ import { SmallButton } from "@/app/_components/SmallButton";
 import DashboardLayout from '@/app/_components/DashboardLayout';
 import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
+import { useRangeSelection } from '@/hooks/useRangeSelection';
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import ThemeToggle from '@/app/_components/ThemeToggle';
@@ -223,8 +224,17 @@ function PendingTasksSection() {
   const [statusFilter, setStatusFilter] = useState('pending');
   const [assignedFilter, setAssignedFilter] = useState('unassigned');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<Agent[]>([]);
+  
+  // Range selection with shift+click support
+  const {
+    selected: selectedTasks,
+    selectedCount,
+    toggleSelection,
+    clearSelection,
+    selectAll: selectAllItems,
+    isSelected,
+  } = useRangeSelection(tasks, (task) => task.id);
   const [assignLoading, setAssignLoading] = useState(false);
   
   // Sorting
@@ -268,7 +278,7 @@ function PendingTasksSection() {
         setTasks(data.tasks);
         setTotal(data.total || data.tasks.length);
         setPage(p);
-        setSelectedTasks(new Set()); // Clear selection on page change
+        clearSelection(); // Clear selection on page change
       }
     } catch (error) {
       console.error('Error loading Yotpo tasks:', error);
@@ -303,15 +313,6 @@ function PendingTasksSection() {
     }
   };
 
-  const toggleTask = (taskId: string) => {
-    const newSet = new Set(selectedTasks);
-    if (newSet.has(taskId)) {
-      newSet.delete(taskId);
-    } else {
-      newSet.add(taskId);
-    }
-    setSelectedTasks(newSet);
-  };
 
   const handleBulkAssign = async (agentId: string) => {
     if (selectedTasks.size === 0) {
@@ -334,7 +335,7 @@ function PendingTasksSection() {
       
       if (data.success) {
         alert(`✓ Assigned ${data.results.assigned} tasks successfully`);
-        setSelectedTasks(new Set());
+        clearSelection();
         fetchPage(page); // Refresh current page
       } else {
         alert(`✗ Error: ${data.error}`);
@@ -369,7 +370,7 @@ function PendingTasksSection() {
       await Promise.all(updates);
       
       alert(`✓ Unassigned ${selectedTasks.size} tasks`);
-      setSelectedTasks(new Set());
+      clearSelection();
       fetchPage(page); // Refresh current page
     } catch (error) {
       console.error('Unassign error:', error);
@@ -391,14 +392,27 @@ function PendingTasksSection() {
         </SmallButton>
       </div>
 
+      {/* Selection counter and help text */}
+      {selectedCount > 0 && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 mb-2">
+          <div className="flex items-center justify-between">
+            <span className="text-white text-sm">
+              {selectedCount} task{selectedCount !== 1 ? 's' : ''} selected
+            </span>
+            <span className="text-xs text-white/60">
+              💡 Tip: Click a task, hold Shift, and click another to select a range
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Bulk Toolbar - Always visible like Text Club */}
       <div className="flex flex-wrap items-center gap-2">
         <SmallButton onClick={() => {
-          const allIds = tasks.map(t => t.id);
           if (selectedTasks.size === tasks.length) {
-            setSelectedTasks(new Set()); // Clear all
+            clearSelection();
           } else {
-            setSelectedTasks(new Set(allIds)); // Select all
+            selectAllItems();
           }
         }}>
           {selectedTasks.size === tasks.length && tasks.length > 0 ? "Clear all" : "Select all"}
@@ -493,11 +507,10 @@ function PendingTasksSection() {
           <thead className="bg-white/[0.04]">
             <tr className="text-left text-white/60">
               <th className="px-3 py-2 w-8"><input type="checkbox" onChange={(e) => {
-                const allIds = tasks.map(t => t.id);
                 if (e.target.checked) {
-                  setSelectedTasks(new Set(allIds));
+                  selectAllItems();
                 } else {
-                  setSelectedTasks(new Set());
+                  clearSelection();
                 }
               }} /></th>
               <SortableHeader sortKey="status" currentSort={sort} onSort={handleSort}>
@@ -542,13 +555,14 @@ function PendingTasksSection() {
                 </td>
               </tr>
             ) : (
-              tasks.map(task => (
+              tasks.map((task, index) => (
                 <tr key={task.id} className="hover:bg-white/[0.02]">
                   <td className="px-3 py-2">
                     <input 
                       type="checkbox" 
-                      checked={selectedTasks.has(task.id)}
-                      onChange={() => toggleTask(task.id)}
+                      checked={isSelected(task.id)}
+                      onChange={() => {}}
+                      onClick={(e) => toggleSelection(task.id, index, e)}
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -629,7 +643,7 @@ function PendingTasksSection() {
       <div className="flex items-center justify-between">
         <div className="text-xs text-white/60">
           Page {page} of {totalPages} · Showing {tasks.length} of {total}
-          {selectedTasks.size > 0 && ` · ${selectedTasks.size} selected`}
+          {selectedCount > 0 && ` · ${selectedCount} selected`}
         </div>
         <div className="flex items-center gap-2">
           <SmallButton onClick={onPrev} disabled={loading || page <= 1}>Prev</SmallButton>

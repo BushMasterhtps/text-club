@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
+import { useRangeSelection } from "@/hooks/useRangeSelection";
 
 interface WodIvcsTask {
   id: string;
@@ -40,8 +41,19 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
+  
+  // Range selection with shift+click support
+  const {
+    selected: selectedTasksSet,
+    selectedCount,
+    toggleSelection,
+    clearSelection,
+    selectAll: selectAllItems,
+    isSelected,
+  } = useRangeSelection(tasks, (task) => task.id);
+  
+  const selectedTasks = Array.from(selectedTasksSet);
   const [sortBy, setSortBy] = useState<string>("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [ageFilter, setAgeFilter] = useState<string>("all");
@@ -88,6 +100,7 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
       if (data.success) {
         setTasks(data.items || []);
         setTotalCount(data.total || 0);
+        clearSelection(); // Clear selection when tasks change
       } else {
         console.error("API returned error:", data.error);
         setTasks([]);
@@ -123,18 +136,10 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
 
   const handleSelectAll = () => {
     if (selectedTasks.length === tasks.length) {
-      setSelectedTasks([]);
+      clearSelection();
     } else {
-      setSelectedTasks(tasks.map(task => task.id));
+      selectAllItems();
     }
-  };
-
-  const handleSelectTask = (taskId: string) => {
-    setSelectedTasks(prev => 
-      prev.includes(taskId) 
-        ? prev.filter(id => id !== taskId)
-        : [...prev, taskId]
-    );
   };
 
   const handleSort = (column: string) => {
@@ -224,7 +229,7 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
       
       if (data.success) {
         setAssignMessage(`✅ ${selectedTasks.length} tasks assigned successfully`);
-        setSelectedTasks([]);
+        clearSelection();
         loadTasks();
         onTaskAssignmentChange?.();
         setTimeout(() => setAssignMessage(""), 3000);
@@ -255,7 +260,7 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
       
       if (data.success) {
         setAssignMessage(`✅ ${data.tasksUnassigned || selectedTasks.length} tasks unassigned successfully`);
-        setSelectedTasks([]);
+        clearSelection();
         loadTasks();
         onTaskAssignmentChange?.();
         setTimeout(() => setAssignMessage(""), 3000);
@@ -415,6 +420,20 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
           </select>
         </div>
 
+        {/* Selection counter and help text */}
+        {selectedCount > 0 && (
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 mb-2">
+            <div className="flex items-center justify-between">
+              <span className="text-white text-sm">
+                {selectedCount} task{selectedCount !== 1 ? 's' : ''} selected
+              </span>
+              <span className="text-xs text-white/60">
+                💡 Tip: Click a task, hold Shift, and click another to select a range
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Bulk Actions */}
         <div className="flex items-center gap-2">
           <SmallButton 
@@ -542,15 +561,16 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
               </tr>
             </thead>
             <tbody>
-              {tasks.map((task) => {
+              {tasks.map((task, index) => {
                 const displayData = getTaskDisplayData(task);
                 return (
                   <tr key={task.id} className="border-b border-white/5 hover:bg-white/5">
                     <td className="py-3 px-2">
                       <input
                         type="checkbox"
-                        checked={selectedTasks.includes(task.id)}
-                        onChange={() => handleSelectTask(task.id)}
+                        checked={isSelected(task.id)}
+                        onChange={() => {}}
+                        onClick={(e) => toggleSelection(task.id, index, e)}
                         className="rounded border-white/20 bg-transparent"
                       />
                     </td>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
+import { useRangeSelection } from "@/hooks/useRangeSelection";
 
 interface QueueData {
   total: number;
@@ -22,8 +23,25 @@ export default function AssemblyLineQueues() {
   const [searchQuery, setSearchQuery] = useState('');
   const [agents, setAgents] = useState<any[]>([]);
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null);
-  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Range selection with shift+click support
+  // Note: We'll create a new selection hook for each queue when it's selected
+  const [currentQueueTasks, setCurrentQueueTasks] = useState<any[]>([]);
+  const {
+    selected: selectedTasks,
+    selectedCount,
+    toggleSelection,
+    clearSelection,
+    selectAll: selectAllItems,
+    isSelected,
+    setSelected,
+  } = useRangeSelection(currentQueueTasks, (task) => task.id);
+  
+  // Check if current queue is assignable (not Duplicates or Completed)
+  const isAssignableQueue = selectedQueue && 
+    selectedQueue !== 'Duplicates' && 
+    selectedQueue !== 'Completed';
   const [bulkAssigning, setBulkAssigning] = useState(false);
   const [escalating, setEscalating] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
@@ -120,7 +138,7 @@ export default function AssemblyLineQueues() {
       const data = await response.json();
       if (data.success) {
         await fetchQueueStats();
-        setSelectedTasks(new Set());
+        clearSelection();
         alert(`Successfully assigned ${data.data.assigned} tasks!`);
       } else {
         alert(`Error: ${data.error || 'Failed to assign tasks'}`);
@@ -153,7 +171,7 @@ export default function AssemblyLineQueues() {
       const data = await response.json();
       if (data.success) {
         await fetchQueueStats();
-        setSelectedTasks(new Set());
+        clearSelection();
         alert(`Successfully unassigned ${data.data.unassigned} tasks!`);
       } else {
         alert(`Error: ${data.error || 'Failed to unassign tasks'}`);
@@ -166,32 +184,23 @@ export default function AssemblyLineQueues() {
     }
   };
 
-  const toggleTaskSelection = (taskId: string) => {
-    const newSelected = new Set(selectedTasks);
-    if (newSelected.has(taskId)) {
-      newSelected.delete(taskId);
-    } else {
-      newSelected.add(taskId);
-    }
-    setSelectedTasks(newSelected);
-  };
 
   const toggleSelectAll = (tasks: any[]) => {
     const paginatedTasks = getPaginatedTasks(tasks);
     const paginatedTaskIds = paginatedTasks.map(t => t.id);
     
-    const allSelected = paginatedTaskIds.every(id => selectedTasks.has(id));
+    const allSelected = paginatedTaskIds.every(id => isSelected(id));
     
     if (allSelected) {
       // Deselect all on current page
       const newSelected = new Set(selectedTasks);
       paginatedTaskIds.forEach(id => newSelected.delete(id));
-      setSelectedTasks(newSelected);
+      setSelected(newSelected);
     } else {
       // Select all on current page
       const newSelected = new Set(selectedTasks);
       paginatedTaskIds.forEach(id => newSelected.add(id));
-      setSelectedTasks(newSelected);
+      setSelected(newSelected);
     }
   };
 
@@ -208,8 +217,26 @@ export default function AssemblyLineQueues() {
   const handleQueueClick = (queueName: string) => {
     setSelectedQueue(selectedQueue === queueName ? null : queueName);
     setCurrentPage(1); // Reset to page 1 when switching queues
-    setSelectedTasks(new Set()); // Clear selections
+    clearSelection(); // Clear selections
   };
+  
+  // Update current queue tasks when queue or tasks change
+  useEffect(() => {
+    if (selectedQueue && queueStats[selectedQueue]) {
+      const tasks = queueStats[selectedQueue].tasks;
+      const filtered = !searchQuery.trim() 
+        ? tasks 
+        : tasks.filter(task => {
+            const query = searchQuery.toLowerCase();
+            return task.holdsOrderNumber?.toLowerCase().includes(query) ||
+                   task.holdsCustomerEmail?.toLowerCase().includes(query) ||
+                   (task.holdsOrderDate && new Date(task.holdsOrderDate).toLocaleDateString().includes(query));
+          });
+      setCurrentQueueTasks(filtered);
+    } else {
+      setCurrentQueueTasks([]);
+    }
+  }, [selectedQueue, queueStats, searchQuery]);
 
   const runAutoEscalation = async () => {
     if (!confirm('Auto-escalate all tasks that are 4+ days old to Escalated Call queue?')) {
@@ -357,7 +384,8 @@ export default function AssemblyLineQueues() {
         const filteredTasks = getFilteredTasks(queueStats[selectedQueue].tasks);
         const paginatedTasks = getPaginatedTasks(filteredTasks);
         const totalPages = Math.ceil(filteredTasks.length / tasksPerPage);
-        const allOnPageSelected = paginatedTasks.every(t => selectedTasks.has(t.id));
+        const allOnPageSelected = paginatedTasks.every(t => isSelected(t.id));
+        const isAssignable = selectedQueue !== 'Duplicates' && selectedQueue !== 'Completed';
         
         return (
           <Card>
@@ -372,9 +400,9 @@ export default function AssemblyLineQueues() {
                 )}
               </h3>
               <div className="flex items-center gap-4">
-                {selectedTasks.size > 0 && (
+                {selectedCount > 0 && isAssignable && (
                   <div className="text-sm text-white/70">
-                    {selectedTasks.size} task(s) selected
+                    {selectedCount} task(s) selected
                   </div>
                 )}
                 {/* Pagination info */}
@@ -402,8 +430,22 @@ export default function AssemblyLineQueues() {
               </div>
             </div>
 
-            {/* Bulk assignment controls */}
-            {filteredTasks.length > 0 && (
+            {/* Selection counter and help text - only for assignable queues */}
+            {selectedCount > 0 && isAssignable && (
+              <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-white text-sm">
+                    {selectedCount} task{selectedCount !== 1 ? 's' : ''} selected
+                  </span>
+                  <span className="text-xs text-white/60">
+                    💡 Tip: Click a task, hold Shift, and click another to select a range
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Bulk assignment controls - only for assignable queues */}
+            {filteredTasks.length > 0 && isAssignable && (
               <div className="mb-4 p-3 bg-white/5 rounded-lg border border-white/10">
                 <div className="flex flex-wrap items-center gap-3">
                   <label className="flex items-center gap-2 text-sm text-white/70">
@@ -426,7 +468,7 @@ export default function AssemblyLineQueues() {
                           e.target.value = '';
                         }
                       }}
-                      disabled={bulkAssigning || selectedTasks.size === 0}
+                      disabled={bulkAssigning || selectedCount === 0}
                     >
                       <option value="">Select agent...</option>
                       {agents.map((agent) => (
@@ -438,7 +480,7 @@ export default function AssemblyLineQueues() {
                     
                     <SmallButton
                       onClick={bulkUnassign}
-                      disabled={bulkAssigning || selectedTasks.size === 0}
+                      disabled={bulkAssigning || selectedCount === 0}
                       className="text-red-400 hover:text-red-300"
                     >
                       Unassign Selected
@@ -453,21 +495,31 @@ export default function AssemblyLineQueues() {
             )}
             
             <div className="space-y-3">
-              {paginatedTasks.map((task) => (
+              {paginatedTasks.map((task) => {
+                // Find the index in the full filtered tasks array for range selection
+                const taskIndex = filteredTasks.findIndex(t => t.id === task.id);
+                return (
               <div
                 key={task.id}
                 className="p-3 bg-white/5 rounded-lg border border-white/10"
               >
                 <div className="flex justify-between items-start gap-4">
-                  {/* Checkbox for selection */}
+                  {/* Checkbox for selection - only for assignable queues */}
                   <div className="flex items-start gap-3 flex-1">
-                    <input
-                      type="checkbox"
-                      checked={selectedTasks.has(task.id)}
-                      onChange={() => toggleTaskSelection(task.id)}
-                      className="w-4 h-4 mt-1 rounded"
-                      onClick={(e) => e.stopPropagation()}
-                    />
+                    {isAssignable ? (
+                      <input
+                        type="checkbox"
+                        checked={isSelected(task.id)}
+                        onChange={() => {}}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelection(task.id, taskIndex, e);
+                        }}
+                        className="w-4 h-4 mt-1 rounded"
+                      />
+                    ) : (
+                      <div className="w-4 h-4 mt-1" /> // Spacer for non-assignable queues
+                    )}
                     <div className="flex-1">
                     <p className="font-medium text-white">
                       {task.text?.replace('Holds - ', '') || 'Unknown Customer'}
@@ -633,7 +685,8 @@ export default function AssemblyLineQueues() {
                 </div>
               </div>
               </div>
-              ))}
+              );
+              })}
               {filteredTasks.length === 0 && (
                 <p className="text-center text-white/60 py-4">
                   No tasks match your search

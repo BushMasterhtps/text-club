@@ -6,6 +6,7 @@ import { SmallButton } from "@/app/_components/SmallButton";
 import DashboardLayout from '@/app/_components/DashboardLayout';
 import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
+import { useRangeSelection } from '@/hooks/useRangeSelection';
 import { AssistanceRequestsSection } from "@/app/manager/_components/AssistanceRequestsSection";
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
@@ -1289,8 +1290,19 @@ function PendingEmailRequestTasksSection() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [assigning, setAssigning] = useState(false);
+  
+  // Range selection with shift+click support
+  const {
+    selected: selectedTasksSet,
+    selectedCount,
+    toggleSelection,
+    clearSelection,
+    selectAll: selectAllItems,
+    isSelected,
+  } = useRangeSelection(tasks, (task) => task.id);
+  
+  const selectedTasks = Array.from(selectedTasksSet);
   const [viewingTask, setViewingTask] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
 
@@ -1332,6 +1344,7 @@ function PendingEmailRequestTasksSection() {
       if (res.ok && data.success) {
         setTasks(data.tasks);
         setTotalCount(data.totalCount);
+        clearSelection(); // Clear selection when tasks change
       }
     } catch (error) {
       console.error('Failed to load tasks:', error);
@@ -1424,7 +1437,7 @@ function PendingEmailRequestTasksSection() {
         alert(`Assignment failed for all ${selectedTasks.length} tasks`);
       }
       
-      setSelectedTasks([]);
+      clearSelection();
       loadTasks();
     } catch (error) {
       console.error('Failed to assign tasks:', error);
@@ -1470,7 +1483,7 @@ function PendingEmailRequestTasksSection() {
         alert(`Unassignment failed for all ${selectedTasks.length} tasks`);
       }
       
-      setSelectedTasks([]);
+      clearSelection();
       loadTasks();
     } catch (error) {
       console.error('Failed to unassign tasks:', error);
@@ -1478,22 +1491,6 @@ function PendingEmailRequestTasksSection() {
     } finally {
       setAssigning(false);
     }
-  };
-
-  const toggleTask = (taskId: string) => {
-    setSelectedTasks(prev => 
-      prev.includes(taskId) 
-        ? prev.filter(id => id !== taskId)
-        : [...prev, taskId]
-    );
-  };
-
-  const selectAll = () => {
-    setSelectedTasks(tasks.map(task => task.id));
-  };
-
-  const selectNone = () => {
-    setSelectedTasks([]);
   };
 
   useEffect(() => {
@@ -1569,6 +1566,20 @@ function PendingEmailRequestTasksSection() {
         </div>
       </div>
 
+      {/* Selection counter and help text */}
+      {selectedCount > 0 && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <span className="text-white">
+              {selectedCount} task{selectedCount !== 1 ? 's' : ''} selected
+            </span>
+            <span className="text-xs text-white/60">
+              💡 Tip: Click a task, hold Shift, and click another to select a range
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Bulk Actions */}
       {selectedTasks.length > 0 && (
         <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
@@ -1599,7 +1610,7 @@ function PendingEmailRequestTasksSection() {
                 </select>
               </div>
               <div className="flex gap-2">
-                <SmallButton onClick={selectNone}>Clear Selection</SmallButton>
+                <SmallButton onClick={clearSelection}>Clear Selection</SmallButton>
                 <SmallButton onClick={unassignSelected} disabled={assigning}>
                   Unassign Selected
                 </SmallButton>
@@ -1618,7 +1629,13 @@ function PendingEmailRequestTasksSection() {
                 <input
                   type="checkbox"
                   checked={selectedTasks.length === tasks.length && tasks.length > 0}
-                  onChange={selectedTasks.length === tasks.length ? selectNone : selectAll}
+                  onChange={() => {
+                    if (selectedTasks.length === tasks.length) {
+                      clearSelection();
+                    } else {
+                      selectAllItems();
+                    }
+                  }}
                   className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                 />
               </th>
@@ -1633,13 +1650,14 @@ function PendingEmailRequestTasksSection() {
             </tr>
           </thead>
           <tbody>
-            {filteredTasks.map((task) => (
+            {filteredTasks.map((task, index) => (
               <tr key={task.id} className="border-b border-white/5 hover:bg-white/5">
                 <td className="py-3 px-2">
                   <input
                     type="checkbox"
-                    checked={selectedTasks.includes(task.id)}
-                    onChange={() => toggleTask(task.id)}
+                    checked={isSelected(task.id)}
+                    onChange={() => {}}
+                    onClick={(e) => toggleSelection(task.id, index, e)}
                     className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                   />
                 </td>

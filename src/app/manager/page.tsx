@@ -16,6 +16,7 @@ import TextClubAnalytics from '@/app/_components/TextClubAnalytics';
 import DashboardLayout from '@/app/_components/DashboardLayout';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
+import { useRangeSelection } from '@/hooks/useRangeSelection';
 
 /* ========== Shared types ========== */
 type AssignResult = Record<string, string[]>;
@@ -696,8 +697,15 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   const totalPages = Math.max(1, Math.ceil((total || 0) / PAGE_SIZE));
   const [loading, setLoading] = useState(false);
 
-  // selection
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  // selection with shift+click range support
+  const {
+    selected,
+    selectedCount,
+    toggleSelection,
+    clearSelection,
+    selectAll: selectAllItems,
+    isSelected,
+  } = useRangeSelection(items, (item) => item.id);
 
   // sorting
   const [sort, setSort] = useState<{ key: string; direction: SortDirection } | null>(null);
@@ -705,7 +713,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   // agents list for dropdowns
   const [agents, setAgents] = useState<Array<{ id: string; email: string; name: string | null; isLive: boolean; lastSeen: string | null }>>([]);
 
-  const resetSelection = () => setSelected({});
+  const resetSelection = () => clearSelection();
 
   async function loadAgents() {
     // Filter to only TEXT_CLUB agents (excludes Holds-only agents)
@@ -744,7 +752,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
       setItems(data.items || []);
       setTotal(data.total || 0);
       setPage(p);
-      resetSelection();
+      clearSelection();
     } finally {
       setLoading(false);
     }
@@ -761,19 +769,19 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   const onPrev = () => page > 1 && fetchPage(page - 1);
   const onNext = () => page < totalPages && fetchPage(page + 1);
 
-  const allChecked = items.length > 0 && items.every((r) => selected[r.id]);
-  const toggleAll = () =>
-    setSelected((m) => {
-      if (allChecked) return {};
-      const next: Record<string, boolean> = {};
-      for (const r of items) next[r.id] = true;
-      return next;
-    });
+  const allChecked = items.length > 0 && items.every((r) => isSelected(r.id));
+  const toggleAll = () => {
+    if (allChecked) {
+      clearSelection();
+    } else {
+      selectAllItems();
+    }
+  };
   const checkedTaskIds = items
-    .filter((r) => selected[r.id] && r.taskId)
+    .filter((r) => isSelected(r.id) && r.taskId)
     .map((r) => r.taskId as string);
   const checkedRawMessageIds = items
-    .filter((r) => selected[r.id] && !r.taskId)
+    .filter((r) => isSelected(r.id) && !r.taskId)
     .map((r) => r.id);
 
   async function bulkAssign(agentId: string) {
@@ -939,6 +947,20 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
         <SmallButton onClick={onSearch} disabled={loading}>{loading ? "Loading…" : "Search"}</SmallButton>
       </div>
 
+      {/* Selection counter and help text */}
+      {selectedCount > 0 && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 mb-2">
+          <div className="flex items-center justify-between">
+            <span className="text-white text-sm">
+              {selectedCount} item{selectedCount !== 1 ? 's' : ''} selected
+            </span>
+            <span className="text-xs text-white/60">
+              💡 Tip: Click a task, hold Shift, and click another to select a range
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Bulk toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <SmallButton onClick={toggleAll}>{allChecked ? "Clear all" : "Select all"}</SmallButton>
@@ -1016,7 +1038,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
                 </td>
               </tr>
             )}
-            {items.map((r) => {
+            {items.map((r, index) => {
               const assigneeName = r.assignedTo ? (r.assignedTo.name || r.assignedTo.email) : null;
               const isAssigned = Boolean(assigneeName);
               return (
@@ -1024,8 +1046,9 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
                   <td className="px-3 py-3">
                     <input
                       type="checkbox"
-                      checked={!!selected[r.id]}
-                      onChange={(e) => setSelected((m) => ({ ...m, [r.id]: e.target.checked }))}
+                      checked={isSelected(r.id)}
+                      onChange={() => {}}
+                      onClick={(e) => toggleSelection(r.id, index, e)}
                     />
                   </td>
                   <td className="px-3 py-3">{r.brand || "—"}</td>
