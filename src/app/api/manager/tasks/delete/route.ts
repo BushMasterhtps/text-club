@@ -77,12 +77,13 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Step 1b: Fetch RawMessages that are not associated with tasks (for Spam Review)
+    // Step 1b: Fetch RawMessages that are not associated with tasks
+    // Allow deletion of RawMessages in PENDING, READY, or SPAM_REVIEW status
     const rawMessages = rawMessageIds.length > 0 
       ? await prisma.rawMessage.findMany({
           where: { 
             id: { in: rawMessageIds },
-            status: 'SPAM_REVIEW' as any, // Only allow deletion of SPAM_REVIEW RawMessages
+            status: { in: ['PENDING', 'READY', 'SPAM_REVIEW'] as any },
           },
           select: {
             id: true,
