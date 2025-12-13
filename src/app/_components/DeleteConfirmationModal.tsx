@@ -73,12 +73,10 @@ export function DeleteConfirmationModal({
             Cancel
           </SmallButton>
           <SmallButton
-            onClick={async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
+            onClick={() => {
               console.log('Delete confirmation button clicked');
               try {
-                await onConfirm();
+                onConfirm();
               } catch (error) {
                 console.error('Error in onConfirm:', error);
               }
