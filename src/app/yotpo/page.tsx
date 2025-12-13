@@ -387,33 +387,48 @@ function PendingTasksSection() {
   };
 
   async function handleDeleteTasks(taskIds: string[]) {
-    if (taskIds.length === 0) return;
+    if (taskIds.length === 0) {
+      console.warn('No task IDs provided for deletion');
+      return;
+    }
     
+    console.log('Yotpo delete - taskIds:', taskIds);
     setDeleteLoading(true);
     try {
+      const requestBody = { ids: taskIds };
+      console.log('Yotpo delete - sending request:', requestBody);
+      
       const res = await fetch("/api/manager/tasks/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: taskIds }),
+        body: JSON.stringify(requestBody),
       });
-      const data = await res.json().catch(() => null);
+      
+      const data = await res.json().catch((err) => {
+        console.error('Failed to parse delete response:', err);
+        return null;
+      });
+      
+      console.log('Yotpo delete - response:', { status: res.status, data });
       
       if (!res.ok || !data?.success) {
-        alert(data?.error || "Failed to delete tasks");
+        const errorMsg = data?.error || `HTTP ${res.status}: Failed to delete tasks`;
+        console.error('Yotpo delete failed:', errorMsg);
+        alert(errorMsg);
         return;
       }
 
       let message = `✅ Successfully deleted ${data.deletedCount} task(s)`;
       if (data.skippedCount > 0) {
-        message += `\n⚠️ Skipped ${data.skippedCount} task(s) (${data.skippedTasks.map((t: any) => t.reason).join(', ')})`;
+        message += `\n⚠️ Skipped ${data.skippedCount} task(s) (${data.skippedTasks?.map((t: any) => t.reason).join(', ') || 'unknown reason'})`;
       }
       alert(message);
 
       clearSelection();
-      fetchPage(page);
+      await fetchPage(page);
     } catch (error) {
-      console.error("Delete error:", error);
-      alert("Failed to delete tasks");
+      console.error("Yotpo delete error:", error);
+      alert(`Failed to delete tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setDeleteLoading(false);
       setShowDeleteModal(false);
@@ -422,12 +437,18 @@ function PendingTasksSection() {
   }
 
   const handleBulkDelete = () => {
-    if (selectedTasks.size === 0) return;
-    setPendingDeleteIds(Array.from(selectedTasks));
+    if (selectedTasks.size === 0) {
+      console.warn('No tasks selected for bulk delete');
+      return;
+    }
+    const ids = Array.from(selectedTasks);
+    console.log('Yotpo bulk delete - selected task IDs:', ids);
+    setPendingDeleteIds(ids);
     setShowDeleteModal(true);
   };
 
   const handleSingleDelete = (taskId: string) => {
+    console.log('Yotpo single delete - task ID:', taskId);
     setPendingDeleteIds([taskId]);
     setShowDeleteModal(true);
   };
