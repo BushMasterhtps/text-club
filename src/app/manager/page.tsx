@@ -969,8 +969,20 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
     setShowDeleteModal(true);
   };
 
-  const handleSingleDelete = (itemId: string) => {
-    setPendingDeleteIds([itemId]);
+  const handleSingleDelete = (itemIdOrTaskId: string) => {
+    // itemIdOrTaskId could be either:
+    // 1. A raw message ID (item.id)
+    // 2. A task ID (item.taskId)
+    // We need to find the item to determine which it is
+    const item = items.find(i => i.id === itemIdOrTaskId || i.taskId === itemIdOrTaskId);
+    if (item) {
+      // Store the item's ID (raw message ID) so we can find it later
+      setPendingDeleteIds([item.id]);
+    } else {
+      // Fallback: just store what we got (might be a taskId)
+      console.warn('Item not found for single delete, using provided ID:', itemIdOrTaskId);
+      setPendingDeleteIds([itemIdOrTaskId]);
+    }
     setShowDeleteModal(true);
   };
 
@@ -1087,7 +1099,8 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
           const rawMessageIdsToDelete: string[] = [];
           
           pendingDeleteIds.forEach(itemId => {
-            const item = items.find(i => i.id === itemId);
+            // Try to find the item by both id and taskId (in case the ID passed was a taskId)
+            const item = items.find(i => i.id === itemId || i.taskId === itemId);
             if (item) {
               if (item.taskId) {
                 // This item has a task, delete by taskId
@@ -1098,11 +1111,16 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
                 rawMessageIdsToDelete.push(item.id);
               }
             } else {
-              console.warn('Item not found for deletion:', itemId);
+              // Item not found in current items array - might have been filtered out
+              // Try to determine if it's a taskId or rawMessageId by checking the API
+              console.warn('Item not found in current items array for deletion:', itemId);
+              // For now, assume it's a rawMessageId if we can't find it
+              // The API will handle validation
+              rawMessageIdsToDelete.push(itemId);
             }
           });
           
-          console.log('Deleting tasks:', { taskIdsToDelete, rawMessageIdsToDelete });
+          console.log('Deleting tasks:', { taskIdsToDelete, rawMessageIdsToDelete, pendingDeleteIds });
           await handleDeleteTasks(taskIdsToDelete, rawMessageIdsToDelete);
         }}
         onCancel={() => {
