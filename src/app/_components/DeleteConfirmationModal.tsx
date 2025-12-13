@@ -23,9 +23,28 @@ export function DeleteConfirmationModal({
   return (
     <div 
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4"
-      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+      style={{ 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        bottom: 0,
+        overflowY: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+      onClick={(e) => {
+        // Close modal if clicking on backdrop
+        if (e.target === e.currentTarget) {
+          onCancel();
+        }
+      }}
     >
-      <div className="bg-neutral-900 rounded-lg p-6 max-w-2xl w-full border border-red-500/30 shadow-xl">
+      <div 
+        className="bg-neutral-900 rounded-lg p-6 max-w-2xl w-full border border-red-500/30 shadow-xl"
+        style={{ margin: 'auto' }}
+      >
         <div className="mb-4">
           <h3 className="text-xl font-semibold text-white mb-2">
             ⚠️ Confirm Task Deletion
