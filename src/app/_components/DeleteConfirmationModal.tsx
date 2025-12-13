@@ -21,8 +21,8 @@ export function DeleteConfirmationModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-neutral-900 rounded-lg p-6 max-w-2xl w-full border border-red-500/30 shadow-xl">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4 overflow-y-auto">
+      <div className="bg-neutral-900 rounded-lg p-6 max-w-2xl w-full border border-red-500/30 shadow-xl my-auto">
         <div className="mb-4">
           <h3 className="text-xl font-semibold text-white mb-2">
             ⚠️ Confirm Task Deletion

@@ -902,15 +902,19 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
     try { await onTasksMutated?.(); } catch {}
   }
 
-  async function handleDeleteTasks(taskIds: string[]) {
-    if (taskIds.length === 0) return;
+  async function handleDeleteTasks(taskIds: string[], rawMessageIds: string[] = []) {
+    const allIds = [...taskIds, ...rawMessageIds];
+    if (allIds.length === 0) return;
     
     setDeleteLoading(true);
     try {
       const res = await fetch("/api/manager/tasks/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: taskIds }),
+        body: JSON.stringify({ 
+          ids: taskIds,
+          rawMessageIds: rawMessageIds,
+        }),
       });
       const data = await res.json().catch(() => null);
       
@@ -920,9 +924,9 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
       }
 
       // Show summary message
-      let message = `✅ Successfully deleted ${data.deletedCount} task(s)`;
+      let message = `✅ Successfully deleted ${data.deletedCount + (data.rawMessagesDeleted || 0)} item(s)`;
       if (data.skippedCount > 0) {
-        message += `\n⚠️ Skipped ${data.skippedCount} task(s) (${data.skippedTasks.map((t: any) => t.reason).join(', ')})`;
+        message += `\n⚠️ Skipped ${data.skippedCount} item(s) (${data.skippedTasks?.map((t: any) => t.reason).join(', ') || 'invalid status'})`;
       }
       alert(message);
 
@@ -935,22 +939,25 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
     } finally {
       setDeleteLoading(false);
       setShowDeleteModal(false);
+      setPendingDeleteIds([]);
     }
   }
 
   const handleBulkDelete = () => {
-    const taskIdsToDelete = [
-      ...checkedTaskIds,
-      ...checkedRawMessageIds,
-    ];
-    if (taskIdsToDelete.length === 0) return;
+    // Get all selected item IDs (these are the raw message IDs or item IDs)
+    const selectedItemIds = items
+      .filter((r) => isSelected(r.id))
+      .map((r) => r.id);
+    
+    if (selectedItemIds.length === 0) return;
+    
+    setPendingDeleteIds(selectedItemIds);
     setShowDeleteModal(true);
   };
 
-  const handleSingleDelete = (taskId: string) => {
+  const handleSingleDelete = (itemId: string) => {
+    setPendingDeleteIds([itemId]);
     setShowDeleteModal(true);
-    // Store single task ID temporarily
-    (window as any).__pendingDeleteId = taskId;
   };
 
   return (
@@ -1058,7 +1065,28 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
       <DeleteConfirmationModal
         isOpen={showDeleteModal}
         taskCount={pendingDeleteIds.length}
-        onConfirm={() => handleDeleteTasks(pendingDeleteIds)}
+        onConfirm={() => {
+          // Split pendingDeleteIds into taskIds and rawMessageIds
+          // pendingDeleteIds contains item IDs (which are raw message IDs)
+          // We need to find which items have taskIds and which don't
+          const taskIdsToDelete: string[] = [];
+          const rawMessageIdsToDelete: string[] = [];
+          
+          pendingDeleteIds.forEach(itemId => {
+            const item = items.find(i => i.id === itemId);
+            if (item) {
+              if (item.taskId) {
+                // This item has a task, delete by taskId
+                taskIdsToDelete.push(item.taskId);
+              } else {
+                // This is a raw message without a task, delete by rawMessageId
+                rawMessageIdsToDelete.push(item.id);
+              }
+            }
+          });
+          
+          handleDeleteTasks(taskIdsToDelete, rawMessageIdsToDelete);
+        }}
         onCancel={() => {
           setShowDeleteModal(false);
           setPendingDeleteIds([]);
