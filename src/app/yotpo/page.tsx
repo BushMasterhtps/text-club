@@ -7,6 +7,7 @@ import DashboardLayout from '@/app/_components/DashboardLayout';
 import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import { useRangeSelection } from '@/hooks/useRangeSelection';
+import { DeleteConfirmationModal } from '@/app/_components/DeleteConfirmationModal';
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import ThemeToggle from '@/app/_components/ThemeToggle';
@@ -380,6 +381,52 @@ function PendingTasksSection() {
     }
   };
 
+  async function handleDeleteTasks(taskIds: string[]) {
+    if (taskIds.length === 0) return;
+    
+    setDeleteLoading(true);
+    try {
+      const res = await fetch("/api/manager/tasks/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: taskIds }),
+      });
+      const data = await res.json().catch(() => null);
+      
+      if (!res.ok || !data?.success) {
+        alert(data?.error || "Failed to delete tasks");
+        return;
+      }
+
+      let message = `✅ Successfully deleted ${data.deletedCount} task(s)`;
+      if (data.skippedCount > 0) {
+        message += `\n⚠️ Skipped ${data.skippedCount} task(s) (${data.skippedTasks.map((t: any) => t.reason).join(', ')})`;
+      }
+      alert(message);
+
+      clearSelection();
+      fetchPage(page);
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Failed to delete tasks");
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteModal(false);
+      setPendingDeleteIds([]);
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedTasks.size === 0) return;
+    setPendingDeleteIds(Array.from(selectedTasks));
+    setShowDeleteModal(true);
+  };
+
+  const handleSingleDelete = (taskId: string) => {
+    setPendingDeleteIds([taskId]);
+    setShowDeleteModal(true);
+  };
+
   return (
     <Card className="p-5 space-y-4">
       <div className="flex items-center justify-between">
@@ -630,6 +677,13 @@ function PendingTasksSection() {
                           </option>
                         ))}
                       </select>
+                      <SmallButton
+                        onClick={() => handleSingleDelete(task.id)}
+                        disabled={deleteLoading}
+                        className="bg-red-600 hover:bg-red-700 text-xs px-2 py-1"
+                      >
+                        Delete
+                      </SmallButton>
                     </div>
                   </td>
                 </tr>

@@ -17,6 +17,7 @@ import DashboardLayout from '@/app/_components/DashboardLayout';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
 import { useRangeSelection } from '@/hooks/useRangeSelection';
+import { DeleteConfirmationModal } from '@/app/_components/DeleteConfirmationModal';
 
 /* ========== Shared types ========== */
 type AssignResult = Record<string, string[]>;
@@ -713,6 +714,11 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   // agents list for dropdowns
   const [agents, setAgents] = useState<Array<{ id: string; email: string; name: string | null; isLive: boolean; lastSeen: string | null }>>([]);
 
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+
   const resetSelection = () => clearSelection();
 
   async function loadAgents() {
@@ -896,6 +902,57 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
     try { await onTasksMutated?.(); } catch {}
   }
 
+  async function handleDeleteTasks(taskIds: string[]) {
+    if (taskIds.length === 0) return;
+    
+    setDeleteLoading(true);
+    try {
+      const res = await fetch("/api/manager/tasks/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: taskIds }),
+      });
+      const data = await res.json().catch(() => null);
+      
+      if (!res.ok || !data?.success) {
+        alert(data?.error || "Failed to delete tasks");
+        return;
+      }
+
+      // Show summary message
+      let message = `✅ Successfully deleted ${data.deletedCount} task(s)`;
+      if (data.skippedCount > 0) {
+        message += `\n⚠️ Skipped ${data.skippedCount} task(s) (${data.skippedTasks.map((t: any) => t.reason).join(', ')})`;
+      }
+      alert(message);
+
+      clearSelection();
+      await fetchPage(page);
+      try { await onTasksMutated?.(); } catch {}
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Failed to delete tasks");
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteModal(false);
+    }
+  }
+
+  const handleBulkDelete = () => {
+    const taskIdsToDelete = [
+      ...checkedTaskIds,
+      ...checkedRawMessageIds,
+    ];
+    if (taskIdsToDelete.length === 0) return;
+    setShowDeleteModal(true);
+  };
+
+  const handleSingleDelete = (taskId: string) => {
+    setShowDeleteModal(true);
+    // Store single task ID temporarily
+    (window as any).__pendingDeleteId = taskId;
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
@@ -988,7 +1045,25 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
 
         <SmallButton onClick={bulkUnassign} disabled={(checkedTaskIds.length + checkedRawMessageIds.length) === 0}>Unassign selected</SmallButton>
         <SmallButton onClick={bulkSpamReview} disabled={(checkedTaskIds.length + checkedRawMessageIds.length) === 0}>Send to Spam Review</SmallButton>
+        <SmallButton 
+          onClick={handleBulkDelete} 
+          disabled={(checkedTaskIds.length + checkedRawMessageIds.length) === 0 || deleteLoading}
+          className="bg-red-600 hover:bg-red-700"
+        >
+          {deleteLoading ? "Deleting..." : "Delete selected"}
+        </SmallButton>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={showDeleteModal}
+        taskCount={pendingDeleteIds.length}
+        onConfirm={() => handleDeleteTasks(pendingDeleteIds)}
+        onCancel={() => {
+          setShowDeleteModal(false);
+          setPendingDeleteIds([]);
+        }}
+      />
 
       {/* List (iMessage style) */}
       <div className="overflow-x-auto">
@@ -1101,6 +1176,13 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
                         }}
                       >
                         Unassign
+                      </SmallButton>
+                      <SmallButton
+                        onClick={() => handleSingleDelete(r.taskId || r.id)}
+                        disabled={deleteLoading}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        Delete
                       </SmallButton>
                     </div>
                   </td>
@@ -1465,6 +1547,14 @@ function SpamReviewSection({
   const [whitelistToggles, setWhitelistToggles] = useState<Record<string, boolean>>({});
   const [applyLoading, setApplyLoading] = useState(false);
   
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+  
+  // Selection state for Spam Review items
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  
   // sorting
   const [sort, setSort] = useState<{ key: string; direction: SortDirection } | null>(null);
 
@@ -1659,6 +1749,74 @@ function SpamReviewSection({
     }
   }
 
+  async function handleDeleteRawMessages(rawMessageIds: string[]) {
+    if (rawMessageIds.length === 0) return;
+    
+    setDeleteLoading(true);
+    try {
+      const res = await fetch("/api/manager/tasks/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawMessageIds }),
+      });
+      const data = await res.json().catch(() => null);
+      
+      if (!res.ok || !data?.success) {
+        alert(data?.error || "Failed to delete items");
+        return;
+      }
+
+      let message = `✅ Successfully deleted ${data.deletedCount + data.rawMessagesDeleted} item(s)`;
+      if (data.skippedCount > 0) {
+        message += `\n⚠️ Skipped ${data.skippedCount} item(s) (${data.skippedTasks.map((t: any) => t.reason).join(', ')})`;
+      }
+      alert(message);
+
+      setSelectedItems(new Set());
+      resetPaging();
+      await fetchPage(1);
+      onChangedCounts?.(0, -(data.deletedCount + (data.rawMessagesDeleted || 0)));
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Failed to delete items");
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteModal(false);
+      setPendingDeleteIds([]);
+    }
+  }
+
+  const handleBulkDeleteSpam = () => {
+    if (selectedItems.size === 0) return;
+    setPendingDeleteIds(Array.from(selectedItems));
+    setShowDeleteModal(true);
+  };
+
+  const handleSingleDeleteSpam = (rawMessageId: string) => {
+    setPendingDeleteIds([rawMessageId]);
+    setShowDeleteModal(true);
+  };
+
+  const toggleItemSelection = (id: string) => {
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllSpamItems = () => {
+    setSelectedItems(new Set(items.map(item => item.id)));
+  };
+
+  const clearSpamSelection = () => {
+    setSelectedItems(new Set());
+  };
+
   async function processSpamInBackground() {
     try {
       setApplyLoading(true);
@@ -1748,6 +1906,19 @@ function SpamReviewSection({
             <table className="w-full text-sm rounded-xl overflow-hidden table-fixed">
               <thead className="bg-white/[0.04]">
                 <tr className="text-left text-white/60">
+                  <th className="px-3 py-2 w-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedItems.size === items.length && items.length > 0}
+                      onChange={() => {
+                        if (selectedItems.size === items.length) {
+                          clearSpamSelection();
+                        } else {
+                          selectAllSpamItems();
+                        }
+                      }}
+                    />
+                  </th>
                   <SortableHeader 
                     sortKey="brand" 
                     currentSort={sort} 
@@ -1853,6 +2024,13 @@ function SpamReviewSection({
                           </SmallButton>
                           <SmallButton onClick={() => restoreAndTurnOff(row)} disabled={restoringId === row.id}>
                             {restoringId === row.id ? "Working…" : "Restore & Turn Off Phrase"}
+                          </SmallButton>
+                          <SmallButton
+                            onClick={() => handleSingleDelete(row.id)}
+                            disabled={deleteLoading}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            Delete
                           </SmallButton>
                         </div>
                       </td>

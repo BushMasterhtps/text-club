@@ -7,6 +7,7 @@ import DashboardLayout from '@/app/_components/DashboardLayout';
 import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import { useRangeSelection } from '@/hooks/useRangeSelection';
+import { DeleteConfirmationModal } from '@/app/_components/DeleteConfirmationModal';
 import { AssistanceRequestsSection } from "@/app/manager/_components/AssistanceRequestsSection";
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
@@ -1493,6 +1494,52 @@ function PendingEmailRequestTasksSection() {
     }
   };
 
+  async function handleDeleteTasks(taskIds: string[]) {
+    if (taskIds.length === 0) return;
+    
+    setDeleteLoading(true);
+    try {
+      const res = await fetch("/api/manager/tasks/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: taskIds }),
+      });
+      const data = await res.json().catch(() => null);
+      
+      if (!res.ok || !data?.success) {
+        alert(data?.error || "Failed to delete tasks");
+        return;
+      }
+
+      let message = `✅ Successfully deleted ${data.deletedCount} task(s)`;
+      if (data.skippedCount > 0) {
+        message += `\n⚠️ Skipped ${data.skippedCount} task(s) (${data.skippedTasks.map((t: any) => t.reason).join(', ')})`;
+      }
+      alert(message);
+
+      clearSelection();
+      loadTasks();
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Failed to delete tasks");
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteModal(false);
+      setPendingDeleteIds([]);
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedTasks.length === 0) return;
+    setPendingDeleteIds(selectedTasks);
+    setShowDeleteModal(true);
+  };
+
+  const handleSingleDelete = (taskId: string) => {
+    setPendingDeleteIds([taskId]);
+    setShowDeleteModal(true);
+  };
+
   useEffect(() => {
     loadTasks();
     loadAgents();
@@ -1682,6 +1729,13 @@ function PendingEmailRequestTasksSection() {
                   <div className="flex gap-1">
                     <SmallButton onClick={() => setViewingTask(task)}>
                       View
+                    </SmallButton>
+                    <SmallButton
+                      onClick={() => handleSingleDelete(task.id)}
+                      disabled={deleteLoading}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Delete
                     </SmallButton>
                     {task.assignedTo ? (
                       <SmallButton 

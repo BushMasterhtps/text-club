@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 import { useRangeSelection } from "@/hooks/useRangeSelection";
+import { DeleteConfirmationModal } from "@/app/_components/DeleteConfirmationModal";
 
 interface QueueData {
   total: number;
@@ -485,14 +486,33 @@ export default function AssemblyLineQueues() {
                     >
                       Unassign Selected
                     </SmallButton>
+                    
+                    <SmallButton
+                      onClick={handleBulkDelete}
+                      disabled={selectedCount === 0 || deleteLoading}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      {deleteLoading ? 'Deleting...' : 'Delete Selected'}
+                    </SmallButton>
                   </div>
                   
-                  {bulkAssigning && (
+                  {(bulkAssigning || deleteLoading) && (
                     <span className="text-sm text-white/60">Processing...</span>
                   )}
                 </div>
               </div>
             )}
+
+            {/* Delete Confirmation Modal */}
+            <DeleteConfirmationModal
+              isOpen={showDeleteModal}
+              taskCount={pendingDeleteIds.length}
+              onConfirm={() => handleDeleteTasks(pendingDeleteIds)}
+              onCancel={() => {
+                setShowDeleteModal(false);
+                setPendingDeleteIds([]);
+              }}
+            />
             
             <div className="space-y-3">
               {paginatedTasks.map((task) => {
@@ -680,6 +700,19 @@ export default function AssemblyLineQueues() {
                       {assigningTaskId === task.id && (
                         <span className="text-xs text-white/60">Assigning...</span>
                       )}
+                    </div>
+                  )}
+                  
+                  {/* Delete button for assignable queues */}
+                  {isAssignable && (
+                    <div className="mt-2">
+                      <SmallButton
+                        onClick={() => handleSingleDelete(task.id)}
+                        disabled={deleteLoading}
+                        className="bg-red-600 hover:bg-red-700 text-xs px-2 py-1 w-full"
+                      >
+                        Delete
+                      </SmallButton>
                     </div>
                   )}
                 </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 import { useRangeSelection } from "@/hooks/useRangeSelection";
+import { DeleteConfirmationModal } from "@/app/_components/DeleteConfirmationModal";
 
 interface WodIvcsTask {
   id: string;
@@ -69,6 +70,11 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
   // Review modal state
   const [selectedTaskForReview, setSelectedTaskForReview] = useState<WodIvcsTask | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
 
   const loadTasks = async () => {
     setLoading(true);
@@ -470,10 +476,29 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
               >
                 {bulkUnassignLoading ? 'Unassigning...' : 'Unassign selected'}
               </SmallButton>
+              
+              <SmallButton 
+                onClick={handleBulkDelete}
+                disabled={selectedTasks.length === 0 || deleteLoading}
+                className="bg-red-600 hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteLoading ? 'Deleting...' : 'Delete selected'}
+              </SmallButton>
             </>
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={showDeleteModal}
+        taskCount={pendingDeleteIds.length}
+        onConfirm={() => handleDeleteTasks(pendingDeleteIds)}
+        onCancel={() => {
+          setShowDeleteModal(false);
+          setPendingDeleteIds([]);
+        }}
+      />
 
       {loading ? (
         <div className="text-center py-8">
@@ -663,6 +688,13 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
                             Unassign
                           </SmallButton>
                         )}
+                        <SmallButton
+                          onClick={() => handleSingleDelete(task.id)}
+                          disabled={deleteLoading}
+                          className="bg-red-600 hover:bg-red-700 text-xs px-2 py-1 disabled:opacity-50"
+                        >
+                          Delete
+                        </SmallButton>
                       </div>
                     </td>
                   </tr>
