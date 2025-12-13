@@ -238,6 +238,11 @@ function PendingTasksSection() {
   } = useRangeSelection(tasks, (task) => task.id);
   const [assignLoading, setAssignLoading] = useState(false);
   
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+  
   // Sorting
   const [sort, setSort] = useState<{ key: string; direction: SortDirection } | null>(null);
   

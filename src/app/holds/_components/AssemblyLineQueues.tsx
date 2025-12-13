@@ -48,6 +48,11 @@ export default function AssemblyLineQueues() {
   const [isExpanded, setIsExpanded] = useState(true);
   const [expandedJourneys, setExpandedJourneys] = useState<Set<string>>(new Set());
   const tasksPerPage = 50;
+  
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
 
   const queueColors = {
     'Agent Research': 'bg-blue-900/20 border-blue-500/30',
@@ -185,6 +190,51 @@ export default function AssemblyLineQueues() {
     }
   };
 
+  async function handleDeleteTasks(taskIds: string[]) {
+    if (taskIds.length === 0) return;
+    
+    setDeleteLoading(true);
+    try {
+      const res = await fetch("/api/manager/tasks/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: taskIds }),
+      });
+      const data = await res.json().catch(() => null);
+      
+      if (!res.ok || !data?.success) {
+        alert(data?.error || "Failed to delete tasks");
+        return;
+      }
+
+      let message = `✅ Successfully deleted ${data.deletedCount} task(s)`;
+      if (data.skippedCount > 0) {
+        message += `\n⚠️ Skipped ${data.skippedCount} task(s) (${data.skippedTasks.map((t: any) => t.reason).join(', ')})`;
+      }
+      alert(message);
+
+      clearSelection();
+      await fetchQueueStats();
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Failed to delete tasks");
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteModal(false);
+      setPendingDeleteIds([]);
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedCount === 0) return;
+    setPendingDeleteIds(Array.from(selectedTasks));
+    setShowDeleteModal(true);
+  };
+
+  const handleSingleDelete = (taskId: string) => {
+    setPendingDeleteIds([taskId]);
+    setShowDeleteModal(true);
+  };
 
   const toggleSelectAll = (tasks: any[]) => {
     const paginatedTasks = getPaginatedTasks(tasks);

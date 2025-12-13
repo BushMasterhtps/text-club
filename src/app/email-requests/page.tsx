@@ -1306,6 +1306,11 @@ function PendingEmailRequestTasksSection() {
   const selectedTasks = Array.from(selectedTasksSet);
   const [viewingTask, setViewingTask] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
+  
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
 
   const itemsPerPage = 50;
 
