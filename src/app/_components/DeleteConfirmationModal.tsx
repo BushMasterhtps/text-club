@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { SmallButton } from './SmallButton';
 
 interface DeleteConfirmationModalProps {
@@ -18,9 +19,16 @@ export function DeleteConfirmationModal({
   onCancel,
   taskDetails,
 }: DeleteConfirmationModalProps) {
-  if (!isOpen) return null;
+  const [mounted, setMounted] = React.useState(false);
 
-  return (
+  React.useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!isOpen || !mounted) return null;
+
+  const modalContent = (
     <div 
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4"
       style={{ 
@@ -108,5 +116,8 @@ export function DeleteConfirmationModal({
       </div>
     </div>
   );
+
+  // Use React Portal to render modal at body level, outside any container
+  return createPortal(modalContent, document.body);
 }
 
