@@ -21,8 +21,11 @@ export function DeleteConfirmationModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4 overflow-y-auto">
-      <div className="bg-neutral-900 rounded-lg p-6 max-w-2xl w-full border border-red-500/30 shadow-xl my-auto">
+    <div 
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4"
+      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+    >
+      <div className="bg-neutral-900 rounded-lg p-6 max-w-2xl w-full border border-red-500/30 shadow-xl">
         <div className="mb-4">
           <h3 className="text-xl font-semibold text-white mb-2">
             ⚠️ Confirm Task Deletion
@@ -60,13 +63,26 @@ export function DeleteConfirmationModal({
 
         <div className="flex items-center justify-end gap-3">
           <SmallButton
-            onClick={onCancel}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onCancel();
+            }}
             className="bg-white/10 hover:bg-white/20"
           >
             Cancel
           </SmallButton>
           <SmallButton
-            onClick={onConfirm}
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Delete confirmation button clicked');
+              try {
+                await onConfirm();
+              } catch (error) {
+                console.error('Error in onConfirm:', error);
+              }
+            }}
             className="bg-red-600 hover:bg-red-700 text-white"
           >
             I Agree - Delete Tasks

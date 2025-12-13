@@ -904,22 +904,36 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
 
   async function handleDeleteTasks(taskIds: string[], rawMessageIds: string[] = []) {
     const allIds = [...taskIds, ...rawMessageIds];
-    if (allIds.length === 0) return;
+    if (allIds.length === 0) {
+      console.warn('No IDs to delete');
+      return;
+    }
     
     setDeleteLoading(true);
     try {
+      const requestBody = { 
+        ids: taskIds,
+        rawMessageIds: rawMessageIds,
+      };
+      console.log('Sending delete request:', requestBody);
+      
       const res = await fetch("/api/manager/tasks/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          ids: taskIds,
-          rawMessageIds: rawMessageIds,
-        }),
+        body: JSON.stringify(requestBody),
       });
-      const data = await res.json().catch(() => null);
+      
+      const data = await res.json().catch((err) => {
+        console.error('Failed to parse response:', err);
+        return null;
+      });
+      
+      console.log('Delete response:', { status: res.status, data });
       
       if (!res.ok || !data?.success) {
-        alert(data?.error || "Failed to delete tasks");
+        const errorMsg = data?.error || `HTTP ${res.status}: Failed to delete tasks`;
+        console.error('Delete failed:', errorMsg);
+        alert(errorMsg);
         return;
       }
 
@@ -935,7 +949,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
       try { await onTasksMutated?.(); } catch {}
     } catch (error) {
       console.error("Delete error:", error);
-      alert("Failed to delete tasks");
+      alert(`Failed to delete tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setDeleteLoading(false);
       setShowDeleteModal(false);
@@ -1065,7 +1079,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
       <DeleteConfirmationModal
         isOpen={showDeleteModal}
         taskCount={pendingDeleteIds.length}
-        onConfirm={() => {
+        onConfirm={async () => {
           // Split pendingDeleteIds into taskIds and rawMessageIds
           // pendingDeleteIds contains item IDs (which are raw message IDs)
           // We need to find which items have taskIds and which don't
@@ -1077,15 +1091,19 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
             if (item) {
               if (item.taskId) {
                 // This item has a task, delete by taskId
+                // The API will handle deleting the associated RawMessage automatically
                 taskIdsToDelete.push(item.taskId);
               } else {
                 // This is a raw message without a task, delete by rawMessageId
                 rawMessageIdsToDelete.push(item.id);
               }
+            } else {
+              console.warn('Item not found for deletion:', itemId);
             }
           });
           
-          handleDeleteTasks(taskIdsToDelete, rawMessageIdsToDelete);
+          console.log('Deleting tasks:', { taskIdsToDelete, rawMessageIdsToDelete });
+          await handleDeleteTasks(taskIdsToDelete, rawMessageIdsToDelete);
         }}
         onCancel={() => {
           setShowDeleteModal(false);
