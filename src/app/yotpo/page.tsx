@@ -499,6 +499,14 @@ function PendingTasksSection() {
         >
           Unassign selected
         </SmallButton>
+        
+        <SmallButton 
+          onClick={handleBulkDelete}
+          disabled={selectedTasks.size === 0 || deleteLoading}
+          className="bg-red-600 hover:bg-red-700"
+        >
+          {deleteLoading ? 'Deleting...' : 'Delete Selected'}
+        </SmallButton>
       </div>
 
       {/* Filters */}
@@ -697,6 +705,17 @@ function PendingTasksSection() {
           </tbody>
         </table>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={showDeleteModal}
+        taskCount={pendingDeleteIds.length}
+        onConfirm={() => handleDeleteTasks(pendingDeleteIds)}
+        onCancel={() => {
+          setShowDeleteModal(false);
+          setPendingDeleteIds([]);
+        }}
+      />
 
       {/* Pagination */}
       <div className="flex items-center justify-between">
