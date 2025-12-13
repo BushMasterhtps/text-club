@@ -522,7 +522,10 @@ function PendingTasksSection() {
         </SmallButton>
         
         <SmallButton 
-          onClick={handleBulkDelete}
+          onClick={() => {
+            console.log('Delete Selected button clicked, selectedTasks.size:', selectedTasks.size);
+            handleBulkDelete();
+          }}
           disabled={selectedTasks.size === 0 || deleteLoading}
           className="bg-red-600 hover:bg-red-700"
         >
@@ -731,8 +734,12 @@ function PendingTasksSection() {
       <DeleteConfirmationModal
         isOpen={showDeleteModal}
         taskCount={pendingDeleteIds.length}
-        onConfirm={() => handleDeleteTasks(pendingDeleteIds)}
+        onConfirm={() => {
+          console.log('Yotpo modal confirm clicked, pendingDeleteIds:', pendingDeleteIds);
+          handleDeleteTasks(pendingDeleteIds);
+        }}
         onCancel={() => {
+          console.log('Yotpo modal cancel clicked');
           setShowDeleteModal(false);
           setPendingDeleteIds([]);
         }}
