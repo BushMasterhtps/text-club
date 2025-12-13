@@ -1666,11 +1666,29 @@ function PendingEmailRequestTasksSection() {
                 <SmallButton onClick={unassignSelected} disabled={assigning}>
                   Unassign Selected
                 </SmallButton>
+                <SmallButton 
+                  onClick={handleBulkDelete}
+                  disabled={selectedTasks.length === 0 || deleteLoading}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {deleteLoading ? 'Deleting...' : 'Delete Selected'}
+                </SmallButton>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={showDeleteModal}
+        taskCount={pendingDeleteIds.length}
+        onConfirm={() => handleDeleteTasks(pendingDeleteIds)}
+        onCancel={() => {
+          setShowDeleteModal(false);
+          setPendingDeleteIds([]);
+        }}
+      />
 
       {/* Tasks Table */}
       <div className="overflow-x-auto">
