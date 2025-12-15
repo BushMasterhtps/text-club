@@ -341,6 +341,57 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
     setShowReviewModal(true);
   };
 
+  // Delete handler functions
+  async function handleDeleteTasks(taskIds: string[]) {
+    if (taskIds.length === 0) return;
+    
+    setDeleteLoading(true);
+    try {
+      const res = await fetch("/api/manager/tasks/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: taskIds }),
+      });
+      const data = await res.json().catch(() => null);
+      
+      if (!res.ok || !data?.success) {
+        setAssignMessage(`❌ Delete failed: ${data?.error || "Failed to delete tasks"}`);
+        setTimeout(() => setAssignMessage(""), 5000);
+        return;
+      }
+
+      let message = `✅ Successfully deleted ${data.deletedCount} task(s)`;
+      if (data.skippedCount > 0) {
+        message += `\n⚠️ Skipped ${data.skippedCount} task(s) (${data.skippedTasks.map((t: any) => t.reason).join(', ')})`;
+      }
+      setAssignMessage(message);
+      setTimeout(() => setAssignMessage(""), 5000);
+
+      clearSelection();
+      loadTasks();
+      onTaskAssignmentChange?.();
+    } catch (error) {
+      console.error("Delete error:", error);
+      setAssignMessage(`❌ Delete failed: ${error}`);
+      setTimeout(() => setAssignMessage(""), 5000);
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteModal(false);
+      setPendingDeleteIds([]);
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedTasks.length === 0) return;
+    setPendingDeleteIds(selectedTasks);
+    setShowDeleteModal(true);
+  };
+
+  const handleSingleDelete = (taskId: string) => {
+    setPendingDeleteIds([taskId]);
+    setShowDeleteModal(true);
+  };
+
   return (
     <Card className="p-6">
       <div className="flex justify-between items-center mb-4">
