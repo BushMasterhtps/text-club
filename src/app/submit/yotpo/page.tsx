@@ -11,7 +11,8 @@ const SUBMITTERS = [
   "Pierina Bardales",
   "Vanessa Medina",
   "Viviana Alvarez",
-  "Silas Little"
+  "Silas Little",
+  "Tahairra Piatt"
 ];
 
 const ISSUE_TOPICS = [
