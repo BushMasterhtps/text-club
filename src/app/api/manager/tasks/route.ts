@@ -249,6 +249,16 @@ export async function GET(req: Request) {
   let total = 0;
   let rows: any[] = [];
   
+  // Debug logging for pending status queries
+  if (statusKey === "pending") {
+    console.log("[Manager Tasks API] Pending query:", {
+      taskType,
+      where: JSON.stringify(where, null, 2),
+      skip,
+      take
+    });
+  }
+  
   try {
     [total, rows] = await Promise.all([
       prisma.rawMessage.count({ where }),
@@ -277,8 +287,21 @@ export async function GET(req: Request) {
         },
       }),
     ]);
+    
+    if (statusKey === "pending") {
+      console.log("[Manager Tasks API] Query result:", {
+        total,
+        rowsCount: rows.length,
+        sampleRow: rows[0] ? { id: rows[0].id, status: rows[0].status, taskCount: rows[0].tasks?.length } : null
+      });
+    }
   } catch (error: any) {
-    console.error("Error querying tasks:", error);
+    console.error("[Manager Tasks API] Error querying tasks:", error);
+    console.error("[Manager Tasks API] Error details:", {
+      message: error?.message,
+      code: error?.code,
+      meta: error?.meta
+    });
     // If there's a database schema mismatch (e.g., new fields not migrated), return empty result
     // This prevents the API from crashing but allows the UI to show an error
     return NextResponse.json({
