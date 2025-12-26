@@ -1933,38 +1933,22 @@ export default function AgentPage() {
           <div className="text-center py-8 text-white/60">No tasks assigned yet.</div>
         ) : (
           <div>
-            {/* Manager Response Summary - Show at top */}
+            {/* Manager Response Notification - Simple count only (details shown in each task card) */}
             {(() => {
               const hasResponses = tasks.some(t => t.managerResponse);
-              const responseTasks = tasks.filter(t => t.managerResponse);
-              console.log("🔍 Debug Summary:", { hasResponses, responseCount: responseTasks.length, tasks: tasks.length });
+              const responseCount = tasks.filter(t => t.managerResponse).length;
               
               if (hasResponses) {
                 return (
-                  <div 
-                    className="mb-6 p-4 bg-green-900/20 border-2 border-green-500/50 rounded-lg"
-                  >
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-green-400 text-xl">💬</span>
-                      <h3 className="text-green-300 font-semibold text-lg">Manager Responses Available</h3>
-                      <span className="text-green-200 text-sm bg-green-600/30 px-2 py-1 rounded-full">
-                        {responseTasks.length} Response{responseTasks.length !== 1 ? 's' : ''}
+                  <div className="mb-4 p-3 bg-green-900/20 border border-green-500/50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-400 text-lg">💬</span>
+                      <span className="text-green-300 font-medium">
+                        {responseCount} Manager Response{responseCount !== 1 ? 's' : ''} Available
                       </span>
-                    </div>
-                    <div className="space-y-2">
-                      {responseTasks.map((task, index) => (
-                        <div key={task.id} className="p-3 bg-green-800/20 rounded border border-green-600/30">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-green-200 font-medium">Task {index + 1}: {task.brand}</span>
-                            <span className="text-green-200 text-sm bg-green-600/30 px-2 py-1 rounded-full">
-                              {task.status.replace("_", " ")}
-                            </span>
-                          </div>
-                          <div className="text-white text-sm">
-                            <strong>Manager Response:</strong> {task.managerResponse}
-                          </div>
-                        </div>
-                      ))}
+                      <span className="text-green-200 text-xs bg-green-600/30 px-2 py-1 rounded-full">
+                        Check tasks below
+                      </span>
                     </div>
                   </div>
                 );
