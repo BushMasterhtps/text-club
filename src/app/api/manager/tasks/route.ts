@@ -246,33 +246,50 @@ export async function GET(req: Request) {
   };
 
   /* ---------- query: total + page ---------- */
-  const [total, rows] = await Promise.all([
-    prisma.rawMessage.count({ where }),
-    prisma.rawMessage.findMany({
-      where,
-      orderBy: buildOrderBy(),
-      skip,
-      take,
-      include: {
-        // latest task matching the selected status (falling back to any open task)
-        tasks: {
-          where:
-            statusKey === "pending"
-              ? ({ status: "PENDING" } as any)
-              : statusKey === "in_progress"
-              ? ({ status: "IN_PROGRESS" } as any)
-              : statusKey === "assistance_required"
-              ? ({ status: "ASSISTANCE_REQUIRED" } as any)
-              : ({ status: { not: "COMPLETED" } } as any),
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          include: {
-            assignedTo: { select: { id: true, name: true, email: true } },
+  let total = 0;
+  let rows: any[] = [];
+  
+  try {
+    [total, rows] = await Promise.all([
+      prisma.rawMessage.count({ where }),
+      prisma.rawMessage.findMany({
+        where,
+        orderBy: buildOrderBy(),
+        skip,
+        take,
+        include: {
+          // latest task matching the selected status (falling back to any open task)
+          tasks: {
+            where:
+              statusKey === "pending"
+                ? ({ status: "PENDING" } as any)
+                : statusKey === "in_progress"
+                ? ({ status: "IN_PROGRESS" } as any)
+                : statusKey === "assistance_required"
+                ? ({ status: "ASSISTANCE_REQUIRED" } as any)
+                : ({ status: { not: "COMPLETED" } } as any),
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            include: {
+              assignedTo: { select: { id: true, name: true, email: true } },
+            },
           },
         },
-      },
-    }),
-  ]);
+      }),
+    ]);
+  } catch (error: any) {
+    console.error("Error querying tasks:", error);
+    // If there's a database schema mismatch (e.g., new fields not migrated), return empty result
+    // This prevents the API from crashing but allows the UI to show an error
+    return NextResponse.json({
+      success: false,
+      error: error?.message || "Database query failed",
+      items: [],
+      total: 0,
+      pageSize: take,
+      offset: skip,
+    }, { status: 500 });
+  }
 
   /* ---------- normalize for UI ---------- */
   const items = rows.map((r) => {
