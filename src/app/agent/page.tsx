@@ -579,47 +579,7 @@ export default function AgentPage() {
         };
         setTaskCounts(counts);
         
-        // Force complete re-render if we have manager responses
-        if (tasksWithResponses.length > 0) {
-          console.log("🔄 Forcing complete re-render due to manager responses");
-          // Force complete component remount
-          setForceRender(prev => prev + 1);
-          
-          // Also try manual DOM manipulation as backup
-          setTimeout(() => {
-            console.log("🔧 Attempting manual DOM update for manager responses");
-            tasksWithResponses.forEach((task: any) => {
-              const taskElement = document.getElementById(`task-${task.id}`);
-              if (taskElement && task.managerResponse) {
-                // Check if manager response section already exists
-                const existingResponse = taskElement.querySelector('.manager-response-section');
-                if (!existingResponse) {
-                  console.log(`🔧 Adding manager response to task ${task.id}`);
-                  const responseHTML = `
-                    <div class="manager-response-section bg-green-900/30 border-2 border-green-500/70 rounded-lg p-4 animate-pulse">
-                      <div class="flex items-center justify-between mb-3">
-                        <div class="text-green-300 font-semibold text-lg">💬 Manager Response</div>
-                        <span class="text-green-200 text-sm bg-green-600/30 px-2 py-1 rounded-full">✨ Ready to Resume</span>
-                      </div>
-                      <div class="text-white mb-3 p-3 bg-green-800/20 rounded border border-green-600/50">
-                        ${task.managerResponse}
-                      </div>
-                      <div class="text-sm text-green-200 bg-green-800/20 p-2 rounded border border-green-600/30">
-                        💡 You can now continue working on this task. Time will resume from when you started.
-                      </div>
-                    </div>
-                  `;
-                  
-                  // Insert before the controls section
-                  const controlsSection = taskElement.querySelector('.space-y-3');
-                  if (controlsSection) {
-                    controlsSection.insertAdjacentHTML('beforebegin', responseHTML);
-                  }
-                }
-              }
-            });
-          }, 100);
-        }
+        // Manager responses are now handled by React rendering only (no DOM manipulation)
         
         console.log("✅ Tasks updated, last update set to:", new Date().toLocaleTimeString());
       } else {
@@ -3437,18 +3397,13 @@ function TaskCard({
           </div>
         )}
 
-        {task.status === "ASSISTANCE_REQUIRED" && (
+        {/* Assistance Required section - Only show if locked (no manager response yet) */}
+        {isTaskLocked && (
           <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3">
             <div className="text-red-400 font-medium mb-2">🆘 Assistance Required</div>
             <div className="text-sm text-white/80 mb-2">
               <strong>Your request:</strong> {task.assistanceNotes}
             </div>
-            {hasManagerResponse && (
-              <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3 mt-2">
-                <div className="text-green-400 font-medium mb-1">💬 Manager Response:</div>
-                <div className="text-sm text-white/90">{task.managerResponse}</div>
-              </div>
-            )}
           </div>
         )}
 
