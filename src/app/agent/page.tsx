@@ -5,6 +5,7 @@ import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import ThemeToggle from '@/app/_components/ThemeToggle';
 import AgentOneOnOneNotes from '@/app/_components/AgentOneOnOneNotes';
 import KnowledgeSection from '@/app/_components/KnowledgeSection';
+import { Toast } from '@/app/_components/Toast';
 
 /* ========== Tiny UI atoms (iOS-ish) ========== */
 function Card({
@@ -231,6 +232,10 @@ export default function AgentPage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
 
+  // Toast notification state for manager responses
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'info' | 'warning' | 'error'>('info');
+
   const [isClient, setIsClient] = useState(false);
 
 
@@ -449,49 +454,29 @@ export default function AgentPage() {
               const newTasks = data.tasks;
               console.log("🔄 SIMPLE Loaded tasks:", newTasks.length);
               
-                               // Check for manager responses
-                 const tasksWithResponses = newTasks.filter((t: any) => t.managerResponse);
-                 if (tasksWithResponses.length > 0) {
-                   console.log("🔄 SIMPLE Found manager responses:", tasksWithResponses.length);
-                   
-                   // Automatically add manager responses to DOM (seamless)
-                   tasksWithResponses.forEach((task: any) => {
-                     const taskElement = document.getElementById(`task-${task.id}`);
-                     if (taskElement && task.managerResponse) {
-                       // Check if response already exists
-                       const existingResponse = taskElement.querySelector('.nuclear-manager-response');
-                       if (!existingResponse) {
-                         console.log("🚀 AUTO: Adding manager response to task", task.id);
-                         
-                         // Add new response
-                         const responseHTML = `
-                           <div class="nuclear-manager-response" style="background: #065f46; border: 2px solid #10b981; border-radius: 8px; padding: 16px; margin: 8px 0; animation: pulse 2s infinite;">
-                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                               <div style="color: #6ee7b7; font-weight: 600; font-size: 18px;">💬 Manager Response</div>
-                               <span style="color: #d1fae5; font-size: 12px; background: #047857; padding: 4px 8px; border-radius: 12px;">✨ Ready to Resume</span>
-                             </div>
-                             <div style="color: white; margin-bottom: 12px; padding: 12px; background: #064e3b; border-radius: 4px; border: 1px solid #10b981;">
-                               ${task.managerResponse}
-                             </div>
-                             <div style="font-size: 12px; color: #d1fae5; background: #064e3b; padding: 8px; border-radius: 4px; border: 1px solid #10b981;">
-                               💡 You can now continue working on this task. Time will resume from when you started.
-                             </div>
-                           </div>
-                         `;
-                         
-                         // Insert before the controls section
-                         const controlsSection = taskElement.querySelector('.space-y-3');
-                         if (controlsSection) {
-                           controlsSection.insertAdjacentHTML('beforebegin', responseHTML);
-                         }
-                       }
-                     }
-                   });
-                 }
-                 
-                // Update tasks
-                setTasks(newTasks);
-                setLastUpdate(new Date());
+              // Check for new manager responses (tasks that now have a response but didn't before)
+              const previousResponses = new Map(tasks.map((t: any) => [t.id, t.managerResponse]));
+              
+              const newResponses = newTasks.filter((t: any) => {
+                const hadResponse = previousResponses.get(t.id);
+                return t.managerResponse && !hadResponse; // New response that wasn't there before
+              });
+              
+              if (newResponses.length > 0) {
+                console.log("🔄 SIMPLE Found new manager responses:", newResponses.length);
+                // Show toast notification for new manager responses
+                const taskTypeInfo = newResponses[0].taskType === 'TEXT_CLUB' ? 'Text Club' :
+                                   newResponses[0].taskType === 'WOD_IVCS' ? 'WOD/IVCS' :
+                                   newResponses[0].taskType === 'EMAIL_REQUESTS' ? 'Email Request' :
+                                   newResponses[0].taskType === 'YOTPO' ? 'Yotpo' :
+                                   newResponses[0].taskType === 'HOLDS' ? 'Holds' : 'Task';
+                setToastMessage(`💬 Manager responded to your ${taskTypeInfo} assistance request!`);
+                setToastType('info');
+              }
+              
+              // Update tasks (React will handle rendering manager responses)
+              setTasks(newTasks);
+              setLastUpdate(new Date());
            }
           }
         } catch (error) {
@@ -2398,6 +2383,16 @@ export default function AgentPage() {
 
       {/* Knowledge Section - Floating Button */}
       <KnowledgeSection />
+
+      {/* Toast Notification for Manager Responses */}
+      {toastMessage && (
+        <Toast
+          message={toastMessage}
+          type={toastType}
+          duration={6000}
+          onClose={() => setToastMessage(null)}
+        />
+      )}
     </main>
   );
 }
@@ -2550,8 +2545,12 @@ function TaskCard({
   // A task is considered "started" only if the agent has explicitly clicked Start
   // This ensures agents must click Start even if tasks were auto-assigned as IN_PROGRESS
   const isTaskStarted = startedTasks.has(task.id);
-  const showDispo = isTaskStarted && task.status !== "ASSISTANCE_REQUIRED";
-  const hasManagerResponse = task.status === "ASSISTANCE_REQUIRED" && task.managerResponse;
+  // Task is locked when in assistance and waiting for manager response
+  const isTaskLocked = task.status === "ASSISTANCE_REQUIRED" && !task.managerResponse;
+  // Show disposition controls only if task is started and not locked
+  const showDispo = isTaskStarted && !isTaskLocked;
+  // Manager response exists (status may be IN_PROGRESS after manager responds)
+  const hasManagerResponse = !!task.managerResponse;
 
   // Helper functions
   const getBrandEmoji = (brand: string) => {
@@ -3013,11 +3012,27 @@ function TaskCard({
         <span className="text-xs text-white/50">• Created: {new Date(task.createdAt).toLocaleString()}</span>
       </div>
 
+      {/* Task Locked Message - Show when waiting for manager response */}
+      {isTaskLocked && (
+        <div className="bg-amber-900/30 border-2 border-amber-500/70 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-amber-300 text-lg">🆘</span>
+            <div className="text-amber-300 font-semibold text-base">Waiting for Manager Response</div>
+          </div>
+          <div className="text-white/80 text-sm mb-2 p-2 bg-amber-800/20 rounded border border-amber-600/30">
+            <strong>Your request:</strong> {task.assistanceNotes}
+          </div>
+          <div className="text-xs text-amber-200/80">
+            ⏸️ Task is locked. You cannot complete or change disposition until the manager responds.
+          </div>
+        </div>
+      )}
+
       {/* Manager Response - Show when available */}
-      {task.managerResponse && (
+      {hasManagerResponse && (
         <div 
           key={`manager-response-${task.id}-${task.managerResponse}`}
-          className="bg-green-900/30 border-2 border-green-500/70 rounded-lg p-4 animate-pulse"
+          className="bg-green-900/30 border-2 border-green-500/70 rounded-lg p-4"
         >
           <div className="flex items-center justify-between mb-3">
             <div className="text-green-300 font-semibold text-lg">💬 Manager Response</div>
@@ -3027,7 +3042,7 @@ function TaskCard({
             {task.managerResponse}
           </div>
           <div className="text-sm text-green-200 bg-green-800/20 p-2 rounded border border-green-600/30">
-            💡 You can now continue working on this task. Time will resume from when you started.
+            💡 You can now continue working on this task. Timer was paused during assistance.
           </div>
         </div>
       )}

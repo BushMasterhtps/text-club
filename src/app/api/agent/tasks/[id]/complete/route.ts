@@ -66,9 +66,14 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Task not found or not available" }, { status: 404 });
     }
 
-    // Calculate duration if start time exists
+    // Calculate duration - use stored paused duration if assistance was requested
+    // This excludes assistance time from the total duration
     let durationSec = null;
-    if (task.startTime) {
+    if (task.assistancePausedDurationSec !== null && task.assistancePausedDurationSec !== undefined) {
+      // Use the stored duration from before assistance was requested
+      durationSec = task.assistancePausedDurationSec;
+    } else if (task.startTime) {
+      // Normal calculation if no assistance was requested
       const start = new Date(task.startTime);
       const end = new Date();
       const seconds = Math.round((end.getTime() - start.getTime()) / 1000);

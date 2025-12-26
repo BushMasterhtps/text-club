@@ -49,6 +49,8 @@ export async function GET(req: Request) {
         disposition: true,
         assistanceNotes: true,
         managerResponse: true,
+        assistancePausedDurationSec: true,
+        assistanceRequestedAt: true,
         createdAt: true,
         updatedAt: true,
         taskType: true,
@@ -151,8 +153,9 @@ export async function GET(req: Request) {
       };
     });
 
-    // Custom sorting for Holds tasks: Sort by queue priority (Escalated Call 4+ Day > Customer Contact > Agent Research)
-    // Then by status: IN_PROGRESS first (current assignments), then PENDING (new assignments), then ASSISTANCE_REQUIRED
+    // Stable sorting: Maintain task position regardless of status changes
+    // Sort by createdAt (or assignedAt if available) to keep tasks in their original order
+    // This ensures tasks don't move when status changes to ASSISTANCE_REQUIRED
     const holdsQueuePriority: Record<string, number> = {
       'Escalated Call 4+ Day': 1,
       'Customer Contact': 2,
@@ -171,16 +174,8 @@ export async function GET(req: Request) {
         }
       }
       
-      // Then sort by status: IN_PROGRESS > PENDING > ASSISTANCE_REQUIRED
-      const statusOrder = { 'IN_PROGRESS': 1, 'PENDING': 2, 'ASSISTANCE_REQUIRED': 3 };
-      const aOrder = statusOrder[a.status as keyof typeof statusOrder] || 4;
-      const bOrder = statusOrder[b.status as keyof typeof statusOrder] || 4;
-      
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder;
-      }
-      
-      // If same status, keep createdAt ordering (asc/desc based on `order`)
+      // For all tasks: Use createdAt for stable position (don't re-sort on status change)
+      // This keeps tasks in the same position when they go to assistance or get responses
       return order === 'asc'
         ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();

@@ -44,12 +44,22 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Task not found or not available" }, { status: 404 });
     }
 
+    // Calculate elapsed time before assistance (to exclude assistance time from duration)
+    let assistancePausedDurationSec = null;
+    if (task.startTime) {
+      const start = new Date(task.startTime);
+      const now = new Date();
+      assistancePausedDurationSec = Math.round((now.getTime() - start.getTime()) / 1000);
+    }
+
     // Update task status and assistance request
     const updatedTask = await prisma.task.update({
       where: { id },
       data: {
         status: "ASSISTANCE_REQUIRED",
         assistanceNotes: message,
+        assistancePausedDurationSec: assistancePausedDurationSec,
+        assistanceRequestedAt: new Date(),
         updatedAt: new Date()
       },
       select: {

@@ -109,16 +109,18 @@ model Task {
   rawMessageId String?
   rawMessage   RawMessage? @relation(fields: [rawMessageId], references: [id])
 
-  status      TaskStatus @default(PENDING)
-  startTime   DateTime?
-  endTime     DateTime?
-  durationSec Int?
+  status                      TaskStatus @default(PENDING)
+  startTime                   DateTime?
+  endTime                     DateTime?
+  durationSec                 Int?
+  assistancePausedDurationSec Int? // Duration elapsed before assistance was requested (excludes assistance time)
 
-  disposition     String?
-  sfOrderNumber   String?
-  sfCaseNumber    String?
-  assistanceNotes String?
-  managerResponse String?
+  disposition           String?
+  sfOrderNumber         String?
+  sfCaseNumber          String?
+  assistanceNotes       String?
+  managerResponse       String?
+  assistanceRequestedAt DateTime? // When assistance was requested (for timer pause)
 
   // 🔄 Send-back tracking for WOD/IVCS tasks
   sentBackBy          String?
@@ -128,9 +130,9 @@ model Task {
 
   // 🎯 Completion tracking for Holds tasks (and all task types for audit trail)
   // Tracks who completed the task, even if task is later unassigned
-  completedBy         String?
-  completedAt         DateTime?
-  completedByUser     User?     @relation("CompletedTasks", fields: [completedBy], references: [id])
+  completedBy     String?
+  completedAt     DateTime?
+  completedByUser User?     @relation("CompletedTasks", fields: [completedBy], references: [id])
 
   // 🆕 WOD/IVCS specific fields
   wodIvcsSource       WodIvcsSource?
