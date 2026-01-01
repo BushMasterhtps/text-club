@@ -29,10 +29,15 @@ export async function GET(request: NextRequest) {
       dateEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
     }
 
-    // Build where clause for Yotpo tasks
+    // Use local dates directly - no UTC conversion needed
+    const utcDateStart = dateStart;
+    const utcDateEnd = dateEnd;
+
+    // Build where clause for Yotpo tasks with date filter
     const where = {
       taskType: "YOTPO" as const,
-      status: "COMPLETED" as const
+      status: "COMPLETED" as const,
+      endTime: { gte: utcDateStart, lte: utcDateEnd }
     };
 
     // Get completed tasks for today
@@ -43,7 +48,8 @@ export async function GET(request: NextRequest) {
     const utcEndOfToday = endOfToday;
 
     const todayWhere = {
-      ...where,
+      taskType: "YOTPO" as const,
+      status: "COMPLETED" as const,
       endTime: { gte: utcStartOfToday, lte: utcEndOfToday }
     };
 
