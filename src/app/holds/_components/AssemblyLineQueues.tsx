@@ -5,6 +5,8 @@ import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 import { useRangeSelection } from "@/hooks/useRangeSelection";
 import { DeleteConfirmationModal } from "@/app/_components/DeleteConfirmationModal";
+import { WorkMetadataBadge } from "@/app/_components/WorkMetadataBadge";
+import { getTaskCardColorClass } from "@/lib/holds-work-metadata";
 
 interface QueueData {
   total: number;
@@ -53,6 +55,11 @@ export default function AssemblyLineQueues() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+  
+  // Sorting and filtering state
+  const [sortBy, setSortBy] = useState<'neverWorkedFirst' | 'oldestFirst' | 'recentlyWorkedLast'>('neverWorkedFirst');
+  const [filterNeverWorked, setFilterNeverWorked] = useState(false);
+  const [filterHideRecent, setFilterHideRecent] = useState(false);
 
   const queueColors = {
     'Agent Research': 'bg-blue-900/20 border-blue-500/30',
@@ -70,14 +77,42 @@ export default function AssemblyLineQueues() {
   const fetchQueueStats = async () => {
     try {
       console.log('Fetching queue stats...');
-      const response = await fetch('/api/holds/queues');
+      // Build query params for sorting and filtering
+      const params = new URLSearchParams();
+      params.set('sortBy', sortBy);
+      
+      if (filterNeverWorked) {
+        params.set('filter', 'neverWorked');
+      }
+      
+      const response = await fetch(`/api/holds/queues?${params.toString()}`);
       const data = await response.json();
       
       console.log('Queue stats API response:', data);
       
       if (data.success && data.data && data.data.queues) {
-        setQueueStats(data.data.queues);
-        console.log('Queue stats loaded:', data.data.queues);
+        // Apply client-side filtering for hide recent
+        let filteredQueues = { ...data.data.queues };
+        
+        if (filterHideRecent) {
+          // Filter out tasks worked <2 hours ago
+          const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+          Object.keys(filteredQueues).forEach(queueName => {
+            filteredQueues[queueName] = {
+              ...filteredQueues[queueName],
+              tasks: filteredQueues[queueName].tasks.filter((task: any) => {
+                if (!task.workMetadata?.hasBeenWorked) return true; // Keep never worked
+                if (!task.workMetadata?.lastWorkedAt) return true;
+                const lastWorked = new Date(task.workMetadata.lastWorkedAt);
+                const hoursSince = (Date.now() - lastWorked.getTime()) / (1000 * 60 * 60);
+                return hoursSince >= 2; // Keep if worked >=2h ago
+              })
+            };
+          });
+        }
+        
+        setQueueStats(filteredQueues);
+        console.log('Queue stats loaded:', filteredQueues);
       } else {
         console.error('Invalid queue stats response:', data);
         setQueueStats({});
@@ -88,6 +123,14 @@ export default function AssemblyLineQueues() {
       setLoading(false);
     }
   };
+
+  // Refetch when sorting/filtering changes
+  useEffect(() => {
+    if (!loading) {
+      fetchQueueStats();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortBy, filterNeverWorked, filterHideRecent]);
 
   const fetchAgents = async () => {
     try {
@@ -374,25 +417,65 @@ export default function AssemblyLineQueues() {
         {isExpanded && (
           <>
         
-        {/* Search Bar */}
-        <div className="mb-6">
-          <label className="block text-sm text-white/60 mb-2">🔍 Search Orders</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by order number, email, or date..."
-              className="flex-1 px-3 py-2 bg-white/10 rounded-md text-white text-sm placeholder-white/40 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-md text-white text-sm"
+        {/* Search Bar and Sorting/Filtering */}
+        <div className="mb-6 space-y-4">
+          <div>
+            <label className="block text-sm text-white/60 mb-2">🔍 Search Orders</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by order number, email, or date..."
+                className="flex-1 px-3 py-2 bg-white/10 rounded-md text-white text-sm placeholder-white/40 ring-1 ring-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-md text-white text-sm"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {/* Sorting and Filtering Controls */}
+          <div className="flex flex-wrap items-center gap-4 p-3 bg-white/5 rounded-lg border border-white/10">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-white/70">Sort by:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="px-3 py-1.5 bg-white/10 rounded text-sm text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                Clear
-              </button>
-            )}
+                <option value="neverWorkedFirst">Never Worked First</option>
+                <option value="oldestFirst">Oldest First</option>
+                <option value="recentlyWorkedLast">Recently Worked Last</option>
+              </select>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-white/70">
+                <input
+                  type="checkbox"
+                  checked={filterNeverWorked}
+                  onChange={(e) => setFilterNeverWorked(e.target.checked)}
+                  className="w-4 h-4 rounded"
+                />
+                Show only never worked
+              </label>
+              
+              <label className="flex items-center gap-2 text-sm text-white/70">
+                <input
+                  type="checkbox"
+                  checked={filterHideRecent}
+                  onChange={(e) => setFilterHideRecent(e.target.checked)}
+                  className="w-4 h-4 rounded"
+                />
+                Hide worked in last 2 hours
+              </label>
+            </div>
           </div>
         </div>
         
@@ -571,7 +654,11 @@ export default function AssemblyLineQueues() {
                 return (
               <div
                 key={task.id}
-                className="p-3 bg-white/5 rounded-lg border border-white/10"
+                className={`p-3 rounded-lg border transition-all ${
+                  task.workMetadata 
+                    ? getTaskCardColorClass(task.workMetadata)
+                    : 'bg-white/5 border-white/10'
+                }`}
               >
                 <div className="flex justify-between items-start gap-4">
                   {/* Checkbox for selection - only for assignable queues */}
@@ -600,6 +687,18 @@ export default function AssemblyLineQueues() {
                     <p className="text-sm text-white/60">
                       Email: {task.holdsCustomerEmail || 'N/A'}
                     </p>
+                    
+                    {/* Work Metadata Badges */}
+                    {task.workMetadata && (
+                      <WorkMetadataBadge
+                        hasBeenWorked={task.workMetadata.hasBeenWorked}
+                        isRework={task.workMetadata.isRework}
+                        recentlyWorked={task.workMetadata.recentlyWorked}
+                        lastWorkedByName={task.workMetadata.lastWorkedByName}
+                        workAttempts={task.workMetadata.workAttempts}
+                        hoursSinceLastWork={task.workMetadata.hoursSinceLastWork}
+                      />
+                    )}
                     
                     {/* Time in Queue */}
                     <div className="mt-2 flex items-center gap-2">

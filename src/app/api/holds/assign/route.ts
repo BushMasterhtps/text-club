@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { calculateWorkMetadata } from '@/lib/holds-work-metadata';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const agentId = searchParams.get('agentId');
     const queue = searchParams.get('queue');
+    const sortBy = searchParams.get('sortBy') || 'neverWorkedFirst'; // Default: never worked first
 
     // Build where clause - include PENDING, COMPLETED, IN_PROGRESS, and ASSISTANCE_REQUIRED (for reassignment)
     const whereClause: any = {
@@ -25,33 +27,52 @@ export async function GET(request: NextRequest) {
       whereClause.holdsStatus = queue;
     }
 
-    // Get holds tasks
-    const tasks = await prisma.task.findMany({
-      where: whereClause,
-      include: {
-        assignedTo: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+    // Fetch tasks and users in parallel
+    const [tasks, allUsers] = await Promise.all([
+      prisma.task.findMany({
+        where: whereClause,
+        include: {
+          assignedTo: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          completedByUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
         },
-      },
-      orderBy: [
-        // Priority items first (5-day+ items)
-        { holdsOrderDate: 'asc' },
-        { holdsPriority: 'desc' },
-        { createdAt: 'asc' },
-      ],
-    });
+        orderBy: [
+          // Priority items first (5-day+ items)
+          { holdsOrderDate: 'asc' },
+          { holdsPriority: 'desc' },
+          { createdAt: 'asc' },
+        ],
+      }),
+      prisma.user.findMany({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      }),
+    ]);
 
-    // Calculate aging for each task
-    const tasksWithAging = tasks.map(task => {
+    // Calculate aging and work metadata for each task
+    let tasksWithAging = tasks.map(task => {
       const currentDate = new Date();
       const orderDate = task.holdsOrderDate;
       const daysSinceOrder = orderDate ? Math.floor((currentDate.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
       const isAging = daysSinceOrder >= 4;
       const isApproaching = daysSinceOrder === 3;
+
+      // Calculate work metadata
+      const workMetadata = calculateWorkMetadata(task, allUsers);
 
       return {
         ...task,
@@ -61,8 +82,46 @@ export async function GET(request: NextRequest) {
           isApproaching,
           orderDate,
         },
+        workMetadata: {
+          ...workMetadata,
+          lastWorkedAt: workMetadata.lastWorkedAt?.toISOString() || null, // Convert Date to ISO string
+        },
       };
     });
+
+    // Apply sorting
+    if (sortBy === 'neverWorkedFirst') {
+      // Never worked first, then by order date
+      tasksWithAging.sort((a, b) => {
+        if (a.workMetadata.hasBeenWorked !== b.workMetadata.hasBeenWorked) {
+          return a.workMetadata.hasBeenWorked ? 1 : -1;
+        }
+        // Same work status, sort by order date (oldest first)
+        const aDate = a.holdsOrderDate?.getTime() || 0;
+        const bDate = b.holdsOrderDate?.getTime() || 0;
+        return aDate - bDate;
+      });
+    } else if (sortBy === 'oldestFirst') {
+      // Sort by order date only (oldest first)
+      tasksWithAging.sort((a, b) => {
+        const aDate = a.holdsOrderDate?.getTime() || 0;
+        const bDate = b.holdsOrderDate?.getTime() || 0;
+        return aDate - bDate;
+      });
+    } else if (sortBy === 'recentlyWorkedLast') {
+      // Never worked first, then recently worked last
+      tasksWithAging.sort((a, b) => {
+        if (!a.workMetadata.hasBeenWorked && b.workMetadata.hasBeenWorked) return -1;
+        if (a.workMetadata.hasBeenWorked && !b.workMetadata.hasBeenWorked) return 1;
+        if (a.workMetadata.recentlyWorked !== b.workMetadata.recentlyWorked) {
+          return a.workMetadata.recentlyWorked ? 1 : -1;
+        }
+        // Same work status, sort by order date (oldest first)
+        const aDate = a.holdsOrderDate?.getTime() || 0;
+        const bDate = b.holdsOrderDate?.getTime() || 0;
+        return aDate - bDate;
+      });
+    }
 
     return NextResponse.json({
       success: true,

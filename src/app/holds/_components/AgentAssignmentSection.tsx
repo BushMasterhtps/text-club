@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
+import { WorkMetadataBadge } from "@/app/_components/WorkMetadataBadge";
+import { getTaskCardColorClass } from "@/lib/holds-work-metadata";
 
 interface Agent {
   id: string;
@@ -32,10 +34,11 @@ export default function AgentAssignmentSection() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState<'neverWorkedFirst' | 'oldestFirst' | 'recentlyWorkedLast'>('neverWorkedFirst');
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [sortBy]);
 
   const fetchData = async () => {
     try {
@@ -58,7 +61,9 @@ export default function AgentAssignmentSection() {
 
       // Fetch ALL holds tasks (not just unassigned) to match existing system
       console.log('Fetching holds tasks...');
-      const tasksResponse = await fetch('/api/holds/assign');
+      const params = new URLSearchParams();
+      params.set('sortBy', sortBy);
+      const tasksResponse = await fetch(`/api/holds/assign?${params.toString()}`);
       const tasksData = await tasksResponse.json();
       
       console.log('Tasks API response:', tasksData);
@@ -170,6 +175,22 @@ export default function AgentAssignmentSection() {
         Assign holds tasks to agents. Use individual assignment for single tasks or bulk assignment for multiple tasks.
       </p>
       
+      {/* Sorting Controls */}
+      <div className="mb-4 p-3 bg-white/5 rounded-lg border border-white/10">
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-white/70">Sort by:</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="px-3 py-1.5 bg-white/10 rounded text-sm text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="neverWorkedFirst">Never Worked First</option>
+            <option value="oldestFirst">Oldest First</option>
+            <option value="recentlyWorkedLast">Recently Worked Last</option>
+          </select>
+        </div>
+      </div>
+      
       {/* Bulk Assignment Controls */}
       <div className="mb-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
         <div className="flex items-center justify-between mb-3">
@@ -212,13 +233,19 @@ export default function AgentAssignmentSection() {
         </div>
         
         <div className="max-h-96 overflow-y-auto space-y-2">
-          {tasks.map(task => (
+          {tasks.map(task => {
+            const taskWithMetadata = task as any;
+            const baseColorClass = taskWithMetadata.workMetadata 
+              ? getTaskCardColorClass(taskWithMetadata.workMetadata)
+              : 'bg-white/5 border-white/10';
+            
+            return (
             <div
               key={task.id}
               className={`p-3 rounded-lg border transition-all ${
                 selectedTasks.includes(task.id)
                   ? 'bg-blue-900/30 border-blue-500'
-                  : 'bg-white/5 border-white/10 hover:bg-white/10'
+                  : baseColorClass
               }`}
             >
               <div className="flex justify-between items-start">
@@ -241,6 +268,21 @@ export default function AgentAssignmentSection() {
                   <p className="text-sm text-white/60 ml-7">
                     Status: {task.holdsStatus} | Priority: {task.holdsPriority || 4}
                   </p>
+                  
+                  {/* Work Metadata Badges */}
+                  {taskWithMetadata.workMetadata && (
+                    <div className="ml-7">
+                      <WorkMetadataBadge
+                        hasBeenWorked={taskWithMetadata.workMetadata.hasBeenWorked}
+                        isRework={taskWithMetadata.workMetadata.isRework}
+                        recentlyWorked={taskWithMetadata.workMetadata.recentlyWorked}
+                        lastWorkedByName={taskWithMetadata.workMetadata.lastWorkedByName}
+                        workAttempts={taskWithMetadata.workMetadata.workAttempts}
+                        hoursSinceLastWork={taskWithMetadata.workMetadata.hoursSinceLastWork}
+                      />
+                    </div>
+                  )}
+                  
                   {task.assignedTo && (
                     <p className="text-sm text-green-300 ml-7">
                       ✓ Assigned to: {task.assignedTo.name}
@@ -275,7 +317,8 @@ export default function AgentAssignmentSection() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </Card>

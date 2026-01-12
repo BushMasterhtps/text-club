@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { calculateWorkMetadata } from '@/lib/holds-work-metadata';
 
 // Assembly line queue statuses for holds
 const HOLDS_QUEUES = [
@@ -17,51 +18,76 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const queue = searchParams.get('queue') as HoldsQueue | null;
     const includeAging = searchParams.get('includeAging') === 'true';
+    // Only apply sorting/filtering if explicitly requested (for UI assignment views)
+    // Reporting/analytics views don't pass these params, so they get all tasks unfiltered
+    const sortBy = searchParams.get('sortBy') || 'neverWorkedFirst'; // Default: never worked first
+    const filter = searchParams.get('filter'); // Optional: neverWorked|reworked|workedToday (only for UI)
 
-    // Get all holds tasks
-    const whereClause: any = {
-      taskType: 'HOLDS',
-    };
+    // Fetch all users for agent name lookups (parallel with tasks)
+    const [tasks, allUsers] = await Promise.all([
+      (async () => {
+        // Get all holds tasks
+        const whereClause: any = {
+          taskType: 'HOLDS',
+        };
 
-    // Filter by specific queue if requested
-    if (queue && HOLDS_QUEUES.includes(queue)) {
-      whereClause.holdsStatus = queue;
-    }
+        // Filter by specific queue if requested
+        if (queue && HOLDS_QUEUES.includes(queue)) {
+          whereClause.holdsStatus = queue;
+        }
 
-    const tasks = await prisma.task.findMany({
-      where: whereClause,
-      select: {
-        id: true,
-        text: true,
-        status: true,
-        holdsStatus: true,
-        holdsOrderNumber: true,
-        holdsCustomerEmail: true,
-        holdsOrderDate: true,
-        holdsPriority: true,
-        holdsDaysInSystem: true,
-        holdsOrderAmount: true,
-        holdsQueueHistory: true,
-        createdAt: true,
-        updatedAt: true,
-        assignedTo: {
+        return prisma.task.findMany({
+          where: whereClause,
           select: {
             id: true,
-            name: true,
-            email: true,
+            text: true,
+            status: true,
+            holdsStatus: true,
+            holdsOrderNumber: true,
+            holdsCustomerEmail: true,
+            holdsOrderDate: true,
+            holdsPriority: true,
+            holdsDaysInSystem: true,
+            holdsOrderAmount: true,
+            holdsQueueHistory: true,
+            completedBy: true,
+            completedAt: true,
+            createdAt: true,
+            updatedAt: true,
+            assignedTo: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            completedByUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
           },
+          orderBy: [
+            // Priority items first (5-day+ items)
+            { holdsOrderDate: 'asc' },
+            { holdsPriority: 'desc' },
+            { createdAt: 'asc' },
+          ],
+        });
+      })(),
+      prisma.user.findMany({
+        select: {
+          id: true,
+          name: true,
+          email: true,
         },
-      },
-      orderBy: [
-        // Priority items first (5-day+ items)
-        { holdsOrderDate: 'asc' },
-        { holdsPriority: 'desc' },
-        { createdAt: 'asc' },
-      ],
-    });
+      }),
+    ]);
 
-    // Calculate aging and time in queue for each task
-    const tasksWithAging = tasks.map(task => {
+    // Calculate aging, time in queue, and work metadata for each task
+    let tasksWithMetadata = tasks.map(task => {
       const currentDate = new Date();
       const orderDate = task.holdsOrderDate;
       const daysSinceOrder = orderDate ? Math.floor((currentDate.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
@@ -81,6 +107,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // Calculate work metadata
+      const workMetadata = calculateWorkMetadata(task, allUsers);
+
       return {
         ...task,
         aging: {
@@ -93,8 +122,62 @@ export async function GET(request: NextRequest) {
         needsAttention: hoursInQueue >= 48, // Flag if 48+ hours in queue
         // Convert Decimal field to number for JSON serialization
         holdsOrderAmount: task.holdsOrderAmount ? Number(task.holdsOrderAmount) : null,
+        // Add work metadata
+        workMetadata: {
+          ...workMetadata,
+          lastWorkedAt: workMetadata.lastWorkedAt?.toISOString() || null, // Convert Date to ISO string
+        },
       };
     });
+
+    // Apply filtering if requested
+    if (filter === 'neverWorked') {
+      tasksWithMetadata = tasksWithMetadata.filter(task => !task.workMetadata.hasBeenWorked);
+    } else if (filter === 'reworked') {
+      tasksWithMetadata = tasksWithMetadata.filter(task => task.workMetadata.isRework);
+    } else if (filter === 'workedToday') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      tasksWithMetadata = tasksWithMetadata.filter(task => 
+        task.workMetadata.lastWorkedAt && new Date(task.workMetadata.lastWorkedAt) >= today
+      );
+    }
+
+    // Apply sorting
+    if (sortBy === 'neverWorkedFirst') {
+      // Never worked first, then by order date
+      tasksWithMetadata.sort((a, b) => {
+        if (a.workMetadata.hasBeenWorked !== b.workMetadata.hasBeenWorked) {
+          return a.workMetadata.hasBeenWorked ? 1 : -1;
+        }
+        // Same work status, sort by order date (oldest first)
+        const aDate = a.holdsOrderDate?.getTime() || 0;
+        const bDate = b.holdsOrderDate?.getTime() || 0;
+        return aDate - bDate;
+      });
+    } else if (sortBy === 'oldestFirst') {
+      // Sort by order date only (oldest first)
+      tasksWithMetadata.sort((a, b) => {
+        const aDate = a.holdsOrderDate?.getTime() || 0;
+        const bDate = b.holdsOrderDate?.getTime() || 0;
+        return aDate - bDate;
+      });
+    } else if (sortBy === 'recentlyWorkedLast') {
+      // Never worked first, then recently worked last
+      tasksWithMetadata.sort((a, b) => {
+        if (!a.workMetadata.hasBeenWorked && b.workMetadata.hasBeenWorked) return -1;
+        if (a.workMetadata.hasBeenWorked && !b.workMetadata.hasBeenWorked) return 1;
+        if (a.workMetadata.recentlyWorked !== b.workMetadata.recentlyWorked) {
+          return a.workMetadata.recentlyWorked ? 1 : -1;
+        }
+        // Same work status, sort by order date (oldest first)
+        const aDate = a.holdsOrderDate?.getTime() || 0;
+        const bDate = b.holdsOrderDate?.getTime() || 0;
+        return aDate - bDate;
+      });
+    }
+
+    const tasksWithAging = tasksWithMetadata;
 
     // Group by queue status
     const queueStats = HOLDS_QUEUES.reduce((acc, queueName) => {

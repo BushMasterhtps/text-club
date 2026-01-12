@@ -183,7 +183,12 @@ export async function POST(
           holdsNotes: dispositionNote || null, // Store disposition note in holdsNotes for agent visibility
           // Track who completed the task (for all Holds completions, even if unassigned)
           completedBy: user.id,
-          completedAt: new Date()
+          completedAt: new Date(),
+          // Reset timer when unassigning (task goes back to queue)
+          ...(shouldUnassign && {
+            durationSec: null,
+            startTime: null // Also reset start time
+          })
         }),
         // Add send-back tracking fields for WOD/IVCS
         ...(isSendBack && {
