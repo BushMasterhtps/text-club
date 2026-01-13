@@ -325,7 +325,7 @@ export async function POST(req: NextRequest) {
           },
           data: { 
             assignedToId: agent.id,
-            status: "IN_PROGRESS", // Assigned tasks = IN_PROGRESS
+            status: "PENDING", // Assigned tasks = PENDING (agent must click Start)
             // Don't set startTime yet - agent will set it when they click Start
           },
         });

@@ -18,7 +18,7 @@ During busy season, Holds tasks have a huge backlog. The main challenges are:
 1. **Initial State**: Task enters "Agent Research" queue (unassigned, status: PENDING)
 2. **Agent Assignment**: Manager assigns → status: IN_PROGRESS
 3. **Agent Completion**: Agent completes with disposition:
-   - **"Unable to Resolve"** → Stays in "Escalated Call 4+ Day" OR moves to "Customer Contact"
+   - **"Unable to Resolve"** → Stays in "Escalated Call 4+ Day" OR moves to "Customer Contact"image.png
    - **"In Communication"** → Moves to "Customer Contact"
    - **"Duplicate"** → Moves to "Duplicates"
    - **Resolved dispositions** → Moves to "Completed"

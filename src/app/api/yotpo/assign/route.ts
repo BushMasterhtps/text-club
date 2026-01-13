@@ -61,8 +61,8 @@ export async function POST(request: NextRequest) {
           where: { id: taskId },
           data: {
             assignedToId: agentId,
-            status: 'IN_PROGRESS',
-            startTime: new Date()
+            status: 'PENDING', // Set to PENDING (agent must click Start)
+            startTime: null // Don't set startTime until agent clicks Start
           },
           include: {
             assignedTo: {

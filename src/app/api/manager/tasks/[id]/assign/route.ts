@@ -54,8 +54,8 @@ export async function POST(
       where: { id: taskId },
       data: {
         assignedToId: agentId,
-        // Status logic: PENDING when unassigned, IN_PROGRESS when assigned
-        status: TaskStatus.IN_PROGRESS,
+        // Status logic: PENDING when assigned (agent must click Start to begin)
+        status: TaskStatus.PENDING,
         // Clear any previous task data when reassigning
         startTime: null,
         endTime: null,

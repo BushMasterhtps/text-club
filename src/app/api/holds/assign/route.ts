@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
       },
       data: {
         assignedToId: agentId,
-        status: 'IN_PROGRESS', // Set to IN_PROGRESS when assigned
+        status: 'PENDING', // Set to PENDING when assigned (agent must click Start)
         updatedAt: new Date(),
       },
     });

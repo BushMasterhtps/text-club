@@ -130,7 +130,7 @@ export async function POST(req: Request) {
         },
         data: { 
           assignedToId: agent.id,
-          status: TaskStatus.IN_PROGRESS, // Assigned tasks = IN_PROGRESS
+          status: TaskStatus.PENDING, // Assigned tasks = PENDING (agent must click Start)
           // Clear any previous task data when assigning
           startTime: null,
           endTime: null,
