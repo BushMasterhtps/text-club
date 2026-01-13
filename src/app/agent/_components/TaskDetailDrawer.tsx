@@ -325,13 +325,21 @@ export default function TaskDetailDrawer({
         setToast({ message: data.error || 'Failed to complete task', type: 'error' });
       } else {
         // Update task with actual response data (including endTime from server)
-        if (data.task) {
-          updateTask(task.id, {
-            status: 'COMPLETED',
-            endTime: data.task.endTime || new Date().toISOString(),
-            disposition: finalDisposition,
-          });
-        }
+        // CRITICAL: Ensure endTime is set correctly for date filtering
+        const serverEndTime = data.task?.endTime || new Date().toISOString();
+        updateTask(task.id, {
+          status: 'COMPLETED',
+          endTime: serverEndTime,
+          disposition: finalDisposition,
+        });
+        
+        console.log('✅ Task completed:', {
+          taskId: task.id,
+          endTime: serverEndTime,
+          selectedDate: new Date().toISOString().split('T')[0],
+          endDateStr: new Date(serverEndTime).toISOString().split('T')[0]
+        });
+        
         setToast({ message: 'Task completed successfully', type: 'success' });
         onTaskAction?.('complete', task.id);
         // Refresh stats and scorecard after completion

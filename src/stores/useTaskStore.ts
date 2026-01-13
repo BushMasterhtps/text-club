@@ -78,6 +78,13 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     newTasks.forEach(newTask => {
       const existing = newMap.get(newTask.id);
       if (existing) {
+        // CRITICAL: Don't overwrite COMPLETED tasks with data from API
+        // API doesn't return COMPLETED tasks, so preserve them as-is
+        if (existing.status === 'COMPLETED') {
+          // Keep existing COMPLETED task unchanged (don't overwrite with API data)
+          return;
+        }
+        
         // Merge: update fields but preserve position/ordering
         // Only update if status hasn't changed (status change = column move)
         if (existing.status === newTask.status) {

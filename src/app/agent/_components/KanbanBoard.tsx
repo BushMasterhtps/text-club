@@ -89,27 +89,46 @@ export default function KanbanBoard({
     const allCompleted = getTasksByStatus('COMPLETED');
     
     // Filter by selected date (format: YYYY-MM-DD)
-    // Normalize selectedDate to ensure proper format
     const targetDateStr = selectedDate; // Already in YYYY-MM-DD format
 
     let tasks = allCompleted.filter(task => {
       if (!task.endTime) {
+        console.log('⚠️ Completed task missing endTime:', task.id, task.status);
         return false;
       }
       
-      // Parse endTime and extract date part (YYYY-MM-DD)
-      // Handle both ISO string and Date object
+      // Parse endTime - handle both ISO string and Date object
       const endDate = new Date(task.endTime);
-      // Use UTC to avoid timezone issues
-      const endDateStr = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-${String(endDate.getUTCDate()).padStart(2, '0')}`;
       
-      // Compare date strings for exact match
-      return endDateStr === targetDateStr;
+      // Extract date part in YYYY-MM-DD format
+      // Use local date (not UTC) to match user's timezone
+      const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+      
+      const matches = endDateStr === targetDateStr;
+      
+      if (!matches) {
+        console.log('📅 Date filter:', {
+          taskId: task.id,
+          endTime: task.endTime,
+          endDateStr,
+          targetDateStr,
+          matches
+        });
+      }
+      
+      return matches;
     });
 
     if (selectedTaskType !== 'ALL') {
       tasks = tasks.filter(t => t.taskType === selectedTaskType);
     }
+    
+    console.log('✅ Completed tasks:', {
+      allCompleted: allCompleted.length,
+      filtered: tasks.length,
+      selectedDate: targetDateStr,
+      taskIds: tasks.map(t => ({ id: t.id, endTime: t.endTime }))
+    });
     
     return tasks;
   }, [tasks, getTasksByStatus, selectedTaskType, selectedDate]);
