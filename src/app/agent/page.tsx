@@ -6,6 +6,9 @@ import ThemeToggle from '@/app/_components/ThemeToggle';
 import AgentOneOnOneNotes from '@/app/_components/AgentOneOnOneNotes';
 import KnowledgeSection from '@/app/_components/KnowledgeSection';
 import { Toast } from '@/app/_components/Toast';
+import { useTaskStore } from '@/stores/useTaskStore';
+import KanbanBoard from '@/app/agent/_components/KanbanBoard';
+import { generateTestTasks } from '@/lib/test-data-generator';
 
 /* ========== Tiny UI atoms (iOS-ish) ========== */
 function Card({
@@ -79,7 +82,7 @@ interface Task {
   brand: string;
   phone: string;
   text: string;
-  status: "PENDING" | "IN_PROGRESS" | "ASSISTANCE_REQUIRED" | "COMPLETED";
+  status: "PENDING" | "IN_PROGRESS" | "ASSISTANCE_REQUIRED" | "RESOLVED" | "COMPLETED";
   assignedToId: string;
   startTime?: string;
   endTime?: string;
@@ -163,6 +166,15 @@ export default function AgentPage() {
   const [email, setEmail] = useState<string>("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [stats, setStats] = useState<AgentStats | null>(null);
+  
+  // Zustand store
+  const { setTasks: setStoreTasks, mergeTasks, setSortOrder: setStoreSortOrder, sortOrder: storeSortOrder } = useTaskStore();
+  
+  // View mode: 'list' or 'kanban'
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  
+  // Test mode (when no database connection)
+  const [useTestData, setUseTestData] = useState(false);
   
   // New state for interactive features
   const [welcomeMessage, setWelcomeMessage] = useState<string>("");
@@ -430,7 +442,7 @@ export default function AgentPage() {
     // Scorecard polling counter (refresh every 15 cycles = 30 seconds)
     let scorecardPollCount = 0;
     
-    // Simple direct polling every 2 seconds
+    // Polling every 5 seconds (as per requirements)
     const interval = setInterval(async () => {
       console.log("🔄 SIMPLE Polling for updates...");
       const currentEmail = localStorage.getItem('agentEmail');
@@ -476,6 +488,14 @@ export default function AgentPage() {
               
               // Update tasks (React will handle rendering manager responses)
               setTasks(newTasks);
+              // Also update Zustand store
+              if (viewMode === 'kanban') {
+                // Merge tasks (no reordering) for Kanban
+                mergeTasks(newTasks);
+              } else {
+                // Full update for List view
+                setStoreTasks(newTasks);
+              }
               setLastUpdate(new Date());
            }
           }
@@ -503,7 +523,7 @@ export default function AgentPage() {
       } else {
         console.log("🔄 SIMPLE No email available");
       }
-    }, 2000); // 2 seconds for simple polling
+    }, 5000); // 5 seconds polling
     
     setPollingInterval(interval);
   };
@@ -521,10 +541,29 @@ export default function AgentPage() {
     };
   }, []);
 
-  const loadTasks = async (emailToUse?: string, orderOverride?: 'asc' | 'desc') => {
+  const loadTasks = async (emailToUse?: string, orderOverride?: 'asc' | 'desc', useTestMode?: boolean) => {
     console.log("📥 loadTasks called with emailToUse:", emailToUse);
     const currentEmail = emailToUse || email;
     console.log("📥 currentEmail resolved to:", currentEmail);
+    
+    // Test data mode
+    if (useTestMode || useTestData) {
+      console.log("🧪 Using test data mode");
+      setLoading(true);
+      try {
+        const testTasks = generateTestTasks(80);
+        setTasks(testTasks);
+        setStoreTasks(testTasks);
+        setStoreSortOrder(orderOverride ?? sortOrderRef.current);
+        setLastUpdate(new Date());
+      } catch (error) {
+        console.error("Error loading test data:", error);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+    
     if (!currentEmail) {
       console.log("❌ No email, skipping loadTasks");
       return;
@@ -533,6 +572,7 @@ export default function AgentPage() {
     setLoading(true);
     try {
       const effectiveOrder = orderOverride ?? sortOrderRef.current;
+      setStoreSortOrder(effectiveOrder);
       const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${effectiveOrder}`;
       console.log("🌐 Fetching from:", url);
       const res = await fetch(url);
@@ -566,6 +606,14 @@ export default function AgentPage() {
         
         // Always update tasks to ensure UI reflects latest data
         setTasks(newTasks);
+        // Also update Zustand store
+        if (viewMode === 'kanban') {
+          // Merge tasks (no reordering) for Kanban
+          mergeTasks(newTasks);
+        } else {
+          // Full update for List view
+          setStoreTasks(newTasks);
+        }
         setLastUpdate(new Date());
         
         // Calculate task counts
@@ -755,6 +803,22 @@ export default function AgentPage() {
   };
 
   const startTask = async (taskId: string) => {
+    // Skip API call in test mode
+    if (useTestData) {
+      // Just update local state
+      setStartedTasks(prev => new Set(prev).add(taskId));
+      if (viewMode === 'kanban') {
+        const task = tasks.find(t => t.id === taskId);
+        if (task) {
+          useTaskStore.getState().updateTask(taskId, {
+            status: 'IN_PROGRESS',
+            startTime: new Date().toISOString(),
+          });
+        }
+      }
+      return;
+    }
+
     try {
       const res = await fetch(`/api/agent/tasks/${taskId}/start`, {
         method: "POST",
@@ -764,8 +828,20 @@ export default function AgentPage() {
       if (res.ok) {
         // Add to local started tasks state for instant UI update
         setStartedTasks(prev => new Set(prev).add(taskId));
+        // Update Zustand store if in Kanban view
+        if (viewMode === 'kanban') {
+          const task = tasks.find(t => t.id === taskId);
+          if (task) {
+            useTaskStore.getState().updateTask(taskId, {
+              status: 'IN_PROGRESS',
+              startTime: new Date().toISOString(),
+            });
+          }
+        }
         // Update stats to reflect the change
         await loadStats();
+        // Reload tasks to get fresh data
+        await loadTasks();
       } else {
         // Log error for debugging
         const errorData = await res.json().catch(() => ({}));
@@ -804,6 +880,17 @@ export default function AgentPage() {
         });
         // Remove task from local state for instant UI update
         setTasks(prev => prev.filter(t => t.id !== taskId));
+        // Update Zustand store if in Kanban view
+        if (viewMode === 'kanban') {
+          const task = useTaskStore.getState().getTask(taskId);
+          if (task) {
+            useTaskStore.getState().updateTask(taskId, {
+              status: 'COMPLETED',
+              endTime: new Date().toISOString(),
+              disposition,
+            });
+          }
+        }
         // Update stats AND scorecard to reflect the completion
         // Skip cache to get fresh data immediately after task completion
         await loadStats();
@@ -819,6 +906,33 @@ export default function AgentPage() {
       alert("Please enter an assistance note.");
       return;
     }
+
+    // Skip API call in test mode
+    if (useTestData) {
+      // Just update local state
+      setStartedTasks(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(taskId);
+        return newSet;
+      });
+      setTasks(prev => prev.map(t => 
+        t.id === taskId 
+          ? { ...t, status: "ASSISTANCE_REQUIRED", assistanceNotes: message, assistanceRequestedAt: new Date().toISOString() }
+          : t
+      ));
+      if (viewMode === 'kanban') {
+        const task = useTaskStore.getState().getTask(taskId);
+        if (task) {
+          useTaskStore.getState().updateTask(taskId, {
+            status: 'ASSISTANCE_REQUIRED',
+            assistanceNotes: message,
+            assistanceRequestedAt: new Date().toISOString(),
+          });
+        }
+      }
+      return;
+    }
+
     try {
       const res = await fetch(`/api/agent/tasks/${taskId}/assistance`, {
         method: "POST",
@@ -835,9 +949,20 @@ export default function AgentPage() {
         // Update the task status locally for instant UI update
         setTasks(prev => prev.map(t => 
           t.id === taskId 
-            ? { ...t, status: "ASSISTANCE_REQUIRED", assistanceNotes: message }
+            ? { ...t, status: "ASSISTANCE_REQUIRED", assistanceNotes: message, assistanceRequestedAt: new Date().toISOString() }
             : t
         ));
+        // Update Zustand store if in Kanban view
+        if (viewMode === 'kanban') {
+          const task = useTaskStore.getState().getTask(taskId);
+          if (task) {
+            useTaskStore.getState().updateTask(taskId, {
+              status: 'ASSISTANCE_REQUIRED',
+              assistanceNotes: message,
+              assistanceRequestedAt: new Date().toISOString(),
+            });
+          }
+        }
         // Update stats to reflect the assistance request
         await loadStats();
       }
@@ -885,7 +1010,7 @@ export default function AgentPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl p-6 space-y-6 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
+    <main className="w-full p-6 space-y-6 min-h-screen bg-gradient-to-br from-neutral-900 to-black dark:from-neutral-900 dark:to-black light:from-slate-50 light:to-slate-100">
       {/* Header with Stats */}
       <div className="space-y-4">
         {/* Company Logo Header */}
@@ -1917,11 +2042,41 @@ export default function AgentPage() {
               >
                 🔄 Force Update
               </SmallButton>
-            <SmallButton onClick={() => { setSortOrder('asc'); loadTasks(undefined, 'asc'); stopPolling(); startPolling('asc'); }} className={sortOrder === 'asc' ? 'bg-white/10' : ''}>
+            <SmallButton onClick={() => { setSortOrder('asc'); setStoreSortOrder('asc'); loadTasks(undefined, 'asc'); stopPolling(); startPolling('asc'); }} className={sortOrder === 'asc' ? 'bg-white/10' : ''}>
               Oldest → Newest
             </SmallButton>
-            <SmallButton onClick={() => { setSortOrder('desc'); loadTasks(undefined, 'desc'); stopPolling(); startPolling('desc'); }} className={sortOrder === 'desc' ? 'bg-white/10' : ''}>
+            <SmallButton onClick={() => { setSortOrder('desc'); setStoreSortOrder('desc'); loadTasks(undefined, 'desc'); stopPolling(); startPolling('desc'); }} className={sortOrder === 'desc' ? 'bg-white/10' : ''}>
               Newest → Oldest
+            </SmallButton>
+            
+            {/* View Toggle */}
+            <div className="flex items-center gap-2 border-l border-white/20 pl-4">
+              <SmallButton
+                onClick={() => setViewMode('list')}
+                className={viewMode === 'list' ? 'bg-white/10' : ''}
+              >
+                📋 List
+              </SmallButton>
+              <SmallButton
+                onClick={() => setViewMode('kanban')}
+                className={viewMode === 'kanban' ? 'bg-white/10' : ''}
+              >
+                📊 Kanban
+              </SmallButton>
+            </div>
+            
+            {/* Test Data Toggle (for local testing) */}
+            <SmallButton
+              onClick={() => {
+                setUseTestData(!useTestData);
+                if (!useTestData) {
+                  loadTasks(undefined, undefined, true);
+                }
+              }}
+              className={useTestData ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-gray-600 hover:bg-gray-700'}
+              title="Toggle test data mode (for local testing without database)"
+            >
+              {useTestData ? '🧪 Test Mode ON' : '🧪 Test Mode'}
             </SmallButton>
 
             </div>
@@ -1931,7 +2086,19 @@ export default function AgentPage() {
           <div className="text-center py-8 text-white/60">Loading tasks...</div>
         ) : tasks.length === 0 ? (
           <div className="text-center py-8 text-white/60">No tasks assigned yet.</div>
+        ) : viewMode === 'kanban' ? (
+          // Kanban View - Full Width
+          <KanbanBoard
+              selectedTaskType={selectedTaskType}
+              selectedDate={selectedDate}
+              agentEmail={email}
+              onStartTask={startTask}
+              onCompleteTask={completeTask}
+              onRequestAssistance={requestAssistance}
+              isTestMode={useTestData}
+            />
         ) : (
+          // List View (existing)
           <div>
             {/* Manager Response Notification - Simple count only (details shown in each task card) */}
             {(() => {

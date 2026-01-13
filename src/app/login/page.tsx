@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
@@ -11,7 +11,16 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [showRoleSelection, setShowRoleSelection] = useState(false);
   const [userData, setUserData] = useState<any>(null);
+  const [isDevelopment, setIsDevelopment] = useState(false);
   const router = useRouter();
+
+  // Check if we're in development mode (client-side)
+  useEffect(() => {
+    setIsDevelopment(
+      typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    );
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +51,37 @@ export default function LoginPage() {
         }
       } else {
         setError(data.error || 'Login failed');
+      }
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Test mode for local development (bypasses authentication)
+  const handleTestMode = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      // Call test mode API to get a valid JWT token
+      const response = await fetch('/api/auth/test-mode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Set agent email in localStorage
+        localStorage.setItem('agentEmail', 'test@example.com');
+        
+        // Redirect to agent page (cookie is set by API)
+        router.push('/agent');
+      } else {
+        setError(data.error || 'Failed to enable test mode');
       }
     } catch (err) {
       setError('Network error. Please try again.');
@@ -118,6 +158,20 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* Test Mode Button (for local development) */}
+          {isDevelopment && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={handleTestMode}
+                disabled={isLoading}
+                className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                🧪 Test Mode (No Login Required)
+              </button>
+            </div>
+          )}
 
           <div className="mt-6 text-center">
             <p className="text-white/40 text-sm">
