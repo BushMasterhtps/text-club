@@ -172,6 +172,11 @@ export default function AgentPage() {
   
   // View mode: 'list' or 'kanban'
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  // Use ref to ensure polling always has current viewMode (avoid closure issues)
+  const viewModeRef = useRef<'list' | 'kanban'>('list');
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
   
   // Test mode (when no database connection)
   const [useTestData, setUseTestData] = useState(false);
@@ -607,9 +612,9 @@ export default function AgentPage() {
         // Always update tasks to ensure UI reflects latest data
         setTasks(newTasks);
         // Also update Zustand store
-        // CRITICAL: Always use mergeTasks for Kanban to preserve COMPLETED tasks
-        // For List view, we can use setStoreTasks since it doesn't need COMPLETED tasks
-        if (viewMode === 'kanban') {
+        // CRITICAL: Use ref to get current viewMode (avoid closure issues)
+        const currentViewMode = viewModeRef.current;
+        if (currentViewMode === 'kanban') {
           // Merge tasks (no reordering) for Kanban - preserves COMPLETED tasks
           mergeTasks(newTasks);
         } else {
