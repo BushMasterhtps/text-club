@@ -2690,7 +2690,7 @@ function TaskCard({
   // A task is considered "started" only if the agent has explicitly clicked Start
   // This ensures agents must click Start even if tasks were auto-assigned as IN_PROGRESS
   // EXCEPTION: RESOLVED tasks are considered started (they were started before assistance)
-  const isTaskStarted = startedTasks.has(task.id) || task.status === "RESOLVED" || task.status === "IN_PROGRESS";
+  const isTaskStarted = startedTasks.has(task.id) || task.status === "RESOLVED";
   // Task is locked when in assistance and waiting for manager response
   const isTaskLocked = task.status === "ASSISTANCE_REQUIRED" && !task.managerResponse;
   // Show disposition controls only if task is started and not locked
