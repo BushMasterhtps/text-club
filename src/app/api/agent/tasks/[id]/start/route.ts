@@ -29,13 +29,14 @@ export async function POST(
     }
 
     // Find the task and verify it's assigned to this user
-    // Allow starting both PENDING and IN_PROGRESS tasks (in case they were auto-assigned)
+    // Allow starting PENDING, IN_PROGRESS, and RESOLVED tasks
+    // RESOLVED tasks can be "restarted" after manager response (they're ready to continue)
     const task = await prisma.task.findFirst({
       where: {
         id,
         assignedToId: user.id,
         status: {
-          in: ["PENDING", "IN_PROGRESS"]
+          in: ["PENDING", "IN_PROGRESS", "RESOLVED"]
         }
       }
     });

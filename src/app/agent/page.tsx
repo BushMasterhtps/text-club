@@ -494,8 +494,10 @@ export default function AgentPage() {
               // Update tasks (React will handle rendering manager responses)
               setTasks(newTasks);
               // Also update Zustand store
-              if (viewMode === 'kanban') {
-                // Merge tasks (no reordering) for Kanban
+              // CRITICAL: Use ref to get current viewMode (polling closure might have stale value)
+              const currentViewMode = viewModeRef.current;
+              if (currentViewMode === 'kanban') {
+                // Merge tasks (no reordering) for Kanban - preserves COMPLETED tasks
                 mergeTasks(newTasks);
               } else {
                 // Full update for List view
@@ -2687,12 +2689,14 @@ function TaskCard({
 
   // A task is considered "started" only if the agent has explicitly clicked Start
   // This ensures agents must click Start even if tasks were auto-assigned as IN_PROGRESS
-  const isTaskStarted = startedTasks.has(task.id);
+  // EXCEPTION: RESOLVED tasks are considered started (they were started before assistance)
+  const isTaskStarted = startedTasks.has(task.id) || task.status === "RESOLVED" || task.status === "IN_PROGRESS";
   // Task is locked when in assistance and waiting for manager response
   const isTaskLocked = task.status === "ASSISTANCE_REQUIRED" && !task.managerResponse;
   // Show disposition controls only if task is started and not locked
+  // RESOLVED tasks should show disposition controls (they're ready to complete)
   const showDispo = isTaskStarted && !isTaskLocked;
-  // Manager response exists (status may be IN_PROGRESS after manager responds)
+  // Manager response exists (status may be RESOLVED after manager responds)
   const hasManagerResponse = !!task.managerResponse;
 
   // Helper functions
@@ -3192,7 +3196,8 @@ function TaskCard({
 
       {/* Controls */}
       <div className="space-y-3">
-        {!isTaskStarted && (
+        {/* Don't show "Start Task" for RESOLVED tasks - they should go straight to disposition */}
+        {!isTaskStarted && task.status !== "RESOLVED" && (
           <PrimaryButton onClick={onStart} className="w-full">
             Start Task
           </PrimaryButton>
