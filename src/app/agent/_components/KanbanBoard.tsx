@@ -28,6 +28,7 @@ export default function KanbanBoard({
   onStatsUpdate,
 }: KanbanBoardProps) {
   const { tasks, getTasksByStatus, sortOrder, mergeTasks } = useTaskStore();
+  const getStoreState = useTaskStore.getState;
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   
@@ -72,7 +73,7 @@ export default function KanbanBoard({
             mergeTasks(completedTasks);
             
             // Verify they're actually in the store after merge
-            const storeAfter = useTaskStore.getState().tasks;
+            const storeAfter = getStoreState().tasks;
             const completedInStore = Array.from(storeAfter.values()).filter(t => t.status === 'COMPLETED');
             
             console.log('✅ Loaded completed tasks:', {
