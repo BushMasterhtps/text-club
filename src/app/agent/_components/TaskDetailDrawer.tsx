@@ -12,6 +12,7 @@ interface TaskDetailDrawerProps {
   agentEmail: string;
   onTaskAction?: (action: 'start' | 'assist' | 'complete', taskId: string) => void;
   isTestMode?: boolean; // Flag to skip API calls in test mode
+  onStatsUpdate?: () => Promise<void>; // Callback to refresh stats after completion
 }
 
 export default function TaskDetailDrawer({
@@ -21,6 +22,7 @@ export default function TaskDetailDrawer({
   agentEmail,
   onTaskAction,
   isTestMode = false,
+  onStatsUpdate,
 }: TaskDetailDrawerProps) {
   const { updateTask } = useTaskStore();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -80,6 +82,7 @@ export default function TaskDetailDrawer({
         setToast({ message: 'Task started (test mode)', type: 'success' });
         onTaskAction?.('start', task.id);
         setIsProcessing(false);
+        // Don't close drawer on start - keep it open
         return;
       }
 
@@ -323,6 +326,10 @@ export default function TaskDetailDrawer({
       } else {
         setToast({ message: 'Task completed successfully', type: 'success' });
         onTaskAction?.('complete', task.id);
+        // Refresh stats and scorecard after completion
+        if (onStatsUpdate) {
+          await onStatsUpdate();
+        }
         // Auto-close drawer on completion
         setTimeout(() => {
           onClose();

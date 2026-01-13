@@ -14,6 +14,7 @@ interface KanbanBoardProps {
   onCompleteTask?: (taskId: string, disposition: string, sfCaseNumber?: string, dispositionNote?: string) => void;
   onRequestAssistance?: (taskId: string, message: string) => void;
   isTestMode?: boolean; // Pass test mode flag to drawer
+  onStatsUpdate?: () => Promise<void>; // Callback to refresh stats after completion
 }
 
 export default function KanbanBoard({ 
@@ -24,6 +25,7 @@ export default function KanbanBoard({
   onCompleteTask,
   onRequestAssistance,
   isTestMode = false,
+  onStatsUpdate,
 }: KanbanBoardProps) {
   const { tasks, getTasksByStatus, sortOrder } = useTaskStore();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -157,6 +159,7 @@ export default function KanbanBoard({
           onClose={handleCloseDrawer}
           agentEmail={agentEmail}
           isTestMode={isTestMode}
+          onStatsUpdate={onStatsUpdate}
           onTaskAction={(action, taskId) => {
             // Handle task actions from drawer
             if (action === 'start' && onStartTask) {

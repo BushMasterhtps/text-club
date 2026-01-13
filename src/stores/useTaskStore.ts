@@ -70,6 +70,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     const { tasks } = get();
     const newMap = new Map(tasks);
     
+    // Get list of new task IDs to know what to keep
+    const newTaskIds = new Set(newTasks.map(t => t.id));
+    
     // Merge new tasks into existing map
     // Only update fields that changed, preserve position
     newTasks.forEach(newTask => {
@@ -87,6 +90,14 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       } else {
         // New task: add it
         newMap.set(newTask.id, newTask);
+      }
+    });
+    
+    // Remove tasks that are no longer in the fetched list
+    // BUT: Keep COMPLETED tasks (they won't be in API response but should stay in store)
+    newMap.forEach((task, id) => {
+      if (!newTaskIds.has(id) && task.status !== 'COMPLETED') {
+        newMap.delete(id);
       }
     });
     

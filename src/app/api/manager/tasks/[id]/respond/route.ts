@@ -31,11 +31,11 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Task not found or not in assistance state" }, { status: 404 });
     }
 
-    // Update task with manager response and change status back to IN_PROGRESS
+    // Update task with manager response and change status to RESOLVED (stays in Assistance Request column but becomes actionable)
     const updatedTask = await prisma.task.update({
       where: { id },
       data: {
-        status: "IN_PROGRESS",
+        status: "RESOLVED",
         managerResponse: response,
         updatedAt: new Date()
       },

@@ -838,10 +838,15 @@ export default function AgentPage() {
             });
           }
         }
-        // Update stats to reflect the change
+        // Update stats to reflect the change (but don't reload tasks to avoid page refresh)
         await loadStats();
-        // Reload tasks to get fresh data
-        await loadTasks();
+        // Only merge tasks in background, don't reload (prevents page refresh)
+        if (viewMode === 'kanban') {
+          // Background merge will happen via polling
+        } else {
+          // For list view, still need to reload
+          await loadTasks();
+        }
       } else {
         // Log error for debugging
         const errorData = await res.json().catch(() => ({}));
@@ -2096,6 +2101,10 @@ export default function AgentPage() {
               onCompleteTask={completeTask}
               onRequestAssistance={requestAssistance}
               isTestMode={useTestData}
+              onStatsUpdate={async () => {
+                await loadStats();
+                await loadScorecard(undefined, true);
+              }}
             />
         ) : (
           // List View (existing)

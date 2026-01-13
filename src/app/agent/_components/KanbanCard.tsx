@@ -13,7 +13,8 @@ export default function KanbanCard({ task, onClick, isReadOnly = false }: Kanban
   const isStarted = !!task.startTime;
   const isAssistanceRequired = task.status === 'ASSISTANCE_REQUIRED';
   const isResolved = task.status === 'RESOLVED';
-  const isInToDo = task.status === 'PENDING';
+  // To Do = PENDING OR IN_PROGRESS without startTime
+  const isInToDo = task.status === 'PENDING' || (task.status === 'IN_PROGRESS' && !task.startTime);
 
   // Determine card styling based on status
   const cardStyle = useMemo(() => {
