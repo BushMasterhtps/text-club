@@ -1,7 +1,7 @@
 "use client";
 
 import { Task } from '@/stores/useTaskStore';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTaskStore } from '@/stores/useTaskStore';
 import { Toast } from '@/app/_components/Toast';
 
@@ -28,8 +28,22 @@ export default function TaskDetailDrawer({
   const [assistanceMessage, setAssistanceMessage] = useState('');
   const [showAssistanceInput, setShowAssistanceInput] = useState(false);
   const [disposition, setDisposition] = useState(task.disposition || '');
+  const [subDisposition, setSubDisposition] = useState('');
   const [sfCaseNumber, setSfCaseNumber] = useState('');
+  const [orderAmount, setOrderAmount] = useState('');
   const [dispositionNote, setDispositionNote] = useState('');
+
+  // Reset form fields when task changes or drawer opens
+  useEffect(() => {
+    setDisposition(task.disposition || '');
+    setSubDisposition('');
+    setSfCaseNumber('');
+    setOrderAmount('');
+    setDispositionNote('');
+    setAssistanceMessage('');
+    setShowAssistanceInput(false);
+    setToast(null);
+  }, [task.id, isOpen]);
 
   const isStarted = !!task.startTime;
   const isAssistanceRequired = task.status === 'ASSISTANCE_REQUIRED';
@@ -172,13 +186,88 @@ export default function TaskDetailDrawer({
       return;
     }
 
+    // Validation logic matching List view
+    let finalDisposition = disposition;
+    let finalSfCaseNumber = sfCaseNumber;
+    let finalOrderAmount = orderAmount;
+    let finalDispositionNote = dispositionNote;
+
+    // For WOD/IVCS tasks, require sub-disposition for both main dispositions
+    if (task.taskType === "WOD_IVCS" && (disposition === "Completed" || disposition === "Unable to Complete")) {
+      if (!subDisposition) {
+        setToast({ message: 'Please select a sub-disposition.', type: 'error' });
+        return;
+      }
+      // Combine main disposition with sub-disposition
+      finalDisposition = `${disposition} - ${subDisposition}`;
+    }
+    // For Email Requests "Unable to Complete", require sub-disposition
+    else if (task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete") {
+      if (!subDisposition) {
+        setToast({ message: 'Please select a sub-disposition for Unable to Complete.', type: 'error' });
+        return;
+      }
+      // Combine main disposition with sub-disposition
+      finalDisposition = `${disposition} - ${subDisposition}`;
+    }
+    // For Email Requests "Completed", require SF Case #
+    else if (task.taskType === "EMAIL_REQUESTS" && disposition === "Completed") {
+      if (!sfCaseNumber.trim()) {
+        setToast({ message: 'Please enter the SF Case # for Completed disposition.', type: 'error' });
+        return;
+      }
+      finalSfCaseNumber = sfCaseNumber.trim();
+    }
+    // For "Answered in SF", require SF Case #
+    else if (disposition === "Answered in SF") {
+      if (!sfCaseNumber.trim()) {
+        setToast({ message: 'Please enter the SF Case # for Answered in SF disposition.', type: 'error' });
+        return;
+      }
+      finalSfCaseNumber = sfCaseNumber.trim();
+    }
+    // For Yotpo, require SF Case # for all dispositions EXCEPT 4 exemptions
+    else if (task.taskType === "YOTPO") {
+      const noSfRequired = [
+        "Information – Unfeasible request or information not available",
+        "Duplicate Request – No new action required",
+        "Previously Assisted – Issue already resolved or refund previously issued",
+        "No Match – No valid account or order located"
+      ];
+      
+      // If disposition requires SF # but none provided
+      if (!noSfRequired.includes(disposition) && !sfCaseNumber.trim()) {
+        setToast({ message: 'Please enter the SF Case # for this Yotpo disposition.', type: 'error' });
+        return;
+      }
+      finalSfCaseNumber = sfCaseNumber.trim() || undefined;
+    }
+    // For Holds, handle queue movements and completion
+    else if (task.taskType === "HOLDS") {
+      // MANDATORY: Order Amount required for all Holds completions
+      if (!orderAmount || parseFloat(orderAmount) <= 0) {
+        setToast({ message: 'Please enter the Order Amount before completing this Holds task.', type: 'error' });
+        return;
+      }
+      
+      // MANDATORY: Note required for specific dispositions
+      const noteRequiredDispositions = ["Unable to Resolve", "Resolved - other", "Resolved - Other"];
+      if (noteRequiredDispositions.includes(disposition) && !dispositionNote.trim()) {
+        setToast({ message: 'Please enter a note/reason for this disposition.', type: 'error' });
+        return;
+      }
+      
+      finalOrderAmount = orderAmount;
+      finalDispositionNote = dispositionNote.trim() || undefined;
+    }
+
     setIsProcessing(true);
     try {
       // Optimistic update
       updateTask(task.id, {
         status: 'COMPLETED',
         endTime: new Date().toISOString(),
-        disposition,
+        disposition: finalDisposition,
       });
 
       // Skip API call in test mode
@@ -193,16 +282,32 @@ export default function TaskDetailDrawer({
         return;
       }
 
-      // Call API
+      // Call API with proper parameters based on task type
+      const body: any = {
+        email: agentEmail,
+        disposition: finalDisposition,
+      };
+
+      // Add SF Case # if provided
+      if (finalSfCaseNumber) {
+        body.sfCaseNumber = finalSfCaseNumber;
+      }
+
+      // For Holds, add order amount and note
+      if (task.taskType === "HOLDS") {
+        body.orderAmount = finalOrderAmount;
+        if (finalDispositionNote) {
+          body.dispositionNote = finalDispositionNote;
+        }
+      } else if (finalDispositionNote) {
+        // For other task types, add note if provided
+        body.dispositionNote = finalDispositionNote;
+      }
+
       const response = await fetch(`/api/agent/tasks/${task.id}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: agentEmail,
-          disposition,
-          sfCaseNumber: sfCaseNumber || undefined,
-          dispositionNote: dispositionNote || undefined,
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -406,44 +511,351 @@ export default function TaskDetailDrawer({
             )}
 
             {isStarted && !isLocked && !isCompleted && (
-              <div className="space-y-2">
-                <select
-                  value={disposition}
-                  onChange={(e) => setDisposition(e.target.value)}
-                  className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm"
-                >
-                  <option value="">Select disposition...</option>
-                  <option value="Resolved">Resolved</option>
-                  <option value="Unable to Resolve">Unable to Resolve</option>
-                  <option value="Duplicate">Duplicate</option>
-                  <option value="In Communication">In Communication</option>
-                </select>
-
-                {task.taskType === 'YOTPO' && (
-                  <input
-                    type="text"
-                    value={sfCaseNumber}
-                    onChange={(e) => setSfCaseNumber(e.target.value)}
-                    placeholder="SF Case #"
-                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40"
-                  />
+              <div className="space-y-4">
+                {/* Order Amount field for Holds tasks - MANDATORY */}
+                {task.taskType === "HOLDS" && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-white">
+                      Order Amount: <span className="text-red-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={orderAmount}
+                        onChange={(e) => {
+                          setOrderAmount(e.target.value);
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value && !isNaN(parseFloat(e.target.value))) {
+                            setOrderAmount(parseFloat(e.target.value).toFixed(2));
+                          }
+                        }}
+                        className="w-full rounded-lg bg-white/10 text-white pl-8 pr-3 py-2 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-white/50">
+                      Enter the order amount to track financial impact per disposition
+                    </p>
+                  </div>
                 )}
 
-                <textarea
-                  value={dispositionNote}
-                  onChange={(e) => setDispositionNote(e.target.value)}
-                  placeholder="Disposition notes (optional)"
-                  className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40"
-                  rows={2}
-                />
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white">Disposition:</label>
+                  <select
+                    value={disposition}
+                    onChange={(e) => setDisposition(e.target.value)}
+                    className="w-full rounded-lg bg-white/10 text-white px-3 py-2 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={{ colorScheme: 'dark' }}
+                  >
+                    <option value="">Select disposition...</option>
+                    {task.taskType === "WOD_IVCS" ? (
+                      <>
+                        <option value="Completed">✅ Completed</option>
+                        <option value="Unable to Complete">❌ Unable to Complete</option>
+                      </>
+                    ) : task.taskType === "EMAIL_REQUESTS" ? (
+                      <>
+                        <option value="Completed">✅ Completed</option>
+                        <option value="Unable to Complete">❌ Unable to Complete</option>
+                      </>
+                    ) : task.taskType === "YOTPO" ? (
+                      <>
+                        <option value="" disabled className="text-white/40 text-xs">— Reship —</option>
+                        <option value="Reship – Item or order not received">📦 Item or order not received</option>
+                        <option value="Reship – Incorrect item received">🔄 Incorrect item received</option>
+                        <option value="Reship – Damaged or quality issue">⚠️ Damaged or quality issue</option>
+                        <option value="" disabled className="text-white/40 text-xs">— Refund —</option>
+                        <option value="Refund – Full refund issued">💵 Full refund issued</option>
+                        <option value="Refund – Partial refund issued">💰 Partial refund issued</option>
+                        <option value="Refund – Return to sender (RTS)">📮 Return to sender (RTS)</option>
+                        <option value="Refund – Out of stock">📭 Out of stock</option>
+                        <option value="Refund – Refund issued with condolences (pet passing or sensitive case)">🐾 Refund with condolences</option>
+                        <option value="Refund – Chargeback or fraud (no further action required)">🚫 Chargeback or fraud</option>
+                        <option value="" disabled className="text-white/40 text-xs">— Subscription —</option>
+                        <option value="Subscription – Cancelled">❌ Cancelled</option>
+                        <option value="Subscription – Updated (next charge date, frequency, etc.)">🔄 Updated (date/frequency)</option>
+                        <option value="Subscription – Cancelled due to PayPal limitations">💳 Cancelled (PayPal limitations)</option>
+                        <option value="" disabled className="text-white/40 text-xs">— Information —</option>
+                        <option value="Information – Billing Inquiry">💳 Billing Inquiry</option>
+                        <option value="Information – Tracking or delivery status provided">📍 Tracking or delivery status</option>
+                        <option value="Information – Product usage or transition tips sent">💡 Product usage/transition tips</option>
+                        <option value="Information – Product Information sent">ℹ️ Product Information sent</option>
+                        <option value="Information – Shelf life or storage details sent">🗓️ Shelf life or storage details</option>
+                        <option value="Information – Store locator or sourcing information sent">🏪 Store locator/sourcing info</option>
+                        <option value="Information – Medical or veterinary guidance provided">🏥 Medical/veterinary guidance</option>
+                        <option value="Information – Unfeasible request or information not available">🚫 Unfeasible request</option>
+                        <option value="" disabled className="text-white/40 text-xs">— AER —</option>
+                        <option value="AER – Serious AER - Refund Issued">🚨 Serious AER - Refund Issued</option>
+                        <option value="AER – None Serious AER - RA Issued">⚠️ None Serious AER - RA Issued</option>
+                        <option value="" disabled className="text-white/40 text-xs">— Other —</option>
+                        <option value="Return Authorization – Created and sent to customer">📋 Return authorization sent</option>
+                        <option value="Verification – Requested LOT number and photos from customer">📸 LOT number/photos requested</option>
+                        <option value="Duplicate Request – No new action required">🔄 Duplicate request</option>
+                        <option value="Previously Assisted – Issue already resolved or refund previously issued">✅ Previously assisted</option>
+                        <option value="Unsubscribed – Customer removed from communications">🚫 Unsubscribed</option>
+                        <option value="No Match – No valid account or order located">❓ No match found</option>
+                        <option value="Escalation – Sent Negative Feedback Macro">⚠️ Escalation (negative feedback)</option>
+                        <option value="Passed MBG">🔬 Passed MBG</option>
+                        <option value="Delivered – Order delivered after review, no further action required">✅ Delivered</option>
+                      </>
+                    ) : task.taskType === "HOLDS" ? (
+                      <>
+                        {task.holdsStatus === "Agent Research" ? (
+                          <>
+                            <option value="Duplicate">🔄 Duplicate</option>
+                            <option value="Refunded & Closed">💰 Refunded & Closed</option>
+                            <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
+                            <option value="Resolved - fixed format / fixed address">✅ Resolved - fixed format / fixed address</option>
+                            <option value="Resolved - other">✅ Resolved - other (requires note)</option>
+                            <option value="International Order - Unable to Call/ Sent Email">🌍 International Order - Unable to Call/ Sent Email (→ Customer Contact)</option>
+                            <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Customer Contact) (requires note)</option>
+                            <option value="Closed & Refunded - Fraud/Reseller">🔒 Closed & Refunded - Fraud/Reseller</option>
+                          </>
+                        ) : task.holdsStatus === "Customer Contact" ? (
+                          <>
+                            <option value="In Communication">💬 In Communication (→ Customer Contact)</option>
+                            <option value="Refunded & Closed - No Contact">💰 Refunded & Closed - No Contact</option>
+                            <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
+                            <option value="Refunded & Closed - Comma Issue">🔧 Refunded & Closed - Comma Issue</option>
+                            <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
+                            <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
+                            <option value="Resolved - Other">✅ Resolved - Other (requires note)</option>
+                            <option value="Closed & Refunded - Fraud/Reseller">🔒 Closed & Refunded - Fraud/Reseller</option>
+                          </>
+                        ) : task.holdsStatus === "Escalated Call 4+ Day" ? (
+                          <>
+                            <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Escalation) (requires note)</option>
+                            <option value="International Order - Unable to Call / Sent Email">🌍 International Order - Unable to Call / Sent Email (→ Customer Contact)</option>
+                            <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
+                            <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
+                            <option value="Refunded & Closed - No Contact">💰 Refunded & Closed - No Contact</option>
+                            <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
+                            <option value="Resolved - Other">✅ Resolved - Other (requires note)</option>
+                            <option value="Closed & Refunded - Fraud/Reseller">🔒 Closed & Refunded - Fraud/Reseller</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="Duplicate">🔄 Duplicate</option>
+                            <option value="Refunded & Closed">💰 Refunded & Closed</option>
+                            <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
+                            <option value="Resolved - fixed format / fixed address">✅ Resolved - fixed format / fixed address</option>
+                            <option value="Resolved - other">✅ Resolved - other (requires note)</option>
+                            <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Customer Contact) (requires note)</option>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <option value="Answered in Attentive">✅ Answered in Attentive</option>
+                        <option value="Answered in SF">📋 Answered in SF</option>
+                        <option value="Previously Assisted">🔄 Previously Assisted</option>
+                        <option value="No Response Required (leadership advised)">⏸️ No Response Required</option>
+                        <optgroup label="Spam">
+                          <option value="Spam - Negative Feedback">🚫 Negative Feedback</option>
+                          <option value="Spam - Positive Feedback">👍 Positive Feedback</option>
+                          <option value="Spam - Off topic">📝 Off topic</option>
+                          <option value="Spam - Gibberish">🤪 Gibberish</option>
+                          <option value="Spam - One word statement">💬 One word statement</option>
+                          <option value="Spam - Reaction Message">😀 Reaction Message</option>
+                        </optgroup>
+                      </>
+                    )}
+                  </select>
 
-                <button
-                  onClick={handleCompleteTask}
-                  disabled={isProcessing || !disposition.trim()}
-                  className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium disabled:opacity-50"
-                >
-                  {isProcessing ? 'Completing...' : 'Complete Task'}
-                </button>
+                  {/* Sub-disposition dropdown for WOD/IVCS "Completed" */}
+                  {task.taskType === "WOD_IVCS" && disposition === "Completed" && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/70">Sub-disposition:</label>
+                      <select
+                        value={subDisposition}
+                        onChange={(e) => setSubDisposition(e.target.value)}
+                        className="w-full rounded-lg bg-white/10 text-white px-3 py-2 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ colorScheme: 'dark' }}
+                      >
+                        <option value="">Select sub-disposition...</option>
+                        <option value="Fixed Amounts">✅ Fixed Amounts</option>
+                        <option value="Unable to fix amounts (everything is matching)">✅ Unable to fix amounts (everything is matching)</option>
+                        <option value="Added PayPal Payment info">💳 Added PayPal Payment info</option>
+                        <option value="Cannot edit CS">📝 Cannot edit CS</option>
+                        <option value="Completed SO only - CS line location error">🔧 Completed SO only - CS line location error</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Sub-disposition dropdown for WOD/IVCS "Unable to Complete" */}
+                  {task.taskType === "WOD_IVCS" && disposition === "Unable to Complete" && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/70">Sub-disposition:</label>
+                      <select
+                        value={subDisposition}
+                        onChange={(e) => setSubDisposition(e.target.value)}
+                        className="w-full rounded-lg bg-white/10 text-white px-3 py-2 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ colorScheme: 'dark' }}
+                      >
+                        <option value="">Select sub-disposition...</option>
+                        <option value="Not Completed - Canada Lock">🇨🇦 Not Completed - Canada Lock</option>
+                        <option value="Not Completed - Meta">📱 Not Completed - Meta</option>
+                        <option value="Not Completed - No edit button">🔄 Not Completed - No edit button</option>
+                        <option value="Not Completed - Locked (CS was able to be edited)">🔒 Not Completed - Locked (CS was able to be edited)</option>
+                        <option value="Not Completed - Reship">📦 Not Completed - Reship</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Sub-disposition dropdown for Email Requests "Unable to Complete" */}
+                  {task.taskType === "EMAIL_REQUESTS" && disposition === "Unable to Complete" && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/70">Sub-disposition:</label>
+                      <select
+                        value={subDisposition}
+                        onChange={(e) => setSubDisposition(e.target.value)}
+                        className="w-full rounded-lg bg-white/10 text-white px-3 py-2 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ colorScheme: 'dark' }}
+                      >
+                        <option value="">Select sub-disposition...</option>
+                        <option value="Unfeasable request / Information not available">🚫 Unfeasable request / Information not available</option>
+                        <option value="Incomplete or Missing Info">📝 Incomplete or Missing Info</option>
+                        <option value="Link/Sale Unavailable">🔗 Link/Sale Unavailable</option>
+                        <option value="No Specification on Requests">❓ No Specification on Requests</option>
+                        <option value="Requesting info on ALL Products">📦 Requesting info on ALL Products</option>
+                        <option value="Duplicate Request">🔄 Duplicate Request</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* SF Case # field for "Answered in SF" */}
+                  {disposition === "Answered in SF" && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/80">
+                        SF Case # <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={sfCaseNumber}
+                        onChange={(e) => setSfCaseNumber(e.target.value)}
+                        placeholder="Enter Salesforce Case Number"
+                        className="w-full rounded-lg bg-white/10 text-white placeholder-white/40 px-3 py-2 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {/* SF Case # field for Email Requests "Completed" */}
+                  {task.taskType === "EMAIL_REQUESTS" && disposition === "Completed" && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/80">
+                        SF Case # <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={sfCaseNumber}
+                        onChange={(e) => setSfCaseNumber(e.target.value)}
+                        placeholder="Enter Salesforce Case Number"
+                        className="w-full rounded-lg bg-white/10 text-white placeholder-white/40 px-3 py-2 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {/* SF Case # field for Yotpo (required for most dispositions, with 4 exceptions) */}
+                  {task.taskType === "YOTPO" && disposition && (() => {
+                    const noSfRequired = [
+                      "Information – Unfeasible request or information not available",
+                      "Duplicate Request – No new action required",
+                      "Previously Assisted – Issue already resolved or refund previously issued",
+                      "No Match – No valid account or order located"
+                    ];
+                    return !noSfRequired.includes(disposition);
+                  })() && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/80">
+                        SF Case # <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={sfCaseNumber}
+                        onChange={(e) => setSfCaseNumber(e.target.value)}
+                        placeholder="Enter Salesforce Case Number"
+                        className="w-full rounded-lg bg-white/10 text-white placeholder-white/40 px-3 py-2 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {/* Disposition Notes field for Holds tasks */}
+                  {task.taskType === "HOLDS" && disposition && (() => {
+                    const requiresNote = [
+                      "Unable to Resolve",
+                      "Resolved - other",
+                      "Resolved - Other",
+                      "Resolved - fixed format / fixed address",
+                      "Resolved - Customer Clarified",
+                      "Resolved - FRT Released"
+                    ];
+                    const isResolved = disposition.toLowerCase().startsWith("resolved");
+                    const isUnableToResolveInEscalation = disposition === "Unable to Resolve" && task.holdsStatus === "Escalated Call 4+ Day";
+                    return requiresNote.includes(disposition) || isResolved || isUnableToResolveInEscalation;
+                  })() && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-white/80">
+                        Reason / Notes: <span className="text-red-400">*</span>
+                      </label>
+                      <textarea
+                        value={dispositionNote}
+                        onChange={(e) => setDispositionNote(e.target.value)}
+                        placeholder={disposition.toLowerCase().startsWith("resolved") 
+                          ? "Provide details about how this order was resolved (required for all Resolved dispositions)..."
+                          : "Explain why this order cannot be resolved or provide additional details..."}
+                        rows={3}
+                        className="w-full rounded-lg bg-white/10 text-white placeholder-white/40 px-3 py-2 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        required
+                      />
+                      <p className="text-xs text-white/50">
+                        This note will be visible in the Queue Journey, Resolved Orders Report, and to assigned agents
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleCompleteTask}
+                    disabled={isProcessing || (() => {
+                      if (!disposition) return true;
+                      if (disposition === "Answered in SF" && !sfCaseNumber.trim()) return true;
+                      if (task.taskType === "EMAIL_REQUESTS") {
+                        if (disposition === "Completed" && !sfCaseNumber.trim()) return true;
+                        if (disposition === "Unable to Complete" && !subDisposition) return true;
+                      }
+                      if (task.taskType === "WOD_IVCS") {
+                        if ((disposition === "Completed" || disposition === "Unable to Complete") && !subDisposition) return true;
+                      }
+                      if (task.taskType === "HOLDS") {
+                        const orderAmountValid = orderAmount && parseFloat(orderAmount) > 0;
+                        if (!orderAmountValid) return true;
+                        const isResolved = disposition.toLowerCase().startsWith("resolved");
+                        const noteRequiredDispositions = ["Unable to Resolve", "Resolved - other", "Resolved - Other", "Resolved - fixed format / fixed address", "Resolved - Customer Clarified", "Resolved - FRT Released"];
+                        if ((noteRequiredDispositions.includes(disposition) || isResolved) && !dispositionNote.trim()) return true;
+                      }
+                      if (task.taskType === "YOTPO" && disposition) {
+                        const noSfRequired = [
+                          "Information – Unfeasible request or information not available",
+                          "Duplicate Request – No new action required",
+                          "Previously Assisted – Issue already resolved or refund previously issued",
+                          "No Match – No valid account or order located"
+                        ];
+                        if (!noSfRequired.includes(disposition) && !sfCaseNumber.trim()) return true;
+                      }
+                      return false;
+                    })()}
+                    className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isProcessing ? 'Completing...' : 'Complete Task'}
+                  </button>
+                </div>
               </div>
             )}
 
