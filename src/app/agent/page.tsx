@@ -607,11 +607,13 @@ export default function AgentPage() {
         // Always update tasks to ensure UI reflects latest data
         setTasks(newTasks);
         // Also update Zustand store
+        // CRITICAL: Always use mergeTasks for Kanban to preserve COMPLETED tasks
+        // For List view, we can use setStoreTasks since it doesn't need COMPLETED tasks
         if (viewMode === 'kanban') {
-          // Merge tasks (no reordering) for Kanban
+          // Merge tasks (no reordering) for Kanban - preserves COMPLETED tasks
           mergeTasks(newTasks);
         } else {
-          // Full update for List view
+          // Full update for List view (doesn't need COMPLETED tasks)
           setStoreTasks(newTasks);
         }
         setLastUpdate(new Date());

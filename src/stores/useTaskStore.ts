@@ -106,12 +106,15 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     
     // Remove tasks that are no longer in the fetched list
     // BUT: 
-    // 1. Keep COMPLETED and RESOLVED tasks (they may not be in API response but should stay in store)
+    // 1. ALWAYS keep COMPLETED and RESOLVED tasks (they may not be in API response but should stay in store)
     // 2. If this is a completed-only merge, DON'T remove active tasks (they're not in the completed fetch)
     if (!isCompletedOnlyMerge) {
-      // Only clean up if this is a main tasks merge (from polling)
+      // Only clean up if this is a main tasks merge (from polling or loadTasks)
+      // Remove tasks that are no longer assigned/active, but preserve COMPLETED and RESOLVED
       newMap.forEach((task, id) => {
         if (!newTaskIds.has(id) && task.status !== 'COMPLETED' && task.status !== 'RESOLVED') {
+          // Only remove if task is truly gone (not just missing from this fetch)
+          // Active tasks should only be removed if they're no longer assigned to this user
           newMap.delete(id);
         }
       });
