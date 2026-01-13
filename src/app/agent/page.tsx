@@ -884,6 +884,9 @@ export default function AgentPage() {
         }),
       });
       if (res.ok) {
+        const responseData = await res.json().catch(() => ({}));
+        const serverEndTime = responseData.task?.endTime || new Date().toISOString();
+        
         // Remove from started tasks since it's completed
         setStartedTasks(prev => {
           const newSet = new Set(prev);
@@ -898,20 +901,19 @@ export default function AgentPage() {
           const store = useTaskStore.getState();
           const task = store.getTask(taskId);
           if (task) {
-            // Get server response to use actual endTime
-            const responseData = await res.json().catch(() => ({}));
-            const serverEndTime = responseData.task?.endTime || new Date().toISOString();
-            
             store.updateTask(taskId, {
               status: 'COMPLETED',
               endTime: serverEndTime,
               disposition,
             });
             
+            // Verify it's in the store
+            const updatedTask = store.getTask(taskId);
             console.log('✅ Updated store with completed task:', {
               taskId,
               endTime: serverEndTime,
-              inStore: store.getTask(taskId)?.status
+              status: updatedTask?.status,
+              inStore: !!updatedTask
             });
           } else {
             console.warn('⚠️ Task not found in store when completing:', taskId);
