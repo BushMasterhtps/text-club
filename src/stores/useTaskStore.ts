@@ -77,6 +77,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     // vs a "main tasks" merge (active tasks from polling)
     const isCompletedOnlyMerge = newTasks.length > 0 && newTasks.every(t => t.status === 'COMPLETED');
     
+    // Track COMPLETED tasks before merge (for debugging)
+    const completedBefore = Array.from(newMap.values()).filter(t => t.status === 'COMPLETED' || t.status === 'RESOLVED');
+    
     // Merge new tasks into existing map
     // Only update fields that changed, preserve position
     newTasks.forEach(newTask => {
@@ -110,16 +113,28 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     // 2. If this is a completed-only merge, DON'T remove active tasks (they're not in the completed fetch)
     if (!isCompletedOnlyMerge) {
       // Only clean up if this is a main tasks merge (from polling or loadTasks)
-      // Remove tasks that are no longer assigned/active, but preserve COMPLETED and RESOLVED
+      // CRITICAL: Never remove COMPLETED or RESOLVED tasks
+      const toRemove: string[] = [];
       newMap.forEach((task, id) => {
         if (!newTaskIds.has(id) && task.status !== 'COMPLETED' && task.status !== 'RESOLVED') {
-          // Only remove if task is truly gone (not just missing from this fetch)
-          // Active tasks should only be removed if they're no longer assigned to this user
-          newMap.delete(id);
+          toRemove.push(id);
         }
       });
+      toRemove.forEach(id => newMap.delete(id));
     }
     // If it's a completed-only merge, we don't remove anything - just add/update completed tasks
+    
+    // Debug: Verify COMPLETED tasks are preserved
+    const completedAfter = Array.from(newMap.values()).filter(t => t.status === 'COMPLETED' || t.status === 'RESOLVED');
+    if (completedBefore.length > completedAfter.length) {
+      console.error('🚨 CRITICAL: Lost COMPLETED tasks during merge!', {
+        before: completedBefore.length,
+        after: completedAfter.length,
+        lost: completedBefore.filter(t => !newMap.has(t.id)).map(t => ({ id: t.id, status: t.status })),
+        isCompletedOnlyMerge,
+        newTaskStatuses: newTasks.map(t => t.status)
+      });
+    }
     
     set({ tasks: newMap });
   },

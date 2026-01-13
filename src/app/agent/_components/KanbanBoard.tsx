@@ -71,11 +71,24 @@ export default function KanbanBoard({
             // Merge completed tasks into store (they won't be overwritten by polling)
             mergeTasks(completedTasks);
             
+            // Verify they're actually in the store after merge
+            const storeAfter = useTaskStore.getState().tasks;
+            const completedInStore = Array.from(storeAfter.values()).filter(t => t.status === 'COMPLETED');
+            
             console.log('✅ Loaded completed tasks:', {
-              count: completedTasks.length,
+              fetched: completedTasks.length,
+              inStore: completedInStore.length,
               date: selectedDate,
-              taskIds: completedTasks.map(t => t.id)
+              taskIds: completedTasks.map(t => t.id),
+              storeIds: completedInStore.map(t => t.id)
             });
+            
+            if (completedTasks.length > completedInStore.length) {
+              console.error('🚨 WARNING: Not all completed tasks made it into store!', {
+                expected: completedTasks.length,
+                actual: completedInStore.length
+              });
+            }
           }
         }
       } catch (error) {
