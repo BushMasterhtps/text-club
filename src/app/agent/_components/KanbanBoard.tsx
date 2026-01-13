@@ -85,24 +85,32 @@ export default function KanbanBoard({
   }, [tasks, getTasksByStatus, selectedTaskType]);
 
   const completedTasks = useMemo(() => {
-    // Filter by selected date
-    // Parse selectedDate (format: YYYY-MM-DD) and compare with endTime
-    const [year, month, day] = selectedDate.split('-').map(Number);
-    const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
-    const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
+    // Get all completed tasks from store
+    const allCompleted = getTasksByStatus('COMPLETED');
+    
+    // Filter by selected date (format: YYYY-MM-DD)
+    // Normalize selectedDate to ensure proper format
+    const targetDateStr = selectedDate; // Already in YYYY-MM-DD format
 
-    let tasks = getTasksByStatus('COMPLETED').filter(task => {
-      if (!task.endTime) return false;
-      const completedDate = new Date(task.endTime);
-      // Compare dates (ignore time for date matching)
-      const completedDateOnly = new Date(completedDate.getFullYear(), completedDate.getMonth(), completedDate.getDate());
-      const startDateOnly = new Date(startOfDay.getFullYear(), startOfDay.getMonth(), startOfDay.getDate());
-      return completedDateOnly.getTime() === startDateOnly.getTime();
+    let tasks = allCompleted.filter(task => {
+      if (!task.endTime) {
+        return false;
+      }
+      
+      // Parse endTime and extract date part (YYYY-MM-DD)
+      // Handle both ISO string and Date object
+      const endDate = new Date(task.endTime);
+      // Use UTC to avoid timezone issues
+      const endDateStr = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-${String(endDate.getUTCDate()).padStart(2, '0')}`;
+      
+      // Compare date strings for exact match
+      return endDateStr === targetDateStr;
     });
 
     if (selectedTaskType !== 'ALL') {
       tasks = tasks.filter(t => t.taskType === selectedTaskType);
     }
+    
     return tasks;
   }, [tasks, getTasksByStatus, selectedTaskType, selectedDate]);
 

@@ -324,6 +324,14 @@ export default function TaskDetailDrawer({
         });
         setToast({ message: data.error || 'Failed to complete task', type: 'error' });
       } else {
+        // Update task with actual response data (including endTime from server)
+        if (data.task) {
+          updateTask(task.id, {
+            status: 'COMPLETED',
+            endTime: data.task.endTime || new Date().toISOString(),
+            disposition: finalDisposition,
+          });
+        }
         setToast({ message: 'Task completed successfully', type: 'success' });
         onTaskAction?.('complete', task.id);
         // Refresh stats and scorecard after completion
