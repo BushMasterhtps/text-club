@@ -29,11 +29,12 @@ export async function GET(req: Request) {
     const order: 'asc' | 'desc' = orderParam === 'desc' ? 'desc' : 'asc';
 
     // Get tasks assigned to this user with statuses that agents can work on
+    // Include RESOLVED so tasks stay visible in Assistance Request column after manager responds
     const tasks = await prisma.task.findMany({
       where: {
         assignedToId: user.id,
         status: {
-          in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"]
+          in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED", "RESOLVED"]
         }
       },
       select: {

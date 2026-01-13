@@ -94,9 +94,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     });
     
     // Remove tasks that are no longer in the fetched list
-    // BUT: Keep COMPLETED tasks (they won't be in API response but should stay in store)
+    // BUT: Keep COMPLETED and RESOLVED tasks (they may not be in API response but should stay in store)
     newMap.forEach((task, id) => {
-      if (!newTaskIds.has(id) && task.status !== 'COMPLETED') {
+      if (!newTaskIds.has(id) && task.status !== 'COMPLETED' && task.status !== 'RESOLVED') {
         newMap.delete(id);
       }
     });
