@@ -127,12 +127,29 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     // Debug: Verify COMPLETED tasks are preserved
     const completedAfter = Array.from(newMap.values()).filter(t => t.status === 'COMPLETED' || t.status === 'RESOLVED');
     if (completedBefore.length > completedAfter.length) {
+      const lostTasks = completedBefore.filter(t => !newMap.has(t.id));
       console.error('🚨 CRITICAL: Lost COMPLETED tasks during merge!', {
         before: completedBefore.length,
         after: completedAfter.length,
-        lost: completedBefore.filter(t => !newMap.has(t.id)).map(t => ({ id: t.id, status: t.status })),
+        lost: lostTasks.map(t => ({ id: t.id, status: t.status, endTime: t.endTime })),
         isCompletedOnlyMerge,
-        newTaskStatuses: newTasks.map(t => t.status)
+        newTaskStatuses: newTasks.map(t => t.status),
+        newTaskIds: Array.from(newTaskIds)
+      });
+      
+      // RESTORE lost COMPLETED tasks - they should never be removed!
+      lostTasks.forEach(lostTask => {
+        console.log('🔄 Restoring lost COMPLETED task:', lostTask.id);
+        newMap.set(lostTask.id, lostTask);
+      });
+    }
+    
+    // Final verification
+    const finalCompleted = Array.from(newMap.values()).filter(t => t.status === 'COMPLETED' || t.status === 'RESOLVED');
+    if (completedBefore.length > 0 && finalCompleted.length < completedBefore.length) {
+      console.error('🚨 STILL MISSING COMPLETED TASKS AFTER RESTORE!', {
+        expected: completedBefore.length,
+        actual: finalCompleted.length
       });
     }
     

@@ -892,15 +892,29 @@ export default function AgentPage() {
         });
         // Remove task from local state for instant UI update
         setTasks(prev => prev.filter(t => t.id !== taskId));
-        // Update Zustand store if in Kanban view
-        if (viewMode === 'kanban') {
-          const task = useTaskStore.getState().getTask(taskId);
+        // Update Zustand store if in Kanban view - use ref to get current viewMode
+        const currentViewMode = viewModeRef.current;
+        if (currentViewMode === 'kanban') {
+          const store = useTaskStore.getState();
+          const task = store.getTask(taskId);
           if (task) {
-            useTaskStore.getState().updateTask(taskId, {
+            // Get server response to use actual endTime
+            const responseData = await res.json().catch(() => ({}));
+            const serverEndTime = responseData.task?.endTime || new Date().toISOString();
+            
+            store.updateTask(taskId, {
               status: 'COMPLETED',
-              endTime: new Date().toISOString(),
+              endTime: serverEndTime,
               disposition,
             });
+            
+            console.log('✅ Updated store with completed task:', {
+              taskId,
+              endTime: serverEndTime,
+              inStore: store.getTask(taskId)?.status
+            });
+          } else {
+            console.warn('⚠️ Task not found in store when completing:', taskId);
           }
         }
         // Update stats AND scorecard to reflect the completion
