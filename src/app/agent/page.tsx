@@ -171,9 +171,9 @@ export default function AgentPage() {
   const { setTasks: setStoreTasks, mergeTasks, setSortOrder: setStoreSortOrder, sortOrder: storeSortOrder } = useTaskStore();
   
   // View mode: 'list' or 'kanban'
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   // Use ref to ensure polling always has current viewMode (avoid closure issues)
-  const viewModeRef = useRef<'list' | 'kanban'>('list');
+  const viewModeRef = useRef<'list' | 'kanban'>('kanban');
   useEffect(() => {
     viewModeRef.current = viewMode;
   }, [viewMode]);
@@ -2094,21 +2094,6 @@ export default function AgentPage() {
                 📊 Kanban
               </SmallButton>
             </div>
-            
-            {/* Test Data Toggle (for local testing) */}
-            <SmallButton
-              onClick={() => {
-                setUseTestData(!useTestData);
-                if (!useTestData) {
-                  loadTasks(undefined, undefined, true);
-                }
-              }}
-              className={useTestData ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-gray-600 hover:bg-gray-700'}
-              title="Toggle test data mode (for local testing without database)"
-            >
-              {useTestData ? '🧪 Test Mode ON' : '🧪 Test Mode'}
-            </SmallButton>
-
             </div>
           </div>
         </div>

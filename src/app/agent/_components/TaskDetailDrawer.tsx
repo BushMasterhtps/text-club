@@ -425,43 +425,66 @@ export default function TaskDetailDrawer({
 
           {/* Task Content */}
           <div className="space-y-4">
-            <div>
-              <div className="text-xs text-white/60 mb-1">Task Content</div>
-              <div className="text-white/90">{task.text || 'No description'}</div>
-            </div>
-
-            {/* Customer Info */}
-            {task.customerName && (
-              <div>
-                <div className="text-xs text-white/60 mb-1">Customer</div>
-                <div className="text-white/90">👤 {task.customerName}</div>
-              </div>
-            )}
-
-            {task.phone && (
-              <div>
-                <div className="text-xs text-white/60 mb-1">Phone</div>
-                <div className="text-white/90">📞 {task.phone}</div>
-              </div>
-            )}
-
-            {/* Timestamps */}
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <div className="text-white/60">Created</div>
-                <div className="text-white/90">
-                  {new Date(task.createdAt).toLocaleString()}
+            {!isStarted && !isCompleted ? (
+              <>
+                {/* Blurred state - show only basic info */}
+                <div className="bg-white/5 border border-white/10 rounded-lg p-4 text-center">
+                  <div className="text-white/60 text-sm mb-2">🔒 Task details are hidden until you start the task</div>
+                  <div className="text-white/40 text-xs">Click "Start Task" below to view full details</div>
                 </div>
-              </div>
-              {task.startTime && (
-                <div>
-                  <div className="text-white/60">Started</div>
-                  <div className="text-white/90">
-                    {new Date(task.startTime).toLocaleString()}
+                
+                {/* Timestamps - safe to show */}
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <div className="text-white/60">Created</div>
+                    <div className="text-white/90">
+                      {new Date(task.createdAt).toLocaleString()}
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
+              </>
+            ) : (
+              <>
+                {/* Unblurred state - show all info */}
+                <div>
+                  <div className="text-xs text-white/60 mb-1">Task Content</div>
+                  <div className="text-white/90">{task.text || 'No description'}</div>
+                </div>
+
+                {/* Customer Info */}
+                {task.customerName && (
+                  <div>
+                    <div className="text-xs text-white/60 mb-1">Customer</div>
+                    <div className="text-white/90">👤 {task.customerName}</div>
+                  </div>
+                )}
+
+                {task.phone && (
+                  <div>
+                    <div className="text-xs text-white/60 mb-1">Phone</div>
+                    <div className="text-white/90">📞 {task.phone}</div>
+                  </div>
+                )}
+
+                {/* Timestamps */}
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <div className="text-white/60">Created</div>
+                    <div className="text-white/90">
+                      {new Date(task.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                  {task.startTime && (
+                    <div>
+                      <div className="text-white/60">Started</div>
+                      <div className="text-white/90">
+                        {new Date(task.startTime).toLocaleString()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Manager Response */}
             {task.managerResponse && (
