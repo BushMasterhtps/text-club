@@ -36,18 +36,20 @@ export async function POST(
     }
 
     // Find the task and verify it's assigned to this user
+    // Allow completing tasks that are IN_PROGRESS, ASSISTANCE_REQUIRED, or RESOLVED (after manager response)
     const task = await prisma.task.findFirst({
       where: {
         id,
         assignedToId: user.id,
         status: {
-          in: ["IN_PROGRESS", "ASSISTANCE_REQUIRED"]
+          in: ["IN_PROGRESS", "ASSISTANCE_REQUIRED", "RESOLVED"]
         }
       },
       select: {
         id: true,
         status: true,
         startTime: true,
+        assistancePausedDurationSec: true,
         text: true,
         brand: true,
         taskType: true,

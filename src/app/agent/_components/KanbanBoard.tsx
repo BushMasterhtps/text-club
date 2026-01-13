@@ -86,16 +86,18 @@ export default function KanbanBoard({
 
   const completedTasks = useMemo(() => {
     // Filter by selected date
-    const selectedDateObj = new Date(selectedDate);
-    const startOfDay = new Date(selectedDateObj);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(selectedDateObj);
-    endOfDay.setHours(23, 59, 59, 999);
+    // Parse selectedDate (format: YYYY-MM-DD) and compare with endTime
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
 
     let tasks = getTasksByStatus('COMPLETED').filter(task => {
       if (!task.endTime) return false;
       const completedDate = new Date(task.endTime);
-      return completedDate >= startOfDay && completedDate <= endOfDay;
+      // Compare dates (ignore time for date matching)
+      const completedDateOnly = new Date(completedDate.getFullYear(), completedDate.getMonth(), completedDate.getDate());
+      const startDateOnly = new Date(startOfDay.getFullYear(), startOfDay.getMonth(), startOfDay.getDate());
+      return completedDateOnly.getTime() === startDateOnly.getTime();
     });
 
     if (selectedTaskType !== 'ALL') {
