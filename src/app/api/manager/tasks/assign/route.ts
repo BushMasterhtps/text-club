@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
           },
           data: {
             assignedToId: agent.id,
-            status: "IN_PROGRESS", // Set to IN_PROGRESS when assigned to agent
+            status: "PENDING", // Set to PENDING when assigned (agent must click Start)
             startTime: null, // Clear start time so new agent can start fresh
             endTime: null, // Clear end time
             durationSec: null, // Clear duration
@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: "No raw messages available for promotion" }, { status: 400 });
       }
 
-      // Create Tasks with status IN_PROGRESS and assign to agent
+      // Create Tasks with status PENDING and assign to agent (agent must click Start)
       const createdTasks = [];
       for (const r of raws) {
         try {
@@ -194,9 +194,9 @@ export async function POST(req: NextRequest) {
               text: r.text ?? null,
               brand: r.brand ?? null,
               rawMessageId: r.id, // ensure linkage so UI queries can find it
-              status: "IN_PROGRESS", // Tasks are IN_PROGRESS when assigned
+              status: "PENDING", // Tasks are PENDING when assigned (agent must click Start)
               assignedToId: agent.id,
-              startTime: new Date(),
+              startTime: null, // Don't set startTime until agent clicks Start
               createdAt: r.createdAt,
               taskType: "TEXT_CLUB", // Set task type for Text Club tasks
             },
