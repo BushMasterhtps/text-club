@@ -73,6 +73,10 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     // Get list of new task IDs to know what to keep
     const newTaskIds = new Set(newTasks.map(t => t.id));
     
+    // Check if this is a "completed tasks only" merge (all tasks are COMPLETED)
+    // vs a "main tasks" merge (active tasks from polling)
+    const isCompletedOnlyMerge = newTasks.length > 0 && newTasks.every(t => t.status === 'COMPLETED');
+    
     // Merge new tasks into existing map
     // Only update fields that changed, preserve position
     newTasks.forEach(newTask => {
@@ -80,8 +84,8 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       if (existing) {
         // CRITICAL: Don't overwrite COMPLETED tasks with data from API
         // API doesn't return COMPLETED tasks, so preserve them as-is
-        if (existing.status === 'COMPLETED') {
-          // Keep existing COMPLETED task unchanged (don't overwrite with API data)
+        if (existing.status === 'COMPLETED' && !isCompletedOnlyMerge) {
+          // Keep existing COMPLETED task unchanged (don't overwrite with API data from polling)
           return;
         }
         
@@ -101,12 +105,18 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     });
     
     // Remove tasks that are no longer in the fetched list
-    // BUT: Keep COMPLETED and RESOLVED tasks (they may not be in API response but should stay in store)
-    newMap.forEach((task, id) => {
-      if (!newTaskIds.has(id) && task.status !== 'COMPLETED' && task.status !== 'RESOLVED') {
-        newMap.delete(id);
-      }
-    });
+    // BUT: 
+    // 1. Keep COMPLETED and RESOLVED tasks (they may not be in API response but should stay in store)
+    // 2. If this is a completed-only merge, DON'T remove active tasks (they're not in the completed fetch)
+    if (!isCompletedOnlyMerge) {
+      // Only clean up if this is a main tasks merge (from polling)
+      newMap.forEach((task, id) => {
+        if (!newTaskIds.has(id) && task.status !== 'COMPLETED' && task.status !== 'RESOLVED') {
+          newMap.delete(id);
+        }
+      });
+    }
+    // If it's a completed-only merge, we don't remove anything - just add/update completed tasks
     
     set({ tasks: newMap });
   },
