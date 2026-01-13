@@ -27,9 +27,68 @@ export default function KanbanBoard({
   isTestMode = false,
   onStatsUpdate,
 }: KanbanBoardProps) {
-  const { tasks, getTasksByStatus, sortOrder } = useTaskStore();
+  const { tasks, getTasksByStatus, sortOrder, mergeTasks } = useTaskStore();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  
+  // Fetch completed tasks for the selected date and add them to the store
+  // This is necessary because the main tasks API doesn't return COMPLETED tasks
+  useEffect(() => {
+    if (!agentEmail || isTestMode) return;
+    
+    const fetchCompletedTasks = async () => {
+      try {
+        // Parse selectedDate (YYYY-MM-DD) and check if it's today
+        const [year, month, day] = selectedDate.split('-').map(Number);
+        const selectedDateObj = new Date(year, month - 1, day);
+        const today = new Date();
+        const isToday = selectedDateObj.getFullYear() === today.getFullYear() &&
+                       selectedDateObj.getMonth() === today.getMonth() &&
+                       selectedDateObj.getDate() === today.getDate();
+        
+        // Fetch completed tasks for the selected date
+        const response = await fetch(`/api/agent/completed-today?email=${encodeURIComponent(agentEmail)}&date=${selectedDate}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.tasks) {
+            // Transform tasks to match Task interface and add to store
+            const completedTasks: Task[] = data.tasks.map((task: any) => ({
+              id: task.id,
+              brand: task.brand || 'Unknown',
+              phone: task.phone || '',
+              text: task.text || '',
+              status: 'COMPLETED' as const,
+              assignedToId: task.assignedToId || '',
+              startTime: task.startTime || undefined,
+              endTime: task.endTime || undefined,
+              durationSec: task.durationSec || undefined,
+              disposition: task.disposition || undefined,
+              createdAt: task.createdAt || new Date().toISOString(),
+              updatedAt: task.updatedAt || new Date().toISOString(),
+              taskType: task.taskType || undefined,
+            }));
+            
+            // Merge completed tasks into store (they won't be overwritten by polling)
+            mergeTasks(completedTasks);
+            
+            console.log('✅ Loaded completed tasks:', {
+              count: completedTasks.length,
+              date: selectedDate,
+              taskIds: completedTasks.map(t => t.id)
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch completed tasks:', error);
+      }
+    };
+    
+    fetchCompletedTasks();
+    
+    // Refresh completed tasks when date changes
+    const interval = setInterval(fetchCompletedTasks, 30000); // Every 30 seconds
+    return () => clearInterval(interval);
+  }, [agentEmail, selectedDate, isTestMode, mergeTasks]);
 
   // Get tasks for each column
   // To Do: PENDING tasks OR IN_PROGRESS tasks without startTime (assigned but not started)

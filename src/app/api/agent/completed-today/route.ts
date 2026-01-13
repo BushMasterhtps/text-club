@@ -24,10 +24,22 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
     }
 
-    // Get today's date boundaries
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    // Get date boundaries - support date parameter for historical dates
+    const dateParam = searchParams.get('date'); // Format: YYYY-MM-DD
+    let startOfDay: Date;
+    let endOfDay: Date;
+    
+    if (dateParam) {
+      // Parse provided date
+      const [year, month, day] = dateParam.split('-').map(Number);
+      startOfDay = new Date(year, month - 1, day);
+      endOfDay = new Date(year, month - 1, day + 1);
+    } else {
+      // Default to today
+      const now = new Date();
+      startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    }
 
     // Get completed tasks for today (including unassigned completed tasks, e.g., "Unable to Resolve" for Holds)
     const tasks = await prisma.task.findMany({
@@ -37,16 +49,16 @@ export async function GET(req: Request) {
             assignedToId: user.id,
             status: "COMPLETED",
             endTime: {
-              gte: startOfToday,
-              lt: endOfToday
+              gte: startOfDay,
+              lt: endOfDay
             }
           },
           {
             completedBy: user.id,
             status: "COMPLETED",
             endTime: {
-              gte: startOfToday,
-              lt: endOfToday
+              gte: startOfDay,
+              lt: endOfDay
             }
           }
         ]
