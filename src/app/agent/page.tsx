@@ -472,24 +472,21 @@ export default function AgentPage() {
               const newTasks = data.tasks;
               console.log("🔄 SIMPLE Loaded tasks:", newTasks.length);
               
-              // Get current tasks from store (not closure) to avoid stale data
-              const storeState = useTaskStore.getState();
-              const currentStoreTasks = Array.from(storeState.tasks.values());
-              
-              // NEVER clear tasks during polling - only update if we have new tasks
-              // If we get empty array, keep existing tasks
+              // CRITICAL: Only update if we have tasks - NEVER clear during polling
               if (newTasks.length > 0) {
-                // Check for new manager responses (tasks that now have a response but didn't before)
-                const previousResponses = new Map(currentStoreTasks.map((t: any) => [t.id, t.managerResponse]));
+                // Get current tasks from store for manager response detection
+                const storeState = useTaskStore.getState();
+                const currentStoreTasks = Array.from(storeState.tasks.values());
                 
+                // Check for new manager responses
+                const previousResponses = new Map(currentStoreTasks.map((t: any) => [t.id, t.managerResponse]));
                 const newResponses = newTasks.filter((t: any) => {
                   const hadResponse = previousResponses.get(t.id);
-                  return t.managerResponse && !hadResponse; // New response that wasn't there before
+                  return t.managerResponse && !hadResponse;
                 });
                 
                 if (newResponses.length > 0) {
                   console.log("🔄 SIMPLE Found new manager responses:", newResponses.length);
-                  // Show toast notification for new manager responses
                   const taskTypeInfo = newResponses[0].taskType === 'TEXT_CLUB' ? 'Text Club' :
                                      newResponses[0].taskType === 'WOD_IVCS' ? 'WOD/IVCS' :
                                      newResponses[0].taskType === 'EMAIL_REQUESTS' ? 'Email Request' :
@@ -499,23 +496,7 @@ export default function AgentPage() {
                   setToastType('info');
                 }
                 
-                // Update tasks (React will handle rendering manager responses)
-                // CRITICAL: Use ref to get current viewMode (polling closure might have stale value)
-                const currentViewMode = viewModeRef.current;
-                if (currentViewMode === 'kanban') {
-                  // Merge tasks (no reordering) for Kanban - preserves COMPLETED tasks
-                  mergeTasks(newTasks);
-                  // Also update local state for consistency
-                  setTasks(newTasks);
-                } else {
-                  // Full update for List view
-                  setTasks(newTasks);
-                  setStoreTasks(newTasks);
-                }
-                setLastUpdate(new Date());
-              } else if (currentStoreTasks.length === 0) {
-                // Only update if we have no tasks at all (initial load scenario)
-                // This allows initial load to work, but prevents clearing during polling
+                // Update tasks silently - use ref to get current viewMode
                 const currentViewMode = viewModeRef.current;
                 if (currentViewMode === 'kanban') {
                   mergeTasks(newTasks);
@@ -524,10 +505,8 @@ export default function AgentPage() {
                   setStoreTasks(newTasks);
                 }
                 setLastUpdate(new Date());
-              } else {
-                // Got empty response but we have existing tasks - don't clear, just log
-                console.log("🔄 SIMPLE Got empty tasks array but keeping existing tasks (polling protection)");
               }
+              // If newTasks.length === 0, do nothing - keep existing tasks
            } else {
              console.warn("🔄 SIMPLE Polling got invalid response:", data);
              // Don't clear tasks on invalid response - keep existing ones
@@ -2122,15 +2101,9 @@ export default function AgentPage() {
             </div>
           </div>
         </div>
-        {/* Only show loading on initial load (when we have no tasks yet), not during polling */}
-        {loading && tasks.length === 0 && useTaskStore.getState().tasks.size === 0 ? (
+        {loading && tasks.length === 0 ? (
           <div className="text-center py-8 text-white/60">Loading tasks...</div>
         ) : viewMode === 'kanban' ? (
-          // Kanban view - check store for tasks, not local state
-          useTaskStore.getState().tasks.size === 0 && !loading ? (
-            <div className="text-center py-8 text-white/60">No tasks assigned yet.</div>
-          ) : (
-          // Kanban View - Full Width
           <KanbanBoard
               selectedTaskType={selectedTaskType}
               selectedDate={selectedDate}
