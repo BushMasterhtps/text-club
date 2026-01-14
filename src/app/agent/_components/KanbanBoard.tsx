@@ -29,6 +29,19 @@ export default function KanbanBoard({
 }: KanbanBoardProps) {
   const { tasks, getTasksByStatus, sortOrder, mergeTasks } = useTaskStore();
   const getStoreState = useTaskStore.getState;
+  
+  // Create a version counter that increments when tasks are updated
+  // This forces useMemo to recalculate when tasks change (not just size)
+  const [tasksVersion, setTasksVersion] = useState(0);
+  
+  // Subscribe to store updates to trigger recalculation
+  useEffect(() => {
+    const unsubscribe = useTaskStore.subscribe((state) => {
+      // Increment version when tasks map changes
+      setTasksVersion(prev => prev + 1);
+    });
+    return unsubscribe;
+  }, []);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   
@@ -146,8 +159,7 @@ export default function KanbanBoard({
 
   // Get tasks for each column
   // To Do: PENDING tasks OR IN_PROGRESS tasks without startTime (assigned but not started)
-  // Use tasks.size as dependency instead of tasks object to prevent unnecessary recalculations
-  const tasksSize = tasks.size;
+  // Use tasksVersion to force recalculation when tasks are updated
   const toDoTasks = useMemo(() => {
     const allTasks = useTaskStore.getState().tasks;
     let filtered = Array.from(allTasks.values()).filter(task => {
@@ -188,7 +200,7 @@ export default function KanbanBoard({
       const bTime = b.startTime ? new Date(b.startTime).getTime() : 0;
       return sortOrder === 'asc' ? aTime - bTime : bTime - aTime;
     });
-  }, [tasksSize, selectedTaskType, sortOrder]);
+  }, [tasksVersion, selectedTaskType, sortOrder]);
 
   const assistanceTasks = useMemo(() => {
     // Includes both ASSISTANCE_REQUIRED and RESOLVED
@@ -197,7 +209,7 @@ export default function KanbanBoard({
       tasks = tasks.filter(t => t.taskType === selectedTaskType);
     }
     return tasks;
-  }, [tasksSize, getTasksByStatus, selectedTaskType]);
+  }, [tasksVersion, getTasksByStatus, selectedTaskType]);
 
   const completedTasks = useMemo(() => {
     // Get all completed tasks from store
@@ -246,7 +258,7 @@ export default function KanbanBoard({
     });
     
     return tasks;
-  }, [tasksSize, getTasksByStatus, selectedTaskType, selectedDate]);
+  }, [tasksVersion, getTasksByStatus, selectedTaskType, selectedDate]);
 
   const handleCardClick = (taskId: string) => {
     setSelectedTaskId(taskId);

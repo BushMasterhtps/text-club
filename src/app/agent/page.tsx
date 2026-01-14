@@ -847,18 +847,31 @@ export default function AgentPage() {
         body: JSON.stringify({ email }),
       });
       if (res.ok) {
+        const responseData = await res.json().catch(() => ({}));
+        const serverStartTime = responseData.task?.startTime || new Date().toISOString();
+        
         // Add to local started tasks state for instant UI update
         setStartedTasks(prev => new Set(prev).add(taskId));
-        // Update Zustand store if in Kanban view
-        if (viewMode === 'kanban') {
-          const task = tasks.find(t => t.id === taskId);
-          if (task) {
-            useTaskStore.getState().updateTask(taskId, {
-              status: 'IN_PROGRESS',
-              startTime: new Date().toISOString(),
-            });
-          }
+        
+        // Update Zustand store - get task from store, not local state
+        const store = useTaskStore.getState();
+        const task = store.getTask(taskId);
+        if (task) {
+          // Update store with server's startTime
+          store.updateTask(taskId, {
+            status: 'IN_PROGRESS',
+            startTime: serverStartTime,
+          });
+          console.log('✅ Updated store with started task:', {
+            taskId,
+            startTime: serverStartTime,
+            status: 'IN_PROGRESS',
+            inStore: store.getTask(taskId)?.status
+          });
+        } else {
+          console.warn('⚠️ Task not found in store when starting:', taskId);
         }
+        
         // Update stats to reflect the change (but don't reload tasks to avoid page refresh)
         await loadStats();
         // Don't reload tasks to prevent page refresh - rely on polling instead
