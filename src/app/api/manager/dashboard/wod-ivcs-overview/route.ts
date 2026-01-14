@@ -12,7 +12,8 @@ export async function GET() {
     // First query: Aggregate all status counts and age bucket counts in a single database trip
     const statusAndAgeQuery = await prisma.$queryRaw<Array<{
       status: string;
-      pending_count: bigint;
+      pending_unassigned_count: bigint;
+      assigned_not_started_count: bigint;
       in_progress_count: bigint;
       completed_today_count: bigint;
       total_completed_count: bigint;
@@ -22,24 +23,28 @@ export async function GET() {
     }>>`
       SELECT 
         'WOD_IVCS' as task_type,
-        COUNT(*) FILTER (WHERE status = 'PENDING')::bigint as pending_count,
+        COUNT(*) FILTER (WHERE status = 'PENDING' AND "assignedToId" IS NULL)::bigint as pending_unassigned_count,
+        COUNT(*) FILTER (WHERE status = 'PENDING' AND "assignedToId" IS NOT NULL)::bigint as assigned_not_started_count,
         COUNT(*) FILTER (WHERE status = 'IN_PROGRESS')::bigint as in_progress_count,
         COUNT(*) FILTER (WHERE status = 'COMPLETED' AND "endTime" >= ${today} AND "endTime" < ${tomorrow})::bigint as completed_today_count,
         COUNT(*) FILTER (WHERE status = 'COMPLETED')::bigint as total_completed_count,
         COUNT(*) FILTER (
           WHERE status = 'PENDING' 
+          AND "assignedToId" IS NULL
           AND "purchaseDate" IS NOT NULL
           AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 1
           AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 < 2
         )::bigint as medium_count,
         COUNT(*) FILTER (
           WHERE status = 'PENDING' 
+          AND "assignedToId" IS NULL
           AND "purchaseDate" IS NOT NULL
           AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 2
           AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 < 4
         )::bigint as high_count,
         COUNT(*) FILTER (
           WHERE status = 'PENDING' 
+          AND "assignedToId" IS NULL
           AND "purchaseDate" IS NOT NULL
           AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 4
         )::bigint as urgent_count
@@ -48,7 +53,8 @@ export async function GET() {
     `;
 
     const result = statusAndAgeQuery[0];
-    const pendingCount = Number(result.pending_count);
+    const pendingUnassignedCount = Number(result.pending_unassigned_count);
+    const assignedNotStartedCount = Number(result.assigned_not_started_count);
     const inProgressCount = Number(result.in_progress_count);
     const completedTodayCount = Number(result.completed_today_count);
     const totalCompletedCount = Number(result.total_completed_count);
@@ -56,8 +62,14 @@ export async function GET() {
     const highCount = Number(result.high_count);
     const urgentCount = Number(result.urgent_count);
 
-    // Calculate progress percentage
-    const totalTasks = pendingCount + inProgressCount + totalCompletedCount;
+    // "Ready to assign" = only unassigned PENDING tasks
+    const pendingCount = pendingUnassignedCount;
+    // "Active Work" = assigned-not-started + in-progress
+    const activeWorkCount = assignedNotStartedCount + inProgressCount;
+
+    // Calculate progress percentage (use all pending, including assigned-not-started)
+    const totalPending = pendingUnassignedCount + assignedNotStartedCount;
+    const totalTasks = totalPending + inProgressCount + totalCompletedCount;
     const progressPercentage = totalTasks > 0 ? Math.round((totalCompletedCount / totalTasks) * 100) : 0;
     
     const ageBreakdown = [mediumCount, highCount, urgentCount];
@@ -83,6 +95,7 @@ export async function GET() {
       FROM "Task"
       WHERE "taskType" = 'WOD_IVCS'
         AND status = 'PENDING'
+        AND "assignedToId" IS NULL
         AND "purchaseDate" IS NOT NULL
         AND EXTRACT(EPOCH FROM (NOW() - "purchaseDate")) / 86400 >= 1
       GROUP BY DATE("purchaseDate"), "wodIvcsSource", age_bucket
@@ -117,7 +130,9 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: {
-        pendingCount,
+        pendingCount, // Only unassigned PENDING tasks (for "Ready to assign")
+        assignedNotStartedCount, // Assigned but not started
+        activeWorkCount, // assigned-not-started + in-progress (for "Active Work")
         inProgressCount,
         completedTodayCount,
         totalCompletedCount,

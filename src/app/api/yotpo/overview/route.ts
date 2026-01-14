@@ -8,11 +8,21 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
-    // Get pending Yotpo tasks
-    const pendingCount = await prisma.task.count({
+    // Get unassigned PENDING Yotpo tasks (for "Ready to assign")
+    const pendingUnassignedCount = await prisma.task.count({
       where: {
         taskType: 'YOTPO',
-        status: 'PENDING'
+        status: 'PENDING',
+        assignedToId: null
+      }
+    });
+
+    // Get assigned-not-started count (PENDING with assignedToId)
+    const assignedNotStartedCount = await prisma.task.count({
+      where: {
+        taskType: 'YOTPO',
+        status: 'PENDING',
+        assignedToId: { not: null }
       }
     });
 
@@ -23,6 +33,9 @@ export async function GET(request: NextRequest) {
         status: 'IN_PROGRESS'
       }
     });
+
+    // "Active Work" = assigned-not-started + in-progress
+    const activeWorkCount = assignedNotStartedCount + inProgressCount;
 
     // Get completed today
     const today = new Date();
@@ -48,11 +61,15 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Calculate progress percentage
-    const totalTasks = pendingCount + inProgressCount + totalCompletedCount;
+    // Calculate progress percentage (use all pending, including assigned-not-started)
+    const totalPending = pendingUnassignedCount + assignedNotStartedCount;
+    const totalTasks = totalPending + inProgressCount + totalCompletedCount;
     const progressPercentage = totalTasks > 0 
       ? Math.round((totalCompletedCount / totalTasks) * 100) 
       : 0;
+    
+    // "Ready to assign" = only unassigned PENDING tasks
+    const pendingCount = pendingUnassignedCount;
 
     // Get last import info
     const lastImport = await prisma.importSession.findFirst({
@@ -73,7 +90,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        pendingCount,
+        pendingCount, // Only unassigned PENDING tasks (for "Ready to assign")
+        assignedNotStartedCount, // Assigned but not started
+        activeWorkCount, // assigned-not-started + in-progress (for "Active Work")
         inProgressCount,
         completedTodayCount,
         totalCompletedCount,

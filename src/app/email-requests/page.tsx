@@ -775,6 +775,8 @@ function EmailRequestsPageContent() {
   // Overview data
   const [overviewData, setOverviewData] = useState({
     pendingCount: 0,
+    assignedNotStartedCount: 0,
+    activeWorkCount: 0,
     inProgressCount: 0,
     completedTodayCount: 0,
     totalCompletedCount: 0,
@@ -820,6 +822,8 @@ function EmailRequestsPageContent() {
         // Set default values on error
         setOverviewData({
           pendingCount: 0,
+          assignedNotStartedCount: 0,
+          activeWorkCount: 0,
           inProgressCount: 0,
           completedTodayCount: 0,
           totalCompletedCount: 0,
@@ -834,6 +838,8 @@ function EmailRequestsPageContent() {
       // Set default values on error
       setOverviewData({
         pendingCount: 0,
+        assignedNotStartedCount: 0,
+        activeWorkCount: 0,
         inProgressCount: 0,
         completedTodayCount: 0,
         totalCompletedCount: 0,
@@ -971,9 +977,9 @@ function EmailRequestsPageContent() {
                 </div>
                 
                 <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-lg p-4 border border-purple-500/30">
-                  <div className="text-purple-400 text-sm font-medium">In Progress</div>
-                  <div className="text-2xl font-bold mt-1">{overviewData.inProgressCount}</div>
-                  <div className="text-xs text-white/40 mt-1">Currently being worked on</div>
+                  <div className="text-purple-400 text-sm font-medium">Active Work</div>
+                  <div className="text-2xl font-bold mt-1">{overviewData.activeWorkCount ?? overviewData.inProgressCount}</div>
+                  <div className="text-xs text-white/40 mt-1">Assigned but not started + In Progress</div>
                 </div>
               </div>
 
@@ -1222,26 +1228,56 @@ function AssignEmailRequestTasksSection() {
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 bg-red-500 rounded-full"></span>
                       WOD/IVCS: {workload.wodIvcs}
+                      {workload.breakdown?.wodIvcs && (
+                        <span className="text-white/50">
+                          ({workload.breakdown.wodIvcs.assignedNotStarted}⏸️ {workload.breakdown.wodIvcs.inProgress}▶️)
+                        </span>
+                      )}
                     </span>
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
                       Text Club: {workload.textClub}
+                      {workload.breakdown?.textClub && (
+                        <span className="text-white/50">
+                          ({workload.breakdown.textClub.assignedNotStarted}⏸️ {workload.breakdown.textClub.inProgress}▶️)
+                        </span>
+                      )}
                     </span>
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                       Email: {workload.emailRequests}
+                      {workload.breakdown?.emailRequests && (
+                        <span className="text-white/50">
+                          ({workload.breakdown.emailRequests.assignedNotStarted}⏸️ {workload.breakdown.emailRequests.inProgress}▶️)
+                        </span>
+                      )}
                     </span>
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
                       Yotpo: {workload.yotpo}
+                      {workload.breakdown?.yotpo && (
+                        <span className="text-white/50">
+                          ({workload.breakdown.yotpo.assignedNotStarted}⏸️ {workload.breakdown.yotpo.inProgress}▶️)
+                        </span>
+                      )}
                     </span>
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
                       Holds: {workload.holds}
+                      {workload.breakdown?.holds && (
+                        <span className="text-white/50">
+                          ({workload.breakdown.holds.assignedNotStarted}⏸️ {workload.breakdown.holds.inProgress}▶️)
+                        </span>
+                      )}
                     </span>
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
                       Refunds: {workload.standaloneRefunds}
+                      {workload.breakdown?.standaloneRefunds && (
+                        <span className="text-white/50">
+                          ({workload.breakdown.standaloneRefunds.assignedNotStarted}⏸️ {workload.breakdown.standaloneRefunds.inProgress}▶️)
+                        </span>
+                      )}
                     </span>
                     <span className="text-white/70 font-medium">
                       Total: {workload.total}

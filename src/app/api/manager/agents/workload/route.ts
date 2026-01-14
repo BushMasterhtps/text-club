@@ -16,15 +16,25 @@ export async function GET() {
       },
     });
 
-    // OPTIMIZED: Get all workloads in a single query using groupBy
-    // Count tasks that are in agent inbox (PENDING assigned) OR actively being worked (IN_PROGRESS)
-    // Exclude COMPLETED tasks
-    const taskCounts = await prisma.task.groupBy({
+    // OPTIMIZED: Get all workloads with breakdown (assigned-not-started vs in-progress)
+    // We need separate queries for PENDING (assigned-not-started) and IN_PROGRESS
+    const pendingTaskCounts = await prisma.task.groupBy({
+      by: ['assignedToId', 'taskType'],
+      where: {
+        assignedToId: { not: null },
+        status: 'PENDING'  // Assigned but not started
+      },
+      _count: {
+        id: true
+      }
+    });
+
+    const inProgressTaskCounts = await prisma.task.groupBy({
       by: ['assignedToId', 'taskType'],
       where: {
         assignedToId: { not: null },
         status: {
-          in: ['PENDING', 'IN_PROGRESS', 'ASSISTANCE_REQUIRED', 'RESOLVED']  // All active work (inbox + in progress)
+          in: ['IN_PROGRESS', 'ASSISTANCE_REQUIRED', 'RESOLVED']  // Actively being worked
         }
       },
       _count: {
@@ -32,45 +42,78 @@ export async function GET() {
       }
     });
 
-    // Build a map of agent task counts for fast lookup
-    const taskCountMap = new Map<string, Map<string, number>>();
+    // Build maps of agent task counts for fast lookup (separate for assigned-not-started and in-progress)
+    const assignedNotStartedMap = new Map<string, Map<string, number>>();
+    const inProgressMap = new Map<string, Map<string, number>>();
     
-    for (const group of taskCounts) {
+    for (const group of pendingTaskCounts) {
       if (!group.assignedToId) continue;
       
-      if (!taskCountMap.has(group.assignedToId)) {
-        taskCountMap.set(group.assignedToId, new Map());
+      if (!assignedNotStartedMap.has(group.assignedToId)) {
+        assignedNotStartedMap.set(group.assignedToId, new Map());
       }
       
-      const agentMap = taskCountMap.get(group.assignedToId)!;
+      const agentMap = assignedNotStartedMap.get(group.assignedToId)!;
       agentMap.set(group.taskType, group._count.id);
     }
 
-    // Map agents with their workload breakdowns
+    for (const group of inProgressTaskCounts) {
+      if (!group.assignedToId) continue;
+      
+      if (!inProgressMap.has(group.assignedToId)) {
+        inProgressMap.set(group.assignedToId, new Map());
+      }
+      
+      const agentMap = inProgressMap.get(group.assignedToId)!;
+      agentMap.set(group.taskType, group._count.id);
+    }
+
+    // Map agents with their workload breakdowns (assigned-not-started vs in-progress)
     const workloadData = agents.map((agent) => {
-      const agentCounts = taskCountMap.get(agent.id);
+      const assignedNotStartedCounts = assignedNotStartedMap.get(agent.id);
+      const inProgressCounts = inProgressMap.get(agent.id);
+
+      // Helper function to get breakdown for a task type
+      const getBreakdown = (taskType: string) => {
+        const assignedNotStarted = assignedNotStartedCounts?.get(taskType) ?? 0;
+        const inProgress = inProgressCounts?.get(taskType) ?? 0;
+        return {
+          assignedNotStarted,
+          inProgress,
+          total: assignedNotStarted + inProgress
+        };
+      };
+
+      const wodIvcs = getBreakdown('WOD_IVCS');
+      const textClub = getBreakdown('TEXT_CLUB');
+      const emailRequests = getBreakdown('EMAIL_REQUESTS');
+      const standaloneRefunds = getBreakdown('STANDALONE_REFUNDS');
+      const yotpo = getBreakdown('YOTPO');
+      const holds = getBreakdown('HOLDS');
       
-      const wodIvcsCount = agentCounts?.get('WOD_IVCS') ?? 0;
-      const textClubCount = agentCounts?.get('TEXT_CLUB') ?? 0;
-      const emailRequestsCount = agentCounts?.get('EMAIL_REQUESTS') ?? 0;
-      const standaloneRefundsCount = agentCounts?.get('STANDALONE_REFUNDS') ?? 0;
-      const yotpoCount = agentCounts?.get('YOTPO') ?? 0;
-      const holdsCount = agentCounts?.get('HOLDS') ?? 0;
-      
-      const total = wodIvcsCount + textClubCount + emailRequestsCount + standaloneRefundsCount + yotpoCount + holdsCount;
+      const total = wodIvcs.total + textClub.total + emailRequests.total + standaloneRefunds.total + yotpo.total + holds.total;
 
       return {
         agentId: agent.id,
         agentName: agent.name,
         agentEmail: agent.email,
         workload: {
-          wodIvcs: wodIvcsCount,
-          textClub: textClubCount,
-          emailRequests: emailRequestsCount,
-          standaloneRefunds: standaloneRefundsCount,
-          yotpo: yotpoCount,
-          holds: holdsCount,
+          wodIvcs: wodIvcs.total,
+          textClub: textClub.total,
+          emailRequests: emailRequests.total,
+          standaloneRefunds: standaloneRefunds.total,
+          yotpo: yotpo.total,
+          holds: holds.total,
           total,
+          // Detailed breakdown for UI display
+          breakdown: {
+            wodIvcs,
+            textClub,
+            emailRequests,
+            standaloneRefunds,
+            yotpo,
+            holds,
+          },
         },
       };
     });
