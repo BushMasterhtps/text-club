@@ -499,11 +499,14 @@ export default function AgentPage() {
                 // Update tasks silently - use ref to get current viewMode
                 const currentViewMode = viewModeRef.current;
                 if (currentViewMode === 'kanban') {
+                  // Kanban: ONLY update store, don't touch local state (prevents flickering)
                   mergeTasks(newTasks);
                 } else {
+                  // List view: update both
                   setTasks(newTasks);
                   setStoreTasks(newTasks);
                 }
+                // Only update lastUpdate, don't cause re-renders
                 setLastUpdate(new Date());
               }
               // If newTasks.length === 0, do nothing - keep existing tasks
