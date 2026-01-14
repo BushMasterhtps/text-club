@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useTaskStore, Task } from '@/stores/useTaskStore';
 import KanbanColumn from './KanbanColumn';
 import TaskDetailDrawer from './TaskDetailDrawer';
@@ -31,6 +31,46 @@ export default function KanbanBoard({
   const getStoreState = useTaskStore.getState;
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  
+  // Use refs to preserve modal state during polling updates
+  const isDrawerOpenRef = useRef(false);
+  const selectedTaskIdRef = useRef<string | null>(null);
+  
+  // Update refs when state changes
+  useEffect(() => {
+    isDrawerOpenRef.current = isDrawerOpen;
+    selectedTaskIdRef.current = selectedTaskId;
+  }, [isDrawerOpen, selectedTaskId]);
+  
+  // Preserve modal state during polling updates
+  // This ensures the modal stays open even when tasks are updated by polling
+  useEffect(() => {
+    // Only restore modal state if it was open before and got closed unexpectedly
+    if (isDrawerOpenRef.current && selectedTaskIdRef.current) {
+      // Check if modal state was lost (this shouldn't happen, but safety check)
+      if (!isDrawerOpen || selectedTaskId !== selectedTaskIdRef.current) {
+        const task = getStoreState().getTask(selectedTaskIdRef.current);
+        // If task still exists in store, restore modal state
+        if (task) {
+          console.log('🔄 Restoring modal state after polling update');
+          setIsDrawerOpen(true);
+          setSelectedTaskId(selectedTaskIdRef.current);
+        } else {
+          // Task doesn't exist - check if it's in completed tasks
+          const allTasks = Array.from(getStoreState().tasks.values());
+          const taskExists = allTasks.some(t => t.id === selectedTaskIdRef.current);
+          if (!taskExists) {
+            // Task truly doesn't exist, close modal
+            console.log('⚠️ Selected task no longer exists, closing modal');
+            setIsDrawerOpen(false);
+            setSelectedTaskId(null);
+            isDrawerOpenRef.current = false;
+            selectedTaskIdRef.current = null;
+          }
+        }
+      }
+    }
+  }, [tasks]); // Only depend on tasks, not getStoreState (which is stable)
   
   // Fetch completed tasks for the selected date and add them to the store
   // This is necessary because the main tasks API doesn't return COMPLETED tasks
@@ -216,7 +256,11 @@ export default function KanbanBoard({
     setSelectedTaskId(null);
   };
 
-  const selectedTask = selectedTaskId ? useTaskStore.getState().getTask(selectedTaskId) : null;
+  // Always get the latest task from store to ensure it's up-to-date during polling
+  const selectedTask = useMemo(() => {
+    if (!selectedTaskId) return null;
+    return getStoreState().getTask(selectedTaskId);
+  }, [selectedTaskId, tasks]); // Re-compute when selectedTaskId or tasks change
 
   return (
     <div className="w-full h-full">
