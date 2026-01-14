@@ -325,48 +325,65 @@ export async function GET(req: Request) {
       
       // Transform tasks to match RawMessage format for consistency
       // CRITICAL: Only include tasks that are actually assigned (double-check)
+      // This filter ensures we never return unassigned tasks, even if the query somehow returns them
       rows = tasks
         .filter(t => {
-          // Ensure task is actually assigned
-          if (!t.assignedToId || !t.assignedTo) {
-            console.warn("[Manager Tasks API] Filtering out task without assignedTo:", {
+          // STRICT validation: task MUST have assignedToId AND assignedTo relation
+          const isAssigned = t.assignedToId !== null && t.assignedTo !== null;
+          if (!isAssigned) {
+            console.error("[Manager Tasks API] CRITICAL: Task returned without assignment:", {
               taskId: t.id,
+              status: t.status,
               assignedToId: t.assignedToId,
-              hasAssignedTo: !!t.assignedTo
+              hasAssignedTo: !!t.assignedTo,
+              taskType: t.taskType
             });
             return false;
           }
           return true;
         })
-        .map(t => ({
-          id: t.rawMessage?.id || t.id, // Use rawMessage ID if available, fallback to task ID
-          brand: t.brand || t.rawMessage?.brand || null,
-          text: t.text || t.rawMessage?.text || null,
-          email: t.email || t.rawMessage?.email || null,
-          phone: t.phone || t.rawMessage?.phone || null,
-          createdAt: t.createdAt,
-          receivedAt: t.rawMessage?.receivedAt || t.createdAt,
-          status: t.rawMessage?.status || "PROMOTED",
-          tasks: [{
-            id: t.id,
-            status: t.status,
-            assignedToId: t.assignedToId,
-            assignedTo: t.assignedTo, // This MUST be populated
-            taskType: t.taskType,
-          }],
-        }));
+        .map(t => {
+          // Double-check assignment before mapping
+          if (!t.assignedToId || !t.assignedTo) {
+            console.error("[Manager Tasks API] CRITICAL: Task lost assignment during mapping:", t.id);
+            return null;
+          }
+          
+          return {
+            id: t.rawMessage?.id || t.id, // Use rawMessage ID if available, fallback to task ID
+            brand: t.brand || t.rawMessage?.brand || null,
+            text: t.text || t.rawMessage?.text || null,
+            email: t.email || t.rawMessage?.email || null,
+            phone: t.phone || t.rawMessage?.phone || null,
+            createdAt: t.createdAt,
+            receivedAt: t.rawMessage?.receivedAt || t.createdAt,
+            status: t.rawMessage?.status || "PROMOTED",
+            tasks: [{
+              id: t.id,
+              status: t.status,
+              assignedToId: t.assignedToId, // MUST be non-null
+              assignedTo: t.assignedTo, // MUST be populated
+              taskType: t.taskType,
+            }],
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null); // Remove any null entries
       
       total = taskTotal;
       
       console.log("[Manager Tasks API] assigned_not_started direct query:", {
         taskTotal,
-        rowsReturned: rows.length,
+        tasksReturned: tasks.length,
+        rowsAfterFilter: rows.length,
+        filteredOut: tasks.length - rows.length,
         sampleRow: rows[0] ? {
           id: rows[0].id,
           hasTask: !!rows[0].tasks?.[0],
           assignedToId: rows[0].tasks?.[0]?.assignedToId,
+          assignedToName: rows[0].tasks?.[0]?.assignedTo?.name || rows[0].tasks?.[0]?.assignedTo?.email,
           hasAssignedTo: !!rows[0].tasks?.[0]?.assignedTo
-        } : null
+        } : null,
+        allRowsHaveAssignment: rows.every(r => r.tasks?.[0]?.assignedToId && r.tasks?.[0]?.assignedTo)
       });
     } else {
       // Original RawMessage query for other statuses
