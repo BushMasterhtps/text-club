@@ -91,7 +91,8 @@ export async function GET(req: Request) {
 
   // (A) Task type filter - only apply to promoted raw messages that have tasks
   // For READY raw messages, we don't filter by task type since they haven't been promoted yet
-  if (statusKey !== "pending") {
+  // NOTE: For "assigned_not_started", the taskType filter is already in statusWhere, so we skip it here to avoid duplication
+  if (statusKey !== "pending" && statusKey !== "assigned_not_started") {
     and.push({
       tasks: {
         some: {
@@ -304,11 +305,23 @@ export async function GET(req: Request) {
       }),
     ]);
     
-    if (statusKey === "pending") {
+    if (statusKey === "pending" || statusKey === "assigned_not_started") {
       console.log("[Manager Tasks API] Query result:", {
+        statusKey,
         total,
         rowsCount: rows.length,
-        sampleRow: rows[0] ? { id: rows[0].id, status: rows[0].status, taskCount: rows[0].tasks?.length } : null
+        sampleRow: rows[0] ? { 
+          id: rows[0].id, 
+          status: rows[0].status, 
+          taskCount: rows[0].tasks?.length,
+          task: rows[0].tasks?.[0] ? {
+            id: rows[0].tasks[0].id,
+            status: rows[0].tasks[0].status,
+            assignedToId: rows[0].tasks[0].assignedToId,
+            taskType: rows[0].tasks[0].taskType
+          } : null
+        } : null,
+        where: JSON.stringify(where, null, 2)
       });
     }
   } catch (error: any) {
@@ -331,8 +344,27 @@ export async function GET(req: Request) {
   }
 
   /* ---------- normalize for UI ---------- */
-  const items = rows.map((r) => {
+  // For "assigned_not_started", filter out any rows that don't have a matching task
+  // (This can happen if the RawMessage matches but the task doesn't match the include filter)
+  const filteredRows = statusKey === "assigned_not_started" 
+    ? rows.filter(r => r.tasks && r.tasks.length > 0 && r.tasks[0].assignedToId !== null)
+    : rows;
+  
+  const items = filteredRows.map((r) => {
     const t = r.tasks?.[0] ?? null;
+    
+    // Debug logging for assigned_not_started to verify task data
+    if (statusKey === "assigned_not_started") {
+      if (!t || !t.assignedToId) {
+        console.warn("[Manager Tasks API] Filtered out row without assigned task:", {
+          rawMessageId: r.id,
+          rawStatus: r.status,
+          taskCount: r.tasks?.length,
+          task: t ? { id: t.id, status: t.status, assignedToId: t.assignedToId } : null
+        });
+      }
+    }
+    
     return {
       id: r.id,
       brand: r.brand ?? null,
