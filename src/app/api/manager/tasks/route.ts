@@ -324,23 +324,37 @@ export async function GET(req: Request) {
       ]);
       
       // Transform tasks to match RawMessage format for consistency
-      rows = tasks.map(t => ({
-        id: t.rawMessage?.id || t.id, // Use rawMessage ID if available, fallback to task ID
-        brand: t.brand || t.rawMessage?.brand || null,
-        text: t.text || t.rawMessage?.text || null,
-        email: t.email || t.rawMessage?.email || null,
-        phone: t.phone || t.rawMessage?.phone || null,
-        createdAt: t.createdAt,
-        receivedAt: t.rawMessage?.receivedAt || t.createdAt,
-        status: t.rawMessage?.status || "PROMOTED",
-        tasks: [{
-          id: t.id,
-          status: t.status,
-          assignedToId: t.assignedToId,
-          assignedTo: t.assignedTo,
-          taskType: t.taskType,
-        }],
-      }));
+      // CRITICAL: Only include tasks that are actually assigned (double-check)
+      rows = tasks
+        .filter(t => {
+          // Ensure task is actually assigned
+          if (!t.assignedToId || !t.assignedTo) {
+            console.warn("[Manager Tasks API] Filtering out task without assignedTo:", {
+              taskId: t.id,
+              assignedToId: t.assignedToId,
+              hasAssignedTo: !!t.assignedTo
+            });
+            return false;
+          }
+          return true;
+        })
+        .map(t => ({
+          id: t.rawMessage?.id || t.id, // Use rawMessage ID if available, fallback to task ID
+          brand: t.brand || t.rawMessage?.brand || null,
+          text: t.text || t.rawMessage?.text || null,
+          email: t.email || t.rawMessage?.email || null,
+          phone: t.phone || t.rawMessage?.phone || null,
+          createdAt: t.createdAt,
+          receivedAt: t.rawMessage?.receivedAt || t.createdAt,
+          status: t.rawMessage?.status || "PROMOTED",
+          tasks: [{
+            id: t.id,
+            status: t.status,
+            assignedToId: t.assignedToId,
+            assignedTo: t.assignedTo, // This MUST be populated
+            taskType: t.taskType,
+          }],
+        }));
       
       total = taskTotal;
       
