@@ -2120,7 +2120,6 @@ export default function AgentPage() {
                 await loadScorecard(undefined, true);
               }}
             />
-          )
         ) : (
           // List View (existing)
           <div>
