@@ -350,10 +350,36 @@ export async function GET(req: Request) {
   if (statusKey === "assigned_not_started") {
     try {
       filteredRows = rows.filter(r => {
-        const t = r.tasks?.[0];
-        const hasAssignedTask = t && t.assignedToId !== null && t.assignedTo !== null;
+        // Must be PROMOTED (not READY)
+        if (r.status !== "PROMOTED") {
+          console.warn("[Manager Tasks API] Filtered out non-PROMOTED row:", {
+            rawMessageId: r.id,
+            rawStatus: r.status
+          });
+          return false;
+        }
+        
+        // Must have at least one task
+        if (!r.tasks || r.tasks.length === 0) {
+          console.warn("[Manager Tasks API] Filtered out row with no tasks:", {
+            rawMessageId: r.id,
+            rawStatus: r.status
+          });
+          return false;
+        }
+        
+        // Get the first task (should match our include filter)
+        const t = r.tasks[0];
+        
+        // Task must be PENDING, assigned, and match task type
+        const hasAssignedTask = t && 
+          t.status === "PENDING" && 
+          t.assignedToId !== null && 
+          t.assignedTo !== null &&
+          t.taskType === taskType;
+        
         if (!hasAssignedTask) {
-          console.warn("[Manager Tasks API] Filtered out row without assigned task:", {
+          console.warn("[Manager Tasks API] Filtered out row without matching assigned task:", {
             rawMessageId: r.id,
             rawStatus: r.status,
             taskCount: r.tasks?.length,
@@ -361,11 +387,19 @@ export async function GET(req: Request) {
               id: t.id, 
               status: t.status, 
               assignedToId: t.assignedToId,
+              taskType: t.taskType,
               hasAssignedTo: !!t.assignedTo
-            } : null
+            } : null,
+            expectedTaskType: taskType
           });
         }
         return hasAssignedTask;
+      });
+      
+      console.log("[Manager Tasks API] assigned_not_started filtering:", {
+        originalRows: rows.length,
+        filteredRows: filteredRows.length,
+        removed: rows.length - filteredRows.length
       });
     } catch (filterError: any) {
       console.error("[Manager Tasks API] Error filtering rows:", filterError);
