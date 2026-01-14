@@ -123,15 +123,19 @@ export function PendingTasksSection({ taskType = "TEXT_CLUB" }: PendingTasksSect
                   <td className="px-3 py-2">
                     {task.assignedTo ? (
                       <div>
-                        <div className="text-sm">Assigned to {task.assignedTo.name}</div>
+                        <div className="text-sm text-blue-300">Assigned to {task.assignedTo.name}</div>
+                        <div className="text-xs text-white/50 mt-1">Waiting for agent to start</div>
                         <select className="text-xs bg-white/10 text-white px-1 py-0.5 rounded mt-1">
-                          <option>Assign to...</option>
+                          <option>Reassign to...</option>
                         </select>
                       </div>
                     ) : (
-                      <select className="text-xs bg-white/10 text-white px-2 py-1 rounded">
-                        <option>Assign to...</option>
-                      </select>
+                      <div>
+                        <div className="text-xs text-orange-300 mb-1">⚠️ Unassigned</div>
+                        <select className="text-xs bg-white/10 text-white px-2 py-1 rounded">
+                          <option>Assign to...</option>
+                        </select>
+                      </div>
                     )}
                   </td>
                   {taskType === "WOD_IVCS" && (

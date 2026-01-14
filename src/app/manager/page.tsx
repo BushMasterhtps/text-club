@@ -111,15 +111,16 @@ type AgentProgress = {
   id: string;
   name: string;
   email: string;
-  assigned: number;
+  assigned: number;  // Total assigned (backward compatibility)
+  assignedNotStarted?: number;  // NEW: Assigned but not started (PENDING with assignedToId)
   inProgress: number;
   completedToday: number;
   lastActivity?: string | null;
   taskTypeBreakdown?: {
-    textClub: { assigned: number; inProgress: number; completedToday: number };
-    wodIvcs: { assigned: number; inProgress: number; completedToday: number };
-    emailRequests: { assigned: number; inProgress: number; completedToday: number };
-    standaloneRefunds: { assigned: number; inProgress: number; completedToday: number };
+    textClub: { assigned: number; assignedNotStarted?: number; inProgress: number; completedToday: number };
+    wodIvcs: { assigned: number; assignedNotStarted?: number; inProgress: number; completedToday: number };
+    emailRequests: { assigned: number; assignedNotStarted?: number; inProgress: number; completedToday: number };
+    standaloneRefunds: { assigned: number; assignedNotStarted?: number; inProgress: number; completedToday: number };
   };
 };
 
@@ -2971,6 +2972,7 @@ function AgentProgressSection() {
               <tr className="text-left text-white/60">
                 <th className="px-3 py-2">Agent</th>
                 <th className="px-3 py-2 w-28">Assigned</th>
+                <th className="px-3 py-2 w-32">Assigned - Not Started</th>
                 <th className="px-3 py-2 w-32">In Progress</th>
                 <th className="px-3 py-2 w-36">Completed Today</th>
                 <th className="px-3 py-2 w-44">Task Breakdown</th>
@@ -2980,7 +2982,7 @@ function AgentProgressSection() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {rows.length === 0 && (
-                <tr><td className="px-3 py-3 text-white/60" colSpan={7}>{loading ? "Loading…" : "No agents yet."}</td></tr>
+                <tr><td className="px-3 py-3 text-white/60" colSpan={8}>{loading ? "Loading…" : "No agents yet."}</td></tr>
               )}
               {rows.map((r) => (
                 <tr key={r.id} className="text-white/90">
@@ -2990,6 +2992,7 @@ function AgentProgressSection() {
                     {(r as any).isLive && <div className="text-xs text-green-400">● Live</div>}
                   </td>
                   <td className="px-3 py-2"><Badge tone="muted">{r.assigned}</Badge></td>
+                  <td className="px-3 py-2"><Badge tone="default">{r.assignedNotStarted ?? 0}</Badge></td>
                   <td className="px-3 py-2"><Badge tone="warning">{r.inProgress}</Badge></td>
                   <td className="px-3 py-2"><Badge tone="success">{r.completedToday}</Badge></td>
                   <td className="px-3 py-2">
@@ -2998,14 +3001,34 @@ function AgentProgressSection() {
                         <div className="flex items-center gap-2 text-xs">
                           <span className="text-blue-400">💬</span>
                           <span>Text: {r.taskTypeBreakdown.textClub.assigned}</span>
+                          {r.taskTypeBreakdown.textClub.assignedNotStarted !== undefined && (
+                            <span className="text-white/50">
+                              ({r.taskTypeBreakdown.textClub.assignedNotStarted}⏸️ {r.taskTypeBreakdown.textClub.inProgress}▶️)
+                            </span>
+                          )}
                           <span className="text-white/40">•</span>
                           <span>WOD: {r.taskTypeBreakdown.wodIvcs.assigned}</span>
+                          {r.taskTypeBreakdown.wodIvcs.assignedNotStarted !== undefined && (
+                            <span className="text-white/50">
+                              ({r.taskTypeBreakdown.wodIvcs.assignedNotStarted}⏸️ {r.taskTypeBreakdown.wodIvcs.inProgress}▶️)
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-xs">
                           <span className="text-green-400">📧</span>
                           <span>Email: {r.taskTypeBreakdown.emailRequests.assigned}</span>
+                          {r.taskTypeBreakdown.emailRequests.assignedNotStarted !== undefined && (
+                            <span className="text-white/50">
+                              ({r.taskTypeBreakdown.emailRequests.assignedNotStarted}⏸️ {r.taskTypeBreakdown.emailRequests.inProgress}▶️)
+                            </span>
+                          )}
                           <span className="text-white/40">•</span>
                           <span>Refund: {r.taskTypeBreakdown.standaloneRefunds.assigned}</span>
+                          {r.taskTypeBreakdown.standaloneRefunds.assignedNotStarted !== undefined && (
+                            <span className="text-white/50">
+                              ({r.taskTypeBreakdown.standaloneRefunds.assignedNotStarted}⏸️ {r.taskTypeBreakdown.standaloneRefunds.inProgress}▶️)
+                            </span>
+                          )}
                         </div>
                       </div>
                     ) : (

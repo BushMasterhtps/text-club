@@ -45,7 +45,14 @@ export async function GET(request: NextRequest) {
     });
 
     // Extract counts from the map
-    const pendingTasks = statusCountMap.get('PENDING') ?? 0;
+    // Get only unassigned pending tasks (assigned tasks are shown in agent progress, not here)
+    const pendingTasks = await prisma.task.count({
+      where: {
+        taskType: "TEXT_CLUB",
+        status: "PENDING",
+        assignedToId: null  // Only unassigned tasks
+      }
+    });
     const spamReview = statusCountMap.get('SPAM_REVIEW') ?? 0;
     const totalCompleted = statusCountMap.get('COMPLETED') ?? 0;
     const inProgress = statusCountMap.get('IN_PROGRESS') ?? 0;

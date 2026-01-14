@@ -106,15 +106,17 @@ export async function GET(req: Request) {
   const statusWhere: Prisma.RawMessageWhereInput | undefined = (() => {
     switch (statusKey) {
       case "pending":
-        // Either not promoted yet (READY) OR promoted with an open Task in PENDING
+        // Either not promoted yet (READY) OR promoted with an open Task in PENDING that is UNASSIGNED
+        // This ensures "Pending Tasks" only shows tasks available for assignment
         return {
           OR: [
-            { status: "READY" as any }, // Raw messages waiting to be promoted
+            { status: "READY" as any }, // Raw messages waiting to be promoted (always unassigned)
             {
               AND: [
                 { status: "PROMOTED" as any },
                 { tasks: { some: { 
                   status: "PENDING" as any,
+                  assignedToId: null,  // NEW: Only show unassigned tasks
                   taskType: taskType as any // Filter promoted tasks by task type
                 } } },
               ],
@@ -272,7 +274,7 @@ export async function GET(req: Request) {
           tasks: {
             where:
               statusKey === "pending"
-                ? ({ status: "PENDING" } as any)
+                ? ({ status: "PENDING", assignedToId: null } as any)  // NEW: Only unassigned pending tasks
                 : statusKey === "in_progress"
                 ? ({ status: "IN_PROGRESS" } as any)
                 : statusKey === "assistance_required"

@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
     // OPTIMIZED: Get all agents and their task data in parallel with minimal queries
-    const [agents, openTaskGroups, inProgressGroups, completedTodayGroups, completedByGroups, sentBackTodayGroups, lastActivities] = await Promise.all([
+    const [agents, openTaskGroups, assignedNotStartedGroups, inProgressGroups, completedTodayGroups, completedByGroups, sentBackTodayGroups, lastActivities] = await Promise.all([
       // Get all agents
       prisma.user.findMany({
         where: { role: { in: ["AGENT", "MANAGER_AGENT"] } },
@@ -21,6 +21,15 @@ export async function GET(request: NextRequest) {
         where: {
           assignedToId: { not: null },
           status: { in: ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"] }
+        },
+        _count: { id: true }
+      }),
+      // NEW: Group assigned but not started tasks (PENDING with assignedToId) by agent + task type
+      prisma.task.groupBy({
+        by: ['assignedToId', 'taskType'],
+        where: {
+          assignedToId: { not: null },
+          status: "PENDING"  // Only PENDING, not IN_PROGRESS
         },
         _count: { id: true }
       }),
@@ -82,6 +91,15 @@ export async function GET(request: NextRequest) {
       openTaskMap.get(g.assignedToId)!.set(g.taskType, g._count.id);
     }
 
+    const assignedNotStartedMap = new Map<string, Map<string, number>>();
+    for (const g of assignedNotStartedGroups) {
+      if (!g.assignedToId) continue;
+      if (!assignedNotStartedMap.has(g.assignedToId)) {
+        assignedNotStartedMap.set(g.assignedToId, new Map());
+      }
+      assignedNotStartedMap.get(g.assignedToId)!.set(g.taskType, g._count.id);
+    }
+
     const inProgressMap = new Map<string, Map<string, number>>();
     for (const g of inProgressGroups) {
       if (!g.assignedToId) continue;
@@ -130,6 +148,7 @@ export async function GET(request: NextRequest) {
     // Build agent progress data (no additional database queries)
     const agentProgress = agents.map((agent) => {
       const openTasks = openTaskMap.get(agent.id);
+      const assignedNotStartedTasks = assignedNotStartedMap.get(agent.id);
       const inProgressTasks = inProgressMap.get(agent.id);
       const completedTasks = completedTodayMap.get(agent.id);
       const sentBackTasks = sentBackMap.get(agent.id);
@@ -139,6 +158,12 @@ export async function GET(request: NextRequest) {
       const wodIvcsAssigned = openTasks?.get('WOD_IVCS') ?? 0;
       const emailRequestsAssigned = openTasks?.get('EMAIL_REQUESTS') ?? 0;
       const standaloneRefundsAssigned = openTasks?.get('STANDALONE_REFUNDS') ?? 0;
+
+      // Get assigned but not started counts (NEW)
+      const textClubAssignedNotStarted = assignedNotStartedTasks?.get('TEXT_CLUB') ?? 0;
+      const wodIvcsAssignedNotStarted = assignedNotStartedTasks?.get('WOD_IVCS') ?? 0;
+      const emailRequestsAssignedNotStarted = assignedNotStartedTasks?.get('EMAIL_REQUESTS') ?? 0;
+      const standaloneRefundsAssignedNotStarted = assignedNotStartedTasks?.get('STANDALONE_REFUNDS') ?? 0;
 
       // Get in-progress counts
       const textClubInProgress = inProgressTasks?.get('TEXT_CLUB') ?? 0;
@@ -154,6 +179,7 @@ export async function GET(request: NextRequest) {
 
       // Calculate totals
       const assigned = textClubAssigned + wodIvcsAssigned + emailRequestsAssigned + standaloneRefundsAssigned;
+      const assignedNotStarted = textClubAssignedNotStarted + wodIvcsAssignedNotStarted + emailRequestsAssignedNotStarted + standaloneRefundsAssignedNotStarted;
       const inProgress = textClubInProgress + wodIvcsInProgress + emailRequestsInProgress + standaloneRefundsInProgress;
       const completedToday = textClubCompletedToday + wodIvcsCompletedToday + emailRequestsCompletedToday + standaloneRefundsCompletedToday;
 
@@ -161,7 +187,8 @@ export async function GET(request: NextRequest) {
         id: agent.id,
         name: agent.name || "Unknown",
         email: agent.email,
-        assigned,
+        assigned,  // Total assigned (backward compatibility)
+        assignedNotStarted,  // NEW: Assigned but not started
         inProgress,
         completedToday,
         lastActivity: lastActivityMap.get(agent.id) || null,
@@ -169,21 +196,25 @@ export async function GET(request: NextRequest) {
         taskTypeBreakdown: {
           textClub: {
             assigned: textClubAssigned,
+            assignedNotStarted: textClubAssignedNotStarted,  // NEW
             inProgress: textClubInProgress,
             completedToday: textClubCompletedToday
           },
           wodIvcs: {
             assigned: wodIvcsAssigned,
+            assignedNotStarted: wodIvcsAssignedNotStarted,  // NEW
             inProgress: wodIvcsInProgress,
             completedToday: wodIvcsCompletedToday
           },
           emailRequests: {
             assigned: emailRequestsAssigned,
+            assignedNotStarted: emailRequestsAssignedNotStarted,  // NEW
             inProgress: emailRequestsInProgress,
             completedToday: emailRequestsCompletedToday
           },
           standaloneRefunds: {
             assigned: standaloneRefundsAssigned,
+            assignedNotStarted: standaloneRefundsAssignedNotStarted,  // NEW
             inProgress: standaloneRefundsInProgress,
             completedToday: standaloneRefundsCompletedToday
           }
