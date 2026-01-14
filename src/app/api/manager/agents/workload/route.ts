@@ -17,11 +17,15 @@ export async function GET() {
     });
 
     // OPTIMIZED: Get all workloads in a single query using groupBy
+    // Count tasks that are in agent inbox (PENDING assigned) OR actively being worked (IN_PROGRESS)
+    // Exclude COMPLETED tasks
     const taskCounts = await prisma.task.groupBy({
       by: ['assignedToId', 'taskType'],
       where: {
         assignedToId: { not: null },
-        status: 'IN_PROGRESS'
+        status: {
+          in: ['PENDING', 'IN_PROGRESS', 'ASSISTANCE_REQUIRED', 'RESOLVED']  // All active work (inbox + in progress)
+        }
       },
       _count: {
         id: true

@@ -286,14 +286,14 @@ export async function GET(req: Request) {
           tasks: {
             where:
               statusKey === "pending"
-                ? ({ status: "PENDING", assignedToId: null } as any)  // Only unassigned pending tasks
+                ? ({ status: "PENDING", assignedToId: null, taskType: taskType as any } as any)  // Only unassigned pending tasks
                 : statusKey === "assigned_not_started"
-                ? ({ status: "PENDING", assignedToId: { not: null } } as any)  // Assigned but not started
+                ? ({ status: "PENDING", assignedToId: { not: null }, taskType: taskType as any } as any)  // Assigned but not started
                 : statusKey === "in_progress"
-                ? ({ status: "IN_PROGRESS" } as any)
+                ? ({ status: "IN_PROGRESS", taskType: taskType as any } as any)
                 : statusKey === "assistance_required"
-                ? ({ status: "ASSISTANCE_REQUIRED" } as any)
-                : ({ status: { not: "COMPLETED" } } as any),
+                ? ({ status: "ASSISTANCE_REQUIRED", taskType: taskType as any } as any)
+                : ({ status: { not: "COMPLETED" }, taskType: taskType as any } as any),
             orderBy: { createdAt: "desc" },
             take: 1,
             include: {
