@@ -35,10 +35,25 @@ export default function KanbanBoard({
   const [tasksVersion, setTasksVersion] = useState(0);
   
   // Subscribe to store updates to trigger recalculation
+  // Only update when tasks Map actually changes (not on every state update)
   useEffect(() => {
+    let prevTasksSize = useTaskStore.getState().tasks.size;
+    let prevTasksHash = '';
+    
     const unsubscribe = useTaskStore.subscribe((state) => {
-      // Increment version when tasks map changes
-      setTasksVersion(prev => prev + 1);
+      const currentTasksSize = state.tasks.size;
+      // Create a simple hash of task IDs and statuses to detect actual changes
+      const currentTasksHash = Array.from(state.tasks.entries())
+        .map(([id, task]) => `${id}:${task.status}:${task.startTime || ''}`)
+        .sort()
+        .join('|');
+      
+      // Only increment if tasks actually changed (size or content)
+      if (currentTasksSize !== prevTasksSize || currentTasksHash !== prevTasksHash) {
+        prevTasksSize = currentTasksSize;
+        prevTasksHash = currentTasksHash;
+        setTasksVersion(prev => prev + 1);
+      }
     });
     return unsubscribe;
   }, []);
