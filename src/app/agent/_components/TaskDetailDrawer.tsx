@@ -446,24 +446,243 @@ export default function TaskDetailDrawer({
             ) : (
               <>
                 {/* Unblurred state - show all info */}
-                <div>
-                  <div className="text-xs text-white/60 mb-1">Task Content</div>
-                  <div className="text-white/90">{task.text || 'No description'}</div>
-                </div>
+                
+                {/* Task Type Specific Fields */}
+                {task.taskType === "WOD_IVCS" ? (
+                  <>
+                    {/* WOD/IVCS specific data */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400">📋</span>
+                        <span className="text-white/60">Source:</span>
+                        <span className="font-mono text-white/90">{task.wodIvcsSource || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400">🔢</span>
+                        <span className="text-white/60">Primary ID:</span>
+                        <span className="font-mono text-white/90">{task.documentNumber || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400">👤</span>
+                        <span className="text-white/60">Customer:</span>
+                        <span className="font-mono text-white/90">{task.customerName || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400">💵</span>
+                        <span className="text-white/60">Amount:</span>
+                        <span className="font-mono text-white/90">{task.amount ? `$${task.amount}` : "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400">📊</span>
+                        <span className="text-white/60">Difference:</span>
+                        <span className="font-mono text-white/90">{task.webOrderDifference ? `$${task.webOrderDifference}` : "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400">📅</span>
+                        <span className="text-white/60">Origin Date:</span>
+                        <span className="font-mono text-white/90">{task.purchaseDate ? new Date(task.purchaseDate).toLocaleDateString() : "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400">⏰</span>
+                        <span className="text-white/60">Order Age:</span>
+                        <span className="font-mono text-white/90">{task.orderAge || "N/A"}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : task.taskType === "EMAIL_REQUESTS" ? (
+                  <>
+                    {/* Email Request specific data */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-400">⏰</span>
+                        <span className="text-white/60">Completion Time:</span>
+                        <span className="font-mono text-white/90">{task.completionTime ? new Date(task.completionTime).toLocaleString() : "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-400">🔢</span>
+                        <span className="text-white/60">SF Case #:</span>
+                        <span className="font-mono text-white/90">{task.salesforceCaseNumber || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-400">📧</span>
+                        <span className="text-white/60">Request For:</span>
+                        <span className="font-mono text-white/90">{task.emailRequestFor || "N/A"}</span>
+                      </div>
+                      <div className="flex items-start gap-2 col-span-2">
+                        <span className="text-green-400 mt-1">📝</span>
+                        <div className="flex-1">
+                          <span className="text-white/60">Details:</span>
+                          <div className="text-sm text-white/90 mt-1 leading-relaxed">{task.details || "N/A"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : task.taskType === "YOTPO" ? (
+                  <>
+                    {/* Yotpo specific data */}
+                    <div className="space-y-3 text-sm">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-yellow-400">👤</span>
+                          <span className="text-white/60">Customer:</span>
+                          <span className="font-mono text-white/90">{task.yotpoCustomerName || "N/A"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-yellow-400">📧</span>
+                          <span className="text-white/60">Email:</span>
+                          <span className="font-mono text-xs text-white/90">{task.yotpoEmail || "N/A"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-yellow-400">📅</span>
+                          <span className="text-white/60">Order Date:</span>
+                          <span className="font-mono text-white/90">{task.yotpoOrderDate ? new Date(task.yotpoOrderDate).toLocaleDateString() : "N/A"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-yellow-400">📦</span>
+                          <span className="text-white/60">Product:</span>
+                          <span className="font-mono text-white/90">{task.yotpoProduct || "N/A"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-yellow-400">🏷️</span>
+                          <span className="text-white/60">Issue Topic:</span>
+                          <span className="font-mono text-white/90">{task.yotpoIssueTopic || "N/A"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-yellow-400">📅</span>
+                          <span className="text-white/60">Review Date:</span>
+                          <span className="font-mono text-white/90">{task.yotpoReviewDate ? new Date(task.yotpoReviewDate).toLocaleDateString() : "N/A"}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Review Text */}
+                      <div className="flex items-start gap-2">
+                        <span className="text-yellow-400 mt-1">⭐</span>
+                        <div className="flex-1">
+                          <span className="text-white/60">Review:</span>
+                          <div className="text-sm text-white/90 mt-1 leading-relaxed bg-white/5 rounded p-3 border border-white/10 whitespace-pre-wrap">
+                            {task.yotpoReview || "No review text provided"}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* SF Order Link */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-yellow-400">🔗</span>
+                        <span className="text-white/60">SF Order:</span>
+                        {task.yotpoSfOrderLink ? (
+                          <a 
+                            href={task.yotpoSfOrderLink} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 underline text-xs break-all"
+                          >
+                            Open in Salesforce →
+                          </a>
+                        ) : (
+                          <span className="font-mono text-white/40">Not provided</span>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : task.taskType === "STANDALONE_REFUNDS" ? (
+                  <>
+                    {/* Standalone Refund specific data */}
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-purple-400">💰</span>
+                        <span className="text-white/60">Refund Amount:</span>
+                        <span className="font-mono text-white/90">{task.refundAmount ? `$${task.refundAmount}` : "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-purple-400">💳</span>
+                        <span className="text-white/60">Payment Method:</span>
+                        <span className="font-mono text-white/90">{task.paymentMethod || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-purple-400">📝</span>
+                        <span className="text-white/60">Reason:</span>
+                        <span className="font-mono text-white/90">{task.refundReason || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-purple-400">📦</span>
+                        <span className="text-white/60">Product SKU:</span>
+                        <span className="font-mono text-white/90">{task.productSku || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-purple-400">🔢</span>
+                        <span className="text-white/60">Quantity:</span>
+                        <span className="font-mono text-white/90">{task.quantity || "N/A"}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : task.taskType === "HOLDS" ? (
+                  <>
+                    {/* Holds specific data */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-orange-400">📦</span>
+                        <span className="text-white/60">Order #:</span>
+                        <span className="font-mono text-white/90">{task.holdsOrderNumber || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-orange-400">📅</span>
+                        <span className="text-white/60">Order Date:</span>
+                        <span className="font-mono text-white/90">{task.holdsOrderDate ? new Date(task.holdsOrderDate).toLocaleDateString() : "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-orange-400">📧</span>
+                        <span className="text-white/60">Customer Email:</span>
+                        <span className="font-mono text-xs text-white/90">{task.holdsCustomerEmail || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-orange-400">💰</span>
+                        <span className="text-white/60">Order Amount:</span>
+                        <span className="font-mono text-white/90">{task.holdsOrderAmount ? `$${task.holdsOrderAmount}` : "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-orange-400">🚦</span>
+                        <span className="text-white/60">Status:</span>
+                        <span className="font-mono text-white/90">{task.holdsStatus || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-orange-400">⏰</span>
+                        <span className="text-white/60">Days in System:</span>
+                        <span className="font-mono text-white/90">{task.holdsDaysInSystem || "N/A"}</span>
+                      </div>
+                      {task.holdsNotes && (
+                        <div className="flex items-start gap-2 col-span-2">
+                          <span className="text-orange-400 mt-1">📝</span>
+                          <div className="flex-1">
+                            <span className="text-white/60">Notes:</span>
+                            <div className="text-sm text-white/90 mt-1">{task.holdsNotes}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Text Club - default task content */}
+                    <div>
+                      <div className="text-xs text-white/60 mb-1">Task Content</div>
+                      <div className="text-white/90">{task.text || 'No description'}</div>
+                    </div>
 
-                {/* Customer Info */}
-                {task.customerName && (
-                  <div>
-                    <div className="text-xs text-white/60 mb-1">Customer</div>
-                    <div className="text-white/90">👤 {task.customerName}</div>
-                  </div>
-                )}
+                    {/* Customer Info */}
+                    {task.customerName && (
+                      <div>
+                        <div className="text-xs text-white/60 mb-1">Customer</div>
+                        <div className="text-white/90">👤 {task.customerName}</div>
+                      </div>
+                    )}
 
-                {task.phone && (
-                  <div>
-                    <div className="text-xs text-white/60 mb-1">Phone</div>
-                    <div className="text-white/90">📞 {task.phone}</div>
-                  </div>
+                    {task.phone && (
+                      <div>
+                        <div className="text-xs text-white/60 mb-1">Phone</div>
+                        <div className="text-white/90">📞 {task.phone}</div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Timestamps */}
