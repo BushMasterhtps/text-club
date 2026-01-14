@@ -180,7 +180,7 @@ export default function KanbanBoard({
       const bTime = new Date(b.createdAt).getTime();
       return sortOrder === 'asc' ? aTime - bTime : bTime - aTime;
     });
-  }, [tasksSize, selectedTaskType, sortOrder]);
+  }, [tasksVersion, selectedTaskType, sortOrder]);
 
   // In Progress: IN_PROGRESS tasks WITH startTime (agent clicked Start)
   const inProgressTasks = useMemo(() => {
