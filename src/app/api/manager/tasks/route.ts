@@ -346,8 +346,10 @@ export async function GET(req: Request) {
   /* ---------- normalize for UI ---------- */
   // For "assigned_not_started", filter out any rows that don't have a matching assigned task
   // (This can happen if the RawMessage matches but the task doesn't match the include filter)
-  const filteredRows = statusKey === "assigned_not_started" 
-    ? rows.filter(r => {
+  let filteredRows = rows;
+  if (statusKey === "assigned_not_started") {
+    try {
+      filteredRows = rows.filter(r => {
         const t = r.tasks?.[0];
         const hasAssignedTask = t && t.assignedToId !== null && t.assignedTo !== null;
         if (!hasAssignedTask) {
@@ -364,8 +366,13 @@ export async function GET(req: Request) {
           });
         }
         return hasAssignedTask;
-      })
-    : rows;
+      });
+    } catch (filterError: any) {
+      console.error("[Manager Tasks API] Error filtering rows:", filterError);
+      // Fallback to original rows if filtering fails
+      filteredRows = rows;
+    }
+  }
   
   const items = filteredRows.map((r) => {
     const t = r.tasks?.[0] ?? null;
