@@ -146,6 +146,8 @@ export default function KanbanBoard({
 
   // Get tasks for each column
   // To Do: PENDING tasks OR IN_PROGRESS tasks without startTime (assigned but not started)
+  // Use tasks.size as dependency instead of tasks object to prevent unnecessary recalculations
+  const tasksSize = tasks.size;
   const toDoTasks = useMemo(() => {
     const allTasks = useTaskStore.getState().tasks;
     let filtered = Array.from(allTasks.values()).filter(task => {
@@ -166,7 +168,7 @@ export default function KanbanBoard({
       const bTime = new Date(b.createdAt).getTime();
       return sortOrder === 'asc' ? aTime - bTime : bTime - aTime;
     });
-  }, [tasks, selectedTaskType, sortOrder]);
+  }, [tasksSize, selectedTaskType, sortOrder]);
 
   // In Progress: IN_PROGRESS tasks WITH startTime (agent clicked Start)
   const inProgressTasks = useMemo(() => {
@@ -186,7 +188,7 @@ export default function KanbanBoard({
       const bTime = b.startTime ? new Date(b.startTime).getTime() : 0;
       return sortOrder === 'asc' ? aTime - bTime : bTime - aTime;
     });
-  }, [tasks, selectedTaskType, sortOrder]);
+  }, [tasksSize, selectedTaskType, sortOrder]);
 
   const assistanceTasks = useMemo(() => {
     // Includes both ASSISTANCE_REQUIRED and RESOLVED
@@ -195,7 +197,7 @@ export default function KanbanBoard({
       tasks = tasks.filter(t => t.taskType === selectedTaskType);
     }
     return tasks;
-  }, [tasks, getTasksByStatus, selectedTaskType]);
+  }, [tasksSize, getTasksByStatus, selectedTaskType]);
 
   const completedTasks = useMemo(() => {
     // Get all completed tasks from store
@@ -244,7 +246,7 @@ export default function KanbanBoard({
     });
     
     return tasks;
-  }, [tasks, getTasksByStatus, selectedTaskType, selectedDate]);
+  }, [tasksSize, getTasksByStatus, selectedTaskType, selectedDate]);
 
   const handleCardClick = (taskId: string) => {
     setSelectedTaskId(taskId);

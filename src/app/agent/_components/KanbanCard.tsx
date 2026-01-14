@@ -1,7 +1,7 @@
 "use client";
 
+import React, { useMemo } from 'react';
 import { Task } from '@/stores/useTaskStore';
-import { useMemo } from 'react';
 
 interface KanbanCardProps {
   task: Task;
@@ -9,7 +9,7 @@ interface KanbanCardProps {
   isReadOnly?: boolean;
 }
 
-export default function KanbanCard({ task, onClick, isReadOnly = false }: KanbanCardProps) {
+const KanbanCard = React.memo(function KanbanCard({ task, onClick, isReadOnly = false }: KanbanCardProps) {
   const isStarted = !!task.startTime;
   const isAssistanceRequired = task.status === 'ASSISTANCE_REQUIRED';
   const isResolved = task.status === 'RESOLVED';
@@ -136,4 +136,35 @@ export default function KanbanCard({ task, onClick, isReadOnly = false }: Kanban
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if task data actually changed (not just object reference)
+  // This prevents cards from flickering/disappearing during polling updates
+  // Returns true if props are equal (skip re-render), false if different (re-render)
+  const prevTask = prevProps.task;
+  const nextTask = nextProps.task;
+  
+  // If task ID changed, definitely re-render
+  if (prevTask.id !== nextTask.id) return false;
+  
+  // Compare task properties that matter for rendering
+  // If any important property changed, re-render
+  if (
+    prevTask.status !== nextTask.status ||
+    prevTask.startTime !== nextTask.startTime ||
+    prevTask.endTime !== nextTask.endTime ||
+    prevTask.managerResponse !== nextTask.managerResponse ||
+    prevTask.assistanceNotes !== nextTask.assistanceNotes ||
+    prevTask.disposition !== nextTask.disposition ||
+    prevTask.text !== nextTask.text ||
+    prevTask.brand !== nextTask.brand ||
+    prevTask.customerName !== nextTask.customerName ||
+    prevTask.phone !== nextTask.phone
+  ) {
+    return false; // Props changed, re-render
+  }
+  
+  // Props are equal, skip re-render (prevents flickering)
+  return true;
+});
+
+export default KanbanCard;
