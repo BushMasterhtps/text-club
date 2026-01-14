@@ -27,12 +27,16 @@ export default function KanbanBoard({
   isTestMode = false,
   onStatsUpdate,
 }: KanbanBoardProps) {
-  const { tasks, getTasksByStatus, sortOrder, mergeTasks } = useTaskStore();
+  const { tasks, getTasksByStatus, sortOrder } = useTaskStore();
   const getStoreState = useTaskStore.getState;
   
   // Create a version counter that increments when tasks are updated
   // This forces useMemo to recalculate when tasks change (not just size)
   const [tasksVersion, setTasksVersion] = useState(0);
+  
+  // Ref to track if we're currently updating completed tasks
+  // This prevents subscription from firing during completed-only updates
+  const isUpdatingCompletedRef = useRef(false);
   
   // Subscribe to store updates to trigger recalculation
   // Only update when ACTIVE tasks Map actually changes (ignore completed-only updates)
@@ -42,6 +46,11 @@ export default function KanbanBoard({
     let prevActiveTasksHash = '';
     
     const unsubscribe = useTaskStore.subscribe((state) => {
+      // Skip if we're in the middle of a completed-only update
+      if (isUpdatingCompletedRef.current) {
+        return;
+      }
+      
       // Only track ACTIVE tasks (not COMPLETED/RESOLVED) to prevent flickering
       // when completed tasks are fetched
       const activeTasks = Array.from(state.tasks.values())
@@ -144,8 +153,20 @@ export default function KanbanBoard({
               taskType: task.taskType || undefined,
             }));
             
-            // Merge completed tasks into store (they won't be overwritten by polling)
-            mergeTasks(completedTasks);
+            // Merge completed tasks silently (won't trigger active task re-renders)
+            // Use the dedicated method that only updates completed tasks
+            const { mergeCompletedTasks } = getStoreState();
+            
+            // Set flag to prevent subscription from firing during this update
+            isUpdatingCompletedRef.current = true;
+            try {
+              mergeCompletedTasks(completedTasks);
+            } finally {
+              // Reset flag after a brief delay to ensure store update completes
+              setTimeout(() => {
+                isUpdatingCompletedRef.current = false;
+              }, 0);
+            }
             
             // Verify they're actually in the store after merge
             const storeAfter = getStoreState().tasks;
@@ -177,7 +198,7 @@ export default function KanbanBoard({
     // Refresh completed tasks when date changes
     const interval = setInterval(fetchCompletedTasks, 30000); // Every 30 seconds
     return () => clearInterval(interval);
-  }, [agentEmail, selectedDate, isTestMode, mergeTasks]);
+  }, [agentEmail, selectedDate, isTestMode]);
 
   // Get tasks for each column
   // To Do: PENDING tasks OR IN_PROGRESS tasks without startTime (assigned but not started)

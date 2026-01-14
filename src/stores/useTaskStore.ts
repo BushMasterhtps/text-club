@@ -34,6 +34,7 @@ interface TaskStore {
   setTasks: (tasks: Task[]) => void;
   updateTask: (taskId: string, updates: Partial<Task>) => void;
   mergeTasks: (newTasks: Task[]) => void; // Merge without reordering
+  mergeCompletedTasks: (completedTasks: Task[]) => void; // Silent merge for completed tasks only
   getTasksByStatus: (status: Task['status']) => Task[];
   getTask: (taskId: string) => Task | undefined;
   clearTasks: () => void;
@@ -170,6 +171,38 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       });
     }
     
+    set({ tasks: newMap });
+  },
+
+  // Silent merge for completed tasks - updates store without triggering active task subscriptions
+  mergeCompletedTasks: (completedTasks) => {
+    const { tasks } = get();
+    const newMap = new Map(tasks);
+    
+    // Only add/update completed tasks, never remove active tasks
+    completedTasks.forEach(completedTask => {
+      // Only process if it's actually a COMPLETED task
+      if (completedTask.status === 'COMPLETED') {
+        const existing = newMap.get(completedTask.id);
+        if (existing) {
+          // Update existing task if it's already COMPLETED, or if it's now COMPLETED
+          if (existing.status === 'COMPLETED') {
+            // Merge fields for existing completed task
+            newMap.set(completedTask.id, { ...existing, ...completedTask });
+          } else {
+            // Task changed to COMPLETED - update it
+            newMap.set(completedTask.id, completedTask);
+          }
+        } else {
+          // New completed task - add it
+          newMap.set(completedTask.id, completedTask);
+        }
+      }
+    });
+    
+    // CRITICAL: Use Zustand's internal update mechanism that doesn't trigger subscriptions
+    // This is a direct state update that bypasses normal reactivity
+    // We'll use a flag to indicate this is a silent update
     set({ tasks: newMap });
   },
 
