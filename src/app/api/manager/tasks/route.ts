@@ -299,9 +299,7 @@ export async function GET(req: Request) {
                 : statusKey === "assistance_required"
                 ? ({ status: "ASSISTANCE_REQUIRED", taskType: taskType as any } as any)
                 : ({ status: { not: "COMPLETED" }, taskType: taskType as any } as any),
-            orderBy: statusKey === "assigned_not_started" 
-              ? [{ assignedToId: "asc" }, { createdAt: "desc" }]  // Prioritize assigned tasks
-              : { createdAt: "desc" },
+            orderBy: { createdAt: "desc" },
             take: 1,
             include: {
               assignedTo: { select: { id: true, name: true, email: true } },
