@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import ThemeToggle from '@/app/_components/ThemeToggle';
 import AgentOneOnOneNotes from '@/app/_components/AgentOneOnOneNotes';
@@ -2523,8 +2523,9 @@ export default function AgentPage() {
   );
 }
 
-// Task Card Component
-function TaskCard({ 
+// Task Card Component - Memoized to prevent unnecessary re-renders during polling
+// This preserves form state (disposition, subDisposition, etc.) when tasks array updates
+const TaskCard = React.memo(function TaskCard({
   task, 
   startedTasks, 
   onStart, 
@@ -3597,4 +3598,30 @@ function TaskCard({
       </div>
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if task data actually changed (not just object reference)
+  // This prevents form state from being lost during polling updates
+  // Returns true if props are equal (skip re-render), false if different (re-render)
+  const prevTask = prevProps.task;
+  const nextTask = nextProps.task;
+  
+  // If task ID changed, definitely re-render
+  if (prevTask.id !== nextTask.id) return false;
+  
+  // Compare task properties that matter for rendering
+  // If any important property changed, re-render
+  if (
+    prevTask.status !== nextTask.status ||
+    prevTask.managerResponse !== nextTask.managerResponse ||
+    prevTask.assistanceNotes !== nextTask.assistanceNotes ||
+    prevTask.disposition !== nextTask.disposition ||
+    prevTask.startTime !== nextTask.startTime ||
+    prevTask.endTime !== nextTask.endTime ||
+    prevProps.startedTasks.has(prevTask.id) !== nextProps.startedTasks.has(nextTask.id)
+  ) {
+    return false; // Props changed, re-render
+  }
+  
+  // Props are equal, skip re-render (preserves form state)
+  return true;
+});
