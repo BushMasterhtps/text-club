@@ -116,11 +116,23 @@ export async function GET(req: Request) {
                 { status: "PROMOTED" as any },
                 { tasks: { some: { 
                   status: "PENDING" as any,
-                  assignedToId: null,  // NEW: Only show unassigned tasks
+                  assignedToId: null,  // Only show unassigned tasks
                   taskType: taskType as any // Filter promoted tasks by task type
                 } } },
               ],
             },
+          ],
+        };
+      case "assigned_not_started":
+        // Show tasks that are assigned but not started (PENDING with assignedToId)
+        return {
+          AND: [
+            { status: "PROMOTED" as any },
+            { tasks: { some: { 
+              status: "PENDING" as any,
+              assignedToId: { not: null },  // Must be assigned
+              taskType: taskType as any
+            } } },
           ],
         };
       case "in_progress":
@@ -274,7 +286,9 @@ export async function GET(req: Request) {
           tasks: {
             where:
               statusKey === "pending"
-                ? ({ status: "PENDING", assignedToId: null } as any)  // NEW: Only unassigned pending tasks
+                ? ({ status: "PENDING", assignedToId: null } as any)  // Only unassigned pending tasks
+                : statusKey === "assigned_not_started"
+                ? ({ status: "PENDING", assignedToId: { not: null } } as any)  // Assigned but not started
                 : statusKey === "in_progress"
                 ? ({ status: "IN_PROGRESS" } as any)
                 : statusKey === "assistance_required"

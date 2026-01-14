@@ -57,9 +57,22 @@ export async function GET(request: NextRequest) {
     const totalCompleted = statusCountMap.get('COMPLETED') ?? 0;
     const inProgress = statusCountMap.get('IN_PROGRESS') ?? 0;
     const assistanceRequired = statusCountMap.get('ASSISTANCE_REQUIRED') ?? 0;
+    
+    // Get assigned but not started tasks (PENDING with assignedToId)
+    // These count as "Active Work" even though they're not IN_PROGRESS yet
+    const assignedNotStarted = await prisma.task.count({
+      where: {
+        taskType: "TEXT_CLUB",
+        status: "PENDING",
+        assignedToId: { not: null }  // Assigned but not started
+      }
+    });
+    
+    // Active Work = IN_PROGRESS + Assigned (Not Started)
+    const activeWork = inProgress + assignedNotStarted;
 
     const totalPending = pendingRawMessages + pendingTasks;
-    const totalAll = totalPending + spamReview + totalCompleted + inProgress + assistanceRequired;
+    const totalAll = totalPending + spamReview + totalCompleted + activeWork + assistanceRequired;
     const pctDone = totalAll > 0 ? Math.round((totalCompleted / totalAll) * 100) : 0;
 
     return NextResponse.json({
@@ -71,6 +84,8 @@ export async function GET(request: NextRequest) {
         completedToday,
         totalCompleted,
         inProgress,
+        assignedNotStarted,  // NEW: Assigned but not started count
+        activeWork,  // NEW: Total active work (IN_PROGRESS + Assigned Not Started)
         assistanceRequired,
         totalAll,
         pctDone

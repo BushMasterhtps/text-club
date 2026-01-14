@@ -676,7 +676,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
 
   // filters
   const [status, setStatus] = useState<
-    "pending" | "in_progress" | "completed" | "spam_review" | "assistance_required" | "resolved" | "all"
+    "pending" | "assigned_not_started" | "in_progress" | "completed" | "spam_review" | "assistance_required" | "resolved" | "all"
   >("pending");
   const [assignedTo, setAssignedTo] = useState<string>(""); // userId or name/email
   const [q, setQ] = useState("");
@@ -990,7 +990,15 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-sm text-white/60">{total} total</div>
+        <div className="text-sm text-white/60">
+          {total} total
+          {status === "pending" && (
+            <span className="text-white/40 ml-2">(Unassigned only)</span>
+          )}
+          {status === "assigned_not_started" && (
+            <span className="text-blue-300 ml-2">(Assigned but not started)</span>
+          )}
+        </div>
         <SmallButton onClick={() => fetchPage(page)} disabled={loading}>
           {loading ? "Loading..." : "🔄 Refresh"}
         </SmallButton>
@@ -1004,7 +1012,8 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
           className="border-none rounded-lg px-3 py-2 bg-white/10 text-white text-sm ring-1 ring-white/10 focus:outline-none"
           title="Status filter"
         >
-          <option value="pending">Pending</option>
+          <option value="pending">Pending (Unassigned)</option>
+          <option value="assigned_not_started">Assigned - Not Started</option>
           <option value="in_progress">In Progress</option>
           <option value="assistance_required">Assistance Required</option>
           <option value="spam_review">Spam Review</option>
@@ -1198,26 +1207,60 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
                     </Bubble>
                   </td>
                   <td className="px-3 py-3">
-                    <div className="text-xs text-white/70 mb-1">
-                      {assigneeName ? `Assigned to ${assigneeName}` : "Unassigned"}
-                    </div>
-                    <select
-                      className="rounded-lg px-2 py-1 bg-white/10 text-white text-xs ring-1 ring-white/10"
-                      defaultValue=""
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (!v) return;
-                        rowAssign(r.id, v);
-                        e.currentTarget.value = "";
-                      }}
-                    >
-                      <option value="" disabled>Assign to…</option>
-                      {agents.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name || a.email}
-                        </option>
-                      ))}
-                    </select>
+                    {assigneeName ? (
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge tone="default">{assigneeName}</Badge>
+                          {r.taskStatus === "PENDING" && (
+                            <span className="text-xs text-blue-300">⏸️ Not Started</span>
+                          )}
+                          {r.taskStatus === "IN_PROGRESS" && (
+                            <span className="text-xs text-orange-300">▶️ In Progress</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-white/50 mb-1">
+                          {r.taskStatus === "PENDING" ? "Waiting for agent to start" : "Agent is working on this"}
+                        </div>
+                        <select
+                          className="rounded-lg px-2 py-1 bg-white/10 text-white text-xs ring-1 ring-white/10"
+                          defaultValue=""
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (!v) return;
+                            rowAssign(r.id, v);
+                            e.currentTarget.value = "";
+                          }}
+                        >
+                          <option value="" disabled>Reassign to…</option>
+                          {agents.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name || a.email}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div>
+                        <Badge tone="warning" className="mb-1">⚠️ Unassigned</Badge>
+                        <select
+                          className="rounded-lg px-2 py-1 bg-white/10 text-white text-xs ring-1 ring-white/10"
+                          defaultValue=""
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (!v) return;
+                            rowAssign(r.id, v);
+                            e.currentTarget.value = "";
+                          }}
+                        >
+                          <option value="" disabled>Assign to…</option>
+                          {agents.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name || a.email}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-3">{fmtDate(r.createdAt)}</td>
                   <td className="px-3 py-3">
@@ -3642,6 +3685,8 @@ function ManagerPageContent() {
   const [completed, setCompleted] = useState<number | null>(null);
   const [completedToday, setCompletedToday] = useState<number | null>(null);
   const [inProgress, setInProgress] = useState<number | null>(null);
+  const [assignedNotStarted, setAssignedNotStarted] = useState<number | null>(null);  // NEW
+  const [activeWork, setActiveWork] = useState<number | null>(null);  // NEW: Total active work
   const [assistanceRequired, setAssistanceRequired] = useState<number | null>(null);
   const [pctDone, setPctDone] = useState<number | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
@@ -3693,6 +3738,8 @@ function ManagerPageContent() {
           setCompleted(metrics.totalCompleted);
           setCompletedToday(metrics.completedToday);
           setInProgress(metrics.inProgress);
+          setAssignedNotStarted(metrics.assignedNotStarted ?? null);  // NEW
+          setActiveWork(metrics.activeWork ?? metrics.inProgress ?? null);  // NEW: Use activeWork if available, fallback to inProgress
           setAssistanceRequired(metrics.assistanceRequired);
           setPctDone(metrics.pctDone);
         }
@@ -4041,9 +4088,9 @@ function ManagerPageContent() {
 
             <Card className="p-4">
               <div className="text-sm text-white/60">Active Work</div>
-              <div className="text-3xl font-bold mt-1">{inProgress ?? "…"}</div>
+              <div className="text-3xl font-bold mt-1">{activeWork ?? inProgress ?? "…"}</div>
               <div className="text-xs text-white/50 mt-1">
-                In Progress • {assistanceRequired ?? "…"} Need Help
+                {inProgress ?? 0} In Progress • {assignedNotStarted ?? 0} Assigned (Not Started) • {assistanceRequired ?? "…"} Need Help
               </div>
             </Card>
           </section>
