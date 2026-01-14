@@ -1150,6 +1150,8 @@ function YotpoPageContent() {
   // Overview data
   const [overviewData, setOverviewData] = useState({
     pendingCount: 0,
+    assignedNotStartedCount: 0,
+    activeWorkCount: 0,
     inProgressCount: 0,
     completedTodayCount: 0,
     totalCompletedCount: 0,
