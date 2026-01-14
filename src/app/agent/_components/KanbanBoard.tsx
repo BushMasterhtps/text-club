@@ -35,23 +35,30 @@ export default function KanbanBoard({
   const [tasksVersion, setTasksVersion] = useState(0);
   
   // Subscribe to store updates to trigger recalculation
-  // Only update when tasks Map actually changes (not on every state update)
+  // Only update when ACTIVE tasks Map actually changes (ignore completed-only updates)
   useEffect(() => {
-    let prevTasksSize = useTaskStore.getState().tasks.size;
-    let prevTasksHash = '';
+    let prevActiveTasksSize = Array.from(useTaskStore.getState().tasks.values())
+      .filter(t => t.status !== 'COMPLETED' && t.status !== 'RESOLVED').length;
+    let prevActiveTasksHash = '';
     
     const unsubscribe = useTaskStore.subscribe((state) => {
-      const currentTasksSize = state.tasks.size;
-      // Create a simple hash of task IDs and statuses to detect actual changes
-      const currentTasksHash = Array.from(state.tasks.entries())
-        .map(([id, task]) => `${id}:${task.status}:${task.startTime || ''}`)
+      // Only track ACTIVE tasks (not COMPLETED/RESOLVED) to prevent flickering
+      // when completed tasks are fetched
+      const activeTasks = Array.from(state.tasks.values())
+        .filter(t => t.status !== 'COMPLETED' && t.status !== 'RESOLVED');
+      
+      const currentActiveTasksSize = activeTasks.length;
+      // Create a hash of active task IDs and statuses to detect actual changes
+      const currentActiveTasksHash = activeTasks
+        .map((task) => `${task.id}:${task.status}:${task.startTime || ''}`)
         .sort()
         .join('|');
       
-      // Only increment if tasks actually changed (size or content)
-      if (currentTasksSize !== prevTasksSize || currentTasksHash !== prevTasksHash) {
-        prevTasksSize = currentTasksSize;
-        prevTasksHash = currentTasksHash;
+      // Only increment if ACTIVE tasks actually changed (size or content)
+      // This prevents re-renders when only completed tasks are updated
+      if (currentActiveTasksSize !== prevActiveTasksSize || currentActiveTasksHash !== prevActiveTasksHash) {
+        prevActiveTasksSize = currentActiveTasksSize;
+        prevActiveTasksHash = currentActiveTasksHash;
         setTasksVersion(prev => prev + 1);
       }
     });

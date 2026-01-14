@@ -77,6 +77,12 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     // vs a "main tasks" merge (active tasks from polling)
     const isCompletedOnlyMerge = newTasks.length > 0 && newTasks.every(t => t.status === 'COMPLETED');
     
+    // CRITICAL: For completed-only merges, preserve ALL active tasks before merging
+    // This prevents any temporary clearing during the merge operation
+    const activeTasksBeforeMerge = isCompletedOnlyMerge 
+      ? Array.from(newMap.values()).filter(t => t.status !== 'COMPLETED' && t.status !== 'RESOLVED')
+      : [];
+    
     // Track COMPLETED tasks before merge (for debugging)
     const completedBefore = Array.from(newMap.values()).filter(t => t.status === 'COMPLETED' || t.status === 'RESOLVED');
     
@@ -123,6 +129,17 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       toRemove.forEach(id => newMap.delete(id));
     }
     // If it's a completed-only merge, we don't remove anything - just add/update completed tasks
+    
+    // CRITICAL: For completed-only merges, ensure all active tasks are still present
+    // This is a safety check to prevent any accidental removal during merge
+    if (isCompletedOnlyMerge && activeTasksBeforeMerge.length > 0) {
+      activeTasksBeforeMerge.forEach(activeTask => {
+        if (!newMap.has(activeTask.id)) {
+          console.warn('🔄 Restoring active task that was lost during completed-only merge:', activeTask.id);
+          newMap.set(activeTask.id, activeTask);
+        }
+      });
+    }
     
     // Debug: Verify COMPLETED tasks are preserved
     const completedAfter = Array.from(newMap.values()).filter(t => t.status === 'COMPLETED' || t.status === 'RESOLVED');
