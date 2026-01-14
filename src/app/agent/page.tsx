@@ -68,10 +68,11 @@ function SmallButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
 }
 
 function PrimaryButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const { className = "", ...rest } = props;
+  const { className = "", type = "button", ...rest } = props;
   return (
     <button
       {...rest}
+      type={type}
       className={`px-3 py-1.5 rounded-md text-sm font-semibold bg-gradient-to-r from-sky-500/90 to-indigo-500/90 hover:from-sky-500 hover:to-indigo-500 text-white ring-1 ring-sky-400/40 disabled:opacity-50 ${className}`}
     />
   );
@@ -849,13 +850,8 @@ export default function AgentPage() {
         }
         // Update stats to reflect the change (but don't reload tasks to avoid page refresh)
         await loadStats();
-        // Only merge tasks in background, don't reload (prevents page refresh)
-        if (viewMode === 'kanban') {
-          // Background merge will happen via polling
-        } else {
-          // For list view, still need to reload
-          await loadTasks();
-        }
+        // Don't reload tasks to prevent page refresh - rely on polling instead
+        // This keeps the UI smooth and prevents modals/details from closing
       } else {
         // Log error for debugging
         const errorData = await res.json().catch(() => ({}));

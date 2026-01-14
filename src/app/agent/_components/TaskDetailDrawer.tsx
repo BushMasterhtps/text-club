@@ -1,7 +1,7 @@
 "use client";
 
 import { Task } from '@/stores/useTaskStore';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTaskStore } from '@/stores/useTaskStore';
 import { Toast } from '@/app/_components/Toast';
 
@@ -35,17 +35,23 @@ export default function TaskDetailDrawer({
   const [orderAmount, setOrderAmount] = useState('');
   const [dispositionNote, setDispositionNote] = useState('');
 
-  // Reset form fields when task changes or drawer opens
+  // Reset form fields when task ID changes (not on every render/polling update)
+  // This prevents form fields from resetting when task data updates during polling
+  const prevTaskIdRef = useRef<string | null>(null);
   useEffect(() => {
-    setDisposition(task.disposition || '');
-    setSubDisposition('');
-    setSfCaseNumber('');
-    setOrderAmount('');
-    setDispositionNote('');
-    setAssistanceMessage('');
-    setShowAssistanceInput(false);
-    setToast(null);
-  }, [task.id, isOpen]);
+    // Only reset if task ID actually changed
+    if (prevTaskIdRef.current !== task.id) {
+      setDisposition(task.disposition || '');
+      setSubDisposition('');
+      setSfCaseNumber('');
+      setOrderAmount('');
+      setDispositionNote('');
+      setAssistanceMessage('');
+      setShowAssistanceInput(false);
+      setToast(null);
+      prevTaskIdRef.current = task.id;
+    }
+  }, [task.id, task.disposition]);
 
   const isStarted = !!task.startTime;
   const isAssistanceRequired = task.status === 'ASSISTANCE_REQUIRED';
@@ -1087,6 +1093,7 @@ export default function TaskDetailDrawer({
                   )}
 
                   <button
+                    type="button"
                     onClick={handleCompleteTask}
                     disabled={isProcessing || (() => {
                       if (!disposition) return true;
