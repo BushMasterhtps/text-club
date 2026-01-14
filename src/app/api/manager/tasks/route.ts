@@ -344,26 +344,31 @@ export async function GET(req: Request) {
   }
 
   /* ---------- normalize for UI ---------- */
-  // For "assigned_not_started", filter out any rows that don't have a matching task
+  // For "assigned_not_started", filter out any rows that don't have a matching assigned task
   // (This can happen if the RawMessage matches but the task doesn't match the include filter)
   const filteredRows = statusKey === "assigned_not_started" 
-    ? rows.filter(r => r.tasks && r.tasks.length > 0 && r.tasks[0].assignedToId !== null)
+    ? rows.filter(r => {
+        const t = r.tasks?.[0];
+        const hasAssignedTask = t && t.assignedToId !== null && t.assignedTo !== null;
+        if (!hasAssignedTask) {
+          console.warn("[Manager Tasks API] Filtered out row without assigned task:", {
+            rawMessageId: r.id,
+            rawStatus: r.status,
+            taskCount: r.tasks?.length,
+            task: t ? { 
+              id: t.id, 
+              status: t.status, 
+              assignedToId: t.assignedToId,
+              hasAssignedTo: !!t.assignedTo
+            } : null
+          });
+        }
+        return hasAssignedTask;
+      })
     : rows;
   
   const items = filteredRows.map((r) => {
     const t = r.tasks?.[0] ?? null;
-    
-    // Debug logging for assigned_not_started to verify task data
-    if (statusKey === "assigned_not_started") {
-      if (!t || !t.assignedToId) {
-        console.warn("[Manager Tasks API] Filtered out row without assigned task:", {
-          rawMessageId: r.id,
-          rawStatus: r.status,
-          taskCount: r.tasks?.length,
-          task: t ? { id: t.id, status: t.status, assignedToId: t.assignedToId } : null
-        });
-      }
-    }
     
     return {
       id: r.id,
@@ -376,15 +381,18 @@ export async function GET(req: Request) {
       rawStatus: r.status,
       taskId: t?.id ?? null,
       assignedToId: t?.assignedToId ?? null,
-      assignedTo: t?.assignedTo ?? null,
+      assignedTo: t?.assignedTo ?? null,  // This must be populated for assigned_not_started
       taskStatus: t?.status ?? null,
     };
   });
+  
+  // Update total count for assigned_not_started to reflect filtered items
+  const finalTotal = statusKey === "assigned_not_started" ? items.length : total;
 
   return NextResponse.json({
     success: true,
     items,
-    total,          // <-- real DB total (not items.length)
+    total: finalTotal ?? total,  // Use filtered total for assigned_not_started, otherwise use DB total
     pageSize: take,
     offset: skip,
   });
