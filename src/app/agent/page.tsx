@@ -829,9 +829,11 @@ export default function AgentPage() {
       // Just update local state
       setStartedTasks(prev => new Set(prev).add(taskId));
       if (viewMode === 'kanban') {
-        const task = tasks.find(t => t.id === taskId);
+        // Get task from store, not local state
+        const store = useTaskStore.getState();
+        const task = store.getTask(taskId);
         if (task) {
-          useTaskStore.getState().updateTask(taskId, {
+          store.updateTask(taskId, {
             status: 'IN_PROGRESS',
             startTime: new Date().toISOString(),
           });
