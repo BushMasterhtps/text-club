@@ -16,11 +16,21 @@ export async function GET(request: NextRequest) {
       taskType: 'EMAIL_REQUESTS'
     };
 
-    if (status && status !== 'all') {
+    // Handle "assigned_not_started" status (PENDING with assignedToId)
+    if (status === 'assigned_not_started') {
+      where.status = 'PENDING';
+      where.assignedToId = { not: null };  // Must be assigned
+    } else if (status === 'pending') {
+      // For "pending", only show unassigned tasks
+      where.status = 'PENDING';
+      where.assignedToId = null;  // Only unassigned
+    } else if (status && status !== 'all') {
       where.status = status;
     }
 
-    if (assignedTo) {
+    // If assignedTo is specified and status is not "assigned_not_started" or "pending", apply it
+    // (For "assigned_not_started" and "pending", the assignedToId is already set above)
+    if (assignedTo && status !== 'assigned_not_started' && status !== 'pending') {
       where.assignedToId = assignedTo;
     }
 

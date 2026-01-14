@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 
 type StatusKey =
   | "pending"
+  | "assigned_not_started"  // NEW: Assigned but not started (PENDING with assignedToId)
   | "in_progress"
   | "assistance_required"
   | "completed"
@@ -13,6 +14,7 @@ function parseStatus(s: string | null): StatusKey {
   const v = (s ?? "").toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_") as StatusKey;
   switch (v) {
     case "pending":
+    case "assigned_not_started":  // NEW: Handle assigned_not_started
     case "in_progress":
     case "assistance_required":
     case "completed":
@@ -60,7 +62,17 @@ export async function GET(req: Request) {
   const statusWhere: Prisma.TaskWhereInput | undefined = (() => {
     switch (statusKey) {
       case "pending":
-        return { status: "PENDING" };
+        // For "pending", only show unassigned tasks
+        return { 
+          status: "PENDING",
+          assignedToId: null  // Only unassigned tasks
+        };
+      case "assigned_not_started":
+        // For "assigned_not_started", show PENDING tasks that are assigned
+        return { 
+          status: "PENDING",
+          assignedToId: { not: null }  // Must be assigned
+        };
       case "in_progress":
         return { status: "IN_PROGRESS" };
       case "assistance_required":

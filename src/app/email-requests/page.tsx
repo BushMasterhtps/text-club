@@ -1329,8 +1329,15 @@ function PendingEmailRequestTasksSection() {
   const loadTasks = async () => {
     setLoading(true);
     try {
+      // Convert UI status values to API format (lowercase with underscores)
+      const apiStatus = statusFilter === "assigned_not_started" ? "assigned_not_started"
+        : statusFilter === "PENDING" ? "pending"
+        : statusFilter === "IN_PROGRESS" ? "in_progress"
+        : statusFilter === "COMPLETED" ? "completed"
+        : statusFilter.toLowerCase();
+      
       const params = new URLSearchParams({
-        status: statusFilter,
+        status: apiStatus,
         take: itemsPerPage.toString(),
         skip: ((currentPage - 1) * itemsPerPage).toString(),
         sortBy: 'createdAt',
@@ -1579,7 +1586,8 @@ function PendingEmailRequestTasksSection() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="PENDING">Pending</option>
+            <option value="PENDING">Pending (Unassigned)</option>
+            <option value="assigned_not_started">Assigned - Not Started</option>
             <option value="IN_PROGRESS">In Progress</option>
             <option value="COMPLETED">Completed</option>
             <option value="all">All</option>

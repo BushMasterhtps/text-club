@@ -27,19 +27,30 @@ export async function GET(request: NextRequest) {
       taskType: 'YOTPO'
     };
 
-    // Status filter
-    if (statusFilter && statusFilter !== 'all') {
+    // Status filter - handle "assigned_not_started" specially
+    if (statusFilter === 'assigned_not_started') {
+      // For "assigned_not_started", show PENDING tasks that are assigned
+      where.status = 'PENDING';
+      where.assignedToId = { not: null };  // Must be assigned
+    } else if (statusFilter === 'pending') {
+      // For "pending", only show unassigned tasks
+      where.status = 'PENDING';
+      where.assignedToId = null;  // Only unassigned
+    } else if (statusFilter && statusFilter !== 'all') {
       where.status = statusFilter.toUpperCase();
     }
 
     // Assigned filter (priority: specific agent > general filter)
-    if (assignedToId) {
-      // Filter by specific agent ID
-      where.assignedToId = assignedToId;
-    } else if (assignedFilter === 'unassigned') {
-      where.assignedToId = null;
-    } else if (assignedFilter === 'assigned') {
-      where.assignedToId = { not: null };
+    // Only apply if status is not "assigned_not_started" or "pending" (already handled above)
+    if (statusFilter !== 'assigned_not_started' && statusFilter !== 'pending') {
+      if (assignedToId) {
+        // Filter by specific agent ID
+        where.assignedToId = assignedToId;
+      } else if (assignedFilter === 'unassigned') {
+        where.assignedToId = null;
+      } else if (assignedFilter === 'assigned') {
+        where.assignedToId = { not: null };
+      }
     }
 
     // Search filter (email, customer name, or SF case number)

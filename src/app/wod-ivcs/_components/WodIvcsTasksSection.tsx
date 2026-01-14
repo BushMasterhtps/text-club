@@ -80,7 +80,15 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set("status", statusFilter);
+      // Convert UI status values to API format (lowercase with underscores)
+      const apiStatus = statusFilter === "assigned_not_started" ? "assigned_not_started" 
+        : statusFilter === "PENDING" ? "pending"
+        : statusFilter === "IN_PROGRESS" ? "in_progress"
+        : statusFilter === "ASSISTANCE_REQUIRED" ? "assistance_required"
+        : statusFilter === "COMPLETED" ? "completed"
+        : statusFilter === "ALL" ? "all"
+        : statusFilter.toLowerCase();
+      params.set("status", apiStatus);
       params.set("take", "50");
       params.set("skip", String((page - 1) * 50));
       params.set("sortBy", sortBy);
@@ -428,7 +436,8 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
             onChange={(e) => setStatusFilter(e.target.value)}
             className="bg-white/10 border border-white/20 rounded px-3 py-2 text-sm text-white"
           >
-            <option value="PENDING">Pending</option>
+            <option value="PENDING">Pending (Unassigned)</option>
+            <option value="assigned_not_started">Assigned - Not Started</option>
             <option value="IN_PROGRESS">In Progress</option>
             <option value="ASSISTANCE_REQUIRED">Assistance Required</option>
             <option value="COMPLETED">Completed</option>

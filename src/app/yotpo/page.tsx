@@ -544,7 +544,8 @@ function PendingTasksSection() {
             style={{ colorScheme: 'dark' }}
           >
             <option value="all">All</option>
-            <option value="pending">Pending</option>
+            <option value="pending">Pending (Unassigned)</option>
+            <option value="assigned_not_started">Assigned - Not Started</option>
             <option value="in_progress">In Progress</option>
             <option value="completed">Completed</option>
           </select>
