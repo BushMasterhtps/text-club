@@ -264,17 +264,108 @@ export async function GET(req: Request) {
   let total = 0;
   let rows: any[] = [];
   
-  // Debug logging for pending status queries
-  if (statusKey === "pending") {
-    console.log("[Manager Tasks API] Pending query:", {
-      taskType,
-      where: JSON.stringify(where, null, 2),
-      skip,
-      take
-    });
-  }
-  
   try {
+    // Special handling for "assigned_not_started" - query Tasks directly for accuracy
+    if (statusKey === "assigned_not_started") {
+      // Build task where clause
+      const taskWhere: Prisma.TaskWhereInput = {
+        status: "PENDING",
+        assignedToId: { not: null },
+        taskType: taskType as any,
+      };
+      
+      // Add search filter if provided
+      if (q) {
+        taskWhere.OR = [
+          { brand: { contains: q } },
+          { text: { contains: q } },
+          { email: { contains: q } },
+          { phone: { contains: q } },
+        ];
+      }
+      
+      // Add assigned filter if provided
+      if (assignedLower !== "" && assignedLower !== "any") {
+        if (assignedLower === "unassigned") {
+          // This shouldn't happen for assigned_not_started, but handle it
+          taskWhere.assignedToId = null;
+        } else {
+          const userWhere: Prisma.UserWhereInput = looksLikeId(assignedRaw)
+            ? { id: assignedRaw }
+            : { OR: [{ name: assignedRaw }, { email: assignedRaw }] };
+          taskWhere.assignedTo = userWhere;
+        }
+      }
+      
+      // Query tasks directly
+      const [taskTotal, tasks] = await Promise.all([
+        prisma.task.count({ where: taskWhere }),
+        prisma.task.findMany({
+          where: taskWhere,
+          orderBy: { createdAt: sortOrder === "asc" ? "asc" : "desc" },
+          skip,
+          take,
+          include: {
+            assignedTo: { select: { id: true, name: true, email: true } },
+            rawMessage: {
+              select: {
+                id: true,
+                brand: true,
+                text: true,
+                email: true,
+                phone: true,
+                createdAt: true,
+                receivedAt: true,
+                status: true,
+              },
+            },
+          },
+        }),
+      ]);
+      
+      // Transform tasks to match RawMessage format for consistency
+      rows = tasks.map(t => ({
+        id: t.rawMessage?.id || t.id, // Use rawMessage ID if available, fallback to task ID
+        brand: t.brand || t.rawMessage?.brand || null,
+        text: t.text || t.rawMessage?.text || null,
+        email: t.email || t.rawMessage?.email || null,
+        phone: t.phone || t.rawMessage?.phone || null,
+        createdAt: t.createdAt,
+        receivedAt: t.rawMessage?.receivedAt || t.createdAt,
+        status: t.rawMessage?.status || "PROMOTED",
+        tasks: [{
+          id: t.id,
+          status: t.status,
+          assignedToId: t.assignedToId,
+          assignedTo: t.assignedTo,
+          taskType: t.taskType,
+        }],
+      }));
+      
+      total = taskTotal;
+      
+      console.log("[Manager Tasks API] assigned_not_started direct query:", {
+        taskTotal,
+        rowsReturned: rows.length,
+        sampleRow: rows[0] ? {
+          id: rows[0].id,
+          hasTask: !!rows[0].tasks?.[0],
+          assignedToId: rows[0].tasks?.[0]?.assignedToId,
+          hasAssignedTo: !!rows[0].tasks?.[0]?.assignedTo
+        } : null
+      });
+    } else {
+      // Original RawMessage query for other statuses
+    // Debug logging for pending status queries
+    if (statusKey === "pending") {
+      console.log("[Manager Tasks API] Pending query:", {
+        taskType,
+        where: JSON.stringify(where, null, 2),
+        skip,
+        take
+      });
+    }
+    
     [total, rows] = await Promise.all([
       prisma.rawMessage.count({ where }),
       prisma.rawMessage.findMany({
@@ -288,12 +379,6 @@ export async function GET(req: Request) {
             where:
               statusKey === "pending"
                 ? ({ status: "PENDING", assignedToId: null, taskType: taskType as any } as any)  // Only unassigned pending tasks
-                : statusKey === "assigned_not_started"
-                ? ({ 
-                    status: "PENDING", 
-                    assignedToId: { not: null },  // CRITICAL: Must be assigned
-                    taskType: taskType as any 
-                  } as any)  // Assigned but not started
                 : statusKey === "in_progress"
                 ? ({ status: "IN_PROGRESS", taskType: taskType as any } as any)
                 : statusKey === "assistance_required"
@@ -309,7 +394,8 @@ export async function GET(req: Request) {
       }),
     ]);
     
-    if (statusKey === "pending" || statusKey === "assigned_not_started") {
+    // Logging for pending (assigned_not_started is logged above)
+    if (statusKey === "pending") {
       console.log("[Manager Tasks API] Query result:", {
         statusKey,
         total,
@@ -327,6 +413,7 @@ export async function GET(req: Request) {
         } : null,
         where: JSON.stringify(where, null, 2)
       });
+    }
     }
   } catch (error: any) {
     console.error("[Manager Tasks API] Error querying tasks:", error);
@@ -348,71 +435,9 @@ export async function GET(req: Request) {
   }
 
   /* ---------- normalize for UI ---------- */
-  // For "assigned_not_started", filter out any rows that don't have a matching assigned task
-  // (This can happen if the RawMessage matches but the task doesn't match the include filter)
-  let filteredRows = rows;
-  if (statusKey === "assigned_not_started") {
-    try {
-      filteredRows = rows.filter(r => {
-        // Must be PROMOTED (not READY)
-        if (r.status !== "PROMOTED") {
-          console.warn("[Manager Tasks API] Filtered out non-PROMOTED row:", {
-            rawMessageId: r.id,
-            rawStatus: r.status
-          });
-          return false;
-        }
-        
-        // Must have at least one task
-        if (!r.tasks || r.tasks.length === 0) {
-          console.warn("[Manager Tasks API] Filtered out row with no tasks:", {
-            rawMessageId: r.id,
-            rawStatus: r.status
-          });
-          return false;
-        }
-        
-        // Get the first task (should match our include filter)
-        const t = r.tasks[0];
-        
-        // Task must be PENDING, assigned, and match task type
-        const hasAssignedTask = t && 
-          t.status === "PENDING" && 
-          t.assignedToId !== null && 
-          t.assignedTo !== null &&
-          t.taskType === taskType;
-        
-        if (!hasAssignedTask) {
-          console.warn("[Manager Tasks API] Filtered out row without matching assigned task:", {
-            rawMessageId: r.id,
-            rawStatus: r.status,
-            taskCount: r.tasks?.length,
-            task: t ? { 
-              id: t.id, 
-              status: t.status, 
-              assignedToId: t.assignedToId,
-              taskType: t.taskType,
-              hasAssignedTo: !!t.assignedTo
-            } : null,
-            expectedTaskType: taskType
-          });
-        }
-        return hasAssignedTask;
-      });
-      
-      console.log("[Manager Tasks API] assigned_not_started filtering:", {
-        originalRows: rows.length,
-        filteredRows: filteredRows.length,
-        removed: rows.length - filteredRows.length
-      });
-    } catch (filterError: any) {
-      console.error("[Manager Tasks API] Error filtering rows:", filterError);
-      // Fallback to original rows if filtering fails
-      filteredRows = rows;
-    }
-  }
-  
-  const items = filteredRows.map((r) => {
+  // For "assigned_not_started", we already queried Tasks directly, so no filtering needed
+  // For other statuses, use the rows as-is
+  const items = rows.map((r) => {
     const t = r.tasks?.[0] ?? null;
     
     return {
