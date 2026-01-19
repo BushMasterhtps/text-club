@@ -22,11 +22,14 @@ export async function GET(request: NextRequest) {
     const take = exportCsv ? undefined : parseInt(searchParams.get('take') || '10000', 10); // Large limit for UI to get all tasks
     const skip = exportCsv ? undefined : parseInt(searchParams.get('skip') || '0', 10);
     
-    // Build where clause - Include ALL completed tasks, including unassigning dispositions
-    // These dispositions count as completed work for agents even if they move to another queue
+    // Build where clause - Only include tasks that have fully completed their journey
+    // Tasks must be in the "Completed" queue (holdsStatus: 'Completed') to be considered resolved
+    // This ensures we only report tasks that have finished their entire workflow, not tasks
+    // that were marked as completed but are still in intermediate queues (e.g., "Escalated Call 4+ Day")
     const where: any = {
       taskType: 'HOLDS',
-      status: 'COMPLETED', // Use status instead of holdsStatus to include all completions
+      status: 'COMPLETED',
+      holdsStatus: 'Completed', // CRITICAL: Only include tasks in the final "Completed" queue
       disposition: { not: null }
     };
     
