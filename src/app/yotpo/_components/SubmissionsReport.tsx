@@ -13,7 +13,13 @@ const SUBMITTERS = [
   "Pierina Bardales",
   "Vanessa Medina",
   "Viviana Alvarez",
-  "Silas Little"
+  "Silas Little",
+  "Tahairra Piatt",
+  "Hannah Scripture",
+  "Ana Mora",
+  "Rachel Yanez",
+  "Laliyah Shabazz",
+  "Izzy Maire"
 ];
 
 export default function SubmissionsReport() {

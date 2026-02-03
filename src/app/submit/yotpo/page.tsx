@@ -12,7 +12,12 @@ const SUBMITTERS = [
   "Vanessa Medina",
   "Viviana Alvarez",
   "Silas Little",
-  "Tahairra Piatt"
+  "Tahairra Piatt",
+  "Hannah Scripture",
+  "Ana Mora",
+  "Rachel Yanez",
+  "Laliyah Shabazz",
+  "Izzy Maire"
 ];
 
 const ISSUE_TOPICS = [
