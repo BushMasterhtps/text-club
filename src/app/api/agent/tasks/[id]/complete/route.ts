@@ -98,6 +98,7 @@ export async function POST(
         "Refunded & Closed - Customer Requested Cancelation",
         "Refunded & Closed - No Contact",
         "Refunded & Closed - Comma Issue",
+        "Refunded & Closed - Out of Stock",
         "Resolved - fixed format / fixed address",
         "Resolved - Customer Clarified",
         "Resolved - FRT Released",

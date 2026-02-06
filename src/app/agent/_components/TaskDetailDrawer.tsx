@@ -881,6 +881,7 @@ export default function TaskDetailDrawer({
                             <option value="Duplicate">🔄 Duplicate</option>
                             <option value="Refunded & Closed">💰 Refunded & Closed</option>
                             <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
+                            <option value="Refunded & Closed - Out of Stock">📦 Refunded & Closed - Out of Stock</option>
                             <option value="Resolved - fixed format / fixed address">✅ Resolved - fixed format / fixed address</option>
                             <option value="Resolved - other">✅ Resolved - other (requires note)</option>
                             <option value="International Order - Unable to Call/ Sent Email">🌍 International Order - Unable to Call/ Sent Email (→ Customer Contact)</option>
@@ -893,6 +894,7 @@ export default function TaskDetailDrawer({
                             <option value="Refunded & Closed - No Contact">💰 Refunded & Closed - No Contact</option>
                             <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
                             <option value="Refunded & Closed - Comma Issue">🔧 Refunded & Closed - Comma Issue</option>
+                            <option value="Refunded & Closed - Out of Stock">📦 Refunded & Closed - Out of Stock</option>
                             <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
                             <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
                             <option value="Resolved - Other">✅ Resolved - Other (requires note)</option>
@@ -903,8 +905,9 @@ export default function TaskDetailDrawer({
                             <option value="Unable to Resolve">⏭️ Unable to Resolve (→ Escalation) (requires note)</option>
                             <option value="International Order - Unable to Call / Sent Email">🌍 International Order - Unable to Call / Sent Email (→ Customer Contact)</option>
                             <option value="Refunded & Closed - Customer Requested Cancelation">❌ Refunded & Closed - Customer Requested Cancelation</option>
-                            <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
                             <option value="Refunded & Closed - No Contact">💰 Refunded & Closed - No Contact</option>
+                            <option value="Refunded & Closed - Out of Stock">📦 Refunded & Closed - Out of Stock</option>
+                            <option value="Resolved - Customer Clarified">✅ Resolved - Customer Clarified</option>
                             <option value="Resolved - FRT Released">📦 Resolved - FRT Released</option>
                             <option value="Resolved - Other">✅ Resolved - Other (requires note)</option>
                             <option value="Closed & Refunded - Fraud/Reseller">🔒 Closed & Refunded - Fraud/Reseller</option>

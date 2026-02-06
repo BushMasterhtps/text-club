@@ -55,6 +55,11 @@ const COMPLETION_DISPOSITIONS: DispositionConfig[] = [
     impact: "lost",
     description: "Task completed - comma issue resolved, refund issued (lost money)"
   },
+  {
+    disposition: "Refunded & Closed - Out of Stock",
+    impact: "lost",
+    description: "Task completed - out of stock, refund issued and order closed (lost money)"
+  },
   // POSITIVE (Saved Money) - Order proceeds, revenue maintained
   {
     disposition: "Resolved - fixed format / fixed address",
