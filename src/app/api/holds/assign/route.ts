@@ -203,20 +203,20 @@ export async function POST(request: NextRequest) {
     // Assign tasks
     const tasksToUpdate = taskIds.slice(0, tasksToAssign);
     
-    // First, check which tasks need status changes
-    // - COMPLETED tasks need to be set back to PENDING
-    // - ASSISTANCE_REQUIRED tasks need to be set back to PENDING
+    // First, check which tasks need status changes before assignment
+    // - COMPLETED, ASSISTANCE_REQUIRED, and RESOLVED tasks need to be set back to PENDING
+    //   (RESOLVED can occur after manager response; they were excluded and caused "assigned 0 tasks")
     // - IN_PROGRESS tasks can be reassigned directly
     const tasksToReassign = await prisma.task.findMany({
       where: {
         id: { in: tasksToUpdate },
         taskType: 'HOLDS',
-        status: { in: ['COMPLETED', 'ASSISTANCE_REQUIRED'] },
+        status: { in: ['COMPLETED', 'ASSISTANCE_REQUIRED', 'RESOLVED'] },
       },
       select: { id: true, holdsStatus: true }
     });
-    
-    // Set COMPLETED and ASSISTANCE_REQUIRED tasks back to PENDING for reassignment
+
+    // Set COMPLETED, ASSISTANCE_REQUIRED, and RESOLVED back to PENDING so the assign update matches
     if (tasksToReassign.length > 0) {
       await prisma.task.updateMany({
         where: {
@@ -227,15 +227,14 @@ export async function POST(request: NextRequest) {
         },
       });
     }
-    
+
     // Now assign all tasks - allow reassignment of already-assigned tasks
-    // This handles PENDING, IN_PROGRESS, and ASSISTANCE_REQUIRED tasks, and allows reassignment
+    // Include RESOLVED so any task that wasn't in the previous batch (e.g. race) can still be assigned
     const updateResult = await prisma.task.updateMany({
       where: {
         id: { in: tasksToUpdate },
         taskType: 'HOLDS',
-        status: { in: ['PENDING', 'IN_PROGRESS', 'ASSISTANCE_REQUIRED'] }, // Allow PENDING, IN_PROGRESS, and ASSISTANCE_REQUIRED
-        // Removed assignedToId: null check to allow reassignment
+        status: { in: ['PENDING', 'IN_PROGRESS', 'ASSISTANCE_REQUIRED', 'RESOLVED'] },
       },
       data: {
         assignedToId: agentId,
