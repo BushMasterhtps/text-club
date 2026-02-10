@@ -36,14 +36,16 @@ export async function POST(
     }
 
     // Find the task and verify it's assigned to this user
-    // Allow completing tasks that are IN_PROGRESS, ASSISTANCE_REQUIRED, or RESOLVED (after manager response)
+    // Allow completing tasks that are IN_PROGRESS, ASSISTANCE_REQUIRED, or RESOLVED (after manager response).
+    // For Holds only: also allow PENDING so agents can complete after reassign without having to click Start again.
     const task = await prisma.task.findFirst({
       where: {
         id,
         assignedToId: user.id,
-        status: {
-          in: ["IN_PROGRESS", "ASSISTANCE_REQUIRED", "RESOLVED"]
-        }
+        OR: [
+          { status: { in: ["IN_PROGRESS", "ASSISTANCE_REQUIRED", "RESOLVED"] } },
+          { status: "PENDING", taskType: "HOLDS" }
+        ]
       },
       select: {
         id: true,
