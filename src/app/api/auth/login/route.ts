@@ -5,10 +5,19 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// RAILWAY LOGIN FIX: Force rebuild to fix 500 error - $(date +%s)
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    let body: { email?: string; password?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+    const email = body?.email;
+    const password = body?.password;
 
     if (!email || !password) {
       return NextResponse.json(
@@ -18,18 +27,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Find user by email
-               const user = await prisma.user.findUnique({
-             where: { email: email.toLowerCase() },
-             select: {
-               id: true,
-               email: true,
-               name: true,
-               password: true,
-               role: true,
-               isActive: true,
-               mustChangePassword: true
-             }
-           });
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        password: true,
+        role: true,
+        isActive: true,
+        mustChangePassword: true
+      }
+    });
 
     if (!user) {
       return NextResponse.json(
@@ -55,23 +64,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Create JWT token
-               const token = jwt.sign(
-             {
-               userId: user.id,
-               email: user.email,
-               role: user.role,
-               name: user.name,
-               mustChangePassword: user.mustChangePassword
-             },
-             JWT_SECRET,
-             { expiresIn: '24h' }
-           );
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+        mustChangePassword: user.mustChangePassword
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
-    // Update last seen
-    await prisma.user.update({
+    // Update last seen (non-blocking: don't fail login if this fails)
+    prisma.user.update({
       where: { id: user.id },
       data: { lastSeen: new Date() }
-    });
+    }).catch((err) => console.error('Login: lastSeen update failed', err));
 
     // Set HTTP-only cookie
     const response = NextResponse.json({
@@ -94,14 +103,12 @@ export async function POST(request: NextRequest) {
     return response;
 
   } catch (error) {
-    console.error('Login error:', error);
-    console.error('Error details:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : undefined
-    });
+    const err = error instanceof Error ? error : new Error('Unknown error');
+    console.error('Login error:', err.message);
+    console.error('Login stack:', err instanceof Error ? err.stack : undefined);
+    // Don't expose internal details in response; log for debugging in Netlify
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
