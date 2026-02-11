@@ -2,8 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
 
+const DEFAULT_METRICS = {
+  pending: 0,
+  pendingRawMessages: 0,
+  spamReview: 0,
+  completedToday: 0,
+  totalCompleted: 0,
+  inProgress: 0,
+  assignedNotStarted: 0,
+  activeWork: 0,
+  assistanceRequired: 0,
+  totalAll: 0,
+  pctDone: 0,
+};
+
 export async function GET(request: NextRequest) {
-  return await withSelfHealing(async () => {
+  try {
+    return await withSelfHealing(async () => {
     try {
     // Get current date boundaries for "today"
     const now = new Date();
@@ -109,4 +124,14 @@ export async function GET(request: NextRequest) {
       );
     }
   }, { service: 'database' });
+  } catch (error: any) {
+    // Graceful degradation: DB/circuit breaker failure should not block the portal
+    console.error("Dashboard metrics unavailable (returning defaults):", error?.message || error);
+    return NextResponse.json({
+      success: true,
+      metrics: DEFAULT_METRICS,
+      _degraded: true,
+      _message: "Metrics temporarily unavailable; showing defaults.",
+    }, { status: 200 });
+  }
 }

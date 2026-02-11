@@ -272,20 +272,12 @@ export async function GET(req: Request) {
       stack: error?.stack,
       name: error?.name
     });
-    // Handle circuit breaker errors gracefully
-    if (error?.message?.includes('Circuit breaker')) {
-      return NextResponse.json({
-        success: false,
-        error: 'Service temporarily unavailable',
-        retryAfter: 30,
-        details: 'Circuit breaker is open',
-      }, { status: 503 });
-    }
-    
+    // Graceful degradation: return 200 with empty list so manager portal still loads
     return NextResponse.json({
-      success: false,
-      error: error?.message || "Failed to fetch assistance requests",
-      details: error?.message || 'Unknown error'
-    }, { status: 500 });
+      success: true,
+      requests: [],
+      _degraded: true,
+      _message: "Assistance list temporarily unavailable.",
+    }, { status: 200 });
   }
 }
