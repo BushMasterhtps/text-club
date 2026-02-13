@@ -2616,7 +2616,8 @@ const TaskCard = React.memo(function TaskCard({
         "Information – Unfeasible request or information not available",
         "Duplicate Request – No new action required",
         "Previously Assisted – Issue already resolved or refund previously issued",
-        "No Match – No valid account or order located"
+        "No Match – No valid account or order located",
+        "Refund – Passed MBG - No Refund Issued"
       ];
       
       // If disposition requires SF # but none provided
@@ -3278,6 +3279,7 @@ const TaskCard = React.memo(function TaskCard({
                   <option value="Refund – Out of stock">📭 Out of stock</option>
                   <option value="Refund – Refund issued with condolences (pet passing or sensitive case)">🐾 Refund with condolences</option>
                   <option value="Refund – Chargeback or fraud (no further action required)">🚫 Chargeback or fraud</option>
+                  <option value="Refund – Passed MBG - No Refund Issued">✅ Passed MBG - No Refund Issued</option>
                   <option value="" disabled className="text-white/40 text-xs">— Subscription —</option>
                   <option value="Subscription – Cancelled">❌ Cancelled</option>
                   <option value="Subscription – Updated (next charge date, frequency, etc.)">🔄 Updated (date/frequency)</option>
@@ -3479,7 +3481,8 @@ const TaskCard = React.memo(function TaskCard({
                 "Information – Unfeasible request or information not available",
                 "Duplicate Request – No new action required",
                 "Previously Assisted – Issue already resolved or refund previously issued",
-                "No Match – No valid account or order located"
+                "No Match – No valid account or order located",
+                "Refund – Passed MBG - No Refund Issued"
               ];
               
               return !noSfRequired.includes(disposition);
@@ -3571,13 +3574,14 @@ const TaskCard = React.memo(function TaskCard({
                   if ((noteRequiredDispositions.includes(disposition) || isResolved) && !dispositionNote.trim()) return true;
                 }
                 
-                // Yotpo: SF Case # required except for 4 dispositions
+                // Yotpo: SF Case # required except for 5 dispositions
                 if (task.taskType === "YOTPO" && disposition) {
                   const noSfRequired = [
                     "Information – Unfeasible request or information not available",
                     "Duplicate Request – No new action required",
                     "Previously Assisted – Issue already resolved or refund previously issued",
-                    "No Match – No valid account or order located"
+                    "No Match – No valid account or order located",
+                    "Refund – Passed MBG - No Refund Issued"
                   ];
                   if (!noSfRequired.includes(disposition) && !sfCaseNumber.trim()) return true;
                 }
