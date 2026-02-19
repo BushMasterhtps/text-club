@@ -68,6 +68,18 @@ export async function GET(request: NextRequest) {
       })
     ]);
 
+    /** Normalize product name for grouping (e.g. "Bio Complete 3", "BioComplete 3" → same key) */
+    function productNormalizeKey(product: string | null): string {
+      if (!product || typeof product !== 'string') return 'unknown';
+      return product
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, '')
+        || 'unknown';
+    }
+
     // Get Issue Topic breakdown (PRIMARY breakdown for Yotpo)
     const issueTopicBreakdown = await prisma.task.groupBy({
       by: ["yotpoIssueTopic"],
@@ -83,6 +95,35 @@ export async function GET(request: NextRequest) {
         id: true
       }
     });
+
+    // Get product counts (raw) then combine by normalized name
+    const productGroupBy = await prisma.task.groupBy({
+      by: ["yotpoProduct"],
+      where: {
+        ...where,
+        yotpoProduct: { not: null }
+      },
+      _count: { id: true }
+    });
+
+    // Group by normalized key; display name = most common raw spelling in that group
+    const productMap: Record<string, { count: number; rawCounts: Record<string, number> }> = {};
+    for (const row of productGroupBy) {
+      const raw = (row.yotpoProduct || '').trim() || 'Unknown';
+      const key = productNormalizeKey(row.yotpoProduct);
+      if (!productMap[key]) {
+        productMap[key] = { count: 0, rawCounts: {} };
+      }
+      productMap[key].count += row._count.id;
+      productMap[key].rawCounts[raw] = (productMap[key].rawCounts[raw] || 0) + row._count.id;
+    }
+    const productBreakdown = Object.entries(productMap)
+      .map(([key, { count, rawCounts }]) => {
+        const displayName = Object.entries(rawCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || key;
+        const variantCount = Object.keys(rawCounts).length;
+        return { displayName, count, variantCount };
+      })
+      .sort((a, b) => b.count - a.count);
 
     // Get disposition breakdown
     const dispositionBreakdown = await prisma.task.groupBy({
@@ -172,6 +213,9 @@ export async function GET(request: NextRequest) {
         count: item._count.id,
         avgDuration: Math.round(item._avg.durationSec || 0) // Keep in seconds
       })).sort((a, b) => b.count - a.count), // Sort by count descending
+
+      // Product breakdown (combined by normalized name: e.g. "Bio Complete 3", "BioComplete 3" → one row)
+      productBreakdown,
 
       // Disposition breakdown (secondary)
       dispositionBreakdown: dispositionBreakdown.map(item => ({

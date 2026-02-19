@@ -15,6 +15,12 @@ interface YotpoAnalyticsData {
     count: number;
     avgDuration: number;
   }>;
+  /** Product names combined by normalized spelling (e.g. Bio Complete 3, BioComplete 3 → one row) */
+  productBreakdown?: Array<{
+    displayName: string;
+    count: number;
+    variantCount?: number;
+  }>;
   dispositionBreakdown: Array<{
     disposition: string;
     count: number;
@@ -234,6 +240,35 @@ export default function YotpoAnalytics() {
               <div className="text-3xl font-bold text-white">{formatDuration(data.overview.avgHandleTime)}</div>
             </Card>
           </div>
+
+          {/* Submissions by Product (combined by normalized name) */}
+          {data.productBreakdown && data.productBreakdown.length > 0 && (
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold text-white mb-2">📦 Submissions by Product</h3>
+              <p className="text-sm text-white/60 mb-4">
+                Product names are combined when spellings match (e.g. &quot;Bio Complete 3&quot;, &quot;BioComplete 3&quot;). Based on selected date range.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {data.productBreakdown.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white/5 rounded-lg px-4 py-3 border border-white/10 min-w-[180px]"
+                  >
+                    <div className="font-medium text-white truncate" title={item.displayName}>
+                      {item.displayName}
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-2xl font-bold text-white">{item.count}</span>
+                      <span className="text-white/50 text-sm">submissions</span>
+                      {item.variantCount != null && item.variantCount > 1 && (
+                        <span className="text-white/40 text-xs">({item.variantCount} spellings)</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           {/* Issue Topic Breakdown (PRIMARY) */}
           <Card className="p-6">
