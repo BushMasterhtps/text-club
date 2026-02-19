@@ -25,7 +25,8 @@ async function showMenu() {
   console.log('5. View raw messages');
   console.log('6. View spam rules');
   console.log('7. Custom SQL query');
-  console.log('8. Exit');
+  console.log('8. Distinct brands (Text Club tasks) — exact spellings + counts');
+  console.log('9. Exit');
   console.log('');
 }
 
@@ -120,13 +121,29 @@ async function handleChoice(choice) {
         askNext();
       });
       return;
-      
+
     case '8':
+      const brandGroups = await prisma.task.groupBy({
+        by: ['brand'],
+        where: { taskType: 'TEXT_CLUB', brand: { not: null } },
+        _count: { id: true }
+      });
+      brandGroups.sort((a, b) => (b._count?.id ?? 0) - (a._count?.id ?? 0));
+      console.log('\n🏷️ DISTINCT BRANDS (Text Club tasks) — use these spellings in src/lib/brand-normalize.ts');
+      brandGroups.forEach((g) => {
+        console.log(`  "${g.brand}"  →  ${g._count.id} tasks`);
+      });
+      if (brandGroups.length === 0) {
+        console.log('  (none)');
+      }
+      break;
+
+    case '9':
       console.log('👋 Goodbye!');
       await prisma.$disconnect();
       process.exit(0);
       break;
-      
+
     default:
       console.log('❌ Invalid choice. Please try again.');
   }
@@ -136,7 +153,7 @@ async function handleChoice(choice) {
 function askNext() {
   rl.question('\nPress Enter to continue...', () => {
     showMenu();
-    rl.question('Choose an option (1-8): ', handleChoice);
+    rl.question('Choose an option (1-9): ', handleChoice);
   });
 }
 
@@ -145,7 +162,7 @@ async function main() {
     await prisma.$connect();
     console.log('✅ Connected to production database!');
     showMenu();
-    rl.question('Choose an option (1-8): ', handleChoice);
+    rl.question('Choose an option (1-9): ', handleChoice);
   } catch (error) {
     console.error('❌ Connection error:', error.message);
     process.exit(1);

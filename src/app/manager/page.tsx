@@ -2220,6 +2220,7 @@ type CompletedWorkAnalytics = {
       completedCount: number;
     }>;
   }>;
+  brandBreakdown?: Array<{ brand: string; count: number }>;
   completedToday: number;
 };
 
@@ -2233,6 +2234,7 @@ function CompletedWorkDashboard() {
   // Filters
   const [agentFilter, setAgentFilter] = useState<string>("");
   const [dispositionFilter, setDispositionFilter] = useState<string>("all");
+  const [brandFilter, setBrandFilter] = useState<string>("all");
   const [limit, setLimit] = useState(50);
   const [offset, setOffset] = useState(0);
   
@@ -2251,6 +2253,7 @@ function CompletedWorkDashboard() {
       const params = new URLSearchParams();
       if (agentFilter) params.set("agent", agentFilter);
       if (dispositionFilter !== "all") params.set("disposition", dispositionFilter);
+      if (brandFilter && brandFilter !== "all") params.set("brandFilter", brandFilter);
       if (startDate) params.set("startDate", startDate);
       if (endDate) params.set("endDate", endDate);
       params.set("includeAll", "true"); // Request all data for reporting
@@ -2283,6 +2286,7 @@ function CompletedWorkDashboard() {
       const params = new URLSearchParams();
       if (agentFilter) params.set("agent", agentFilter);
       if (dispositionFilter !== "all") params.set("disposition", dispositionFilter);
+      if (brandFilter && brandFilter !== "all") params.set("brandFilter", brandFilter);
       params.set("startDate", compareStartDate);
       params.set("endDate", compareEndDate);
       params.set("limit", limit.toString());
@@ -2311,7 +2315,7 @@ function CompletedWorkDashboard() {
         loadComparisonData();
       }
     }
-  }, [open, agentFilter, dispositionFilter, limit, offset, startDate, endDate, dateMode, compareStartDate, compareEndDate]);
+  }, [open, agentFilter, dispositionFilter, brandFilter, limit, offset, startDate, endDate, dateMode, compareStartDate, compareEndDate]);
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return "—";
@@ -2787,7 +2791,59 @@ function CompletedWorkDashboard() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="text-sm text-white/60 block mb-1">Filter by Brand</label>
+              <select
+                value={brandFilter}
+                onChange={(e) => setBrandFilter(e.target.value)}
+                className="border-none rounded-lg px-3 py-2 bg-white/10 text-white text-sm ring-1 ring-white/10 focus:outline-none"
+              >
+                <option value="all">All Brands</option>
+                {analytics?.brandBreakdown?.map((b) => (
+                  <option key={b.brand} value={b.brand}>
+                    {b.brand} ({b.count})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+
+          {brandFilter && brandFilter !== "all" && (
+            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-200 text-sm">
+              <span>Showing data for brand: <strong>{brandFilter}</strong></span>
+              <button
+                type="button"
+                onClick={() => setBrandFilter("all")}
+                className="underline hover:no-underline"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+
+          {/* Completed by Brand (drill-down: click brand to filter Agent + Disposition) */}
+          {analytics?.brandBreakdown && analytics.brandBreakdown.length > 0 && (
+            <Card className="p-4">
+              <h3 className="text-lg font-semibold mb-2">Completed by Brand</h3>
+              <p className="text-sm text-white/60 mb-4">Click a brand to see disposition and agent performance for that brand only. Based on selected date range.</p>
+              <div className="flex flex-wrap gap-2">
+                {analytics.brandBreakdown.map((b) => (
+                  <button
+                    key={b.brand}
+                    type="button"
+                    onClick={() => setBrandFilter(brandFilter === b.brand ? "all" : b.brand)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      brandFilter === b.brand
+                        ? "bg-blue-600 text-white ring-2 ring-blue-400"
+                        : "bg-white/10 text-white hover:bg-white/20"
+                    }`}
+                  >
+                    {b.brand} — <span className="font-mono">{b.count}</span> completed
+                  </button>
+                ))}
+              </div>
+            </Card>
+          )}
 
           {/* Analytics Tables */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
