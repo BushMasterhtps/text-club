@@ -26,7 +26,8 @@ async function showMenu() {
   console.log('6. View spam rules');
   console.log('7. Custom SQL query');
   console.log('8. Distinct brands (Text Club tasks) — exact spellings + counts');
-  console.log('9. Exit');
+  console.log('9. WOD/IVCS order prefixes (first 2 letters of order #) — for GM=GundryMD index');
+  console.log('10. Exit');
   console.log('');
 }
 
@@ -138,7 +139,26 @@ async function handleChoice(choice) {
       }
       break;
 
-    case '9':
+    case '9': {
+      const prefixCounts = {};
+      const tasks = await prisma.task.findMany({
+        where: { taskType: 'WOD_IVCS' },
+        select: { documentNumber: true, webOrder: true }
+      });
+      for (const t of tasks) {
+        const raw = (t.documentNumber || t.webOrder || '').trim().toUpperCase();
+        const prefix = raw.length >= 2 ? raw.slice(0, 2) : (raw || '??');
+        prefixCounts[prefix] = (prefixCounts[prefix] || 0) + 1;
+      }
+      const sorted = Object.entries(prefixCounts).sort((a, b) => b[1] - a[1]);
+      console.log('\n📦 WOD/IVCS ORDER PREFIXES (first 2 letters of documentNumber/webOrder)');
+      console.log('Send these initials back in format: GM = GundryMD, CB = City Beauty, etc.\n');
+      sorted.forEach(([prefix, count]) => console.log(`  ${prefix}  →  ${count} orders`));
+      if (sorted.length === 0) console.log('  (none)');
+      break;
+    }
+
+    case '10':
       console.log('👋 Goodbye!');
       await prisma.$disconnect();
       process.exit(0);
@@ -153,16 +173,88 @@ async function handleChoice(choice) {
 function askNext() {
   rl.question('\nPress Enter to continue...', () => {
     showMenu();
-    rl.question('Choose an option (1-9): ', handleChoice);
+    rl.question('Choose an option (1-10): ', handleChoice);
   });
+}
+
+async function runWodPrefixesOnly() {
+  await prisma.$connect();
+  const prefixCounts = {};
+  const tasks = await prisma.task.findMany({
+    where: { taskType: 'WOD_IVCS' },
+    select: { documentNumber: true, webOrder: true }
+  });
+  for (const t of tasks) {
+    const raw = (t.documentNumber || t.webOrder || '').trim().toUpperCase();
+    const prefix = raw.length >= 2 ? raw.slice(0, 2) : (raw || '??');
+    prefixCounts[prefix] = (prefixCounts[prefix] || 0) + 1;
+  }
+  const sorted = Object.entries(prefixCounts).sort((a, b) => b[1] - a[1]);
+  console.log('WOD/IVCS ORDER PREFIXES (first 2 letters of order number)');
+  console.log('Reply with: GM = GundryMD, CB = City Beauty, etc.\n');
+  sorted.forEach(([prefix, count]) => console.log(`${prefix}\t${count}`));
+  await prisma.$disconnect();
+}
+
+/** List sample order numbers (documentNumber/webOrder) that start with a given prefix, e.g. --wod-sample-prefix=OR */
+async function runWodSamplePrefix(prefix) {
+  const p = (prefix || '').trim().toUpperCase().slice(0, 2);
+  if (!p) {
+    console.error('Usage: node query-production-data.js --wod-sample-prefix=OR');
+    process.exit(1);
+  }
+  await prisma.$connect();
+  const tasks = await prisma.task.findMany({
+    where: {
+      taskType: 'WOD_IVCS',
+      OR: [
+        { documentNumber: { startsWith: p, mode: 'insensitive' } },
+        { webOrder: { startsWith: p, mode: 'insensitive' } }
+      ]
+    },
+    select: { documentNumber: true, webOrder: true, brand: true },
+    take: 100
+  });
+  const seen = new Set();
+  console.log(`\nSample order numbers starting with "${p}" (up to 100 unique, with brand when set):\n`);
+  for (const t of tasks) {
+    const doc = (t.documentNumber || '').trim();
+    const web = (t.webOrder || '').trim();
+    const key = doc || web || '';
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const brand = (t.brand || '').trim() || '—';
+    console.log(`${key}\tBrand: ${brand}`);
+  }
+  const total = await prisma.task.count({
+    where: {
+      taskType: 'WOD_IVCS',
+      OR: [
+        { documentNumber: { startsWith: p, mode: 'insensitive' } },
+        { webOrder: { startsWith: p, mode: 'insensitive' } }
+      ]
+    }
+  });
+  console.log(`\n(Total tasks with prefix "${p}": ${total})`);
+  await prisma.$disconnect();
 }
 
 async function main() {
   try {
+    if (process.argv[2] === '--wod-prefixes') {
+      await runWodPrefixesOnly();
+      process.exit(0);
+    }
+    const samplePrefix = process.argv[2] && process.argv[2].startsWith('--wod-sample-prefix=');
+    if (samplePrefix) {
+      const prefix = process.argv[2].split('=')[1] || '';
+      await runWodSamplePrefix(prefix);
+      process.exit(0);
+    }
     await prisma.$connect();
     console.log('✅ Connected to production database!');
     showMenu();
-    rl.question('Choose an option (1-9): ', handleChoice);
+    rl.question('Choose an option (1-10): ', handleChoice);
   } catch (error) {
     console.error('❌ Connection error:', error.message);
     process.exit(1);

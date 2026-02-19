@@ -81,6 +81,13 @@ interface AnalyticsData {
     totalLost: number;
     netAmount: number;
   }>;
+  /** Completed per order prefix (first 2 chars of order number: GM, CB, BP, UP, etc.) */
+  orderPrefixBreakdown?: Record<string, {
+    count: number;
+    totalSaved: number;
+    totalLost: number;
+    netAmount: number;
+  }>;
   sourceBreakdown: Record<string, {
     count: number;
     totalSaved: number;
@@ -132,6 +139,8 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
   // Filter state
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [dispositionFilter, setDispositionFilter] = useState<string>('all');
+  const [orderPrefixFilter, setOrderPrefixFilter] = useState<string>('all');
+  const [brandFilter, setBrandFilter] = useState<string>('all');
   const [agents, setAgents] = useState<Array<{ id: string; name: string; email: string }>>([]);
   
   // Pagination state
@@ -275,6 +284,8 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
         limit: pageSize.toString(),
         offset: ((currentPage - 1) * pageSize).toString()
       });
+      if (orderPrefixFilter && orderPrefixFilter !== 'all') params.set('orderPrefixFilter', orderPrefixFilter);
+      if (brandFilter && brandFilter !== 'all') params.set('brandFilter', brandFilter);
 
       if (dateMode === 'compare' && compareStartDate && compareEndDate) {
         params.append('compareStartDate', compareStartDate);
@@ -306,7 +317,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
   useEffect(() => {
     loadAnalytics();
     loadDetailedAnalytics();
-  }, [startDate, endDate, compareStartDate, compareEndDate, agentFilter, dispositionFilter, currentPage, pageSize]);
+  }, [startDate, endDate, compareStartDate, compareEndDate, agentFilter, dispositionFilter, orderPrefixFilter, brandFilter, currentPage, pageSize]);
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return "—";
@@ -795,7 +806,7 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
 
       {/* Filters */}
       <div className="bg-white/5 rounded-lg p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Filter by Agent</label>
             <select
@@ -821,8 +832,55 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
               <option value="Unable to Complete">Unable to Complete</option>
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Filter by Brand</label>
+            <select
+              value={brandFilter}
+              onChange={(e) => setBrandFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-white/10 text-white rounded border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All brands</option>
+              {analyticsData?.brandBreakdown && Object.keys(analyticsData.brandBreakdown)
+                .sort()
+                .map((b) => (
+                  <option key={b} value={b}>
+                    {b} ({analyticsData.brandBreakdown[b].count})
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Filter by order prefix</label>
+            <select
+              value={orderPrefixFilter}
+              onChange={(e) => setOrderPrefixFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-white/10 text-white rounded border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All prefixes</option>
+              {analyticsData?.orderPrefixBreakdown && Object.keys(analyticsData.orderPrefixBreakdown)
+                .sort()
+                .map((prefix) => (
+                  <option key={prefix} value={prefix}>
+                    {prefix} ({analyticsData.orderPrefixBreakdown![prefix].count})
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
       </div>
+
+      {brandFilter && brandFilter !== 'all' && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-200 text-sm">
+          <span>Showing data for brand: <strong>{brandFilter}</strong></span>
+          <button type="button" onClick={() => setBrandFilter('all')} className="underline hover:no-underline">Clear</button>
+        </div>
+      )}
+      {orderPrefixFilter && orderPrefixFilter !== 'all' && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-500/20 border border-sky-500/30 text-sky-200 text-sm">
+          <span>Showing data for order prefix: <strong className="font-mono">{orderPrefixFilter}</strong></span>
+          <button type="button" onClick={() => setOrderPrefixFilter('all')} className="underline hover:no-underline">Clear</button>
+        </div>
+      )}
 
       {analyticsError && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
@@ -895,6 +953,60 @@ export function AnalyticsSection({ onClose }: AnalyticsSectionProps) {
               Note: "Lost" indicates orders with higher risk of shipping errors or customer-requested refunds, negatively impacting customer experience.
             </div>
           </div>
+
+          {/* Completed by Brand (from task.brand) */}
+          {analyticsData.brandBreakdown && Object.keys(analyticsData.brandBreakdown).length > 0 && (
+            <div className="bg-white/5 rounded-lg p-4">
+              <h3 className="text-lg font-semibold mb-2">Completed by Brand</h3>
+              <p className="text-sm text-white/60 mb-4">Click a brand to filter disposition and agent data below.</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(analyticsData.brandBreakdown)
+                  .sort(([, a], [, b]) => b.count - a.count)
+                  .map(([brand, data]) => (
+                    <button
+                      key={brand}
+                      type="button"
+                      onClick={() => setBrandFilter(brandFilter === brand ? 'all' : brand)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        brandFilter === brand
+                          ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                          : 'bg-white/10 text-white hover:bg-white/20'
+                      }`}
+                    >
+                      {brand} — <span className="font-mono">{data.count}</span> orders
+                      <span className="ml-1 text-white/70 text-xs">(${data.netAmount >= 0 ? '+' : ''}{data.netAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })})</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Completed by order prefix (first 2 letters of order number: GM, CB, BP, UP, etc.) */}
+          {analyticsData.orderPrefixBreakdown && Object.keys(analyticsData.orderPrefixBreakdown).length > 0 && (
+            <div className="bg-white/5 rounded-lg p-4">
+              <h3 className="text-lg font-semibold mb-2">Completed by order prefix</h3>
+              <p className="text-sm text-white/60 mb-4">Order numbers start with a 2-letter prefix (e.g. GM = GundryMD, CB = City Beauty). Click a prefix to filter disposition and agent data below.</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(analyticsData.orderPrefixBreakdown)
+                  .sort(([, a], [, b]) => b.count - a.count)
+                  .map(([prefix, data]) => (
+                    <button
+                      key={prefix}
+                      type="button"
+                      onClick={() => setOrderPrefixFilter(orderPrefixFilter === prefix ? 'all' : prefix)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        orderPrefixFilter === prefix
+                          ? 'bg-sky-600 text-white ring-2 ring-sky-400'
+                          : 'bg-white/10 text-white hover:bg-white/20'
+                      }`}
+                    >
+                      <span className="font-mono">{prefix}</span> — <span className="font-mono">{data.count}</span> orders
+                      <span className="ml-1 text-white/70 text-xs">(${data.netAmount >= 0 ? '+' : ''}{data.netAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })})</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
 
           {/* Disposition Breakdown with Financial Impact */}
           <div className="bg-white/5 rounded-lg p-4">

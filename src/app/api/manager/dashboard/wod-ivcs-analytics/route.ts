@@ -9,10 +9,19 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const agentFilter = searchParams.get('agentFilter');
     const dispositionFilter = searchParams.get('dispositionFilter');
+    const orderPrefixFilter = searchParams.get('orderPrefixFilter'); // e.g. "GM", "CB" – filter by first 2 chars of order number
+    const brandFilter = searchParams.get('brandFilter'); // e.g. "City Beauty" – filter by task.brand
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
     const compareStartDate = searchParams.get('compareStartDate');
     const compareEndDate = searchParams.get('compareEndDate');
+
+    /** Get 2-letter order prefix from documentNumber or webOrder (e.g. GM24886009 → "GM") */
+    function getOrderPrefix(documentNumber: string | null, webOrder: string | null): string {
+      const raw = (documentNumber || webOrder || '').trim().toUpperCase();
+      if (raw.length < 2) return raw || '??';
+      return raw.slice(0, 2);
+    }
 
     // Parse dates with proper timezone handling
     let dateStart: Date;
@@ -71,12 +80,36 @@ export async function GET(request: NextRequest) {
       where.disposition = dispositionFilter;
     }
 
-    // Get completed tasks with all necessary data
+    // For main queries, optionally restrict by order prefix and/or brand
+    const whereForMain = (() => {
+      let w: any = where;
+      if (orderPrefixFilter && orderPrefixFilter.trim().length >= 2) {
+        const prefix = orderPrefixFilter.trim().toUpperCase().slice(0, 2);
+        w = {
+          ...w,
+          AND: [
+            ...(Array.isArray(w.AND) ? w.AND : []),
+            {
+              OR: [
+                { documentNumber: { startsWith: prefix, mode: 'insensitive' as const } },
+                { webOrder: { startsWith: prefix, mode: 'insensitive' as const } }
+              ]
+            }
+          ]
+        };
+      }
+      if (brandFilter && brandFilter.trim() !== '' && brandFilter !== 'all') {
+        w = { ...w, brand: brandFilter.trim() };
+      }
+      return w;
+    })();
+
+    // Get completed tasks with all necessary data (use whereForMain so prefix filter applies)
     // Fetch ALL tasks for accurate financial calculations (not just paginated subset)
-    const [completedTasks, allTasksForCalculations, totalCount] = await Promise.all([
+    const [completedTasks, allTasksForCalculations, totalCount, tasksForPrefixBreakdown, tasksForBrandBreakdown] = await Promise.all([
       // Paginated tasks for display
       prisma.task.findMany({
-        where,
+        where: whereForMain,
         select: {
           id: true,
           endTime: true,
@@ -113,7 +146,7 @@ export async function GET(request: NextRequest) {
       }),
       // All tasks for financial calculations (no pagination)
       prisma.task.findMany({
-        where,
+        where: whereForMain,
         select: {
           id: true,
           disposition: true,
@@ -139,7 +172,22 @@ export async function GET(request: NextRequest) {
           durationSec: true
         }
       }),
-      prisma.task.count({ where })
+      prisma.task.count({ where: whereForMain }),
+      // All tasks in range (no prefix filter) for order prefix breakdown – first 2 chars of order number
+      prisma.task.findMany({
+        where,
+        select: {
+          documentNumber: true,
+          webOrder: true,
+          amount: true,
+          disposition: true
+        }
+      }),
+      // All tasks in range (no brand/prefix filter) for brand breakdown – so "Completed by Brand" list is always full
+      prisma.task.findMany({
+        where,
+        select: { brand: true, amount: true, disposition: true }
+      })
     ]);
 
     // Get analytics data
@@ -152,7 +200,7 @@ export async function GET(request: NextRequest) {
       prisma.task.groupBy({
         by: ["assignedToId", "sentBackBy"],
         where: {
-          ...where,
+          ...whereForMain,
           durationSec: { not: null }
         },
         _avg: {
@@ -166,7 +214,7 @@ export async function GET(request: NextRequest) {
       prisma.task.groupBy({
         by: ["disposition"],
         where: {
-          ...where,
+          ...whereForMain,
           durationSec: { not: null },
           disposition: { not: null }
         },
@@ -181,7 +229,7 @@ export async function GET(request: NextRequest) {
       prisma.task.groupBy({
         by: ["endTime"],
         where: {
-          ...where,
+          ...whereForMain,
           durationSec: { not: null }
         },
         _avg: {
@@ -211,13 +259,25 @@ export async function GET(request: NextRequest) {
       dispositions: Record<string, { count: number; savedAmount: number; lostAmount: number; netAmount: number }> 
     }> = {};
     
-    // Process brand breakdown with financial impact
+    // Brand breakdown from unfiltered set (so "Completed by Brand" shows all brands in date range)
     const brandBreakdown: Record<string, {
       count: number;
       totalSaved: number;
       totalLost: number;
       netAmount: number;
     }> = {};
+    for (const task of tasksForBrandBreakdown) {
+      const brand = task.brand || 'Unknown';
+      const amount = task.amount ? Number(task.amount) : 0;
+      const { savedAmount, lostAmount, netAmount: taskNetAmount } = calculateFinancialImpact(task.disposition, amount);
+      if (!brandBreakdown[brand]) {
+        brandBreakdown[brand] = { count: 0, totalSaved: 0, totalLost: 0, netAmount: 0 };
+      }
+      brandBreakdown[brand].count++;
+      brandBreakdown[brand].totalSaved += savedAmount;
+      brandBreakdown[brand].totalLost += lostAmount;
+      brandBreakdown[brand].netAmount += taskNetAmount;
+    }
 
     // Process source breakdown with financial impact
     const sourceBreakdown: Record<string, {
@@ -226,6 +286,26 @@ export async function GET(request: NextRequest) {
       totalLost: number;
       netAmount: number;
     }> = {};
+
+    // Order prefix breakdown (first 2 chars of documentNumber/webOrder, e.g. GM, CB, BP) – no brand stored on import
+    const orderPrefixBreakdown: Record<string, {
+      count: number;
+      totalSaved: number;
+      totalLost: number;
+      netAmount: number;
+    }> = {};
+    for (const task of tasksForPrefixBreakdown) {
+      const prefix = getOrderPrefix(task.documentNumber, task.webOrder);
+      const amount = task.amount ? Number(task.amount) : 0;
+      const { savedAmount, lostAmount, netAmount: taskNetAmount } = calculateFinancialImpact(task.disposition, amount);
+      if (!orderPrefixBreakdown[prefix]) {
+        orderPrefixBreakdown[prefix] = { count: 0, totalSaved: 0, totalLost: 0, netAmount: 0 };
+      }
+      orderPrefixBreakdown[prefix].count++;
+      orderPrefixBreakdown[prefix].totalSaved += savedAmount;
+      orderPrefixBreakdown[prefix].totalLost += lostAmount;
+      orderPrefixBreakdown[prefix].netAmount += taskNetAmount;
+    }
 
     // Process all tasks for financial calculations
     for (const task of allTasksForCalculations) {
@@ -270,21 +350,6 @@ export async function GET(request: NextRequest) {
         agentBreakdown[agentId].dispositions[disp].lostAmount += lostAmount;
         agentBreakdown[agentId].dispositions[disp].netAmount += taskNetAmount;
       }
-
-      // Update brand breakdown
-      const brand = task.brand || 'Unknown';
-      if (!brandBreakdown[brand]) {
-        brandBreakdown[brand] = {
-          count: 0,
-          totalSaved: 0,
-          totalLost: 0,
-          netAmount: 0
-        };
-      }
-      brandBreakdown[brand].count++;
-      brandBreakdown[brand].totalSaved += savedAmount;
-      brandBreakdown[brand].totalLost += lostAmount;
-      brandBreakdown[brand].netAmount += taskNetAmount;
 
       // Update source breakdown
       const source = task.wodIvcsSource || 'Unknown';
@@ -395,7 +460,7 @@ export async function GET(request: NextRequest) {
       
       const compareCount = await prisma.task.count({
         where: {
-          ...where,
+          ...whereForMain,
           endTime: {
             gte: utcCompareDateStart,
             lte: utcCompareDateEnd
@@ -405,7 +470,7 @@ export async function GET(request: NextRequest) {
       
       const compareDuration = await prisma.task.aggregate({
         where: {
-          ...where,
+          ...whereForMain,
           endTime: {
             gte: utcCompareDateStart,
             lte: utcCompareDateEnd
@@ -478,8 +543,9 @@ export async function GET(request: NextRequest) {
       completedWork,
       dispositionBreakdown,
       agentBreakdown,
-      brandBreakdown, // New: Brand breakdown with financial metrics
-      sourceBreakdown, // New: Source breakdown with financial metrics
+      brandBreakdown,
+      orderPrefixBreakdown, // Completed per order prefix (first 2 chars: GM, CB, BP, UP, etc.)
+      sourceBreakdown,
       dailyTrends: dailyTrendsArray,
       comparisonData,
       pagination: {
