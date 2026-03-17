@@ -4,10 +4,6 @@ import { jwtVerify } from 'jose';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-if (!JWT_SECRET) {
-  throw new Error('CRITICAL: JWT_SECRET environment variable is not set! Check Netlify configuration.');
-}
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -30,6 +26,12 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
+    // Fail closed (redirect) instead of crashing edge runtime if env is missing/misconfigured
+    if (!JWT_SECRET) {
+      console.error('JWT_SECRET is not set in edge runtime; redirecting to /login');
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
     // Verify JWT token
     const { payload } = await jwtVerify(
       token,
