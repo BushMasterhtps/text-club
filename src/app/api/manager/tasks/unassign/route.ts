@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 function coerceIds(input: any): string[] {
   if (!input) return [];
@@ -8,7 +9,10 @@ function coerceIds(input: any): string[] {
   return [];
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const url = new URL(req.url);
     let body: any = {};

@@ -1,22 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { authorizeAgentTaskMutationBody, verifyAuth } from "@/lib/auth";
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
     const body = await req.json();
-    const email = body.email;
 
-    if (!email) {
-      return NextResponse.json({ success: false, error: "Email required" }, { status: 400 });
-    }
+    const session = await verifyAuth(req);
+    const actor = authorizeAgentTaskMutationBody(session, body);
+    if (!actor.ok) return actor.response;
 
-    // Find the user by email
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+      where: { id: actor.userId },
       select: { id: true, isLive: true }
     });
 

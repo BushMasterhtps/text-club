@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireManagerRole } from "@/lib/auth";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import bcrypt from 'bcryptjs';
 
 // GET: list users (agents and managers)
 export async function GET(req: NextRequest) {
-  // SECURITY: Verify manager role
-  const auth = requireManagerRole(req);
-  if (!auth.success) {
-    return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
-  }
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const users = await prisma.user.findMany({
       where: {
@@ -33,12 +31,9 @@ export async function GET(req: NextRequest) {
 
 // POST: create a user with default password
 export async function POST(req: NextRequest) {
-  // SECURITY: Verify manager role
-  const auth = requireManagerRole(req);
-  if (!auth.success) {
-    return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
-  }
-  
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const body = await req.json();
     const name = (body?.name ?? null) as string | null;

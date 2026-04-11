@@ -1,6 +1,7 @@
 // src/app/api/manager/tasks/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import type { Prisma } from "@prisma/client";
 
 /* --------------------------------- helpers -------------------------------- */
@@ -33,7 +34,7 @@ function parseStatus(s: string | null): StatusKey {
 }
 
 // read from either query string or JSON body (first match wins)
-async function getParam(req: Request, keys: string[]) {
+async function getParam(req: NextRequest | Request, keys: string[]) {
   const url = new URL(req.url);
   for (const k of keys) {
     const v = url.searchParams.get(k);
@@ -60,7 +61,10 @@ function looksLikeId(s: string) {
  * All status/assignee/search filters are pushed into Prisma `where` so
  * pagination + total are accurate.
  */
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   /* ---------- read filters ---------- */
   const url = new URL(req.url);
   const statusKey = parseStatus(url.searchParams.get("status"));

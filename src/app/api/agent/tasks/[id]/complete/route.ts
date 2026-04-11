@@ -1,30 +1,33 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { learnFromSpamDecision } from "@/lib/spam-detection";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
 import { cache } from "@/lib/cache";
+import { authorizeAgentTaskMutationBody, verifyAuth } from "@/lib/auth";
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
     const body = await req.json();
-    const email = body.email;
     const disposition = body.disposition;
     const sfCaseNumber = body.sfCaseNumber;
     const orderAmount = body.orderAmount;
     const dispositionNote = body.dispositionNote;
 
-    if (!email || !disposition) {
-      return NextResponse.json({ success: false, error: "Email and disposition required" }, { status: 400 });
+    const session = await verifyAuth(req);
+    const actor = authorizeAgentTaskMutationBody(session, body);
+    if (!actor.ok) return actor.response;
+
+    if (!disposition) {
+      return NextResponse.json({ success: false, error: "Disposition required" }, { status: 400 });
     }
 
-    // Find the user by email
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
-      select: { id: true, isLive: true }
+      where: { id: actor.userId },
+      select: { id: true, isLive: true, email: true }
     });
 
     if (!user) {
@@ -234,7 +237,7 @@ export async function POST(
     // Clear scorecard cache for this user to ensure fresh data on next fetch
     // This ensures the performance scorecard updates immediately after task completion
     try {
-      const cacheKey = `personal-scorecard:${email.toLowerCase().trim()}`;
+      const cacheKey = `personal-scorecard:${(user.email || actor.userEmail).toLowerCase().trim()}`;
       cache.delete(cacheKey);
       console.log(`✅ Cleared scorecard cache for ${email}`);
     } catch (error) {

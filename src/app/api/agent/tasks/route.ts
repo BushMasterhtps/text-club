@@ -1,16 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { authorizeAgentTasksList } from "@/lib/auth";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const email = searchParams.get('email');
-    
-    if (!email) {
-      return NextResponse.json({ success: false, error: "Email parameter required" }, { status: 400 });
-    }
+    const listAuth = await authorizeAgentTasksList(req);
+    if (!listAuth.ok) return listAuth.response;
 
-    // Find the user by email
+    const { searchParams } = new URL(req.url);
+    const email = listAuth.targetEmail;
+
+    // Find the user by authorized email (JWT-bound for agents; explicit ?email= for managers)
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
       select: { id: true, isLive: true }

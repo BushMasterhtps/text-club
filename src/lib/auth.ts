@@ -98,6 +98,126 @@ export async function requireStaffApiAuth(
   };
 }
 
+export type AgentTasksListAuthOk = { ok: true; targetEmail: string };
+export type AgentTasksListAuthFail = { ok: false; response: NextResponse };
+
+/**
+ * GET /api/agent/tasks — cookie JWT only.
+ * - AGENT: queue is always the JWT user's email; optional ?email= must match JWT (ignored for lookup otherwise).
+ * - MANAGER / MANAGER_AGENT: must pass ?email= (agent whose queue is being viewed).
+ */
+export async function authorizeAgentTasksList(
+  request: NextRequest
+): Promise<AgentTasksListAuthOk | AgentTasksListAuthFail> {
+  const auth = await verifyAuth(request);
+  if (!auth.success) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { success: false, error: auth.error || 'Unauthorized' },
+        { status: 401 }
+      ),
+    };
+  }
+  const role = auth.userRole!;
+  const jwtEmail = (auth.userEmail || '').toLowerCase().trim();
+  const emailParam =
+    new URL(request.url).searchParams.get('email')?.toLowerCase().trim() ?? '';
+
+  if (role === 'AGENT') {
+    if (!jwtEmail) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { success: false, error: 'Invalid session' },
+          { status: 400 }
+        ),
+      };
+    }
+    if (emailParam && emailParam !== jwtEmail) {
+      return {
+        ok: false,
+        response: NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 }),
+      };
+    }
+    return { ok: true, targetEmail: jwtEmail };
+  }
+
+  if (role === 'MANAGER' || role === 'MANAGER_AGENT') {
+    if (!emailParam) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { success: false, error: 'Email parameter required' },
+          { status: 400 }
+        ),
+      };
+    }
+    return { ok: true, targetEmail: emailParam };
+  }
+
+  return {
+    ok: false,
+    response: NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 }),
+  };
+}
+
+export type AgentTaskMutationAuthOk = {
+  ok: true;
+  userId: string;
+  userEmail: string;
+};
+
+export type AgentTaskMutationAuthFail = { ok: false; response: NextResponse };
+
+/**
+ * POST /api/agent/tasks/[id]/* — AGENT or MANAGER_AGENT only; body.email must match JWT.
+ * Use returned userId for assignedToId checks (no email-based impersonation).
+ */
+export function authorizeAgentTaskMutationBody(
+  auth: AuthResult,
+  body: { email?: string }
+): AgentTaskMutationAuthOk | AgentTaskMutationAuthFail {
+  if (!auth.success) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { success: false, error: auth.error || 'Unauthorized' },
+        { status: 401 }
+      ),
+    };
+  }
+  const role = auth.userRole!;
+  if (role !== 'AGENT' && role !== 'MANAGER_AGENT') {
+    return {
+      ok: false,
+      response: NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 }),
+    };
+  }
+  const jwtEmail = (auth.userEmail || '').toLowerCase().trim();
+  const bodyEmail =
+    typeof body?.email === 'string' ? body.email.toLowerCase().trim() : '';
+  if (!bodyEmail || bodyEmail !== jwtEmail) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { success: false, error: 'Email mismatch or missing' },
+        { status: 403 }
+      ),
+    };
+  }
+  if (!auth.userId) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { success: false, error: 'Invalid session' },
+        { status: 400 }
+      ),
+    };
+  }
+  return { ok: true, userId: auth.userId, userEmail: jwtEmail };
+}
+
 export async function verifyAuth(request: NextRequest): Promise<AuthResult> {
   try {
     // Get token from cookies

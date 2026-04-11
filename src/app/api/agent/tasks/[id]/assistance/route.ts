@@ -1,23 +1,26 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { authorizeAgentTaskMutationBody, verifyAuth } from "@/lib/auth";
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
     const body = await req.json();
-    const email = body.email;
     const message = body.message;
 
-    if (!email || !message) {
-      return NextResponse.json({ success: false, error: "Email and message required" }, { status: 400 });
+    const session = await verifyAuth(req);
+    const actor = authorizeAgentTaskMutationBody(session, body);
+    if (!actor.ok) return actor.response;
+
+    if (!message) {
+      return NextResponse.json({ success: false, error: "Message required" }, { status: 400 });
     }
 
-    // Find the user by email
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+      where: { id: actor.userId },
       select: { id: true, isLive: true }
     });
 
@@ -71,7 +74,7 @@ export async function POST(
 
     console.log("🔍 Assistance Request Created:", {
       taskId: id,
-      agentEmail: email,
+      agentEmail: actor.userEmail,
       message: message,
       status: updatedTask.status
     });

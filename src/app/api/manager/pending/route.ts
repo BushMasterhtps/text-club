@@ -1,8 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   const { searchParams } = new URL(req.url);
   const q        = searchParams.get('q') ?? '';
   const assigned = searchParams.get('assigned') ?? 'any'; // 'any' | 'unassigned' | <userId>

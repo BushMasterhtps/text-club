@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RawStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { requireManagerRole } from '@/lib/auth';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 /** RawMessage.status uses RawStatus, not TaskStatus (e.g. no PENDING on RawMessage). */
 const DELETABLE_RAW_MESSAGE_STATUSES: RawStatus[] = [
@@ -44,12 +44,9 @@ function coerceIds(input: any): string[] {
  */
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
-  
-  // SECURITY: Verify manager role
-  const auth = requireManagerRole(req);
-  if (!auth.success) {
-    return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
-  }
+
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
 
   try {
     const body = await req.json().catch(() => ({}));

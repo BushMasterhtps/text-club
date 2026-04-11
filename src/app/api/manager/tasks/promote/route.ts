@@ -1,8 +1,12 @@
 // src/app/api/manager/tasks/promote/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const body = await req.json().catch(() => ({}));
     const ids: string[] = Array.isArray(body?.ids) ? body.ids : [];

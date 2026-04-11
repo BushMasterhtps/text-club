@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import type { Prisma } from "@prisma/client";
 
 type StatusKey =
@@ -29,7 +30,10 @@ function looksLikeId(s: string) {
   return /^[a-z0-9_-]{10,}$/i.test(s);
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   const url = new URL(req.url);
   const statusKey = parseStatus(url.searchParams.get("status"));
   const q = (url.searchParams.get("q") ?? url.searchParams.get("search") ?? "").trim();
