@@ -3,8 +3,16 @@
 // Uses efficient bulk operations to avoid Netlify timeout issues
 
 import { NextRequest, NextResponse } from 'next/server';
+import { RawStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireManagerRole } from '@/lib/auth';
+
+/** RawMessage.status uses RawStatus, not TaskStatus (e.g. no PENDING on RawMessage). */
+const DELETABLE_RAW_MESSAGE_STATUSES: RawStatus[] = [
+  RawStatus.READY,
+  RawStatus.SPAM_REVIEW,
+  RawStatus.SPAM_ARCHIVED,
+];
 
 function coerceIds(input: any): string[] {
   if (!input) return [];
@@ -78,12 +86,12 @@ export async function POST(req: NextRequest) {
     });
 
     // Step 1b: Fetch RawMessages that are not associated with tasks
-    // Allow deletion of RawMessages in PENDING, READY, or SPAM_REVIEW status
+    // Allow deletion only for valid RawStatus values (not TaskStatus like PENDING)
     const rawMessages = rawMessageIds.length > 0 
       ? await prisma.rawMessage.findMany({
           where: { 
             id: { in: rawMessageIds },
-            status: { in: ['PENDING', 'READY', 'SPAM_REVIEW'] as any },
+            status: { in: DELETABLE_RAW_MESSAGE_STATUSES },
           },
           select: {
             id: true,

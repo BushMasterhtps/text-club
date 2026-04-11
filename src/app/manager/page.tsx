@@ -1876,7 +1876,10 @@ function SpamReviewSection({
 
       let message = `✅ Successfully deleted ${data.deletedCount + data.rawMessagesDeleted} item(s)`;
       if (data.skippedCount > 0) {
-        message += `\n⚠️ Skipped ${data.skippedCount} item(s) (${data.skippedTasks.map((t: any) => t.reason).join(', ')})`;
+        const reasons = Array.isArray(data.skippedTasks)
+          ? data.skippedTasks.map((t: any) => t.reason).join(', ')
+          : '';
+        message += `\n⚠️ Skipped ${data.skippedCount} item(s)${reasons ? ` (${reasons})` : ''}`;
       }
       alert(message);
 
@@ -2008,10 +2011,19 @@ function SpamReviewSection({
             <SmallButton onClick={handleRefresh} disabled={loading}>
               {loading ? "Loading…" : "🔄 Refresh"}
             </SmallButton>
+            {selectedItems.size > 0 && (
+              <SmallButton
+                onClick={handleBulkDeleteSpam}
+                disabled={deleteLoading}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete selected ({selectedItems.size})
+              </SmallButton>
+            )}
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm rounded-xl overflow-hidden table-fixed">
+            <table className="w-full text-sm rounded-xl overflow-hidden min-w-[960px]">
               <thead className="bg-white/[0.04]">
                 <tr className="text-left text-white/60">
                   <th className="px-3 py-2 w-10">
@@ -2065,7 +2077,7 @@ function SpamReviewSection({
               </thead>
               <tbody className="divide-y divide-white/5">
                 {items.length === 0 && (
-                  <tr><td className="px-3 py-3 text-white/60" colSpan={6}>{loading ? "Loading…" : "No items."}</td></tr>
+                  <tr><td className="px-3 py-3 text-white/60" colSpan={7}>{loading ? "Loading…" : "No items."}</td></tr>
                 )}
                 {items.map((row, idx) => {
                   const raw = row.previewMatches;
@@ -2081,7 +2093,16 @@ function SpamReviewSection({
                           : ''
                       }`}
                     >
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 w-10 align-top">
+                        <input
+                          type="checkbox"
+                          className="accent-sky-500"
+                          checked={selectedItems.has(row.id)}
+                          onChange={() => toggleItemSelection(row.id)}
+                          aria-label={`Select spam review row ${row.id}`}
+                        />
+                      </td>
+                      <td className="px-3 py-2 w-32 align-top break-words">
                         {row.brand || "—"}
                         {row.learningScore && row.learningScore >= 70 && (
                           <div className="text-xs text-green-400 mt-1">🧠 Learning: {row.learningScore}%</div>
@@ -2098,7 +2119,7 @@ function SpamReviewSection({
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2 max-w-md">
+                      <td className="px-3 py-2 min-w-0 max-w-md align-top">
                         <Bubble><div className="line-clamp-3 break-words overflow-wrap-anywhere">{row.text || "—"}</div></Bubble>
                         {row.learningReasons && row.learningReasons.length > 0 && (
                           <div className="text-xs text-green-400 mt-1">
@@ -2134,7 +2155,7 @@ function SpamReviewSection({
                             {restoringId === row.id ? "Working…" : "Restore & Turn Off Phrase"}
                           </SmallButton>
                           <SmallButton
-                            onClick={() => handleSingleDelete(row.id)}
+                            onClick={() => handleSingleDeleteSpam(row.id)}
                             disabled={deleteLoading}
                             className="bg-red-600 hover:bg-red-700"
                           >
@@ -2174,6 +2195,18 @@ function SpamReviewSection({
               <SmallButton onClick={() => onNext()} disabled={loading || page >= totalPages}>Next</SmallButton>
             </div>
           </div>
+
+          <DeleteConfirmationModal
+            isOpen={showDeleteModal}
+            taskCount={pendingDeleteIds.length}
+            onConfirm={() => {
+              void handleDeleteRawMessages(pendingDeleteIds);
+            }}
+            onCancel={() => {
+              setShowDeleteModal(false);
+              setPendingDeleteIds([]);
+            }}
+          />
         </>
       )}
     </Card>
