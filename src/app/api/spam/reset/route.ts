@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { requireManagerApiAuth } from "@/lib/auth";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
@@ -24,9 +24,7 @@ function normText(s: unknown) {
  */
 export async function POST(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
-  if (!auth.allowed) {
-    return NextResponse.json({ error: auth.message }, { status: auth.status });
-  }
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
 
   try {
     const rules = await prisma.spamRule.findMany({
@@ -73,8 +71,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/** GET /api/spam/reset — quick read to see current rules */
-export async function GET() {
+/** GET /api/spam/reset — quick read to see current rules (manager-only; was unauthenticated) */
+export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   const rules = await prisma.spamRule.findMany({
     select: { id: true, pattern: true, patternNorm: true, enabled: true },
     orderBy: { createdAt: "asc" },

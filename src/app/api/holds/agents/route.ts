@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 /**
  * Get Holds-specific agents
@@ -7,6 +8,9 @@ import { prisma } from '@/lib/prisma';
  */
 
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     // Fetch agents with HOLDS in agentTypes
     const agents = await prisma.user.findMany({

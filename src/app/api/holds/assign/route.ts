@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateWorkMetadata } from '@/lib/holds-work-metadata';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { searchParams } = new URL(request.url);
     const agentId = searchParams.get('agentId');
@@ -143,6 +147,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const body = await request.json();
     const { taskIds, agentId, maxTasks = 200 } = body;
@@ -280,6 +287,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const body = await request.json();
     const { taskIds } = body;

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { SpamMode } from "@prisma/client";
 
 /** Normalize for matching + unique key */
@@ -51,7 +52,10 @@ function parseCSV(text: string): Record<string, string>[] {
   return rows;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const form = await req.formData();
     const file = form.get("file") as File | null;

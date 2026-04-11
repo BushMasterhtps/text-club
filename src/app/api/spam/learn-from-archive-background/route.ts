@@ -1,6 +1,7 @@
 // Background processing for spam learning from archive
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { learnFromSpamDecision } from "@/lib/spam-detection";
 
 /**
@@ -15,7 +16,10 @@ import { learnFromSpamDecision } from "@/lib/spam-detection";
  *   type?: 'spam' | 'legitimate' | 'both'; // what to process (default: 'both')
  * }
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   const startTime = Date.now();
   
   try {

@@ -1,6 +1,7 @@
 // Learn from archived spam data - Batch processing version
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { analyzeSpamPatterns, learnFromSpamDecision } from "@/lib/spam-detection";
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -9,7 +10,10 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   const startTime = Date.now();
   
   try {

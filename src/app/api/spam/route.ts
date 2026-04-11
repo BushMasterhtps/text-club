@@ -1,8 +1,9 @@
 // src/app/api/spam/route.ts
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 // same normalizer used elsewhere
 function normText(s: unknown) {
@@ -16,7 +17,10 @@ function normText(s: unknown) {
 }
 
 /** GET /api/spam — list rules */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const rules = await prisma.spamRule.findMany({
       orderBy: { createdAt: "desc" },
@@ -41,7 +45,10 @@ export async function GET() {
 /** POST /api/spam — create one rule
  * body: { pattern: string, phrase: string, brand?: string, enabled?: boolean }
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const body = await req.json().catch(() => ({} as any));
     // Support both 'phrase' and 'pattern' for frontend compatibility
@@ -74,7 +81,10 @@ export async function POST(req: Request) {
 /** PATCH /api/spam — update one rule
  * body: { id: string, pattern?: string, enabled?: boolean }
  */
-export async function PATCH(req: Request) {
+export async function PATCH(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const body = (await req.json()) as { id?: string; pattern?: string; enabled?: boolean };
     if (!body?.id) {
@@ -112,7 +122,10 @@ export async function PATCH(req: Request) {
 /** DELETE /api/spam — delete one
  * body: { id: string }
  */
-export async function DELETE(req: Request) {
+export async function DELETE(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const body = (await req.json()) as { id?: string };
     if (!body?.id) {

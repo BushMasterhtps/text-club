@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 /**
  * Get Holds import history with duplicate details
@@ -7,6 +8,9 @@ import { prisma } from '@/lib/prisma';
  */
 
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     // Fetch recent Holds imports with duplicates
     const importSessions = await prisma.importSession.findMany({

@@ -1,8 +1,12 @@
 // Learn from individual spam/legitimate decisions
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { learnFromSpamDecision } from "@/lib/spam-detection";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { text, brand, isSpam, source } = await req.json();
     

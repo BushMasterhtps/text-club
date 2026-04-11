@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateFinancialImpact } from '@/lib/holds-disposition-impact';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 /**
  * API for Agent Work Breakdown
@@ -9,6 +10,9 @@ import { calculateFinancialImpact } from '@/lib/holds-disposition-impact';
  */
 
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');

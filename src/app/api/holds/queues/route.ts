@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateWorkMetadata } from '@/lib/holds-work-metadata';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 // Assembly line queue statuses for holds
 const HOLDS_QUEUES = [
@@ -14,6 +15,9 @@ const HOLDS_QUEUES = [
 type HoldsQueue = typeof HOLDS_QUEUES[number];
 
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { searchParams } = new URL(request.url);
     const queue = searchParams.get('queue') as HoldsQueue | null;

@@ -1,8 +1,12 @@
 // Advanced spam analysis API
-import { NextResponse } from "next/server";
-import { analyzeSpamPatterns, getImprovedSpamScore, learnFromSpamDecision } from "@/lib/spam-detection";
+import { NextRequest, NextResponse } from "next/server";
+import { getImprovedSpamScore, learnFromSpamDecision } from "@/lib/spam-detection";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { text, brand, action } = await req.json();
     
@@ -42,7 +46,10 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const url = new URL(req.url);
     const text = url.searchParams.get('text');
