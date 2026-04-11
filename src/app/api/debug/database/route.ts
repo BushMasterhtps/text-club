@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { denyDebugApiOutsideDevelopment } from '@/lib/debug-api-gate';
 
 const prisma = new PrismaClient();
 
 export async function GET() {
+  const denied = denyDebugApiOutsideDevelopment();
+  if (denied) return denied;
+
   try {
     // Get database connection info
     const dbInfo = await prisma.$queryRaw`

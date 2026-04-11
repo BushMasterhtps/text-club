@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireManagerApiAuth } from '@/lib/auth';
 
 /**
  * Cleanup Holds Test Data
@@ -13,6 +14,11 @@ import { prisma } from '@/lib/prisma';
  */
 
 export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.message }, { status: auth.status });
+  }
+
   try {
     console.log('🧹 Starting Holds test data cleanup...');
 

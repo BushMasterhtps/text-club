@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { denyDebugApiOutsideDevelopment } from "@/lib/debug-api-gate";
 
 export async function GET() {
+  const denied = denyDebugApiOutsideDevelopment();
+  if (denied) return denied;
+
   try {
     // Get all task statuses and types
     const taskStats = await prisma.task.groupBy({

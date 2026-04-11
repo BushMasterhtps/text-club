@@ -1,7 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireManagerApiAuth } from '@/lib/auth';
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.message }, { status: auth.status });
+  }
+
   try {
     // Delete all WOD/IVCS tasks
     const result = await prisma.task.deleteMany({

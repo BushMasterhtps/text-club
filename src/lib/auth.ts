@@ -16,6 +16,50 @@ export interface AuthResult {
   error?: string;
 }
 
+export type ManagerApiAuthDenied = {
+  allowed: false;
+  status: 401 | 403;
+  message: string;
+};
+
+export type ManagerApiAuthOk = {
+  allowed: true;
+  userId: string;
+  userRole: string;
+  userEmail: string;
+};
+
+/**
+ * Handler-level manager check using the auth cookie JWT only (not x-user-* headers).
+ * Use for sensitive routes outside /api/manager/* middleware header injection.
+ * 401: missing/invalid token; 403: authenticated but not MANAGER / MANAGER_AGENT.
+ */
+export async function requireManagerApiAuth(
+  request: NextRequest
+): Promise<ManagerApiAuthOk | ManagerApiAuthDenied> {
+  const auth = await verifyAuth(request);
+  if (!auth.success) {
+    return {
+      allowed: false,
+      status: 401,
+      message: auth.error || 'Unauthorized',
+    };
+  }
+  if (auth.userRole !== 'MANAGER' && auth.userRole !== 'MANAGER_AGENT') {
+    return {
+      allowed: false,
+      status: 403,
+      message: 'Forbidden: manager access required',
+    };
+  }
+  return {
+    allowed: true,
+    userId: auth.userId!,
+    userRole: auth.userRole!,
+    userEmail: auth.userEmail!,
+  };
+}
+
 export async function verifyAuth(request: NextRequest): Promise<AuthResult> {
   try {
     // Get token from cookies

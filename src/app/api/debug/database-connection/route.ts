@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { denyDebugApiOutsideDevelopment } from '@/lib/debug-api-gate';
 
 export async function GET(request: NextRequest) {
+  const denied = denyDebugApiOutsideDevelopment();
+  if (denied) return denied;
+
   try {
     console.log('Testing database connection...');
     

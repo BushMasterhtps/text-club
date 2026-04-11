@@ -1,8 +1,9 @@
 // src/app/api/spam/reset/route.ts
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { requireManagerApiAuth } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
@@ -21,7 +22,12 @@ function normText(s: unknown) {
  * POST /api/spam/reset
  * Backfills SpamRule.patternNorm = normalized(SpamRule.pattern)
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.message }, { status: auth.status });
+  }
+
   try {
     const rules = await prisma.spamRule.findMany({
       select: { id: true, pattern: true, patternNorm: true, enabled: true },

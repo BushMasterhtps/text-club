@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireManagerApiAuth } from '@/lib/auth';
 
 /**
  * Auto-escalate Holds tasks that are 4+ days old
@@ -7,6 +8,11 @@ import { prisma } from '@/lib/prisma';
  */
 
 export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.message }, { status: auth.status });
+  }
+
   try {
     // Find all Holds tasks that are 4+ days old but NOT in Escalated Call queue
     const currentDate = new Date();

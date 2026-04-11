@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { denyDebugApiOutsideDevelopment } from '@/lib/debug-api-gate';
 
 export async function POST() {
+  const denied = denyDebugApiOutsideDevelopment();
+  if (denied) return denied;
+
   try {
     console.log('🔧 Fixing assigned task status in production...');
     
