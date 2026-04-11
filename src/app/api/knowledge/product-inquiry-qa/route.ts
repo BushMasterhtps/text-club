@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parse } from 'csv-parse/sync';
+import {
+  apiAuthDeniedResponse,
+  requireManagerApiAuth,
+  requireStaffApiAuth,
+} from '@/lib/auth';
 
 // GET - List all product inquiry QAs
 export async function GET(request: NextRequest) {
+  const auth = await requireStaffApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
@@ -35,6 +43,9 @@ export async function GET(request: NextRequest) {
 
 // POST - Create new product inquiry QA or import CSV
 export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const contentType = request.headers.get('content-type') || '';
     
@@ -198,6 +209,9 @@ export async function POST(request: NextRequest) {
 
 // PUT - Update product inquiry QA
 export async function PUT(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const body = await request.json();
     const { id, brand, product, question, answer } = body;
@@ -231,6 +245,9 @@ export async function PUT(request: NextRequest) {
 
 // DELETE - Delete product inquiry QA(s)
 export async function DELETE(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

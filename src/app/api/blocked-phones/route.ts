@@ -1,8 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 // GET /api/blocked-phones - List all blocked phone numbers
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const blockedPhones = await prisma.blockedPhone.findMany({
       where: { isActive: true },
@@ -31,7 +35,10 @@ export async function GET() {
 }
 
 // POST /api/blocked-phones - Add a new blocked phone number
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { phone, brand, reason } = await req.json();
 

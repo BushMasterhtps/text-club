@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
-export async function POST(req: Request, { params }: { params: { id: string }}) {
+export async function POST(req: NextRequest, { params }: { params: { id: string }}) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   const { id: rawMessageId } = params;
   const { userId } = await req.json().catch(() => ({}));
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });

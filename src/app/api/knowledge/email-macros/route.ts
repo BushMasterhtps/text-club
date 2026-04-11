@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parse } from 'csv-parse/sync';
+import {
+  apiAuthDeniedResponse,
+  requireManagerApiAuth,
+  requireStaffApiAuth,
+} from '@/lib/auth';
 
 // GET - List all email macros
 export async function GET(request: NextRequest) {
+  const auth = await requireStaffApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
@@ -36,6 +44,9 @@ export async function GET(request: NextRequest) {
 
 // POST - Create new email macro or import CSV
 export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const contentType = request.headers.get('content-type') || '';
     
@@ -212,6 +223,9 @@ export async function POST(request: NextRequest) {
 
 // PUT - Update email macro
 export async function PUT(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const body = await request.json();
     const { id, macroName, macro, caseType, brand, description } = body;
@@ -246,6 +260,9 @@ export async function PUT(request: NextRequest) {
 
 // DELETE - Delete email macro(s)
 export async function DELETE(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

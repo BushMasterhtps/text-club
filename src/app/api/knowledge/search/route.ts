@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireStaffApiAuth } from '@/lib/auth';
 
 /**
  * Search across all knowledge base resources
  * Searches Email Macros, Text Club Macros, and Product Inquiry QA
  */
 export async function GET(request: NextRequest) {
+  const auth = await requireStaffApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get('q') || '';

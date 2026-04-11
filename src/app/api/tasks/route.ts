@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 import type { Prisma, TaskStatus } from '@prisma/client';
 
 // ----------------- helpers -----------------
@@ -41,7 +42,10 @@ function looksLikeId(s: string) {
 
 // ----------------- route -------------------
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
   const url = new URL(req.url);
   const statusKey = parseStatus(url.searchParams.get('status'));
   const assignedQ = parseAssigned(url.searchParams.get('assigned'));

@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -56,6 +56,44 @@ export async function requireManagerApiAuth(
     allowed: true,
     userId: auth.userId!,
     userRole: auth.userRole!,
+    userEmail: auth.userEmail!,
+  };
+}
+
+/** Standard JSON response for handler-level 401/403 from require*ApiAuth helpers. */
+export function apiAuthDeniedResponse(denied: ManagerApiAuthDenied) {
+  return NextResponse.json(
+    { success: false, error: denied.message },
+    { status: denied.status }
+  );
+}
+
+/**
+ * Any logged-in staff (AGENT, MANAGER, MANAGER_AGENT). Use for read APIs shared by agent + manager UIs.
+ */
+export async function requireStaffApiAuth(
+  request: NextRequest
+): Promise<ManagerApiAuthOk | ManagerApiAuthDenied> {
+  const auth = await verifyAuth(request);
+  if (!auth.success) {
+    return {
+      allowed: false,
+      status: 401,
+      message: auth.error || 'Unauthorized',
+    };
+  }
+  const role = auth.userRole!;
+  if (role !== 'AGENT' && role !== 'MANAGER' && role !== 'MANAGER_AGENT') {
+    return {
+      allowed: false,
+      status: 403,
+      message: 'Forbidden: staff access required',
+    };
+  }
+  return {
+    allowed: true,
+    userId: auth.userId!,
+    userRole: role,
     userEmail: auth.userEmail!,
   };
 }

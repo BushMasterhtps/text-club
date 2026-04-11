@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { NextRequest } from "next/server";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
@@ -27,17 +28,21 @@ async function resetTask(id: string) {
 }
 
 export async function PATCH(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   const { id } = await context.params;
   return resetTask(id);
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   const { id } = await context.params;
   return resetTask(id);
 }
