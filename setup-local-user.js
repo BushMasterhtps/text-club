@@ -6,7 +6,7 @@ async function setupLocalUser() {
   // Check DATABASE_URL to make sure it's not production
   const dbUrl = process.env.DATABASE_URL || '';
   
-  if (dbUrl.includes('railway') || dbUrl.includes('interchange.proxy.rlwy.net')) {
+  if (dbUrl.includes('railway') || dbUrl.includes('.rlwy.net')) {
     console.error('❌ ERROR: Production database detected!');
     console.error('This script should only run with LOCAL database.');
     console.error('Please set DATABASE_URL to your local database in .env file');
@@ -17,7 +17,6 @@ async function setupLocalUser() {
     console.log('✅ Using local database (safe to proceed)');
   } else {
     console.warn('⚠️  WARNING: Unrecognized DATABASE_URL. Make sure this is your LOCAL database!');
-    console.warn(`DATABASE_URL: ${dbUrl.substring(0, 30)}...`);
   }
   
   const prisma = new PrismaClient();

@@ -1,24 +1,17 @@
 #!/bin/bash
+# Opens Prisma Studio using DATABASE_URL from the environment (never hardcode credentials).
 
-# Script to open Prisma Studio connected to Railway database
-# This gives you a visual interface to browse all your raw data
+set -euo pipefail
 
-RAILWAY_DB_URL="postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway"
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "DATABASE_URL is not set. Export your PostgreSQL connection string, then re-run:"
+  echo "  export DATABASE_URL='postgresql://…'"
+  echo "  ./scripts/open-prisma-studio.sh"
+  exit 1
+fi
 
 echo "🚀 Opening Prisma Studio..."
-echo "📊 Connecting to Railway database..."
-echo ""
-echo "✅ Prisma Studio will open at: http://localhost:5555"
-echo "📝 You can browse, search, and view all your raw data there!"
-echo ""
-echo "Press Ctrl+C to stop Prisma Studio when you're done."
+echo "📝 Prisma Studio: http://localhost:5555 (Ctrl+C to stop)"
 echo ""
 
-# Set DATABASE_URL and run Prisma Studio
-DATABASE_URL="$RAILWAY_DB_URL" npx prisma studio
-
-
-
-
-
-
+exec npx prisma studio

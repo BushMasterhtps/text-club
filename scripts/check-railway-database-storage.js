@@ -10,18 +10,11 @@
  *   DATABASE_URL="your-connection-string" node scripts/check-railway-database-storage.js
  */
 
+const { requireEnv } = require('./lib/require-env');
+requireEnv('DATABASE_URL');
+
 const { PrismaClient } = require('@prisma/client');
-
-// Use Railway DATABASE_URL from environment or fallback to hardcoded (for reference)
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway';
-
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: DATABASE_URL
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 async function checkDatabaseStorage() {
   try {

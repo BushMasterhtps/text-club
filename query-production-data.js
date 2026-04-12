@@ -1,14 +1,11 @@
-// Interactive query tool for your production database
+// Interactive query tool — set DATABASE_URL to the target database before running.
+const { requireEnv } = require('./scripts/lib/require-env');
+requireEnv('DATABASE_URL');
+
 const { PrismaClient } = require('@prisma/client');
 const readline = require('readline');
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway'
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -16,7 +13,7 @@ const rl = readline.createInterface({
 });
 
 async function showMenu() {
-  console.log('\n🔍 PRODUCTION DATABASE QUERY TOOL');
+  console.log('\n🔍 DATABASE QUERY TOOL (uses DATABASE_URL from environment)');
   console.log('=====================================');
   console.log('1. View all users');
   console.log('2. View recent tasks (last 20)');

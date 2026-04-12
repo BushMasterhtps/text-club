@@ -61,7 +61,7 @@ Redeploy the site, then:
 
 ## 7. Railway: "Database unreachable" / Sentry Prisma errors
 
-If Sentry shows **Can't reach database server at interchange.proxy.rlwy.net:43835** and `/api/health` returns `Database unreachable`, the URL is correct but the connection is blocked or failing. Do the following on **Railway**:
+If Sentry shows **Can't reach database server at `your-db-host:port`** and `/api/health` returns `Database unreachable`, the URL may be correct but the connection is blocked or failing. Do the following on **Railway**:
 
 ### A. Enable Public Networking (required for Netlify)
 
@@ -73,7 +73,7 @@ If Sentry shows **Can't reach database server at interchange.proxy.rlwy.net:4383
 
 ### B. Try without SSL
 
-If the connection still fails, the proxy might be failing during SSL handshake. In Netlify, **edit** `DATABASE_URL` and **remove** `?sslmode=require` so the value is only the base URL (e.g. `postgresql://postgres:PASSWORD@interchange.proxy.rlwy.net:43835/railway`). Save, trigger a new deploy, then check `/api/health` again.
+If the connection still fails, the proxy might be failing during SSL handshake. In Netlify, **edit** `DATABASE_URL` and **remove** `?sslmode=require` so the value is only the base URL (e.g. `postgresql://USER:PASSWORD@HOST:PORT/DATABASE`). Save, trigger a new deploy, then check `/api/health` again.
 
 ### C. Confirm Postgres is running
 

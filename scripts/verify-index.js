@@ -1,11 +1,8 @@
+const { requireEnv } = require('./lib/require-env');
+requireEnv('DATABASE_URL');
+
 const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL || 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway'
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 async function verifyIndex() {
   try {

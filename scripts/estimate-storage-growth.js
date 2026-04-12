@@ -7,18 +7,11 @@
  *   node scripts/estimate-storage-growth.js
  */
 
+const { requireEnv } = require('./lib/require-env');
+requireEnv('DATABASE_URL');
+
 const { PrismaClient } = require('@prisma/client');
-
-// Use Railway DATABASE_URL from environment or fallback
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway';
-
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: DATABASE_URL
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 async function estimateStorageGrowth() {
   try {

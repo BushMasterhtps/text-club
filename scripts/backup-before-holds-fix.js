@@ -7,20 +7,14 @@
  * Usage: node scripts/backup-before-holds-fix.js
  */
 
+const { requireEnv } = require('./lib/require-env');
+requireEnv('DATABASE_URL');
+
 const { PrismaClient } = require('@prisma/client');
 const fs = require('fs');
 const path = require('path');
 
-// Use Railway's DATABASE_URL (production)
-const RAILWAY_DB_URL = 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway';
-
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: RAILWAY_DB_URL
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 async function createBackup() {
   try {

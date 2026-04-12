@@ -8,22 +8,14 @@
  * 3. What the current state of the task is (assignedToId, status, etc.)
  */
 
+const { requireEnv } = require('./scripts/lib/require-env');
+requireEnv('DATABASE_URL');
+
 const { PrismaClient } = require('@prisma/client');
 
-// Use Railway's DATABASE_URL (production) - explicitly set to bypass local .env
-const RAILWAY_DB_URL = 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway';
+console.log('🔗 Connecting using DATABASE_URL from environment...\n');
 
-console.log('🔗 Connecting to Railway production database...');
-console.log(`   Host: interchange.proxy.rlwy.net:43835`);
-console.log(`   Database: railway\n`);
-
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: RAILWAY_DB_URL
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 async function checkHoldsUnableToResolve() {
   try {

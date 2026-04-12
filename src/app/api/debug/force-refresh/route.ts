@@ -51,7 +51,6 @@ export async function POST() {
         userCount,
         sampleTasks,
         sampleRawMessages,
-        databaseUrl: process.env.DATABASE_URL ? 'Set' : 'Not set',
         timestamp: new Date().toISOString()
       }
     });

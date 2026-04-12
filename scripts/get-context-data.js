@@ -1,24 +1,13 @@
-// Script to gather data for presentation CONTEXT slide
-// Connect to Railway PostgreSQL database directly
+// Script to gather data for presentation CONTEXT slide — requires DATABASE_URL.
+
+const { requireEnv } = require('./lib/require-env');
+requireEnv('DATABASE_URL');
 
 const { PrismaClient } = require('@prisma/client');
 
-// Use Railway DATABASE_URL directly from codebase
-const RAILWAY_DB_URL = 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway';
+console.log('\n📡 Connecting using DATABASE_URL from environment...\n');
 
-console.log('\n📡 Connecting to Railway Database...');
-console.log('   Host: interchange.proxy.rlwy.net');
-console.log('   Port: 43835');
-console.log('   Database: railway');
-console.log('   ✓ Using Railway production database\n');
-
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: RAILWAY_DB_URL
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 async function getContextData() {
   try {
@@ -102,7 +91,7 @@ async function getContextData() {
   } catch (error) {
     console.error('\n❌ Error gathering context data:', error.message);
     if (error.code === 'P1001') {
-      console.error('   Database connection failed. Check Railway DATABASE_URL.');
+      console.error('   Database connection failed. Check DATABASE_URL.');
     }
   } finally {
     await prisma.$disconnect();

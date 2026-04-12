@@ -81,17 +81,15 @@ const tableSizes = await prisma.$queryRaw`
 # Make sure DATABASE_URL is set to Railway
 export DATABASE_URL="your-railway-database-url"
 
-# Or use the Railway connection string directly
-DATABASE_URL="postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway" npx prisma studio
+# Or set DATABASE_URL to your provider’s connection string, then:
+npx prisma studio
 ```
 
-**Or create a script for convenience:**
+**Or use the repo script (requires `DATABASE_URL` in the environment):**
 
 ```bash
-# Create: scripts/open-prisma-studio.sh
-#!/bin/bash
-export DATABASE_URL="postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway"
-npx prisma studio
+export DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
+./scripts/open-prisma-studio.sh
 ```
 
 **Features:**

@@ -1,15 +1,10 @@
 #!/usr/bin/env node
 
-const { PrismaClient } = require('@prisma/client');
+const { requireEnv } = require('./lib/require-env');
+requireEnv('DATABASE_URL');
 
-// Connect to the database that Netlify is actually using
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway'
-    }
-  }
-});
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 async function wipeDatabase() {
   try {

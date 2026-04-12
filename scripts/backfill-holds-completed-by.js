@@ -14,18 +14,11 @@
  *   --auto-assign: Automatically assign based on heuristics (use with caution)
  */
 
+const { requireEnv } = require('./lib/require-env');
+requireEnv('DATABASE_URL');
+
 const { PrismaClient } = require('@prisma/client');
-
-// Use Railway's DATABASE_URL (production)
-const RAILWAY_DB_URL = 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway';
-
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: RAILWAY_DB_URL
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 // Holds started on 11/17/2025
 const HOLDS_START_DATE = new Date('2025-11-17T00:00:00.000Z');

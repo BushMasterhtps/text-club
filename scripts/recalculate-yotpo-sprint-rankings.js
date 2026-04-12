@@ -8,18 +8,11 @@
  * 4. Ensures hybrid 30/70 calculations are correct
  */
 
+const { requireEnv } = require('./lib/require-env');
+requireEnv('DATABASE_URL');
+
 const { PrismaClient } = require('@prisma/client');
-
-// Connect to Railway PostgreSQL database directly
-const RAILWAY_DB_URL = 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway';
-
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: RAILWAY_DB_URL
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 // Import task weights (we'll replicate the logic here)
 const YOTPO_WEIGHTS = {

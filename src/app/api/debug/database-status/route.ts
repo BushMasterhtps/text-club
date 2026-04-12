@@ -76,7 +76,6 @@ export async function GET() {
         assignedTasksDetails: assignedTasks,
         users: users.length,
         usersDetails: users,
-        databaseUrl: process.env.DATABASE_URL ? 'Set' : 'Not set'
       }
     });
     

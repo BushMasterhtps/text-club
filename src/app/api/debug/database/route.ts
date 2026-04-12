@@ -30,25 +30,17 @@ export async function GET() {
         user: dbInfo[0].current_user,
         host: dbInfo[0].inet_server_addr,
         port: dbInfo[0].inet_server_port,
-        isRailway: dbInfo[0].inet_server_addr === 'interchange.proxy.rlwy.net' || 
-                   dbInfo[0].inet_server_addr === 'postgres.railway.internal'
       },
       data: {
         userCount,
         taskCount,
         sampleUsers
       },
-      environment: {
-        DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT SET'
-      }
     });
     
   } catch (error) {
     return NextResponse.json({
       error: error.message,
-      environment: {
-        DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT SET'
-      }
     }, { status: 500 });
   } finally {
     await prisma.$disconnect();

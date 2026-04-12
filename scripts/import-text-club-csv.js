@@ -17,25 +17,16 @@
  */
 
 require('dotenv').config();
+const { requireEnv } = require('./lib/require-env');
+requireEnv('DATABASE_URL');
+
 const { PrismaClient } = require('@prisma/client');
 const fs = require('fs');
 const path = require('path');
 const { parse } = require('csv-parse/sync');
 const crypto = require('crypto');
 
-// Use Railway's DATABASE_URL (production)
-// If DATABASE_URL is not set or points to local, use Railway production URL
-const dbUrl = process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost') && !process.env.DATABASE_URL.includes('127.0.0.1')
-  ? process.env.DATABASE_URL
-  : 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway';
-
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: dbUrl
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 // Helper functions (mirror API logic)
 function normText(s) {

@@ -1,16 +1,12 @@
 #!/usr/bin/env node
 
+const { requireEnv } = require('./lib/require-env');
+requireEnv('DATABASE_URL');
+
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
-// Connect to the database that Netlify is using
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: 'postgresql://postgres:OUYdvdsKqOUGwpTWTUUniqINJdjqIBdy@interchange.proxy.rlwy.net:43835/railway'
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 async function createAdminUser() {
   try {
