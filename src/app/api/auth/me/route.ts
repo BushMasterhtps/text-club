@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAuthFromHeaders } from '@/lib/auth';
+import { verifyAuth } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const authResult = getAuthFromHeaders(request);
+    const authResult = await verifyAuth(request);
     
     if (!authResult.success) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });

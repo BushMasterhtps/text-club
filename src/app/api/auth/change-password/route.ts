@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAuthFromHeaders } from '@/lib/auth';
+import { verifyAuth } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -27,8 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user from JWT token in headers
-    const authResult = getAuthFromHeaders(request);
+    const authResult = await verifyAuth(request);
     
     if (!authResult.success) {
       return NextResponse.json(
