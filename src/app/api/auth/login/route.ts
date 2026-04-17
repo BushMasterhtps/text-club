@@ -8,12 +8,21 @@ if (!JWT_SECRET) {
   throw new Error('CRITICAL: JWT_SECRET environment variable is not set');
 }
 
-/** TEMP: structured login diagnostics — remove or reduce after production login issue is resolved. */
+/** Verbose login step logs (email, lookup details). Off unless Netlify sets LOGIN_DIAG=1. */
+function loginDiagEnabled() {
+  return process.env.LOGIN_DIAG === '1';
+}
+
 function loginLog(payload: Record<string, unknown>) {
+  if (!loginDiagEnabled()) return;
   console.info('[auth/login]', JSON.stringify({ ...payload, ts: new Date().toISOString() }));
 }
 
+/** Structured errors for login debugging; gated like loginLog except unhandled_exception. */
 function loginError(payload: Record<string, unknown>) {
+  const step = payload.step;
+  const alwaysLog = step === 'unhandled_exception';
+  if (!alwaysLog && !loginDiagEnabled()) return;
   console.error('[auth/login]', JSON.stringify({ ...payload, ts: new Date().toISOString() }));
 }
 
