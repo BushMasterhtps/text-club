@@ -1,9 +1,12 @@
 // RAILWAY FRESH DEPLOY: Database wiped, deploying with clean schema - $(date +%s)
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     console.log("🔍 Assistance API: Fetching assistance requests...");
     

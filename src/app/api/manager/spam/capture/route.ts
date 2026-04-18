@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SpamMode, RawStatus } from "@prisma/client";
 import { validateStatusTransition } from "@/lib/self-healing/status-validator";
 import { fuzzyContains } from "@/lib/fuzzy-matching";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 function norm(s: string | null | undefined) {
   return (s ?? "")
@@ -83,7 +84,9 @@ function similarity(str1: string, str2: string): number {
  * This is the first step - catches most spam quickly
  * Background processing (pattern + learning) happens separately via /capture-background
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   return await withSelfHealing(async () => {
     const startTime = Date.now();
     let rules: any[] = [];

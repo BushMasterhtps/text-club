@@ -1,12 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 // NOTE: keep your existing normalizer consistent with import/preview
 function norm(s: string) {
   return s.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const { ids, whitelist = [], disablePhrases = false } = await req.json();
 

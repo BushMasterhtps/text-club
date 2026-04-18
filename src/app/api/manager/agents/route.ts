@@ -1,8 +1,9 @@
 // src/app/api/manager/agents/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { $Enums } from "@prisma/client";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 // Which statuses count as "open"
 const OPEN_STATUSES: $Enums.TaskStatus[] = [
@@ -11,7 +12,9 @@ const OPEN_STATUSES: $Enums.TaskStatus[] = [
   "ASSISTANCE_REQUIRED",
 ];
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   return await withSelfHealing(async () => {
     try {
     // Get filter parameter (e.g., ?filter=TEXT_CLUB or ?filter=HOLDS)

@@ -7,6 +7,7 @@ import {
   isSeniorAgent 
 } from '@/lib/sprint-utils';
 import { getTaskWeight, getAllWeights, WEIGHT_SUMMARY } from '@/lib/task-weights';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 const SPRINT_DURATION_DAYS = 14;
 
@@ -67,6 +68,8 @@ function calculateTier(percentile: number): string {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const { searchParams } = new URL(request.url);
     const mode = searchParams.get('mode') || 'current'; // 'current', 'lifetime', 'sprint-{number}', or 'custom'

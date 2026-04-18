@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { RawStatus } from "@prisma/client";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 /**
  * Bulk restore old messages from spam review queue
@@ -9,6 +10,8 @@ import { RawStatus } from "@prisma/client";
  * - dryRun: "true" to preview without making changes (default: true)
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const url = new URL(req.url);
     const beforeDateStr = url.searchParams.get("beforeDate");
@@ -152,6 +155,8 @@ export async function POST(req: NextRequest) {
  * GET endpoint to check how many old messages are in spam review
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const url = new URL(req.url);
     const beforeDateStr = url.searchParams.get("beforeDate");

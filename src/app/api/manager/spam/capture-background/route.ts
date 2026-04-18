@@ -1,16 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { RawStatus } from "@prisma/client";
 import { validateStatusTransition } from "@/lib/self-healing/status-validator";
 import { analyzeSpamPatterns, getBatchImprovedSpamScores } from "@/lib/spam-detection";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 /**
  * Background processing endpoint for pattern + learning spam detection
  * This runs after fast capture (phrase rules) to catch pattern/learning matches
  * Processes in optimized batches to avoid timeouts
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   return await withSelfHealing(async () => {
     const startTime = Date.now();
     const MAX_EXECUTION_TIME = 20000; // 20 seconds (leave 6 seconds buffer for Netlify's 26s timeout)

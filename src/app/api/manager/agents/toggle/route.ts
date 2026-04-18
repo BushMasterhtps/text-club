@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
@@ -7,7 +8,9 @@ const prisma = new PrismaClient();
  * PATCH /api/manager/agents/toggle
  * body: { id: string, isLive: boolean }
  */
-export async function PATCH(req: Request) {
+export async function PATCH(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const body = await req.json().catch(() => ({}));
     const { id, isLive } = body as { id?: string; isLive?: boolean };

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { formatSprintPeriod, getSprintDates, getCurrentSprint } from '@/lib/sprint-utils';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 /**
  * Sprint History API
@@ -8,6 +9,8 @@ import { formatSprintPeriod, getSprintDates, getCurrentSprint } from '@/lib/spri
  */
 
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '20', 20);

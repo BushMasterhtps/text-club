@@ -1,7 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     // Get all agents
     const agents = await prisma.user.findMany({

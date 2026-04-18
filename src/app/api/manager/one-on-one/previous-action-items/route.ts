@@ -1,9 +1,12 @@
 // API route for fetching previous action items from last one-on-one
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 // GET - Fetch previous action items for an agent
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     
     const { searchParams } = new URL(request.url);

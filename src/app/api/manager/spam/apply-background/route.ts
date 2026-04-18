@@ -1,7 +1,8 @@
 // src/app/api/manager/spam/apply-background/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 // Stable hash (brand + normalized text) for archive dedupe
 function makeTextHash(text?: string | null, brand?: string | null) {
@@ -27,7 +28,9 @@ function chunk<T>(arr: T[], size: number): T[][] {
  *   q?: string;             // optional filter
  * }
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   const startTime = Date.now();
   
   try {

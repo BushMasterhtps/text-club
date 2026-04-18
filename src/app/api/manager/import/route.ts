@@ -1,9 +1,10 @@
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parse } from "csv-parse/sync";
 import crypto from "crypto";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 /* ------------ helpers (mirror your Apps Script semantics) ------------ */
 function normText(s: unknown) {
@@ -59,7 +60,9 @@ function buildKey(toPhone: string, when: Date | null, text: string, brand: strin
 }
 
 /** Optional counts for a small “Import Summary” widget */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const ready = await prisma.rawMessage.count({ where: { status: "READY" } });
     const spam = await prisma.rawMessage.count({ where: { status: "SPAM_REVIEW" } });
@@ -75,7 +78,9 @@ export async function GET() {
  * POST /api/manager/import
  * Accepts one or multiple CSVs via form-data (field name "files" or "file")
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     console.log("Import API called");
     const form = await req.formData();

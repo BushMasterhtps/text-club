@@ -1,9 +1,12 @@
 // API route for managing one-on-one meeting notes
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 // GET - Fetch one-on-one notes
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     
     const { searchParams } = new URL(request.url);
@@ -55,6 +58,8 @@ export async function GET(request: NextRequest) {
 
 // POST - Create new one-on-one note
 export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const body = await request.json();
     const {
@@ -113,6 +118,8 @@ export async function POST(request: NextRequest) {
 
 // PUT - Update existing one-on-one note
 export async function PUT(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const body = await request.json();
     const { noteId, ...updateData } = body;
@@ -170,6 +177,8 @@ export async function PUT(request: NextRequest) {
 
 // DELETE - Delete a one-on-one note
 export async function DELETE(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const { searchParams } = new URL(request.url);
     const noteId = searchParams.get('noteId');

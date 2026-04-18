@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTaskWeight, getAllWeights, WEIGHT_SUMMARY } from "@/lib/task-weights";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 /**
  * Performance Scorecard API
@@ -12,6 +13,8 @@ import { getTaskWeight, getAllWeights, WEIGHT_SUMMARY } from "@/lib/task-weights
  * - agentId: Optional - for detailed drill-down
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const url = new URL(req.url);
     const dateStartStr = url.searchParams.get("dateStart");

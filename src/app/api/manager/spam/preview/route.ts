@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SpamMode, RawStatus } from "@prisma/client";
 import { getBatchImprovedSpamScores, analyzeSpamPatterns } from "@/lib/spam-detection";
 import { fuzzyContains } from "@/lib/fuzzy-matching";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 /** simple normalize: lowercase, strip punctuation, collapse spaces */
 function norm(s: string | null | undefined) {
@@ -79,7 +80,9 @@ function similarity(str1: string, str2: string): number {
   return 1 - (distance / maxLen);
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   return await withSelfHealing(async () => {
     try {
       // CACHE BUST: Force new deployment to clear Netlify cache

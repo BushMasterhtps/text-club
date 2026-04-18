@@ -1,7 +1,8 @@
 // src/app/api/manager/assign/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { TaskStatus } from "@prisma/client";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 type PostBody = {
   agents?: string[];     // array of agent emails selected in the UI (legacy)
@@ -17,7 +18,9 @@ type PlanEntry = { taskId: string; agentId: string };
 // Utility to format a display label for the summary map
 const labelFor = (a: AgentLite): string => a.name?.trim() || a.email;
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const body = (await req.json()) as PostBody | null;
     

@@ -1,12 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 /**
  * Trello Import API
  * Allows managers to manually add Trello card completion counts for agents
  */
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const url = new URL(req.url);
     const dateStart = url.searchParams.get("dateStart");
@@ -66,7 +69,9 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const body = await req.json();
     const { date, agentId, cardsCount, createdBy } = body;
@@ -151,7 +156,9 @@ export async function POST(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+export async function DELETE(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const url = new URL(req.url);
     const id = url.searchParams.get("id");

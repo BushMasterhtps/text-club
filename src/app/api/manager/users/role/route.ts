@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 // PATCH: update user role
-export async function PATCH(req: Request) {
+export async function PATCH(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const body = await req.json().catch(() => ({}));
     const id = String(body?.id || "").trim();

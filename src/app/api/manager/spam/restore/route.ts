@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 // tiny helper to normalize/compare phrases
 function norm(s: unknown) {
@@ -12,7 +13,9 @@ function norm(s: unknown) {
     .trim();
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const { ids, addToWhitelist, addMatched } = (await req.json()) as {
       ids: string[];

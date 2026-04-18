@@ -69,7 +69,9 @@ export async function POST(req: NextRequest) {
 }
 
 // DELETE: remove access (set isLive to false, clear lastSeen)
-export async function DELETE(req: Request) {
+export async function DELETE(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     // Try to get ID from query parameters first, then from request body
     const { searchParams } = new URL(req.url);

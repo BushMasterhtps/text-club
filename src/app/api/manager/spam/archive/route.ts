@@ -1,13 +1,16 @@
 // src/app/api/manager/spam/archive/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 /**
  * GET /api/manager/spam/archive?take=50&offset=0&q=optional
  * Returns paged archive rows. We normalize a single `archivedAt` date so the UI
  * doesn't have to guess between `firstSeen`/`lastSeen`.
  */
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const url = new URL(req.url);
     const take = Math.min(200, Math.max(1, Number(url.searchParams.get("take") ?? 50)));

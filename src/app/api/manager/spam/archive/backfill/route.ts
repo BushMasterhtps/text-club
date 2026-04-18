@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { RawStatus } from "@prisma/client";
 import crypto from "crypto";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,9 @@ function makeTextHash(text?: string | null, brand?: string | null) {
   return crypto.createHash("sha256").update(`${brandNorm}::${norm}`).digest("hex");
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   const BATCH = 500;
   let totalProcessed = 0;
   let inserted = 0;

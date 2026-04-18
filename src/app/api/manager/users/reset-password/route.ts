@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from 'bcryptjs';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 // POST: set a temporary password
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const body = await req.json().catch(() => ({}));
     const id = String(body?.id || body?.userId || "").trim(); // Support both id and userId

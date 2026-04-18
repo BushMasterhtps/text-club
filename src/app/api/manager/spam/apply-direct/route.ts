@@ -2,9 +2,10 @@
 // Direct database update endpoint for spam review queue
 // This bypasses API timeouts by using efficient bulk database operations
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
 // Work around stale Prisma type hints
 const db = prisma as any;
@@ -27,7 +28,9 @@ function makeTextHash(text?: string | null, brand?: string | null) {
  * This endpoint directly updates the database using efficient bulk operations
  * to avoid Netlify timeout issues.
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await requireManagerApiAuth(req);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   const startTime = Date.now();
   
   try {
