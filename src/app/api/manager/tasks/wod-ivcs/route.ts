@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { looksLikePrismaCuid } from "@/lib/prisma-user-id";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import type { Prisma } from "@prisma/client";
 
@@ -27,7 +28,7 @@ function parseStatus(s: string | null): StatusKey {
 }
 
 function looksLikeId(s: string) {
-  return /^[a-z0-9_-]{10,}$/i.test(s);
+  return looksLikePrismaCuid(s);
 }
 
 export async function GET(req: NextRequest) {

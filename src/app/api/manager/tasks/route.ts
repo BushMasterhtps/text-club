@@ -1,6 +1,7 @@
 // src/app/api/manager/tasks/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { looksLikePrismaCuid } from "@/lib/prisma-user-id";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import type { Prisma } from "@prisma/client";
 
@@ -52,7 +53,7 @@ async function getParam(req: NextRequest | Request, keys: string[]) {
 }
 
 function looksLikeId(s: string) {
-  return /^[a-z0-9_-]{10,}$/i.test(s);
+  return looksLikePrismaCuid(s);
 }
 
 /* ------------------------------- route: GET ------------------------------- */

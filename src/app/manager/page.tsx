@@ -1032,7 +1032,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
           <option value="unassigned">Unassigned</option>
           <option value="__sep__" disabled>—</option>
           {agents.map((a) => (
-            <option key={a.id} value={a.name || a.email || a.id}>
+            <option key={a.id} value={a.id}>
               {a.name || a.email}
             </option>
           ))}

@@ -23,7 +23,11 @@ export async function GET(request: NextRequest) {
     // Handle "assigned_not_started" status (PENDING with assignedToId)
     if (status === 'assigned_not_started') {
       where.status = 'PENDING';
-      where.assignedToId = { not: null };  // Must be assigned
+      if (assignedTo && assignedTo !== 'unassigned') {
+        where.assignedToId = assignedTo;
+      } else {
+        where.assignedToId = { not: null }; // Must be assigned
+      }
     } else if (status === 'pending') {
       // For "pending", only show unassigned tasks
       where.status = 'PENDING';
@@ -33,7 +37,7 @@ export async function GET(request: NextRequest) {
     }
 
     // If assignedTo is specified and status is not "assigned_not_started" or "pending", apply it
-    // (For "assigned_not_started" and "pending", the assignedToId is already set above)
+    // (assigned_not_started + assignee is handled above; pending stays unassigned-only)
     if (assignedTo && status !== 'assigned_not_started' && status !== 'pending') {
       where.assignedToId = assignedTo;
     }

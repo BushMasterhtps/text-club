@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { looksLikePrismaCuid } from '@/lib/prisma-user-id';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 import type { Prisma, TaskStatus } from '@prisma/client';
 
@@ -35,9 +36,8 @@ function parseAssigned(a: string | null) {
   return { kind: 'user', raw: v } as const;
 }
 
-// try to detect if a string looks like an id (cuid/uuid-ish)
 function looksLikeId(s: string) {
-  return /^[a-z0-9_-]{10,}$/i.test(s);
+  return looksLikePrismaCuid(s);
 }
 
 // ----------------- route -------------------
