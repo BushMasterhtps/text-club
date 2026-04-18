@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { getClientIp, hitRateLimit, rateLimitedResponse } from '@/lib/rate-limit';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -33,6 +34,10 @@ function passwordLooksLikeBcryptHash(s: string): boolean {
 
 export async function POST(request: NextRequest) {
   let normalizedEmail = '';
+
+  const ip = getClientIp(request);
+  const loginRl = hitRateLimit(`login:${ip}`, 8, 60_000);
+  if (!loginRl.ok) return rateLimitedResponse(loginRl.retryAfterSec);
 
   try {
     let body: { email?: string; password?: string };

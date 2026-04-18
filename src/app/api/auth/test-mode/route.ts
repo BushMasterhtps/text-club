@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SignJWT } from 'jose';
+import { gateSensitiveDebugEndpoint } from '@/lib/debug-api-gate';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -12,13 +13,15 @@ if (!JWT_SECRET) {
  * Creates a test JWT token for local testing without database
  */
 export async function POST(request: NextRequest) {
-  // Only allow in development
   if (process.env.NODE_ENV !== 'development') {
     return NextResponse.json(
       { success: false, error: 'Test mode only available in development' },
       { status: 403 }
     );
   }
+
+  const denied = await gateSensitiveDebugEndpoint(request);
+  if (denied) return denied;
 
   try {
     // Create a test JWT token

@@ -1,12 +1,17 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 /**
- * Debug API routes must not run outside local development.
- * Production/staging return 404 to avoid recon and accidental exposure.
+ * Debug/test APIs: 404 in production; otherwise require manager session (cookie JWT only).
+ * Do not rely on middleware or x-user-* headers.
  */
-export function denyDebugApiOutsideDevelopment(): NextResponse | null {
-  if (process.env.NODE_ENV === 'development') {
-    return null;
+export async function gateSensitiveDebugEndpoint(
+  request: NextRequest
+): Promise<NextResponse | null> {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
-  return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+  return null;
 }

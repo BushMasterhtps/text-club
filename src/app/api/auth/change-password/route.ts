@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { getClientIp, hitRateLimit, rateLimitedResponse } from '@/lib/rate-limit';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -10,6 +11,10 @@ if (!JWT_SECRET) {
 }
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rl = hitRateLimit(`change-password:${ip}`, 8, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.retryAfterSec);
+
   try {
     const { currentPassword, newPassword } = await request.json();
 

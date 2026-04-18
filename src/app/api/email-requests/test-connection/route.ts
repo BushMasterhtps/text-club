@@ -3,6 +3,9 @@ import { getAccessToken, getSharePointSite, findExcelFile } from '@/lib/microsof
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   const auth = await requireManagerApiAuth(req);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
 

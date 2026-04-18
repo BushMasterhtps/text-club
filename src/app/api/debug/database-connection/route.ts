@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { denyDebugApiOutsideDevelopment } from '@/lib/debug-api-gate';
+import { gateSensitiveDebugEndpoint } from '@/lib/debug-api-gate';
 
 export async function GET(request: NextRequest) {
-  const denied = denyDebugApiOutsideDevelopment();
+  const denied = await gateSensitiveDebugEndpoint(request);
   if (denied) return denied;
 
   try {

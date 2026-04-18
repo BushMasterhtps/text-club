@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getClientIp, hitRateLimit, rateLimitedResponse } from '@/lib/rate-limit';
 
 /**
  * Public API endpoint for Yotpo form submissions
@@ -7,6 +8,10 @@ import { prisma } from '@/lib/prisma';
  */
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rl = hitRateLimit(`yotpo-submit:${ip}`, 30, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.retryAfterSec);
+
   try {
     const body = await request.json();
     

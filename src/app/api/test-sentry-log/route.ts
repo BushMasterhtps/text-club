@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
+import { gateSensitiveDebugEndpoint } from '@/lib/debug-api-gate';
 
 /**
  * API endpoint to test Sentry Logs from server-side
  * This helps unlock the Sentry Logs UI which may require server-side logs
  */
 export async function GET(request: NextRequest) {
+  const denied = await gateSensitiveDebugEndpoint(request);
+  if (denied) return denied;
+
   try {
     // Check if Sentry is initialized
     const client = Sentry.getClient();
