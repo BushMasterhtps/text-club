@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { apiAuthDeniedResponse, requireStaffApiAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
-  const auth = await requireManagerApiAuth(request);
+  const auth = await requireStaffApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const { email } = await request.json();
-    
+
     if (!email) {
       return NextResponse.json(
         { success: false, error: "Email is required" },
@@ -15,9 +15,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update lastSeen timestamp for the user
+    const bodyEmail = String(email).toLowerCase().trim();
+    const jwtEmail = auth.userEmail.toLowerCase().trim();
+    if (bodyEmail !== jwtEmail) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 }
+      );
+    }
+
+    // Update lastSeen timestamp for the authenticated user only
     await prisma.user.updateMany({
-      where: { email },
+      where: { email: bodyEmail },
       data: { lastSeen: new Date() }
     });
 
