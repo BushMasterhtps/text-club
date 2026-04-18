@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 /**
  * Yotpo Overview API
@@ -7,6 +8,8 @@ import { prisma } from '@/lib/prisma';
  */
 
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     // Get unassigned PENDING Yotpo tasks (for "Ready to assign")
     const pendingUnassignedCount = await prisma.task.count({

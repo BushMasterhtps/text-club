@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parse } from 'csv-parse/sync';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 /**
  * Yotpo CSV Import API
@@ -21,6 +22,8 @@ import { parse } from 'csv-parse/sync';
  */
 
 export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 /**
  * Supervisor Dashboard API - Track Yotpo form submissions
@@ -7,6 +8,8 @@ import { prisma } from '@/lib/prisma';
  */
 
 export async function GET(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const url = new URL(request.url);
     const startDate = url.searchParams.get('startDate');

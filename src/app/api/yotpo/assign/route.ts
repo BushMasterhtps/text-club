@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 
 /**
  * Yotpo Task Assignment API
@@ -7,6 +8,8 @@ import { prisma } from '@/lib/prisma';
  */
 
 export async function POST(request: NextRequest) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
     const body = await request.json();
     const { taskIds, agentIds, mode = 'distribute' } = body;
