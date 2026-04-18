@@ -41,8 +41,11 @@ export default function KanbanBoard({
   // Subscribe to store updates to trigger recalculation
   // Only update when ACTIVE tasks Map actually changes (ignore completed-only updates)
   useEffect(() => {
+    // Track all non-completed tasks (includes RESOLVED in Assistance column).
+    // Excluding RESOLVED broke RESOLVED→COMPLETED: neither status counted as "active",
+    // so tasksVersion never bumped and Kanban columns stayed stale.
     let prevActiveTasksSize = Array.from(useTaskStore.getState().tasks.values())
-      .filter(t => t.status !== 'COMPLETED' && t.status !== 'RESOLVED').length;
+      .filter(t => t.status !== 'COMPLETED').length;
     let prevActiveTasksHash = '';
     
     const unsubscribe = useTaskStore.subscribe((state) => {
@@ -51,10 +54,9 @@ export default function KanbanBoard({
         return;
       }
       
-      // Only track ACTIVE tasks (not COMPLETED/RESOLVED) to prevent flickering
-      // when completed tasks are fetched
+      // Non-completed only — adding/updating COMPLETED rows (mergeCompletedTasks) does not change this set
       const activeTasks = Array.from(state.tasks.values())
-        .filter(t => t.status !== 'COMPLETED' && t.status !== 'RESOLVED');
+        .filter(t => t.status !== 'COMPLETED');
       
       const currentActiveTasksSize = activeTasks.length;
       // Create a hash of active task IDs and statuses to detect actual changes
@@ -301,7 +303,9 @@ export default function KanbanBoard({
     });
     
     return tasks;
-  }, [tasksVersion, getTasksByStatus, selectedTaskType, selectedDate]);
+    // `tasks` (store map) must be a dependency so Completed hydrates after mergeCompletedTasks
+    // even when tasksVersion did not change (e.g. fetch completed after initial loadTasks).
+  }, [tasks, tasksVersion, getTasksByStatus, selectedTaskType, selectedDate]);
 
   const handleCardClick = (taskId: string) => {
     setSelectedTaskId(taskId);

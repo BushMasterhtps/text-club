@@ -69,6 +69,7 @@ export async function GET(req: NextRequest) {
         phone: true,
         text: true,
         status: true,
+        taskType: true,
         startTime: true,
         endTime: true,
         durationSec: true,
