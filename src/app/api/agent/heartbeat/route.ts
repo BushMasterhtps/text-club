@@ -1,12 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { verifyAuth } from "@/lib/auth";
 
 /**
  * POST /api/agent/heartbeat
  * body: { id?: string; email?: string }
- * - Updates lastSeen=now() and (optionally) flips isLive=true if you want.
+ * Updates lastSeen for the authenticated user, or for another user only when caller is MANAGER.
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const session = await verifyAuth(req);
+  if (!session.success) {
+    return NextResponse.json(
+      { success: false, error: session.error || "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
     const { id, email } = body as { id?: string; email?: string };
@@ -18,12 +27,24 @@ export async function POST(req: Request) {
       );
     }
 
+    const role = session.userRole!;
+    const jwtId = session.userId!;
+    const jwtEmail = (session.userEmail || "").toLowerCase().trim();
+
+    if (role === "AGENT" || role === "MANAGER_AGENT") {
+      if (id && id !== jwtId) {
+        return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+      }
+      const em = email ? String(email).toLowerCase().trim() : "";
+      if (email && em !== jwtEmail) {
+        return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+      }
+    }
+
     const updated = await prisma.user.update({
       where: id ? { id } : { email: email! },
       data: {
         lastSeen: new Date(),
-        // Optional: uncomment to auto-mark live when we see a heartbeat
-        // isLive: true,
       },
       select: { id: true, email: true, isLive: true, lastSeen: true },
     });

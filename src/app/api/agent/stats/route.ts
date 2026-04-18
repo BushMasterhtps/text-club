@@ -1,19 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { authorizeAgentTargetEmail } from "@/lib/auth";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const email = searchParams.get('email');
-    const dateParam = searchParams.get('date'); // Optional date parameter (YYYY-MM-DD format)
-    
-    if (!email) {
-      return NextResponse.json({ success: false, error: "Email parameter required" }, { status: 400 });
-    }
+    const email = searchParams.get("email");
+    const dateParam = searchParams.get("date"); // Optional date parameter (YYYY-MM-DD format)
+
+    const gate = await authorizeAgentTargetEmail(req, email);
+    if (!gate.ok) return gate.response;
 
     // Find the user by email
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+      where: { email: gate.targetEmail },
       select: { id: true }
     });
 

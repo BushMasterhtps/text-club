@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getTaskWeight } from "@/lib/task-weights";
 import { getCurrentSprint } from "@/lib/sprint-utils";
 import { cache } from "@/lib/cache";
+import { authorizeAgentTargetEmail } from "@/lib/auth";
 
 // Minimum thresholds
 const MINIMUM_TASKS_FOR_RANKING = 20;
@@ -15,15 +16,13 @@ const MINIMUM_DAYS_FOR_SPRINT = 3;
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const email = searchParams.get("email");
+    const emailParam = searchParams.get("email");
     const skipCache = searchParams.get("skipCache") === "true";
 
-    if (!email) {
-      return NextResponse.json({
-        success: false,
-        error: "Email is required"
-      }, { status: 400 });
-    }
+    const gate = await authorizeAgentTargetEmail(req, emailParam);
+    if (!gate.ok) return gate.response;
+
+    const email = gate.targetEmail;
 
     // Check cache first (5 minute TTL to prevent repeated slow queries)
     // Skip cache if skipCache=true (used when refreshing after task completion)

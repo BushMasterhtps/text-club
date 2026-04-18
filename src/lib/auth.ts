@@ -162,6 +162,61 @@ export async function authorizeAgentTasksList(
   };
 }
 
+export type AgentTargetEmailAuthOk = { ok: true; targetEmail: string };
+export type AgentTargetEmailAuthFail = { ok: false; response: NextResponse };
+
+/**
+ * For /api/agent/* routes that take a client-supplied email (query or body).
+ * - AGENT: may only request their own email (must match JWT).
+ * - MANAGER / MANAGER_AGENT: must provide email (view any agent’s data for that identifier).
+ */
+export async function authorizeAgentTargetEmail(
+  request: NextRequest,
+  email: string | null
+): Promise<AgentTargetEmailAuthOk | AgentTargetEmailAuthFail> {
+  const normalized = (email ?? '').toLowerCase().trim();
+  const auth = await verifyAuth(request);
+  if (!auth.success) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { success: false, error: auth.error || 'Unauthorized' },
+        { status: 401 }
+      ),
+    };
+  }
+  const role = auth.userRole!;
+  const jwtEmail = (auth.userEmail || '').toLowerCase().trim();
+
+  if (role === 'AGENT') {
+    if (!normalized || normalized !== jwtEmail) {
+      return {
+        ok: false,
+        response: NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 }),
+      };
+    }
+    return { ok: true, targetEmail: normalized };
+  }
+
+  if (role === 'MANAGER' || role === 'MANAGER_AGENT') {
+    if (!normalized) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { success: false, error: 'Email parameter required' },
+          { status: 400 }
+        ),
+      };
+    }
+    return { ok: true, targetEmail: normalized };
+  }
+
+  return {
+    ok: false,
+    response: NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 }),
+  };
+}
+
 export type AgentTaskMutationAuthOk = {
   ok: true;
   userId: string;

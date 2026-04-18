@@ -1,21 +1,18 @@
 // API route for agent profile information
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { authorizeAgentTargetEmail } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email');
-    
-    if (!email) {
-      return NextResponse.json(
-        { success: false, error: 'Email required' },
-        { status: 400 }
-      );
-    }
-    
+
+    const gate = await authorizeAgentTargetEmail(request, email);
+    if (!gate.ok) return gate.response;
+
     const agent = await prisma.user.findUnique({
-      where: { email },
+      where: { email: gate.targetEmail },
       select: {
         id: true,
         email: true,

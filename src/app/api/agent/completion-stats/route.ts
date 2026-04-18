@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
+import { authorizeAgentTargetEmail } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,13 +9,12 @@ export async function GET(request: NextRequest) {
     const email = searchParams.get("email");
     const date = searchParams.get("date");
 
-    if (!email) {
-      return NextResponse.json({ success: false, error: "Email is required" }, { status: 400 });
-    }
+    const gate = await authorizeAgentTargetEmail(request, email);
+    if (!gate.ok) return gate.response;
 
     // Get user
     const user = await prisma.user.findFirst({
-      where: { email },
+      where: { email: gate.targetEmail },
     });
 
     if (!user) {
