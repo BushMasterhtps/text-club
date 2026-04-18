@@ -426,12 +426,15 @@ export default function AgentPage() {
     setWelcomeMessage(`👋 Welcome, ${firstName}!`);
   }
 
-  // Function to load completed tasks for today
-  async function loadCompletedTasksToday() {
+  // Same persisted source as Kanban Completed column: /api/agent/completed-today with stats date
+  async function loadCompletedTasksForStatsDate(dateOverride?: string) {
     if (!email) return;
-    
+    const date = dateOverride ?? selectedDate;
     try {
-      const response = await fetch(`/api/agent/completed-today?email=${encodeURIComponent(email)}`);
+      const response = await fetch(
+        `/api/agent/completed-today?email=${encodeURIComponent(email)}&date=${encodeURIComponent(date)}`,
+        { cache: "no-store" }
+      );
       if (response.ok) {
         const data = await response.json();
         setCompletedTasksToday(data.tasks || []);
@@ -1135,8 +1138,10 @@ export default function AgentPage() {
             type="date"
             value={selectedDate}
             onChange={(e) => {
-              setSelectedDate(e.target.value);
-              loadStats(undefined, e.target.value);
+              const v = e.target.value;
+              setSelectedDate(v);
+              loadStats(undefined, v);
+              loadCompletedTasksForStatsDate(v);
             }}
             className="border-none rounded-lg px-3 py-2 bg-white/10 dark:bg-white/10 light:bg-gray-100 text-white dark:text-white light:text-gray-800 text-sm ring-1 ring-white/10 dark:ring-white/10 light:ring-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
@@ -1151,6 +1156,7 @@ export default function AgentPage() {
               loadStats(undefined, today);
               // Also refresh completion stats to show today's performance
               loadCompletionStats(undefined, today);
+              loadCompletedTasksForStatsDate(today);
             }}
           >
             Today
@@ -1170,7 +1176,7 @@ export default function AgentPage() {
               className="cursor-pointer hover:bg-white/5 rounded-lg p-2 transition-colors"
               onClick={() => {
                 setShowCompletedTasks(true);
-                loadCompletedTasksToday();
+                loadCompletedTasksForStatsDate();
               }}
             >
               <div className="text-2xl font-bold text-green-400">{stats.completed}</div>
@@ -1196,7 +1202,7 @@ export default function AgentPage() {
       {showCompletedTasks && (
         <Card className="p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <H2>✅ Completed Tasks Today</H2>
+            <H2>✅ Completed tasks ({selectedDate})</H2>
             <SmallButton onClick={() => setShowCompletedTasks(false)}>
               ✕ Close
             </SmallButton>
@@ -1204,7 +1210,7 @@ export default function AgentPage() {
           <div className="space-y-3">
             {completedTasksToday.length === 0 ? (
               <div className="text-center text-white/60 py-8">
-                No completed tasks today yet. Keep going! 🚀
+                No completed tasks for this date yet. Keep going! 🚀
               </div>
             ) : (
               completedTasksToday.map((task) => (

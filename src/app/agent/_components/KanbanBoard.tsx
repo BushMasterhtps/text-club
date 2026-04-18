@@ -134,7 +134,10 @@ export default function KanbanBoard({
                        selectedDateObj.getDate() === today.getDate();
         
         // Fetch completed tasks for the selected date
-        const response = await fetch(`/api/agent/completed-today?email=${encodeURIComponent(agentEmail)}&date=${selectedDate}`);
+        const response = await fetch(
+          `/api/agent/completed-today?email=${encodeURIComponent(agentEmail)}&date=${encodeURIComponent(selectedDate)}`,
+          { cache: "no-store" }
+        );
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.tasks) {
