@@ -37,14 +37,31 @@ export async function POST(
         status: {
           in: ["PENDING", "IN_PROGRESS", "RESOLVED"]
         }
-      }
+      },
+      select: {
+        id: true,
+        status: true,
+        startTime: true,
+      },
     });
 
     if (!task) {
       return NextResponse.json({ success: false, error: "Task not found or not available" }, { status: 404 });
     }
 
-    // Update task status and start time
+    // Idempotent: already started — preserve startTime (avoid resetting duration baseline on double-click)
+    if (task.status === "IN_PROGRESS" && task.startTime) {
+      return NextResponse.json({
+        success: true,
+        task: {
+          id: task.id,
+          status: task.status,
+          startTime: task.startTime,
+        },
+      });
+    }
+
+    // Update task status and start time (PENDING / RESOLVED, or IN_PROGRESS missing startTime)
     const updatedTask = await prisma.task.update({
       where: { id },
       data: {

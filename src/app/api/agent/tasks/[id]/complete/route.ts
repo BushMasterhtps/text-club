@@ -237,9 +237,10 @@ export async function POST(
     // Clear scorecard cache for this user to ensure fresh data on next fetch
     // This ensures the performance scorecard updates immediately after task completion
     try {
-      const cacheKey = `personal-scorecard:${(user.email || actor.userEmail).toLowerCase().trim()}`;
+      const cacheEmail = (user.email || actor.userEmail).toLowerCase().trim();
+      const cacheKey = `personal-scorecard:${cacheEmail}`;
       cache.delete(cacheKey);
-      console.log(`✅ Cleared scorecard cache for ${email}`);
+      console.log(`✅ Cleared scorecard cache for ${cacheEmail}`);
     } catch (error) {
       console.error('Failed to clear scorecard cache:', error);
       // Don't fail the task completion if cache clearing fails
