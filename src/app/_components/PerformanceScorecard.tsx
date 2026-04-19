@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { formatYmdStringForDisplay } from '@/lib/format-ymd-label';
 
 type RankingMode = 'sprint' | 'lifetime-points' | 'task-day' | 'hybrid';
 
@@ -249,6 +250,8 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
                       <div className="text-lg font-bold text-white">
                         {rankingMode === 'sprint' && sprintData.sprint ? (
                           <>🔥 {sprintData.sprint.period}</>
+                        ) : sprintData.dateRange?.isCustom && dateRange?.start && dateRange?.end ? (
+                          <>📅 {formatYmdStringForDisplay(dateRange.start)} - {formatYmdStringForDisplay(dateRange.end)}</>
                         ) : (
                           <>📅 {new Date(sprintData.dateRange.start).toLocaleDateString()} - {new Date(sprintData.dateRange.end).toLocaleDateString()}</>
                         )}
@@ -1194,7 +1197,10 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
               <div className="bg-white/5 rounded-lg p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-white/80">
-                    <strong>Period:</strong> {new Date(scorecardData.period.start).toLocaleDateString()} - {new Date(scorecardData.period.end).toLocaleDateString()} ({scorecardData.period.days} days)
+                    <strong>Period:</strong>{' '}
+                    {dateRange?.start && dateRange?.end
+                      ? `${formatYmdStringForDisplay(dateRange.start)} - ${formatYmdStringForDisplay(dateRange.end)} (${scorecardData.period.days} days)`
+                      : `${new Date(scorecardData.period.start).toLocaleDateString()} - ${new Date(scorecardData.period.end).toLocaleDateString()} (${scorecardData.period.days} days)`}
                   </div>
                   <div className="text-sm text-white/60">
                     <strong>Ranking:</strong> Highest daily avg tasks/day at top

@@ -5,6 +5,7 @@ import { Card } from '@/app/_components/Card';
 import { SmallButton } from '@/app/_components/SmallButton';
 import PerformanceScorecard from '@/app/_components/PerformanceScorecard';
 import OneOnOneNotes from '@/app/_components/OneOnOneNotes';
+import { formatYmdStringForDisplay } from '@/lib/format-ymd-label';
 
 // Typography components
 function H1({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -553,7 +554,7 @@ export default function AnalyticsPage() {
                             <div>
                               <p className="text-blue-200 text-sm font-medium">
                                 {selectedDateRange === 'custom' && customStartDate && customEndDate
-                                  ? `${new Date(customStartDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${new Date(customEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                  ? `${formatYmdStringForDisplay(customStartDate)} - ${formatYmdStringForDisplay(customEndDate)}`
                                   : 'Completed Today'}
                               </p>
                               <p className="text-3xl font-bold text-white mt-1">{overviewStats?.totalCompletedToday || 0}</p>
