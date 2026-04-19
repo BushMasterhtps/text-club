@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizeAgentTargetEmail } from "@/lib/auth";
+import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,21 +25,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
     }
 
-    // Get date boundaries - support date parameter for historical dates
-    const dateParam = searchParams.get('date'); // Format: YYYY-MM-DD
-    let startOfDay: Date;
-    let endOfDay: Date;
-    
-    if (dateParam) {
-      // Parse provided date
-      const [year, month, day] = dateParam.split('-').map(Number);
-      startOfDay = new Date(year, month - 1, day);
-      endOfDay = new Date(year, month - 1, day + 1);
-    } else {
-      // Default to today
-      const now = new Date();
-      startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const dateParam = searchParams.get("date"); // YYYY-MM-DD or omit for today (PST fixed UTC−8, same as stats)
+    let startUtc: Date;
+    let endExclusiveUtc: Date;
+    try {
+      ({ startUtc, endExclusiveUtc } = getAgentReportingDayBoundsUtc(dateParam));
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Invalid date format. Use YYYY-MM-DD" },
+        { status: 400 }
+      );
     }
 
     // Get completed tasks for today (including unassigned completed tasks, e.g., "Unable to Resolve" for Holds)
@@ -49,16 +45,16 @@ export async function GET(req: NextRequest) {
             assignedToId: user.id,
             status: "COMPLETED",
             endTime: {
-              gte: startOfDay,
-              lt: endOfDay
+              gte: startUtc,
+              lt: endExclusiveUtc,
             }
           },
           {
             completedBy: user.id,
             status: "COMPLETED",
             endTime: {
-              gte: startOfDay,
-              lt: endOfDay
+              gte: startUtc,
+              lt: endExclusiveUtc,
             }
           }
         ]

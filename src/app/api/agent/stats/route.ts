@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizeAgentTargetEmail } from "@/lib/auth";
+import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,33 +22,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    // Calculate date range in PST timezone
-    // Server runs in UTC, but users are in PST (UTC-8)
-    // PST is 8 hours BEHIND UTC, so we SUBTRACT 8 hours
     let dateStart: Date;
-    let dateEnd: Date;
-    
-    if (dateParam) {
-      // Parse the date as PST time
-      const [year, month, day] = dateParam.split('-').map(Number);
-      if (isNaN(year) || isNaN(month) || isNaN(day)) {
-        return NextResponse.json({ success: false, error: "Invalid date format. Use YYYY-MM-DD" }, { status: 400 });
-      }
-      
-      // Create date in PST: Nov 5 00:00 PST = Nov 5 08:00 UTC
-      dateStart = new Date(Date.UTC(year, month - 1, day, 8, 0, 0, 0)); // 8 AM UTC = 12 AM PST
-      dateEnd = new Date(Date.UTC(year, month - 1, day + 1, 7, 59, 59, 999)); // Next day 7:59 AM UTC = 11:59 PM PST
-    } else {
-      // Use today in PST timezone
-      const now = new Date();
-      const pstOffset = -8 * 60 * 60 * 1000; // PST = UTC - 8 hours
-      const nowPST = new Date(now.getTime() + pstOffset);
-      const year = nowPST.getUTCFullYear();
-      const month = nowPST.getUTCMonth();
-      const day = nowPST.getUTCDate();
-      
-      dateStart = new Date(Date.UTC(year, month, day, 8, 0, 0, 0)); // 8 AM UTC = 12 AM PST
-      dateEnd = new Date(Date.UTC(year, month, day + 1, 7, 59, 59, 999)); // Next day 7:59 AM UTC = 11:59 PM PST
+    let dateEndExclusive: Date;
+    try {
+      const bounds = getAgentReportingDayBoundsUtc(dateParam);
+      dateStart = bounds.startUtc;
+      dateEndExclusive = bounds.endExclusiveUtc;
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Invalid date format. Use YYYY-MM-DD" },
+        { status: 400 }
+      );
     }
     
     // Get all tasks for this user (including sent-back tasks and completed tasks that are no longer assigned)
@@ -94,7 +79,11 @@ export async function GET(req: NextRequest) {
       const isCompleted = t.status === "COMPLETED";
       const isSentBack = t.status === "PENDING" && t.sentBackBy; // Sent back tasks still count as work
       const isCompletedByUser = t.status === "COMPLETED" && t.completedBy === user.id; // Unassigned completed tasks
-      return (isCompleted || isSentBack || isCompletedByUser) && endTime >= dateStart && endTime < dateEnd;
+      return (
+        (isCompleted || isSentBack || isCompletedByUser) &&
+        endTime >= dateStart &&
+        endTime < dateEndExclusive
+      );
     }).length;
     
     const assistanceSent = tasks.filter(t => 
@@ -111,7 +100,7 @@ export async function GET(req: NextRequest) {
         const end = new Date(task.endTime);
         if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
           // Only include tasks completed on the selected date
-          if (end >= dateStart && end < dateEnd) {
+          if (end >= dateStart && end < dateEndExclusive) {
             const mins = Math.round((end.getTime() - start.getTime()) / 60000);
             totalDuration += mins;
             durationCount++;

@@ -1,0 +1,55 @@
+/**
+ * Agent-facing "reporting day" in fixed PST (UTC−8), matching legacy /api/agent/stats behavior.
+ * Used by completed-today, stats, and completion-stats so the same YYYY-MM-DD means the same UTC window.
+ *
+ * Half-open interval [startUtc, endExclusiveUtc) for safe Prisma filters: gte + lt.
+ */
+
+const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000;
+
+function ymdFromInstantInPstFixed(instant: Date): { year: number; month: number; day: number } {
+  const shiftedUtc = new Date(instant.getTime() - EIGHT_HOURS_MS);
+  return {
+    year: shiftedUtc.getUTCFullYear(),
+    month: shiftedUtc.getUTCMonth() + 1,
+    day: shiftedUtc.getUTCDate(),
+  };
+}
+
+function boundsFromCalendarYmd(year: number, month: number, day: number): {
+  startUtc: Date;
+  endExclusiveUtc: Date;
+} {
+  // 00:00 PST on calendar day = 08:00 UTC same civil date; next PST midnight = +1 day 08:00 UTC
+  const startUtc = new Date(Date.UTC(year, month - 1, day, 8, 0, 0, 0));
+  const endExclusiveUtc = new Date(Date.UTC(year, month - 1, day + 1, 8, 0, 0, 0));
+  return { startUtc, endExclusiveUtc };
+}
+
+/**
+ * @param dateParam YYYY-MM-DD or null/undefined/empty → "today" in PST (fixed UTC−8)
+ * @throws Error with message INVALID_AGENT_DATE if the string is not parseable as YYYY-MM-DD numbers
+ */
+export function getAgentReportingDayBoundsUtc(
+  dateParam: string | null | undefined
+): { startUtc: Date; endExclusiveUtc: Date } {
+  const trimmed = dateParam?.trim();
+  if (!trimmed) {
+    const { year, month, day } = ymdFromInstantInPstFixed(new Date());
+    return boundsFromCalendarYmd(year, month, day);
+  }
+
+  const parts = trimmed.split("-").map(Number);
+  if (parts.length !== 3) {
+    throw new Error("INVALID_AGENT_DATE");
+  }
+  const [year, month, day] = parts;
+  if (![year, month, day].every((n) => Number.isFinite(n))) {
+    throw new Error("INVALID_AGENT_DATE");
+  }
+  if (isNaN(year) || isNaN(month) || isNaN(day)) {
+    throw new Error("INVALID_AGENT_DATE");
+  }
+
+  return boundsFromCalendarYmd(year, month, day);
+}
