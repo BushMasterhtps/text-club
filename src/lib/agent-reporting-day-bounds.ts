@@ -53,3 +53,23 @@ export function getAgentReportingDayBoundsUtc(
 
   return boundsFromCalendarYmd(year, month, day);
 }
+
+/**
+ * Inclusive calendar range [startYmd, endYmd] in fixed PST (UTC−8), each day full width.
+ * Half-open overall window: [startUtc, endExclusiveUtc).
+ */
+export function getAgentReportingRangeBoundsUtc(
+  startYmd: string,
+  endYmd: string
+): { startUtc: Date; endExclusiveUtc: Date } {
+  const s = startYmd.trim();
+  const e = endYmd.trim();
+  if (!s || !e) {
+    throw new Error("INVALID_AGENT_DATE");
+  }
+  const lo = s <= e ? s : e;
+  const hi = s <= e ? e : s;
+  const startUtc = getAgentReportingDayBoundsUtc(lo).startUtc;
+  const endExclusiveUtc = getAgentReportingDayBoundsUtc(hi).endExclusiveUtc;
+  return { startUtc, endExclusiveUtc };
+}

@@ -12,7 +12,6 @@ import DashboardSwitcher from '@/app/_components/DashboardSwitcher';
 import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
 import SpamInsights from '@/app/_components/SpamInsights';
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
-import TextClubAnalytics from '@/app/_components/TextClubAnalytics';
 import DashboardLayout from '@/app/_components/DashboardLayout';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
@@ -132,6 +131,14 @@ function fmtDate(d: string | Date | null | undefined) {
   } catch {
     return "—";
   }
+}
+
+/** YYYY-MM-DD from a local calendar Date (matches <input type="date"> value semantics). */
+function formatLocalYmd(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 const clamp = (n: number, min = 0, max = 100) => Math.max(min, Math.min(max, n));
 
@@ -2273,8 +2280,8 @@ function CompletedWorkDashboard() {
   
   // Date picker and comparison
   const [dateMode, setDateMode] = useState<'single' | 'compare'>('single');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>(() => formatLocalYmd(new Date()));
+  const [endDate, setEndDate] = useState<string>(() => formatLocalYmd(new Date()));
   const [compareStartDate, setCompareStartDate] = useState<string>('');
   const [compareEndDate, setCompareEndDate] = useState<string>('');
   const [comparisonData, setComparisonData] = useState<CompletedWorkAnalytics | null>(null);
@@ -2289,7 +2296,6 @@ function CompletedWorkDashboard() {
       if (brandFilter && brandFilter !== "all") params.set("brandFilter", brandFilter);
       if (startDate) params.set("startDate", startDate);
       if (endDate) params.set("endDate", endDate);
-      params.set("includeAll", "true"); // Request all data for reporting
       params.set("limit", limit.toString());
       params.set("offset", offset.toString());
 
@@ -2349,6 +2355,10 @@ function CompletedWorkDashboard() {
       }
     }
   }, [open, agentFilter, dispositionFilter, brandFilter, limit, offset, startDate, endDate, dateMode, compareStartDate, compareEndDate]);
+
+  useEffect(() => {
+    setOffset(0);
+  }, [startDate, endDate, agentFilter, dispositionFilter, brandFilter, limit]);
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return "—";
@@ -2424,16 +2434,8 @@ function CompletedWorkDashboard() {
         break;
     }
 
-    // Format dates as YYYY-MM-DD without timezone conversion
-    const formatDate = (date: Date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    setStartDate(formatDate(start));
-    setEndDate(formatDate(end));
+    setStartDate(formatLocalYmd(start));
+    setEndDate(formatLocalYmd(end));
   };
 
   const setComparisonDateRange = (range: 'previousPeriod' | 'sameLastMonth' | 'sameLastQuarter' | 'sameLastYear') => {
@@ -2470,8 +2472,8 @@ function CompletedWorkDashboard() {
         break;
     }
 
-    setCompareStartDate(compareStart.toISOString().split('T')[0]);
-    setCompareEndDate(compareEnd.toISOString().split('T')[0]);
+    setCompareStartDate(formatLocalYmd(compareStart));
+    setCompareEndDate(formatLocalYmd(compareEnd));
   };
 
   // Comparison calculation functions
@@ -2493,69 +2495,87 @@ function CompletedWorkDashboard() {
   };
 
   // CSV download function
-  const downloadCompletedTasksCSV = () => {
-    if (!tasks || tasks.length === 0) {
-      alert('No data available to export. Please load the dashboard first.');
-      return;
+  const downloadCompletedTasksCSV = async () => {
+    const params = new URLSearchParams();
+    if (agentFilter) params.set("agent", agentFilter);
+    if (dispositionFilter !== "all") params.set("disposition", dispositionFilter);
+    if (brandFilter && brandFilter !== "all") params.set("brandFilter", brandFilter);
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    params.set("includeAll", "true");
+
+    try {
+      const response = await fetch(
+        `/api/manager/dashboard/completed-work?${params.toString()}`,
+        { cache: "no-store" }
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success) {
+        alert(data?.error || "Export failed. Try a smaller date range.");
+        return;
+      }
+      const exportTasks: CompletedTask[] = data.completedTasks || [];
+      if (exportTasks.length === 0) {
+        alert("No rows match the current filters and date range.");
+        return;
+      }
+
+      const headers = [
+        "Brand",
+        "Phone",
+        "Agent Name",
+        "Agent Email",
+        "Start Time",
+        "End Time",
+        "Duration (min)",
+        "Disposition",
+        "SF Case #",
+        "Message Text",
+      ];
+
+      const rows = exportTasks.map((task) => [
+        task.brand || "",
+        task.rawMessage?.phone || "",
+        task.assignedTo?.name || "",
+        task.assignedTo?.email || "",
+        task.startTime ? new Date(task.startTime).toLocaleString() : "",
+        task.endTime ? new Date(task.endTime).toLocaleString() : "",
+        task.durationSec ? Math.round(task.durationSec / 60) : "",
+        task.disposition || "",
+        task.sfCaseNumber || "",
+        (task.text || task.rawMessage?.text || "").replace(/"/g, '""'),
+      ]);
+
+      const csvContent = [headers, ...rows]
+        .map((row) => row.map((field) => `"${field}"`).join(","))
+        .join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+
+      const dateRange =
+        startDate && endDate
+          ? `_${startDate}_to_${endDate}`
+          : `_${formatLocalYmd(new Date())}`;
+
+      link.setAttribute("download", `completed_tasks${dateRange}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      alert(
+        `CSV Export Complete!\n\n` +
+          `Total Tasks: ${exportTasks.length}\n` +
+          `Date Range: ${startDate && endDate ? `${startDate} to ${endDate}` : "Current period"}\n\n` +
+          `File saved as: completed_tasks${dateRange}.csv`
+      );
+    } catch (e) {
+      console.error("CSV export failed:", e);
+      alert("CSV export failed. Check your connection and try again.");
     }
-
-    // Create CSV headers
-    const headers = [
-      'Brand',
-      'Phone',
-      'Agent Name',
-      'Agent Email',
-      'Start Time',
-      'End Time',
-      'Duration (min)',
-      'Disposition',
-      'SF Case #',
-      'Message Text'
-    ];
-
-    // Create CSV rows
-    const rows = tasks.map(task => [
-      task.brand || '',
-      task.rawMessage?.phone || '',
-      task.assignedTo?.name || '',
-      task.assignedTo?.email || '',
-      task.startTime ? new Date(task.startTime).toLocaleString() : '',
-      task.endTime ? new Date(task.endTime).toLocaleString() : '',
-      task.durationSec ? Math.round(task.durationSec / 60) : '',
-      task.disposition || '',
-      task.sfCaseNumber || '',
-      (task.text || task.rawMessage?.text || '').replace(/"/g, '""') // Escape quotes
-    ]);
-
-    // Combine headers and rows
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(field => `"${field}"`).join(','))
-      .join('\n');
-
-    // Create and download file
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    
-    // Generate filename with date range
-    const dateRange = startDate && endDate 
-      ? `_${startDate}_to_${endDate}` 
-      : `_${new Date().toISOString().split('T')[0]}`;
-    
-    link.setAttribute('download', `completed_tasks${dateRange}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    // Show success message
-    alert(
-      `CSV Export Complete!\n\n` +
-      `Total Tasks: ${tasks.length}\n` +
-      `Date Range: ${startDate && endDate ? `${startDate} to ${endDate}` : 'Current period'}\n\n` +
-      `File saved as: completed_tasks${dateRange}.csv`
-    );
   };
 
   return (
@@ -2754,6 +2774,12 @@ function CompletedWorkDashboard() {
                   />
                 </div>
               </div>
+              <p className="text-sm text-white/50">
+                Reporting window (PST calendar days, same bounds as agent stats):{" "}
+                <span className="font-mono text-white/80">{startDate || "—"}</span>
+                {" → "}
+                <span className="font-mono text-white/80">{endDate || "—"}</span>
+              </p>
 
               {/* Comparison Date Inputs */}
               {dateMode === 'compare' && (
@@ -3038,6 +3064,28 @@ function CompletedWorkDashboard() {
                 </tbody>
               </table>
             </div>
+            {totalCount > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-4 text-sm text-white/70">
+                <span>
+                  Page: rows {offset + 1}–
+                  {offset + (tasks.length || 0)} of {totalCount.toLocaleString()} (size {limit})
+                </span>
+                <div className="flex gap-2">
+                  <SmallButton
+                    disabled={offset === 0 || loading}
+                    onClick={() => setOffset((o) => Math.max(0, o - limit))}
+                  >
+                    Previous page
+                  </SmallButton>
+                  <SmallButton
+                    disabled={offset + limit >= totalCount || loading}
+                    onClick={() => setOffset((o) => o + limit)}
+                  >
+                    Next page
+                  </SmallButton>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       )}

@@ -174,6 +174,12 @@ export default function TextClubAnalytics({
 
   return (
     <div className="space-y-6">
+      <p className="text-sm text-white/50">
+        Reporting window (PST calendar days):{" "}
+        <span className="font-mono text-white/80">
+          {startDate && endDate ? `${startDate} → ${endDate}` : "Today (default)"}
+        </span>
+      </p>
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="p-4 bg-gradient-to-br from-blue-500/20 to-blue-600/20 border-blue-500/30">

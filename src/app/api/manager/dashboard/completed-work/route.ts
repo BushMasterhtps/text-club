@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeBrand, getBrandFilterValues } from "@/lib/brand-normalize";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import {
+  getAgentReportingDayBoundsUtc,
+  getAgentReportingRangeBoundsUtc,
+} from "@/lib/agent-reporting-day-bounds";
 
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
@@ -23,14 +27,23 @@ export async function GET(request: NextRequest) {
       taskType: "TEXT_CLUB" // Only show Text Club tasks
     };
 
-    // Add date filtering if provided
+    // Date range: YYYY-MM-DD = same PST-fixed calendar days as agent stats (half-open [start, end))
     if (startDate && endDate) {
-      const start = new Date(startDate + 'T00:00:00.000Z');
-      const end = new Date(endDate + 'T23:59:59.999Z');
-      where.endTime = {
-        gte: start,
-        lte: end
-      };
+      try {
+        const { startUtc, endExclusiveUtc } = getAgentReportingRangeBoundsUtc(
+          startDate,
+          endDate
+        );
+        where.endTime = {
+          gte: startUtc,
+          lt: endExclusiveUtc,
+        };
+      } catch {
+        return NextResponse.json(
+          { success: false, error: "Invalid startDate or endDate. Use YYYY-MM-DD." },
+          { status: 400 }
+        );
+      }
     }
 
     if (brandFilter && brandFilter !== "all") {
@@ -130,15 +143,18 @@ export async function GET(request: NextRequest) {
         _avg: { durationSec: true },
         _count: { id: true }
       }),
-      // Total completed in the selected date range (or today if no range specified)
+      // Total completed in the selected date range (or current PST "today" if no range specified)
       prisma.task.count({
-        where: startDate && endDate ? where : {
-          ...where,
-          endTime: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-            lt: new Date(new Date().setHours(23, 59, 59, 999))
-          }
-        }
+        where:
+          startDate && endDate
+            ? where
+            : {
+                ...where,
+                endTime: (() => {
+                  const b = getAgentReportingDayBoundsUtc(null);
+                  return { gte: b.startUtc, lt: b.endExclusiveUtc };
+                })(),
+              },
       }),
       // Brand breakdown (no brand filter): group by raw brand, merge by canonical name
       prisma.task.groupBy({
