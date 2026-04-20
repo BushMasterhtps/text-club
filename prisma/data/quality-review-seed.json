@@ -1,0 +1,157 @@
+{
+  "templates": [
+    {
+      "slug": "qr-communications-core-v1",
+      "displayName": "Quality Review – Communications (Core)",
+      "taskTypes": ["TEXT_CLUB", "EMAIL_REQUESTS", "YOTPO"],
+      "wodIvcsSource": null,
+      "versions": [
+        {
+          "version": 1,
+          "lines": [
+            {
+              "slug": "problem-solving-path",
+              "sectionOrder": 1,
+              "sectionTitle": "Problem Solving",
+              "lineOrder": 1,
+              "label": "Correct overall solution path for the customer issue",
+              "helpText": "Fail if the agent chose an incorrect resolution path.",
+              "weight": "10.00",
+              "isCritical": true,
+              "allowNa": false
+            },
+            {
+              "slug": "protocol-compliance-spam-unfeasible",
+              "sectionOrder": 2,
+              "sectionTitle": "Protocol Compliance",
+              "lineOrder": 1,
+              "label": "Correct handling of spam / unfeasible disposition when applicable",
+              "helpText": null,
+              "weight": "10.00",
+              "isCritical": true,
+              "allowNa": true
+            },
+            {
+              "slug": "soft-skills-tone",
+              "sectionOrder": 3,
+              "sectionTitle": "Soft Skills",
+              "lineOrder": 1,
+              "label": "Professional tone, clarity, and customer-appropriate language",
+              "helpText": null,
+              "weight": "5.00",
+              "isCritical": false,
+              "allowNa": false
+            },
+            {
+              "slug": "end-documentation-disposition",
+              "sectionOrder": 4,
+              "sectionTitle": "End / Documentation / Disposition",
+              "lineOrder": 1,
+              "label": "Accurate disposition and documentation for the outcome",
+              "helpText": null,
+              "weight": "8.00",
+              "isCritical": false,
+              "allowNa": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "qr-wod-ivcs-v1",
+      "displayName": "Quality Review – WOD / IVCS",
+      "taskTypes": ["WOD_IVCS"],
+      "wodIvcsSource": null,
+      "versions": [
+        {
+          "version": 1,
+          "lines": [
+            {
+              "slug": "wod-problem-solving-path",
+              "sectionOrder": 1,
+              "sectionTitle": "Problem Solving",
+              "lineOrder": 1,
+              "label": "Correct overall solution path for the order / discrepancy",
+              "helpText": "Fail if the agent chose an incorrect resolution path.",
+              "weight": "10.00",
+              "isCritical": true,
+              "allowNa": false
+            },
+            {
+              "slug": "wod-protocol-disposition",
+              "sectionOrder": 2,
+              "sectionTitle": "Protocol Compliance",
+              "lineOrder": 1,
+              "label": "Correct disposition and procedural handling for the WOD/IVCS scenario",
+              "helpText": null,
+              "weight": "8.00",
+              "isCritical": true,
+              "allowNa": false
+            },
+            {
+              "slug": "wod-sale-order-discrepancy",
+              "sectionOrder": 3,
+              "sectionTitle": "Systems & Cash Sale",
+              "lineOrder": 1,
+              "label": "Corrected sale order discrepancy accurately (when applicable)",
+              "weight": "10.00",
+              "isCritical": true,
+              "allowNa": true
+            },
+            {
+              "slug": "wod-cash-sale-accuracy",
+              "sectionOrder": 3,
+              "sectionTitle": "Systems & Cash Sale",
+              "lineOrder": 2,
+              "label": "Created or edited cash sale accurately (when applicable)",
+              "weight": "10.00",
+              "isCritical": true,
+              "allowNa": true
+            },
+            {
+              "slug": "wod-payment-info",
+              "sectionOrder": 3,
+              "sectionTitle": "Systems & Cash Sale",
+              "lineOrder": 3,
+              "label": "Confirmed payment information correctly (when applicable)",
+              "weight": "8.00",
+              "isCritical": true,
+              "allowNa": true
+            },
+            {
+              "slug": "wod-retrigger-cash-sale",
+              "sectionOrder": 3,
+              "sectionTitle": "Systems & Cash Sale",
+              "lineOrder": 4,
+              "label": "Re-triggered cash sale correctly when required",
+              "weight": "8.00",
+              "isCritical": true,
+              "allowNa": true
+            },
+            {
+              "slug": "wod-soft-skills",
+              "sectionOrder": 4,
+              "sectionTitle": "Soft Skills",
+              "lineOrder": 1,
+              "label": "Professional internal notes and clear documentation",
+              "weight": "5.00",
+              "isCritical": false,
+              "allowNa": false
+            },
+            {
+              "slug": "wms-download-after-48h",
+              "sectionOrder": 5,
+              "sectionTitle": "Systems Outcome",
+              "lineOrder": 1,
+              "label": "Did the Sale Order download into WMS after 48 hours?",
+              "helpText": "NA if agent followed procedure but system failed outside agent control.",
+              "weight": "3.00",
+              "isCritical": false,
+              "allowNa": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

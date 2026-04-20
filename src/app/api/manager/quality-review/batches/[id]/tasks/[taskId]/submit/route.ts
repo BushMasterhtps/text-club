@@ -175,7 +175,7 @@ export async function POST(
           submittedAt: new Date(),
           weightedScore: scores.weightedScore,
           failedCriticalCount: scores.failedCriticalCount,
-          scoreCap: scores.scoreCap,
+          scoreCap: scores.scoreCap ?? null,
           finalScore: scores.finalScore,
           taskSnapshot: buildTaskSnapshot(task),
           reviewerNotes: body.reviewerNotes?.trim() || null,
@@ -221,6 +221,9 @@ export async function POST(
         reviewId: review.id,
         taskId,
         scores: {
+          earnedWeight: scores.earnedWeight,
+          possibleWeight: scores.possibleWeight,
+          weightedPercent: scores.weightedPercent,
           weightedScore: scores.weightedScore,
           failedCriticalCount: scores.failedCriticalCount,
           scoreCap: scores.scoreCap,
@@ -232,7 +235,11 @@ export async function POST(
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";
-    if (msg.startsWith("MISSING_RESPONSE") || msg.startsWith("NA_NOT_ALLOWED")) {
+    if (
+      msg.startsWith("MISSING_RESPONSE") ||
+      msg.startsWith("NA_NOT_ALLOWED") ||
+      msg.startsWith("NO_APPLICABLE_LINES")
+    ) {
       return NextResponse.json({ success: false, error: msg }, { status: 400 });
     }
     console.error("[quality-review/submit]", e);

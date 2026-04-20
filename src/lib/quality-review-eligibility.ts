@@ -21,26 +21,17 @@ export function buildQualityReviewEligibleTaskWhere(
     taskType?: TaskType;
     disposition?: QualityReviewDispositionFilter;
     wodIvcsSource?: WodIvcsSource | null;
+    /** When true, do not filter by disposition (used to list disposition options / unfiltered breakdowns). */
+    omitDispositionFilter?: boolean;
   }
 ): Prisma.TaskWhereInput {
   const { startUtc, endExclusiveUtc } = getAgentReportingRangeBoundsUtc(startYmd, endYmd);
 
-  const disposition = options?.disposition;
-  let dispositionWhere: Prisma.StringFilter | undefined;
+  const disposition = options?.omitDispositionFilter ? undefined : options?.disposition;
+  let dispositionWhere: Prisma.StringNullableFilter | undefined;
   if (disposition && disposition !== "all") {
-    if (disposition === "Spam") {
-      dispositionWhere = {
-        in: [
-          "Spam - Negative Feedback",
-          "Spam - Positive Feedback",
-          "Spam - Off Topic",
-          "Spam - Gibberish",
-          "Spam - One word statement",
-          "Spam - Reaction Message",
-        ],
-      };
-    } else if (disposition === "Answered in SF") {
-      dispositionWhere = { contains: "Answered in SF" };
+    if (disposition === "__NONE__") {
+      dispositionWhere = { equals: null };
     } else {
       dispositionWhere = { equals: disposition };
     }
