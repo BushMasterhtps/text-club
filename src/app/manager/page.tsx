@@ -4146,6 +4146,13 @@ function ManagerPageContent() {
         timeLeft={timeLeft} 
         onExtend={extendSession} 
       />
+      <a
+        href="/manager/quality-review"
+        className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-violet-600/80 text-white hover:bg-violet-600"
+        title="Quality Review sampling and scoring"
+      >
+        Quality Review
+      </a>
       {/* Switch to Agent Button (only if user has MANAGER_AGENT role) */}
       {currentUserRole === 'MANAGER_AGENT' && (
         <button

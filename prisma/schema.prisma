@@ -63,6 +63,27 @@ enum WodIvcsSource {
 }
 
 /////////////////////////////////////
+// Quality Review (QA*) — manager sampling v1
+/////////////////////////////////////
+
+enum QASampleBatchStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum QATaskReviewStatus {
+  PENDING
+  SUBMITTED
+}
+
+enum QAReviewLineResponse {
+  PASS
+  FAIL
+  NA
+}
+
+/////////////////////////////////////
 // Core user & task models
 /////////////////////////////////////
 
@@ -88,6 +109,12 @@ model User {
   assistance        AssistanceRequest[]
   histories         TaskHistory[]       @relation("UserHistory")
   trelloCompletions TrelloCompletion[]
+
+  qaTemplatesCreated        QATemplate[]        @relation("QATemplateCreatedBy")
+  qaTemplateVersionsCreated QATemplateVersion[] @relation("QATemplateVersionCreatedBy")
+  qaSampleBatchesAsReviewer QASampleBatch[]     @relation("QASampleBatchReviewer")
+  qaSampleBatchesAsSubject  QASampleBatch[]     @relation("QASampleBatchSubject")
+  qaTaskReviewsAsReviewer   QATaskReview[]      @relation("QATaskReviewReviewer")
 
   @@index([isLive, lastSeen])
 }
@@ -205,6 +232,9 @@ model Task {
   assistance AssistanceRequest[]
   history    TaskHistory[]
   labels     SpamLabel[]
+
+  qaSampleBatchTasks QASampleBatchTask[]
+  qaTaskReview       QATaskReview?
 
   @@index([assignedToId])
   @@index([status, createdAt])
@@ -598,4 +628,144 @@ model ProductInquiryQA {
 
   @@index([brand])
   @@index([product])
+}
+
+/////////////////////////////////////
+// Quality Review — templates & batches (v1)
+/////////////////////////////////////
+
+model QATemplate {
+  id            String         @id @default(cuid())
+  slug          String         @unique
+  displayName   String
+  taskType      TaskType
+  wodIvcsSource WodIvcsSource?
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  createdById   String?
+  createdBy     User?          @relation("QATemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  versions QATemplateVersion[]
+
+  @@index([taskType, isActive])
+  @@index([taskType, wodIvcsSource, isActive])
+}
+
+model QATemplateVersion {
+  id          String     @id @default(cuid())
+  templateId  String
+  template    QATemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version     Int
+  createdAt   DateTime   @default(now())
+  createdById String?
+  createdBy   User?      @relation("QATemplateVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  lines         QALine[]
+  sampleBatches QASampleBatch[]
+  taskReviews   QATaskReview[]
+
+  @@unique([templateId, version])
+  @@index([templateId])
+}
+
+model QALine {
+  id                String            @id @default(cuid())
+  templateVersionId String
+  templateVersion   QATemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Cascade)
+  slug              String
+  sectionOrder      Int
+  sectionTitle      String
+  lineOrder         Int
+  label             String
+  helpText          String?
+  weight            Decimal           @db.Decimal(10, 2)
+  isCritical        Boolean           @default(false)
+  allowNa           Boolean           @default(false)
+
+  lineResults QALineResult[]
+
+  @@unique([templateVersionId, slug])
+  @@index([templateVersionId])
+}
+
+model QASampleBatch {
+  id                String              @id @default(cuid())
+  reviewerId        String
+  reviewer          User                @relation("QASampleBatchReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  subjectAgentId    String
+  subjectAgent      User                @relation("QASampleBatchSubject", fields: [subjectAgentId], references: [id], onDelete: Restrict)
+  templateVersionId String
+  templateVersion   QATemplateVersion   @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  periodStartDate   String              @db.VarChar(10)
+  periodEndDate     String              @db.VarChar(10)
+  filtersJson       Json?
+  sampleCount       Int
+  status            QASampleBatchStatus @default(OPEN)
+  createdAt         DateTime            @default(now())
+  completedAt       DateTime?
+
+  batchTasks QASampleBatchTask[]
+  reviews    QATaskReview[]
+
+  @@index([reviewerId, createdAt])
+  @@index([subjectAgentId, createdAt])
+  @@index([status])
+}
+
+model QASampleBatchTask {
+  id        String        @id @default(cuid())
+  batchId   String
+  batch     QASampleBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  taskId    String
+  task      Task          @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  sortIndex Int
+
+  @@unique([batchId, taskId])
+  @@index([taskId])
+}
+
+model QATaskReview {
+  id                  String             @id @default(cuid())
+  batchId             String
+  batch               QASampleBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  taskId              String             @unique
+  task                Task               @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  templateVersionId   String
+  templateVersion     QATemplateVersion  @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  reviewerId          String
+  reviewer            User               @relation("QATaskReviewReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  status              QATaskReviewStatus @default(PENDING)
+  weightedScore       Decimal?           @db.Decimal(5, 2)
+  failedCriticalCount Int?
+  scoreCap            Decimal?           @db.Decimal(5, 2)
+  finalScore          Decimal?           @db.Decimal(5, 2)
+  submittedAt         DateTime?
+  taskSnapshot        Json?
+  reviewerNotes       String?            @db.Text
+  expiresAt           DateTime?
+
+  lineResults QALineResult[]
+
+  @@index([batchId])
+  @@index([status])
+  @@index([templateVersionId])
+  @@index([expiresAt])
+}
+
+model QALineResult {
+  id                 String               @id @default(cuid())
+  taskReviewId       String
+  taskReview         QATaskReview         @relation(fields: [taskReviewId], references: [id], onDelete: Cascade)
+  lineId             String
+  line               QALine               @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  response           QAReviewLineResponse
+  comment            String?
+  labelSnapshot      String
+  weightSnapshot     Decimal              @db.Decimal(10, 2)
+  isCriticalSnapshot Boolean
+  allowNaSnapshot    Boolean
+
+  @@unique([taskReviewId, lineId])
+  @@index([taskReviewId])
 }

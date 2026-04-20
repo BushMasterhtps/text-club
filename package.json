@@ -2,6 +2,9 @@
   "name": "text-club",
   "version": "0.1.0",
   "private": true,
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "rimraf node_modules/.prisma && npx prisma generate && next build --turbopack",

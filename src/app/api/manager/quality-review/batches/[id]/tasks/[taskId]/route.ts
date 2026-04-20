@@ -1,0 +1,92 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+
+const taskReviewSelect = {
+  id: true,
+  taskId: true,
+  status: true,
+  templateVersionId: true,
+  batchId: true,
+} as const;
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string; taskId: string }> }
+) {
+  const auth = await requireManagerApiAuth(request);
+  if (!auth.allowed) return apiAuthDeniedResponse(auth);
+
+  const { id: batchId, taskId } = await context.params;
+
+  try {
+    const batch = await prisma.qASampleBatch.findFirst({
+      where: { id: batchId, reviewerId: auth.userId },
+      select: { id: true },
+    });
+    if (!batch) {
+      return NextResponse.json({ success: false, error: "Batch not found" }, { status: 404 });
+    }
+
+    const link = await prisma.qASampleBatchTask.findFirst({
+      where: { batchId, taskId },
+    });
+    if (!link) {
+      return NextResponse.json({ success: false, error: "Task not in this batch" }, { status: 404 });
+    }
+
+    const review = await prisma.qATaskReview.findFirst({
+      where: { batchId, taskId },
+      select: taskReviewSelect,
+    });
+    if (!review) {
+      return NextResponse.json({ success: false, error: "Review row missing" }, { status: 500 });
+    }
+
+    const [task, lines] = await Promise.all([
+      prisma.task.findFirst({
+        where: { id: taskId },
+        include: {
+          rawMessage: {
+            select: { brand: true, phone: true, text: true, email: true },
+          },
+          assignedTo: { select: { id: true, name: true, email: true } },
+          completedByUser: { select: { id: true, name: true, email: true } },
+        },
+      }),
+      prisma.qALine.findMany({
+        where: { templateVersionId: review.templateVersionId },
+        orderBy: [{ sectionOrder: "asc" }, { lineOrder: "asc" }],
+        select: {
+          id: true,
+          slug: true,
+          sectionOrder: true,
+          sectionTitle: true,
+          lineOrder: true,
+          label: true,
+          helpText: true,
+          weight: true,
+          isCritical: true,
+          allowNa: true,
+        },
+      }),
+    ]);
+
+    if (!task) {
+      return NextResponse.json({ success: false, error: "Task not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        review,
+        lines,
+        task,
+      },
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    console.error("[quality-review/batches/task GET]", e);
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
+}
