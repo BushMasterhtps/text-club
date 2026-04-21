@@ -373,6 +373,11 @@ function QualityReviewContent() {
       setError("Select a checklist template.");
       return;
     }
+    const batchSampleCount = sampleSize;
+    if (!Number.isFinite(batchSampleCount) || batchSampleCount < 1 || batchSampleCount > 100) {
+      setError("Sample size must be a number from 1 to 100.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -391,7 +396,7 @@ function QualityReviewContent() {
           subjectAgentId,
           startDate,
           endDate,
-          sampleCount,
+          sampleCount: batchSampleCount,
           taskType,
           disposition: dispositionBody,
           wodIvcsSource: taskType === "WOD_IVCS" && wodSource ? wodSource : undefined,
@@ -406,7 +411,9 @@ function QualityReviewContent() {
       setStep("review");
       if (first) await loadTask(json.data.batchId, first);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Batch creation failed");
+      const msg = e instanceof Error ? e.message : "Batch creation failed";
+      console.error("[quality-review] createBatch", e);
+      setError(msg);
     } finally {
       setBusy(false);
     }
