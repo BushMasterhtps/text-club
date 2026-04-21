@@ -27,11 +27,12 @@ const WOD_SOURCES: WodIvcsSource[] = [
   "SO_VS_WEB_DIFFERENCE",
 ];
 
-type TemplateRow = {
+type ActiveTemplateInfo = {
+  templateId: string;
   templateVersionId: string;
   displayName: string;
   slug: string;
-  wodIvcsSource: WodIvcsSource | null;
+  version: number;
   lineCount: number;
 };
 
@@ -117,14 +118,13 @@ function QualityReviewContent() {
   const [dispositionChoice, setDispositionChoice] = useState(DISPOSITION_ALL);
   const [wodSource, setWodSource] = useState<WodIvcsSource | "">("");
   const [sampleSizeInput, setSampleSizeInput] = useState("5");
-  const [templateVersionId, setTemplateVersionId] = useState("");
 
   const sampleSize = useMemo(() => clampSample(parseInt(sampleSizeInput, 10)), [sampleSizeInput]);
 
   const [eligibility, setEligibility] = useState<EligibilityData | null>(null);
-  const [templates, setTemplates] = useState<TemplateRow[]>([]);
+  const [activeTemplate, setActiveTemplate] = useState<ActiveTemplateInfo | null>(null);
+  const [loadingActiveTemplate, setLoadingActiveTemplate] = useState(false);
   const [loadingEligibility, setLoadingEligibility] = useState(false);
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
   const [step, setStep] = useState<"setup" | "review" | "summary">("setup");
   const [error, setError] = useState<string | null>(null);
@@ -163,32 +163,24 @@ function QualityReviewContent() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoadingTemplates(true);
+      setLoadingActiveTemplate(true);
       setError(null);
       try {
-        const res = await fetch(`/api/manager/quality-review/templates?taskType=${taskType}`, {
-          credentials: "include",
-        });
-        const json = await res.json();
-        if (!json.success) throw new Error(json.error || "Failed to load templates");
-        const rows = (json.data ?? []) as TemplateRow[];
-        if (cancelled) return;
-        setTemplates(rows);
-        setTemplateVersionId((prev) =>
-          rows.length === 0
-            ? ""
-            : rows.some((r) => r.templateVersionId === prev)
-              ? prev
-              : rows[0]!.templateVersionId
+        const res = await fetch(
+          `/api/manager/quality-review/templates/active?taskType=${taskType}`,
+          { credentials: "include" }
         );
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || "Failed to resolve active template");
+        if (cancelled) return;
+        setActiveTemplate((json.data as ActiveTemplateInfo | null) ?? null);
       } catch (e: unknown) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Template load failed");
-          setTemplates([]);
-          setTemplateVersionId("");
+          console.error("[quality-review] active template", e);
+          setActiveTemplate(null);
         }
       } finally {
-        if (!cancelled) setLoadingTemplates(false);
+        if (!cancelled) setLoadingActiveTemplate(false);
       }
     })();
     return () => {
@@ -372,8 +364,10 @@ function QualityReviewContent() {
       setError("Select agent and date range.");
       return;
     }
-    if (!templateVersionId) {
-      setError("Select a checklist template.");
+    if (!activeTemplate) {
+      setError(
+        "No active checklist for this task type. Add or publish one under Quality Review → Templates."
+      );
       return;
     }
     const batchSampleCount = sampleSize;
@@ -403,7 +397,6 @@ function QualityReviewContent() {
           taskType,
           disposition: dispositionBody,
           wodIvcsSource: taskType === "WOD_IVCS" && wodSource ? wodSource : undefined,
-          templateVersionId,
         }),
       });
       const json = await res.json();
@@ -544,6 +537,12 @@ function QualityReviewContent() {
       <>
         <ThemeToggle />
         <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
+        <Link
+          href="/manager/quality-review/templates"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20"
+        >
+          Templates
+        </Link>
         <Link
           href="/manager"
           className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20"
@@ -724,24 +723,38 @@ function QualityReviewContent() {
                     className="mt-1.5 w-full rounded-lg bg-neutral-950/80 px-3 py-2.5 text-white border border-white/15 focus:border-violet-400/60 focus:outline-none font-mono"
                   />
                 </label>
-                <label className="block text-sm">
-                  <span className="text-white/55">Checklist template</span>
-                  <select
-                    value={templateVersionId}
-                    onChange={(e) => setTemplateVersionId(e.target.value)}
-                    disabled={loadingTemplates || templates.length === 0}
-                    className="mt-1.5 w-full rounded-lg bg-neutral-950/80 px-3 py-2.5 text-white border border-white/15 focus:border-violet-400/60 focus:outline-none"
-                  >
-                    <option value="">
-                      {loadingTemplates ? "Loading…" : templates.length ? "Select…" : "No template"}
-                    </option>
-                    {templates.map((t) => (
-                      <option key={t.templateVersionId} value={t.templateVersionId}>
-                        {t.displayName} ({t.lineCount} lines)
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="rounded-xl border border-white/10 bg-black/25 p-4 space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                    Active checklist (auto)
+                  </div>
+                  {loadingActiveTemplate ? (
+                    <p className="text-sm text-white/50">Loading template…</p>
+                  ) : activeTemplate ? (
+                    <>
+                      <p className="text-sm text-white/90 font-medium">{activeTemplate.displayName}</p>
+                      <p className="text-xs text-white/50">
+                        Version {activeTemplate.version} · {activeTemplate.lineCount} lines ·{" "}
+                        <span className="font-mono text-white/40">{activeTemplate.slug}</span>
+                      </p>
+                      <Link
+                        href={`/manager/quality-review/templates/${activeTemplate.templateId}`}
+                        className="inline-block text-xs text-violet-300 hover:text-violet-200 underline underline-offset-2"
+                      >
+                        Edit template
+                      </Link>
+                    </>
+                  ) : (
+                    <p className="text-sm text-amber-200/90">
+                      No active checklist for this task type.{" "}
+                      <Link
+                        href="/manager/quality-review/templates"
+                        className="underline underline-offset-2 text-violet-300 hover:text-violet-200"
+                      >
+                        Configure templates
+                      </Link>
+                    </p>
+                  )}
+                </div>
 
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-white/10">
                   <button
@@ -796,7 +809,7 @@ function QualityReviewContent() {
                       busy ||
                       !eligibility ||
                       eligibility.totalEligible < sampleSize ||
-                      !templateVersionId ||
+                      !activeTemplate ||
                       !filtersReady
                     }
                     className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold disabled:opacity-40 shadow-md shadow-emerald-900/30"

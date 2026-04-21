@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { buildQualityReviewEligibleTaskWhere } from "@/lib/quality-review-eligibility";
-import { resolveActiveTemplateVersionId } from "@/lib/quality-review-template";
+import { resolveActiveTemplateForTaskType } from "@/lib/quality-review-template";
 import type { Prisma, TaskType, WodIvcsSource } from "@prisma/client";
 
 const PENDING_RESERVATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -30,7 +30,6 @@ export async function POST(request: NextRequest) {
       taskType?: TaskType;
       disposition?: string | null;
       wodIvcsSource?: WodIvcsSource | null;
-      templateVersionId?: string;
       filtersJson?: Prisma.InputJsonValue;
     };
 
@@ -75,44 +74,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let templateVersionId = body.templateVersionId?.trim();
-    let resolvedDisplayName: string | undefined;
-
-    if (templateVersionId) {
-      const tv = await prisma.qATemplateVersion.findFirst({
-        where: { id: templateVersionId },
-        include: {
-          template: true,
-          _count: { select: { lines: true } },
+    const resolved = await resolveActiveTemplateForTaskType(body.taskType);
+    if (!resolved) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "No active Quality Review checklist for this task type. Configure one under Manager → Quality Review → Templates.",
         },
-      });
-      if (!tv || tv._count.lines === 0 || !tv.template.isActive) {
-        return NextResponse.json(
-          { success: false, error: "Invalid or inactive templateVersionId" },
-          { status: 400 }
-        );
-      }
-      if (tv.template.taskType !== body.taskType) {
-        return NextResponse.json(
-          { success: false, error: "templateVersion does not match taskType" },
-          { status: 400 }
-        );
-      }
-      resolvedDisplayName = tv.template.displayName;
-    } else {
-      const resolved = await resolveActiveTemplateVersionId(
-        body.taskType,
-        body.wodIvcsSource ?? undefined
+        { status: 400 }
       );
-      if (!resolved) {
-        return NextResponse.json(
-          { success: false, error: "No active Quality Review template for this task type" },
-          { status: 400 }
-        );
-      }
-      templateVersionId = resolved.templateVersionId;
-      resolvedDisplayName = resolved.displayName;
     }
+    const templateVersionId = resolved.templateVersionId;
+    const resolvedDisplayName = resolved.displayName;
 
     const where = buildQualityReviewEligibleTaskWhere(
       subjectAgentId,
@@ -153,7 +127,7 @@ export async function POST(request: NextRequest) {
           data: {
             reviewerId: auth.userId,
             subjectAgentId,
-            templateVersionId: templateVersionId!,
+            templateVersionId,
             periodStartDate: startDate,
             periodEndDate: endDate,
             filtersJson: body.filtersJson ?? undefined,
@@ -174,7 +148,7 @@ export async function POST(request: NextRequest) {
             data: {
               batchId: b.id,
               taskId: picked[i]!,
-              templateVersionId: templateVersionId!,
+              templateVersionId,
               reviewerId: auth.userId,
               status: "PENDING",
               expiresAt,

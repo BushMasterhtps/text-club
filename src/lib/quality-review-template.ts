@@ -1,16 +1,40 @@
 import { prisma } from "@/lib/prisma";
-import type { TaskType, WodIvcsSource } from "@prisma/client";
+import type { TaskType } from "@prisma/client";
+
+/** Task types we surface in Quality Review template admin + batch flow. */
+export const QUALITY_REVIEW_TASK_TYPES: TaskType[] = [
+  "TEXT_CLUB",
+  "WOD_IVCS",
+  "EMAIL_REQUESTS",
+  "YOTPO",
+  "HOLDS",
+  "STANDALONE_REFUNDS",
+];
+
+export type ResolvedActiveTemplate = {
+  templateId: string;
+  templateVersionId: string;
+  displayName: string;
+  slug: string;
+  version: number;
+  lineCount: number;
+};
 
 /**
- * Pick the active template version for sampling/review for a task type.
- * Prefer an exact wodIvcsSource match when provided; otherwise templates with null source (all WOD).
+ * One active checklist per task type (this phase): canonical templates use
+ * `wodIvcsSource === null` only. WOD_IVCS does not pick different templates by source.
+ *
+ * If multiple active canonical templates exist (misconfiguration), the earliest slug wins.
  */
-export async function resolveActiveTemplateVersionId(
-  taskType: TaskType,
-  wodIvcsSource?: WodIvcsSource | null
-): Promise<{ templateVersionId: string; templateId: string; displayName: string } | null> {
+export async function resolveActiveTemplateForTaskType(
+  taskType: TaskType
+): Promise<ResolvedActiveTemplate | null> {
   const templates = await prisma.qATemplate.findMany({
-    where: { isActive: true, taskType },
+    where: {
+      isActive: true,
+      taskType,
+      wodIvcsSource: null,
+    },
     include: {
       versions: {
         orderBy: { version: "desc" },
@@ -18,6 +42,7 @@ export async function resolveActiveTemplateVersionId(
         include: { _count: { select: { lines: true } } },
       },
     },
+    orderBy: { slug: "asc" },
   });
 
   const withVersion = templates
@@ -29,30 +54,13 @@ export async function resolveActiveTemplateVersionId(
 
   if (withVersion.length === 0) return null;
 
-  if (taskType === "WOD_IVCS" && wodIvcsSource != null) {
-    const exact = withVersion.find((x) => x.template.wodIvcsSource === wodIvcsSource);
-    if (exact) {
-      return {
-        templateVersionId: exact.version!.id,
-        templateId: exact.template.id,
-        displayName: exact.template.displayName,
-      };
-    }
-  }
-
-  const catchAll = withVersion.find((x) => x.template.wodIvcsSource === null);
-  if (catchAll) {
-    return {
-      templateVersionId: catchAll.version!.id,
-      templateId: catchAll.template.id,
-      displayName: catchAll.template.displayName,
-    };
-  }
-
-  const first = withVersion[0];
+  const { template, version } = withVersion[0]!;
   return {
-    templateVersionId: first.version!.id,
-    templateId: first.template.id,
-    displayName: first.template.displayName,
+    templateId: template.id,
+    templateVersionId: version!.id,
+    displayName: template.displayName,
+    slug: template.slug,
+    version: version!.version,
+    lineCount: version!._count.lines,
   };
 }
