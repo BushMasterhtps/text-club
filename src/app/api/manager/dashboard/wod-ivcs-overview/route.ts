@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
 
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { startUtc, endExclusiveUtc } = getAgentReportingDayBoundsUtc(null);
 
     // OPTIMIZED: Consolidate 4 count queries + 3 groupBy queries into 2 raw SQL queries
     // First query: Aggregate all status counts and age bucket counts in a single database trip
@@ -29,7 +27,15 @@ export async function GET(request: NextRequest) {
         COUNT(*) FILTER (WHERE status = 'PENDING' AND "assignedToId" IS NULL)::bigint as pending_unassigned_count,
         COUNT(*) FILTER (WHERE status = 'PENDING' AND "assignedToId" IS NOT NULL)::bigint as assigned_not_started_count,
         COUNT(*) FILTER (WHERE status = 'IN_PROGRESS')::bigint as in_progress_count,
-        COUNT(*) FILTER (WHERE status = 'COMPLETED' AND "endTime" >= ${today} AND "endTime" < ${tomorrow})::bigint as completed_today_count,
+        COUNT(*) FILTER (
+          WHERE "endTime" IS NOT NULL
+            AND "endTime" >= ${startUtc}
+            AND "endTime" < ${endExclusiveUtc}
+            AND (
+              status = 'COMPLETED'
+              OR (status = 'PENDING' AND "sentBackBy" IS NOT NULL)
+            )
+        )::bigint as completed_today_count,
         COUNT(*) FILTER (WHERE status = 'COMPLETED')::bigint as total_completed_count,
         COUNT(*) FILTER (
           WHERE status = 'PENDING' 

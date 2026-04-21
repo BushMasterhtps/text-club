@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
 
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { startUtc, endExclusiveUtc } = getAgentReportingDayBoundsUtc(null);
 
     // FIXED: Get counts for Email Request tasks using groupBy to reduce from 4 queries to 2 queries
     // First, get all status counts in one query
@@ -47,9 +45,9 @@ export async function GET(request: NextRequest) {
         taskType: 'EMAIL_REQUESTS',
         status: 'COMPLETED',
         endTime: {
-          gte: today,
-          lt: tomorrow
-        }
+          gte: startUtc,
+          lt: endExclusiveUtc,
+        },
       }
     });
     

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import { getAgentReportingDayBoundsUtc } from '@/lib/agent-reporting-day-bounds';
 
 /**
  * Yotpo Overview API
@@ -40,20 +41,18 @@ export async function GET(request: NextRequest) {
     // "Active Work" = assigned-not-started + in-progress
     const activeWorkCount = assignedNotStartedCount + inProgressCount;
 
-    // Get completed today
-    const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+    // Get completed today (PST-fixed reporting day, half-open — same helper as agent-facing stats)
+    const { startUtc, endExclusiveUtc } = getAgentReportingDayBoundsUtc(null);
 
     const completedTodayCount = await prisma.task.count({
       where: {
         taskType: 'YOTPO',
         status: 'COMPLETED',
         endTime: {
-          gte: startOfToday,
-          lte: endOfToday
-        }
-      }
+          gte: startUtc,
+          lt: endExclusiveUtc,
+        },
+      },
     });
 
     // Get total completed (all time)

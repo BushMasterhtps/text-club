@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
 
 const DEFAULT_METRICS = {
   pending: 0,
@@ -23,10 +24,8 @@ export async function GET(request: NextRequest) {
   try {
     return await withSelfHealing(async () => {
     try {
-    // Get current date boundaries for "today"
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    // Same PST-fixed "reporting day" and half-open window as /api/analytics/text-club (incl. sent-back rows)
+    const { startUtc, endExclusiveUtc } = getAgentReportingDayBoundsUtc(null);
 
     // Optimize: Use a single groupBy query for all task counts instead of multiple count queries
     const [pendingRawMessages, taskStatusGroups] = await Promise.all([
@@ -53,13 +52,19 @@ export async function GET(request: NextRequest) {
     // Get completed today count separately (needs date filtering)
     const completedToday = await prisma.task.count({
       where: {
-        status: "COMPLETED",
         taskType: "TEXT_CLUB",
-        endTime: {
-          gte: startOfToday,
-          lt: endOfToday
-        }
-      }
+        OR: [
+          {
+            status: "COMPLETED",
+            endTime: { gte: startUtc, lt: endExclusiveUtc },
+          },
+          {
+            status: "PENDING",
+            sentBackBy: { not: null },
+            endTime: { gte: startUtc, lt: endExclusiveUtc },
+          },
+        ],
+      },
     });
 
     // Extract counts from the map
