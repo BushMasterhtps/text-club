@@ -237,6 +237,7 @@ export async function POST(
     const msg = e instanceof Error ? e.message : "Unknown error";
     if (
       msg.startsWith("MISSING_RESPONSE") ||
+      msg.startsWith("INVALID_RESPONSE_FOR_LINE") ||
       msg.startsWith("NA_NOT_ALLOWED") ||
       msg.startsWith("NO_APPLICABLE_LINES")
     ) {

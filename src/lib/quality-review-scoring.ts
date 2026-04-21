@@ -47,20 +47,26 @@ export function computeQualityReviewScores(
     if (!r) {
       throw new Error(`MISSING_RESPONSE_FOR_LINE:${line.id}`);
     }
+    if (r !== "PASS" && r !== "FAIL" && r !== "NA") {
+      throw new Error(`INVALID_RESPONSE_FOR_LINE:${line.id}:${String(r)}`);
+    }
     if (r === "NA" && !line.allowNa) {
       throw new Error(`NA_NOT_ALLOWED:${line.id}`);
     }
 
-    const w = line.weight.toNumber();
-
+    // N/A: exclude this line entirely — not in possibleWeight or earnedWeight,
+    // and it must never count toward critical-failure caps.
     if (r === "NA") {
       continue;
     }
 
+    const w = line.weight.toNumber();
+
     possibleWeight += w;
     if (r === "PASS") {
       earnedWeight += w;
-    } else if (r === "FAIL") {
+    } else {
+      // FAIL
       if (line.isCritical) {
         failedCriticalCount += 1;
       }

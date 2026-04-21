@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
+/** Prisma Decimal / BigInt / Date → JSON-safe values for the manager UI. */
+function serializeForClientJson<T>(value: T): T {
+  return JSON.parse(
+    JSON.stringify(value, (_key, v) => {
+      if (typeof v === "bigint") return v.toString();
+      if (v instanceof Date) return v.toISOString();
+      if (v && typeof v === "object") {
+        const ctor = (v as { constructor?: { name?: string } }).constructor?.name;
+        if (ctor === "Decimal") return (v as { toString: () => string }).toString();
+      }
+      return v;
+    })
+  );
+}
+
 const taskReviewSelect = {
   id: true,
   taskId: true,
@@ -76,12 +91,14 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Task not found" }, { status: 404 });
     }
 
+    const taskForClient = serializeForClientJson(task);
+
     return NextResponse.json({
       success: true,
       data: {
         review,
         lines,
-        task,
+        task: taskForClient,
       },
     });
   } catch (e: unknown) {
