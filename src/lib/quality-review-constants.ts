@@ -12,3 +12,6 @@ export const QA_PENDING_REVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Max rows in QA sprint snapshot “Needs attention” (full list on dashboard). */
 export const QA_NEEDS_ATTENTION_SNAPSHOT_LIMIT = 8;
+
+/** Max rows in “Who needs QA next” on the main Quality Review page. */
+export const QA_SMART_QUEUE_LIMIT = 30;

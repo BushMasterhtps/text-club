@@ -3,6 +3,7 @@ import { getAgentReportingRangeBoundsUtc } from "@/lib/agent-reporting-day-bound
 import {
   QA_COVERAGE_TARGET_REVIEWS_PER_AGENT,
   QA_NEEDS_ATTENTION_SNAPSHOT_LIMIT,
+  QA_SMART_QUEUE_LIMIT,
 } from "@/lib/quality-review-constants";
 import { buildQualityReviewEligibleTaskWhere } from "@/lib/quality-review-eligibility";
 
@@ -40,6 +41,77 @@ export type QaAgentCoverageRow = {
   lastReviewedBy: { name: string | null; email: string } | null;
 };
 
+const COVERAGE_STATUSES: QaCoverageDisplayStatus[] = [
+  "exempt",
+  "no_eligible_work",
+  "complete",
+  "below",
+  "none",
+];
+
+export function parseCoverageStatusQuery(
+  raw: string | null | undefined
+): QaCoverageDisplayStatus | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  return COVERAGE_STATUSES.includes(v as QaCoverageDisplayStatus)
+    ? (v as QaCoverageDisplayStatus)
+    : null;
+}
+
+/** Build dashboard URL with filters (client-side navigation). */
+export function buildQaDashboardUrl(opts: {
+  startYmd: string;
+  endYmd: string;
+  rosterScope?: string | null;
+  qaTeamFilter?: string | null;
+  coverageStatus?: QaCoverageDisplayStatus | null;
+  agentId?: string | null;
+  q?: string | null;
+}): string {
+  const sp = new URLSearchParams();
+  sp.set("startDate", opts.startYmd);
+  sp.set("endDate", opts.endYmd);
+  if (opts.rosterScope === QA_ROSTER_SCOPE_TRACKED) {
+    sp.set("rosterScope", QA_ROSTER_SCOPE_TRACKED);
+  }
+  if (opts.qaTeamFilter && opts.qaTeamFilter !== QA_TEAM_FILTER_ANY) {
+    sp.set("qaTeam", opts.qaTeamFilter);
+  }
+  if (opts.coverageStatus) {
+    sp.set("coverageStatus", opts.coverageStatus);
+  }
+  if (opts.agentId?.trim()) {
+    sp.set("agentId", opts.agentId.trim());
+  }
+  if (opts.q?.trim()) {
+    sp.set("q", opts.q.trim());
+  }
+  return `/manager/quality-review/dashboard?${sp.toString()}`;
+}
+
+/** Sort for “who needs QA next” and snapshot needs-attention (urgency first). */
+export function compareQaQueuePriority(a: QaAgentCoverageRow, b: QaAgentCoverageRow): number {
+  const statusRank = (s: QaCoverageDisplayStatus) =>
+    s === "none" ? 0 : s === "below" ? 1 : 2;
+  const sr = statusRank(a.coverageStatus) - statusRank(b.coverageStatus);
+  if (sr !== 0) return sr;
+  if (b.eligibleTaskCount !== a.eligibleTaskCount) {
+    return b.eligibleTaskCount - a.eligibleTaskCount;
+  }
+  const ta = a.lastReviewedAt ? new Date(a.lastReviewedAt).getTime() : 0;
+  const tb = b.lastReviewedAt ? new Date(b.lastReviewedAt).getTime() : 0;
+  if (ta !== tb) return ta - tb;
+  return (a.name || a.email).localeCompare(b.name || b.email, undefined, { sensitivity: "base" });
+}
+
+function qaTeamClauseFromFilter(teamRaw: string | null | undefined): Prisma.UserWhereInput {
+  const t = (teamRaw ?? QA_TEAM_FILTER_ANY).trim() || QA_TEAM_FILTER_ANY;
+  if (t === QA_TEAM_FILTER_UNASSIGNED) return { qaTeam: null };
+  if (t === QA_TEAM_FILTER_ANY || t === "") return {};
+  return { qaTeam: t };
+}
+
 function classifyCoverageDisplay(
   qaIsTracked: boolean,
   eligibleTaskCount: number,
@@ -69,10 +141,14 @@ export async function loadQaAgentCoverageRows(
     startYmd: string;
     endYmd: string;
     agentSearch?: string | null;
+    /** When set, only this user id (still subject to role/active filters). */
+    agentId?: string | null;
     /** `all` (default) or `tracked` (qaIsTracked only). */
     rosterScope?: string | null;
     /** `__any__` / absent = any team; `__unassigned__` = qaTeam null; else exact qaTeam string. */
     qaTeamFilter?: string | null;
+    /** When set, only rows with this coverage display status. */
+    coverageStatus?: QaCoverageDisplayStatus | null;
     coverageTarget?: number;
   }
 ): Promise<QaCoverageLoadResult> {
@@ -88,20 +164,18 @@ export async function loadQaAgentCoverageRows(
     rosterRaw === QA_ROSTER_SCOPE_TRACKED ? QA_ROSTER_SCOPE_TRACKED : QA_ROSTER_SCOPE_ALL;
 
   const teamRaw = params.qaTeamFilter?.trim() || QA_TEAM_FILTER_ANY;
-  const teamClause: Prisma.UserWhereInput =
-    teamRaw === QA_TEAM_FILTER_UNASSIGNED
-      ? { qaTeam: null }
-      : teamRaw === QA_TEAM_FILTER_ANY || teamRaw === ""
-        ? {}
-        : { qaTeam: teamRaw };
+  const teamClause: Prisma.UserWhereInput = qaTeamClauseFromFilter(teamRaw);
 
   const rosterClause: Prisma.UserWhereInput =
     rosterScope === QA_ROSTER_SCOPE_TRACKED ? { qaIsTracked: true } : {};
+
+  const agentId = params.agentId?.trim() || null;
 
   const agents = await db.user.findMany({
     where: {
       isActive: true,
       OR: [{ role: "AGENT" }, { role: "MANAGER_AGENT" }],
+      ...(agentId ? { id: agentId } : {}),
       ...rosterClause,
       ...teamClause,
       ...(q
@@ -247,7 +321,11 @@ export async function loadQaAgentCoverageRows(
     };
   });
 
-  return { rows, teamOptions };
+  const statusFilter = params.coverageStatus ?? null;
+  const filteredRows =
+    statusFilter != null ? rows.filter((r) => r.coverageStatus === statusFilter) : rows;
+
+  return { rows: filteredRows, teamOptions };
 }
 
 export async function loadQaDashboardSummary(
@@ -266,6 +344,8 @@ export async function loadQaDashboardSummary(
     coverageTarget: params.coverageTarget,
     rosterScope: params.rosterScope,
     qaTeamFilter: params.qaTeamFilter,
+    coverageStatus: null,
+    agentId: null,
   });
   const target = params.coverageTarget ?? QA_COVERAGE_TARGET_REVIEWS_PER_AGENT;
 
@@ -276,19 +356,34 @@ export async function loadQaDashboardSummary(
   const fullyCovered = trackedWithEligible.filter((r) => r.coverageStatus === "complete").length;
   const below = trackedWithEligible.filter((r) => r.coverageStatus === "below").length;
   const zero = trackedWithEligible.filter((r) => r.coverageStatus === "none").length;
-  const agentsExempt = rows.filter((r) => r.coverageStatus === "exempt").length;
+  const qaTf = params.qaTeamFilter ?? QA_TEAM_FILTER_ANY;
+  const agentsExempt = await db.user.count({
+    where: {
+      isActive: true,
+      OR: [{ role: "AGENT" }, { role: "MANAGER_AGENT" }],
+      qaIsTracked: false,
+      ...qaTeamClauseFromFilter(qaTf),
+    },
+  });
   const agentsNoEligibleWork = tracked.filter((r) => r.coverageStatus === "no_eligible_work").length;
   const agentsTracked = tracked.length;
 
   const needsAttention = [...trackedWithEligible]
     .filter((r) => r.coverageStatus !== "complete")
-    .sort((a, b) => a.reviewsCompleted - b.reviewsCompleted)
+    .sort(compareQaQueuePriority)
     .slice(0, QA_NEEDS_ATTENTION_SNAPSHOT_LIMIT);
+
+  const smartQueue = [...trackedWithEligible]
+    .filter((r) => r.coverageStatus !== "complete")
+    .sort(compareQaQueuePriority)
+    .slice(0, QA_SMART_QUEUE_LIMIT);
 
   return {
     startYmd: params.startYmd,
     endYmd: params.endYmd,
     coverageTarget: target,
+    rosterScope: params.rosterScope ?? QA_ROSTER_SCOPE_ALL,
+    qaTeamFilter: params.qaTeamFilter ?? QA_TEAM_FILTER_ANY,
     teamOptions,
     totalReviewsCompleted,
     agentsFullyCovered: fullyCovered,
@@ -299,5 +394,6 @@ export async function loadQaDashboardSummary(
     agentsTracked,
     totalAgentsListed: rows.length,
     needsAttention,
+    smartQueue,
   };
 }

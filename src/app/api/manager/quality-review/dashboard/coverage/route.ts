@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import {
   loadQaAgentCoverageRows,
+  parseCoverageStatusQuery,
   QA_ROSTER_SCOPE_ALL,
   QA_ROSTER_SCOPE_TRACKED,
   QA_TEAM_FILTER_ANY,
@@ -30,6 +31,9 @@ export async function GET(request: NextRequest) {
         ? qaTeamRaw
         : QA_TEAM_FILTER_ANY;
 
+  const coverageStatus = parseCoverageStatusQuery(searchParams.get("coverageStatus"));
+  const agentId = searchParams.get("agentId")?.trim() || null;
+
   if (!startDate || !endDate) {
     return NextResponse.json(
       { success: false, error: "startDate and endDate are required (YYYY-MM-DD)." },
@@ -46,9 +50,11 @@ export async function GET(request: NextRequest) {
       startYmd: startDate,
       endYmd: endDate,
       agentSearch: q,
+      agentId,
       coverageTarget,
       rosterScope,
       qaTeamFilter,
+      coverageStatus,
     });
     return NextResponse.json({
       success: true,
@@ -58,6 +64,8 @@ export async function GET(request: NextRequest) {
         coverageTarget,
         rosterScope,
         qaTeamFilter,
+        coverageStatus,
+        agentId,
         teamOptions,
         rows,
       },

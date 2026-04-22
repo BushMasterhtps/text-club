@@ -8,10 +8,16 @@ import ThemeToggle from "@/app/_components/ThemeToggle";
 import SessionTimer from "@/app/_components/SessionTimer";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/app/_components/AutoLogoutWarning";
-import { getDefaultSprintYmdBounds, addDaysToYmd } from "@/lib/quality-review-sprint";
+import {
+  getDefaultSprintYmdBounds,
+  getPreviousSprintYmdBounds,
+  getLastNDaysReportingYmdBounds,
+  addDaysToYmd,
+} from "@/lib/quality-review-sprint";
 import { QA_COVERAGE_TARGET_REVIEWS_PER_AGENT } from "@/lib/quality-review-constants";
 import type { QaAgentCoverageRow } from "@/lib/quality-review-dashboard";
 import {
+  parseCoverageStatusQuery,
   QA_ROSTER_SCOPE_ALL,
   QA_ROSTER_SCOPE_TRACKED,
   QA_TEAM_FILTER_ANY,
@@ -77,6 +83,8 @@ function DashboardInner() {
   const router = useRouter();
   const pathname = usePathname();
   const defaultSprint = useMemo(() => getDefaultSprintYmdBounds(), []);
+  const previousSprint = useMemo(() => getPreviousSprintYmdBounds(), []);
+  const last30 = useMemo(() => getLastNDaysReportingYmdBounds(30), []);
 
   const [startDate, setStartDate] = useState(
     () => searchParams.get("startDate") || defaultSprint.startYmd
@@ -85,6 +93,13 @@ function DashboardInner() {
     () => searchParams.get("endDate") || defaultSprint.endYmd
   );
   const [agentQ, setAgentQ] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(() =>
+    searchParams.get("agentId")?.trim() || null
+  );
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    const p = parseCoverageStatusQuery(searchParams.get("coverageStatus"));
+    return p ?? "";
+  });
   const [rosterScope, setRosterScope] = useState<typeof QA_ROSTER_SCOPE_ALL | typeof QA_ROSTER_SCOPE_TRACKED>(
     () =>
       searchParams.get("rosterScope") === QA_ROSTER_SCOPE_TRACKED
@@ -102,7 +117,6 @@ function DashboardInner() {
   const [coverageTarget, setCoverageTarget] = useState(QA_COVERAGE_TARGET_REVIEWS_PER_AGENT);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [history, setHistory] = useState<ReviewHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [regradeFor, setRegradeFor] = useState<ReviewHistoryRow | null>(null);
@@ -123,8 +137,15 @@ function DashboardInner() {
         qaTeamFilter !== QA_TEAM_FILTER_ANY
           ? `&qaTeam=${encodeURIComponent(qaTeamFilter)}`
           : "";
+      const st =
+        statusFilter && ["exempt", "no_eligible_work", "complete", "below", "none"].includes(statusFilter)
+          ? `&coverageStatus=${encodeURIComponent(statusFilter)}`
+          : "";
+      const aid = selectedAgentId?.trim()
+        ? `&agentId=${encodeURIComponent(selectedAgentId.trim())}`
+        : "";
       const res = await fetch(
-        `/api/manager/quality-review/dashboard/coverage?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}${roster}${teamQ}${q}`,
+        `/api/manager/quality-review/dashboard/coverage?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}${roster}${teamQ}${st}${aid}${q}`,
         { credentials: "include" }
       );
       const json = await res.json();
@@ -137,7 +158,12 @@ function DashboardInner() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, agentQ, rosterScope, qaTeamFilter]);
+  }, [startDate, endDate, agentQ, rosterScope, qaTeamFilter, statusFilter, selectedAgentId]);
+
+  const isDefaultSprintWindow = useMemo(
+    () => startDate === defaultSprint.startYmd && endDate === defaultSprint.endYmd,
+    [startDate, endDate, defaultSprint.startYmd, defaultSprint.endYmd]
+  );
 
   useEffect(() => {
     const sp = new URLSearchParams();
@@ -149,8 +175,14 @@ function DashboardInner() {
     if (qaTeamFilter !== QA_TEAM_FILTER_ANY) {
       sp.set("qaTeam", qaTeamFilter);
     }
+    if (statusFilter) {
+      sp.set("coverageStatus", statusFilter);
+    }
+    if (selectedAgentId?.trim()) {
+      sp.set("agentId", selectedAgentId.trim());
+    }
     router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
-  }, [startDate, endDate, rosterScope, qaTeamFilter, pathname, router]);
+  }, [startDate, endDate, rosterScope, qaTeamFilter, statusFilter, selectedAgentId, pathname, router]);
 
   useEffect(() => {
     void loadCoverage();
@@ -219,6 +251,16 @@ function DashboardInner() {
     const b = getDefaultSprintYmdBounds();
     setStartDate(b.startYmd);
     setEndDate(b.endYmd);
+  };
+
+  const applyPreviousSprintShortcut = () => {
+    setStartDate(previousSprint.startYmd);
+    setEndDate(previousSprint.endYmd);
+  };
+
+  const applyLast30Shortcut = () => {
+    setStartDate(last30.startYmd);
+    setEndDate(last30.endYmd);
   };
 
   const startRegrade = async () => {
@@ -291,10 +333,28 @@ function DashboardInner() {
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">QA dashboard</h1>
           <p className="text-sm text-white/55 mt-2 max-w-2xl">
-            Coverage uses the latest submitted review per task in the selected window. Regrades keep
-            full history; only the current version counts toward averages and coverage.
+            <span className="text-white/70">Coverage</span> counts only{" "}
+            <strong className="text-white/85">submitted</strong> reviews marked{" "}
+            <strong className="text-white/85">current version</strong>, with{" "}
+            <strong className="text-white/85">submittedAt</strong> in the reporting window below.{" "}
+            <span className="text-white/70">Review history</span> (when you open an agent) lists every
+            version in range for tasks touched in that window, including superseded and regrade chains.
+          </p>
+          <p className="text-xs text-white/40 mt-2 tabular-nums">
+            Reporting window: {startDate} → {endDate} (PST labels, same semantics as sampling).
           </p>
         </header>
+
+        {!isDefaultSprintWindow && (
+          <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-50/95">
+            <p className="font-semibold text-amber-100">Historical / non-default window</p>
+            <p className="text-xs text-amber-100/75 mt-1 leading-relaxed">
+              You are outside the current default sprint. The table still reflects coverage for the
+              selected dates; drill-down history may span more tasks and older regrades than a typical
+              sprint check.
+            </p>
+          </div>
+        )}
 
         <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:p-5 space-y-4">
           <div className="flex flex-wrap gap-3 items-end">
@@ -316,13 +376,29 @@ function DashboardInner() {
                 className="mt-1 block rounded-lg bg-black/40 border border-white/15 px-2 py-1.5 text-sm"
               />
             </label>
-            <button
-              type="button"
-              onClick={applySprintShortcut}
-              className="text-xs font-semibold px-3 py-2 rounded-lg bg-violet-500/25 text-violet-100 border border-violet-400/30"
-            >
-              Current 14-day sprint
-            </button>
+            <div className="flex flex-wrap gap-2 items-center">
+              <button
+                type="button"
+                onClick={applySprintShortcut}
+                className="text-xs font-semibold px-3 py-2 rounded-lg bg-violet-500/25 text-violet-100 border border-violet-400/30"
+              >
+                Current sprint
+              </button>
+              <button
+                type="button"
+                onClick={applyPreviousSprintShortcut}
+                className="text-xs font-semibold px-3 py-2 rounded-lg bg-white/10 text-white/75 hover:bg-white/15"
+              >
+                Previous sprint
+              </button>
+              <button
+                type="button"
+                onClick={applyLast30Shortcut}
+                className="text-xs font-semibold px-3 py-2 rounded-lg bg-white/10 text-white/75 hover:bg-white/15"
+              >
+                Last 30 days
+              </button>
+            </div>
             <label className="text-xs text-white/50 block">
               Roster
               <select
@@ -356,6 +432,21 @@ function DashboardInner() {
                 ))}
               </select>
             </label>
+            <label className="text-xs text-white/50 block">
+              Coverage status
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="mt-1 block rounded-lg bg-black/40 border border-white/15 px-2 py-1.5 text-sm min-w-[10rem]"
+              >
+                <option value="">Any status</option>
+                <option value="exempt">Exempt</option>
+                <option value="no_eligible_work">No eligible work</option>
+                <option value="complete">At target</option>
+                <option value="below">Below target</option>
+                <option value="none">Zero QA</option>
+              </select>
+            </label>
             <label className="text-xs text-white/50 block flex-1 min-w-[12rem]">
               Agent filter
               <input
@@ -385,7 +476,7 @@ function DashboardInner() {
             >
               −1 week
             </button>{" "}
-            (edit dates manually for precise ranges)
+            · Custom range: edit start/end dates above.
           </p>
         </section>
 
@@ -474,7 +565,14 @@ function DashboardInner() {
         {selectedAgentId && (
           <section className="rounded-2xl border border-violet-500/25 bg-neutral-950/60 p-4 md:p-6 space-y-4">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <h2 className="text-lg font-semibold">Review history</h2>
+              <div>
+                <h2 className="text-lg font-semibold">Review history</h2>
+                <p className="text-[11px] text-white/45 mt-1 tabular-nums">
+                  Submitted reviews for tasks with at least one submission between {startDate} and{" "}
+                  {endDate}. Includes superseded and regrade versions; coverage above uses only the
+                  current version per agent.
+                </p>
+              </div>
               <button
                 type="button"
                 className="text-xs text-white/50 hover:text-white underline"
@@ -486,7 +584,9 @@ function DashboardInner() {
             {historyLoading ? (
               <p className="text-sm text-white/45">Loading history…</p>
             ) : groupedHistory.length === 0 ? (
-              <p className="text-sm text-white/45">No submitted reviews in this window for tasks.</p>
+              <p className="text-sm text-white/45">
+                No submitted reviews in this date range for this agent&apos;s sampled tasks.
+              </p>
             ) : (
               <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
                 {groupedHistory.map(([taskId, chain]) => (
