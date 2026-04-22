@@ -54,6 +54,13 @@ export async function resolveActiveTemplateForTaskType(
 
   if (withVersion.length === 0) return null;
 
+  if (withVersion.length > 1) {
+    const slugs = withVersion.map((x) => `${x.template.slug}(${x.template.id})`);
+    console.warn(
+      `[QA WARNING] Multiple active templates for taskType=${taskType} (count=${withVersion.length}): ${slugs.join(", ")} — using first by slug order (${withVersion[0]!.template.slug})`
+    );
+  }
+
   const { template, version } = withVersion[0]!;
   return {
     templateId: template.id,

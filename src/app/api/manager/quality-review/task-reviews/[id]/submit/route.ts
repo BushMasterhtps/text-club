@@ -6,12 +6,12 @@ import type { QAReviewLineResponse } from "@prisma/client";
 
 export async function POST(
   request: NextRequest,
-  context: { params: Promise<{ id: string; taskId: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
 
-  const { id: batchId, taskId } = await context.params;
+  const { id: reviewId } = await context.params;
 
   try {
     const body = (await request.json()) as {
@@ -26,81 +26,39 @@ export async function POST(
       );
     }
 
-    const batch = await prisma.qASampleBatch.findFirst({
-      where: { id: batchId, reviewerId: auth.userId },
+    const pre = await prisma.qATaskReview.findFirst({
+      where: { id: reviewId, reviewerId: auth.userId, status: "PENDING" },
+      include: { batch: { select: { status: true } } },
     });
-    if (!batch) {
-      return NextResponse.json({ success: false, error: "Batch not found" }, { status: 404 });
+    if (!pre) {
+      return NextResponse.json(
+        { success: false, error: "Review not found or already submitted" },
+        { status: 404 }
+      );
     }
-    if (batch.status === "CANCELLED") {
+    if (pre.batchId && pre.batch?.status === "CANCELLED") {
       return NextResponse.json(
         { success: false, error: "Batch was cancelled" },
         { status: 400 }
       );
     }
 
-    const link = await prisma.qASampleBatchTask.findFirst({
-      where: { batchId, taskId },
-    });
-    if (!link) {
-      return NextResponse.json({ success: false, error: "Task not in this batch" }, { status: 404 });
-    }
-
-    const review = await prisma.qATaskReview.findFirst({
-      where: { batchId, taskId, reviewerId: auth.userId },
-    });
-    if (!review) {
-      return NextResponse.json({ success: false, error: "Review not found" }, { status: 404 });
-    }
-    if (review.status === "SUBMITTED") {
-      return NextResponse.json(
-        { success: false, error: "Review already submitted" },
-        { status: 400 }
-      );
-    }
-
     const result = await prisma.$transaction(async (tx) =>
       submitQATaskReviewInTransaction(tx, {
-        reviewId: review.id,
+        reviewId,
         authUserId: auth.userId,
         responses: body.responses!,
         reviewerNotes: body.reviewerNotes,
       })
     );
 
-    const batchAfter = await prisma.qASampleBatch.findFirst({
-      where: { id: batchId },
-      select: { status: true },
-    });
-
-    const ordered = await prisma.qASampleBatchTask.findMany({
-      where: { batchId },
-      orderBy: { sortIndex: "asc" },
-      include: {
-        task: {
-          include: {
-            qaTaskReviews: {
-              where: { batchId },
-              select: { status: true, batchId: true },
-              take: 1,
-            },
-          },
-        },
-      },
-    });
-    const nextPendingRow = ordered.find((row) => {
-      const r = row.task.qaTaskReviews[0];
-      return r?.status === "PENDING" && r?.batchId === batchId;
-    });
-
     return NextResponse.json({
       success: true,
       data: {
-        reviewId: review.id,
-        taskId,
+        reviewId,
+        taskId: result.taskId,
+        batchId: result.batchId,
         scores: result.scores,
-        batchStatus: batchAfter?.status ?? null,
-        nextTaskId: nextPendingRow?.taskId ?? null,
       },
     });
   } catch (e: unknown) {
@@ -131,7 +89,7 @@ export async function POST(
     if (msg === "TASK_NOT_FOUND") {
       return NextResponse.json({ success: false, error: "Task not found" }, { status: 404 });
     }
-    console.error("[quality-review/submit]", e);
+    console.error("[quality-review/task-reviews/submit]", e);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

@@ -3,9 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { buildQualityReviewEligibleTaskWhere } from "@/lib/quality-review-eligibility";
 import { resolveActiveTemplateForTaskType } from "@/lib/quality-review-template";
+import { QA_PENDING_REVIEW_TTL_MS } from "@/lib/quality-review-constants";
 import type { Prisma, TaskType, WodIvcsSource } from "@prisma/client";
-
-const PENDING_RESERVATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -119,7 +118,7 @@ export async function POST(request: NextRequest) {
     }
 
     const picked = shuffle(eligible.map((e) => e.id)).slice(0, sampleCount);
-    const expiresAt = new Date(Date.now() + PENDING_RESERVATION_TTL_MS);
+    const expiresAt = new Date(Date.now() + QA_PENDING_REVIEW_TTL_MS);
 
     try {
       const batch = await prisma.$transaction(async (tx) => {
@@ -150,6 +149,7 @@ export async function POST(request: NextRequest) {
               taskId: picked[i]!,
               templateVersionId,
               reviewerId: auth.userId,
+              subjectAgentId,
               status: "PENDING",
               expiresAt,
             },

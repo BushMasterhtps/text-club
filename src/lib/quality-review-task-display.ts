@@ -79,7 +79,7 @@ const NESTED_KEYS = new Set([
   "assignedTo",
   "completedByUser",
   "qaSampleBatchTasks",
-  "qaTaskReview",
+  "qaTaskReviews",
   "history",
   "labels",
   "assistance",

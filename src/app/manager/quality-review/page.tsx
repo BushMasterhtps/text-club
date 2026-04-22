@@ -10,6 +10,7 @@ import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/app/_components/AutoLogoutWarning";
 import { computeQualityReviewScores } from "@/lib/quality-review-scoring";
 import { buildOrderedMetadataRows } from "@/lib/quality-review-task-display";
+import { QaSprintSummary } from "@/app/manager/quality-review/_components/QaSprintSummary";
 import type { QAReviewLineResponse, TaskType, WodIvcsSource } from "@prisma/client";
 
 type AgentRow = { id: string; email: string; name: string | null };
@@ -538,6 +539,12 @@ function QualityReviewContent() {
         <ThemeToggle />
         <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
         <Link
+          href="/manager/quality-review/dashboard"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20"
+        >
+          QA dashboard
+        </Link>
+        <Link
           href="/manager/quality-review/templates"
           className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20"
         >
@@ -604,6 +611,8 @@ function QualityReviewContent() {
             a critical-failure cap.
           </p>
         </header>
+
+        <QaSprintSummary />
 
         {error && (
           <div className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">

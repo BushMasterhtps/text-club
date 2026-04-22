@@ -115,6 +115,7 @@ model User {
   qaSampleBatchesAsReviewer QASampleBatch[]     @relation("QASampleBatchReviewer")
   qaSampleBatchesAsSubject  QASampleBatch[]     @relation("QASampleBatchSubject")
   qaTaskReviewsAsReviewer   QATaskReview[]      @relation("QATaskReviewReviewer")
+  qaTaskReviewsAsSubject    QATaskReview[]      @relation("QATaskReviewSubject")
 
   @@index([isLive, lastSeen])
 }
@@ -234,7 +235,7 @@ model Task {
   labels     SpamLabel[]
 
   qaSampleBatchTasks QASampleBatchTask[]
-  qaTaskReview       QATaskReview?
+  qaTaskReviews      QATaskReview[]
 
   @@index([assignedToId])
   @@index([status, createdAt])
@@ -727,14 +728,25 @@ model QASampleBatchTask {
 
 model QATaskReview {
   id                  String             @id @default(cuid())
-  batchId             String
-  batch               QASampleBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  taskId              String             @unique
+  batchId             String?
+  batch               QASampleBatch?     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  taskId              String
   task                Task               @relation(fields: [taskId], references: [id], onDelete: Restrict)
   templateVersionId   String
   templateVersion     QATemplateVersion  @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
   reviewerId          String
   reviewer            User               @relation("QATaskReviewReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  /// Agent whose work is being QA'd (denormalized for coverage; set from batch or parent regrade).
+  subjectAgentId      String?
+  subjectAgent        User?              @relation("QATaskReviewSubject", fields: [subjectAgentId], references: [id], onDelete: Restrict)
+  /// Points to the review this row supersedes (null = original chain root).
+  parentReviewId      String?
+  parentReview        QATaskReview?      @relation("QATaskReviewChain", fields: [parentReviewId], references: [id], onDelete: Restrict)
+  childReviews        QATaskReview[]     @relation("QATaskReviewChain")
+  /// Latest submitted review in a chain for dashboards; only one true per task once submitted.
+  isCurrentVersion    Boolean            @default(true)
+  /// Why this revision exists (required on regrade-created rows at creation time).
+  regradeReason       String?            @db.Text
   status              QATaskReviewStatus @default(PENDING)
   weightedScore       Decimal?           @db.Decimal(5, 2)
   failedCriticalCount Int?
@@ -751,6 +763,8 @@ model QATaskReview {
   @@index([status])
   @@index([templateVersionId])
   @@index([expiresAt])
+  @@index([taskId, isCurrentVersion])
+  @@index([subjectAgentId, submittedAt])
 }
 
 model QALineResult {

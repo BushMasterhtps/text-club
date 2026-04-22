@@ -7,6 +7,10 @@
 
 const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000;
 
+function pad2(n: number) {
+  return n < 10 ? `0${n}` : String(n);
+}
+
 function ymdFromInstantInPstFixed(instant: Date): { year: number; month: number; day: number } {
   const shiftedUtc = new Date(instant.getTime() - EIGHT_HOURS_MS);
   return {
@@ -52,6 +56,27 @@ export function getAgentReportingDayBoundsUtc(
   }
 
   return boundsFromCalendarYmd(year, month, day);
+}
+
+/** Current agent reporting calendar day as YYYY-MM-DD (fixed PST, same basis as bounds). */
+export function getAgentReportingTodayYmd(now: Date = new Date()): string {
+  const { year, month, day } = ymdFromInstantInPstFixed(now);
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+/**
+ * Add whole calendar days to a PST reporting calendar label (YYYY-MM-DD).
+ * Uses Gregorian civil date arithmetic on the label (same calendar system as reporting days).
+ */
+export function addCalendarDaysToReportingYmd(ymd: string, deltaDays: number): string {
+  const trimmed = ymd.trim();
+  const parts = trimmed.split("-").map(Number);
+  if (parts.length !== 3 || !parts.every((n) => Number.isFinite(n))) {
+    throw new Error("INVALID_AGENT_DATE");
+  }
+  const [y, m, d] = parts;
+  const t = new Date(Date.UTC(y, m - 1, d + deltaDays));
+  return `${t.getUTCFullYear()}-${pad2(t.getUTCMonth() + 1)}-${pad2(t.getUTCDate())}`;
 }
 
 /**

@@ -11,7 +11,7 @@ export type QualityReviewDispositionFilter =
 
 /**
  * Completed tasks for an agent in a PST-fixed calendar range, excluding any task
- * that already has a QATaskReview row (PENDING reserves globally; SUBMITTED excludes).
+ * that already has any QATaskReview row (PENDING reserves globally; SUBMITTED excludes).
  */
 export function buildQualityReviewEligibleTaskWhere(
   agentId: string,
@@ -52,7 +52,7 @@ export function buildQualityReviewEligibleTaskWhere(
       lt: endExclusiveUtc,
     },
     OR: [{ assignedToId: agentId }, { completedBy: agentId }],
-    qaTaskReview: null,
+    qaTaskReviews: { none: {} },
     ...(dispositionWhere ? { disposition: dispositionWhere } : {}),
     ...taskTypeWhere,
     ...wodSourceWhere,
