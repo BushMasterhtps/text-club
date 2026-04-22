@@ -10,6 +10,7 @@ import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/app/_components/AutoLogoutWarning";
 import { getDefaultSprintYmdBounds, addDaysToYmd } from "@/lib/quality-review-sprint";
 import { QA_COVERAGE_TARGET_REVIEWS_PER_AGENT } from "@/lib/quality-review-constants";
+import { DashboardNavigationProvider } from "@/contexts/DashboardNavigationContext";
 
 type CoverageRow = {
   agentId: string;
@@ -500,14 +501,16 @@ function DashboardInner() {
 
 export default function QaDashboardPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-neutral-950 text-white flex items-center justify-center">
-          Loading…
-        </div>
-      }
-    >
-      <DashboardInner />
-    </Suspense>
+    <DashboardNavigationProvider>
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-neutral-950 text-white flex items-center justify-center">
+            Loading…
+          </div>
+        }
+      >
+        <DashboardInner />
+      </Suspense>
+    </DashboardNavigationProvider>
   );
 }

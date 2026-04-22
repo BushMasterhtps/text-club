@@ -1,6 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 import { getAgentReportingRangeBoundsUtc } from "@/lib/agent-reporting-day-bounds";
-import { QA_COVERAGE_TARGET_REVIEWS_PER_AGENT } from "@/lib/quality-review-constants";
+import {
+  QA_COVERAGE_TARGET_REVIEWS_PER_AGENT,
+  QA_NEEDS_ATTENTION_SNAPSHOT_LIMIT,
+} from "@/lib/quality-review-constants";
 
 export type QaCoverageStatus = "complete" | "below" | "none";
 
@@ -155,7 +158,7 @@ export async function loadQaDashboardSummary(
   const needsAttention = [...rows]
     .filter((r) => r.coverageStatus !== "complete")
     .sort((a, b) => a.reviewsCompleted - b.reviewsCompleted)
-    .slice(0, 8);
+    .slice(0, QA_NEEDS_ATTENTION_SNAPSHOT_LIMIT);
 
   return {
     startYmd: params.startYmd,

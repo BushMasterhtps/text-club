@@ -9,3 +9,6 @@ export const QA_COVERAGE_TARGET_REVIEWS_PER_AGENT = 4;
 
 /** Pending batch/regrade reservations expire after this TTL. */
 export const QA_PENDING_REVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Max rows in QA sprint snapshot “Needs attention” (full list on dashboard). */
+export const QA_NEEDS_ATTENTION_SNAPSHOT_LIMIT = 8;

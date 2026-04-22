@@ -3,7 +3,10 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { getDefaultSprintYmdBounds } from "@/lib/quality-review-sprint";
-import { QA_COVERAGE_TARGET_REVIEWS_PER_AGENT } from "@/lib/quality-review-constants";
+import {
+  QA_COVERAGE_TARGET_REVIEWS_PER_AGENT,
+  QA_NEEDS_ATTENTION_SNAPSHOT_LIMIT,
+} from "@/lib/quality-review-constants";
 
 type Summary = {
   startYmd: string;
@@ -118,8 +121,13 @@ export function QaSprintSummary() {
       </div>
       {summary.needsAttention.length > 0 && (
         <div className="mt-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40 mb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40 mb-1">
             Needs attention
+          </p>
+          <p className="text-[10px] text-white/35 mb-2 leading-snug">
+            Same sprint window and rules as the dashboard (SUBMITTED + current version only). Showing
+            up to {QA_NEEDS_ATTENTION_SNAPSHOT_LIMIT} agents with the lowest counts; open the
+            dashboard for the full list.
           </p>
           <ul className="space-y-1.5 text-xs text-white/75">
             {summary.needsAttention.map((a) => (

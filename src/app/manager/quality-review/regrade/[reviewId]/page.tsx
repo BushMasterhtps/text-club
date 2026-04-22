@@ -8,6 +8,7 @@ import ThemeToggle from "@/app/_components/ThemeToggle";
 import SessionTimer from "@/app/_components/SessionTimer";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/app/_components/AutoLogoutWarning";
+import { DashboardNavigationProvider } from "@/contexts/DashboardNavigationContext";
 import { computeQualityReviewScores } from "@/lib/quality-review-scoring";
 import type { QAReviewLineResponse } from "@prisma/client";
 
@@ -34,7 +35,7 @@ type ScoreFeedback = {
   finalScore: number;
 };
 
-export default function RegradeReviewPage() {
+function RegradeReviewPageContent() {
   const params = useParams<{ reviewId: string }>();
   const reviewId = params.reviewId;
   const router = useRouter();
@@ -269,5 +270,13 @@ export default function RegradeReviewPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function RegradeReviewPage() {
+  return (
+    <DashboardNavigationProvider>
+      <RegradeReviewPageContent />
+    </DashboardNavigationProvider>
   );
 }
