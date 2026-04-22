@@ -545,6 +545,12 @@ function QualityReviewContent() {
           QA dashboard
         </Link>
         <Link
+          href="/manager/quality-review/roster"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20"
+        >
+          QA roster
+        </Link>
+        <Link
           href="/manager/quality-review/templates"
           className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20"
         >

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
-import { loadQaAgentCoverageRows } from "@/lib/quality-review-dashboard";
+import {
+  loadQaAgentCoverageRows,
+  QA_ROSTER_SCOPE_ALL,
+  QA_ROSTER_SCOPE_TRACKED,
+  QA_TEAM_FILTER_ANY,
+  QA_TEAM_FILTER_UNASSIGNED,
+} from "@/lib/quality-review-dashboard";
 import { QA_COVERAGE_TARGET_REVIEWS_PER_AGENT } from "@/lib/quality-review-constants";
 
 export async function GET(request: NextRequest) {
@@ -13,6 +19,16 @@ export async function GET(request: NextRequest) {
   const endDate = searchParams.get("endDate")?.trim();
   const q = searchParams.get("q")?.trim() || null;
   const targetRaw = searchParams.get("coverageTarget");
+  const rosterScopeRaw = searchParams.get("rosterScope")?.trim();
+  const rosterScope =
+    rosterScopeRaw === QA_ROSTER_SCOPE_TRACKED ? QA_ROSTER_SCOPE_TRACKED : QA_ROSTER_SCOPE_ALL;
+  const qaTeamRaw = searchParams.get("qaTeam")?.trim();
+  const qaTeamFilter =
+    qaTeamRaw === QA_TEAM_FILTER_UNASSIGNED
+      ? QA_TEAM_FILTER_UNASSIGNED
+      : qaTeamRaw && qaTeamRaw !== QA_TEAM_FILTER_ANY
+        ? qaTeamRaw
+        : QA_TEAM_FILTER_ANY;
 
   if (!startDate || !endDate) {
     return NextResponse.json(
@@ -26,11 +42,13 @@ export async function GET(request: NextRequest) {
     : QA_COVERAGE_TARGET_REVIEWS_PER_AGENT;
 
   try {
-    const rows = await loadQaAgentCoverageRows(prisma, {
+    const { rows, teamOptions } = await loadQaAgentCoverageRows(prisma, {
       startYmd: startDate,
       endYmd: endDate,
       agentSearch: q,
       coverageTarget,
+      rosterScope,
+      qaTeamFilter,
     });
     return NextResponse.json({
       success: true,
@@ -38,6 +56,9 @@ export async function GET(request: NextRequest) {
         startYmd: startDate,
         endYmd: endDate,
         coverageTarget,
+        rosterScope,
+        qaTeamFilter,
+        teamOptions,
         rows,
       },
     });

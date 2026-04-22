@@ -16,6 +16,9 @@ type Summary = {
   agentsFullyCovered: number;
   agentsBelowTarget: number;
   agentsWithZeroQa: number;
+  agentsExempt: number;
+  agentsNoEligibleWork: number;
+  agentsTracked: number;
   totalAgentsListed: number;
   needsAttention: Array<{
     agentId: string;
@@ -24,6 +27,8 @@ type Summary = {
     reviewsCompleted: number;
     coverageTarget: number;
     coverageStatus: string;
+    eligibleTaskCount?: number;
+    qaTeam?: string | null;
   }>;
 };
 
@@ -81,7 +86,8 @@ export function QaSprintSummary() {
           </h2>
           <p className="text-xs text-white/45 mt-1 tabular-nums">
             Window {summary.startYmd} → {summary.endYmd} · target{" "}
-            {summary.coverageTarget ?? QA_COVERAGE_TARGET_REVIEWS_PER_AGENT} reviews / agent
+            {summary.coverageTarget ?? QA_COVERAGE_TARGET_REVIEWS_PER_AGENT} reviews / agent ·{" "}
+            {summary.agentsTracked ?? 0} tracked in pool
           </p>
         </div>
         <Link
@@ -91,13 +97,13 @@ export function QaSprintSummary() {
           Open dashboard
         </Link>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-center">
         <div className="rounded-xl bg-black/30 border border-white/10 px-3 py-3">
           <div className="text-2xl font-bold text-white tabular-nums">
             {summary.totalReviewsCompleted}
           </div>
           <div className="text-[10px] uppercase tracking-wide text-white/40 mt-1">
-            Reviews (current)
+            Reviews (tracked)
           </div>
         </div>
         <div className="rounded-xl bg-emerald-500/10 border border-emerald-400/25 px-3 py-3">
@@ -118,6 +124,18 @@ export function QaSprintSummary() {
           </div>
           <div className="text-[10px] uppercase tracking-wide text-red-200/60 mt-1">Zero QA</div>
         </div>
+        <div className="rounded-xl bg-slate-500/10 border border-slate-400/25 px-3 py-3">
+          <div className="text-2xl font-bold text-slate-200 tabular-nums">
+            {summary.agentsExempt ?? 0}
+          </div>
+          <div className="text-[10px] uppercase tracking-wide text-slate-300/60 mt-1">Exempt</div>
+        </div>
+        <div className="rounded-xl bg-sky-500/10 border border-sky-400/25 px-3 py-3">
+          <div className="text-2xl font-bold text-sky-200 tabular-nums">
+            {summary.agentsNoEligibleWork ?? 0}
+          </div>
+          <div className="text-[10px] uppercase tracking-wide text-sky-200/60 mt-1">No eligible work</div>
+        </div>
       </div>
       {summary.needsAttention.length > 0 && (
         <div className="mt-4">
@@ -125,9 +143,9 @@ export function QaSprintSummary() {
             Needs attention
           </p>
           <p className="text-[10px] text-white/35 mb-2 leading-snug">
-            Same sprint window and rules as the dashboard (SUBMITTED + current version only). Showing
-            up to {QA_NEEDS_ATTENTION_SNAPSHOT_LIMIT} agents with the lowest counts; open the
-            dashboard for the full list.
+            Tracked agents with eligible work in the sprint, not yet at target (SUBMITTED + current
+            version only). Showing up to {QA_NEEDS_ATTENTION_SNAPSHOT_LIMIT} lowest counts; open the
+            dashboard for filters and the full list.
           </p>
           <ul className="space-y-1.5 text-xs text-white/75">
             {summary.needsAttention.map((a) => (

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
-import { loadQaDashboardSummary } from "@/lib/quality-review-dashboard";
+import {
+  loadQaDashboardSummary,
+  QA_ROSTER_SCOPE_ALL,
+  QA_ROSTER_SCOPE_TRACKED,
+  QA_TEAM_FILTER_ANY,
+  QA_TEAM_FILTER_UNASSIGNED,
+} from "@/lib/quality-review-dashboard";
 import { QA_COVERAGE_TARGET_REVIEWS_PER_AGENT } from "@/lib/quality-review-constants";
 
 export async function GET(request: NextRequest) {
@@ -12,6 +18,16 @@ export async function GET(request: NextRequest) {
   const startDate = searchParams.get("startDate")?.trim();
   const endDate = searchParams.get("endDate")?.trim();
   const targetRaw = searchParams.get("coverageTarget");
+  const rosterScopeRaw = searchParams.get("rosterScope")?.trim();
+  const rosterScope =
+    rosterScopeRaw === QA_ROSTER_SCOPE_TRACKED ? QA_ROSTER_SCOPE_TRACKED : QA_ROSTER_SCOPE_ALL;
+  const qaTeamRaw = searchParams.get("qaTeam")?.trim();
+  const qaTeamFilter =
+    qaTeamRaw === QA_TEAM_FILTER_UNASSIGNED
+      ? QA_TEAM_FILTER_UNASSIGNED
+      : qaTeamRaw && qaTeamRaw !== QA_TEAM_FILTER_ANY
+        ? qaTeamRaw
+        : QA_TEAM_FILTER_ANY;
 
   if (!startDate || !endDate) {
     return NextResponse.json(
@@ -29,6 +45,8 @@ export async function GET(request: NextRequest) {
       startYmd: startDate,
       endYmd: endDate,
       coverageTarget,
+      rosterScope,
+      qaTeamFilter,
     });
     return NextResponse.json({ success: true, data });
   } catch (e: unknown) {

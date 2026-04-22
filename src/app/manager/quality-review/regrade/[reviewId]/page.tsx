@@ -159,7 +159,16 @@ function RegradeReviewPageContent() {
 
   return (
     <DashboardLayout headerActions={headerActions}>
-      <AutoLogoutWarning show={showWarning} timeLeft={timeLeft} onExtend={extendSession} />
+      <AutoLogoutWarning
+        isOpen={showWarning}
+        timeLeft={timeLeft}
+        onExtend={extendSession}
+        onLogout={() => {
+          localStorage.removeItem("currentRole");
+          void fetch("/api/auth/logout", { method: "POST" });
+          window.location.href = "/login";
+        }}
+      />
       <div className="max-w-3xl mx-auto space-y-6 text-white pb-16 px-4">
         <header className="border-b border-white/10 pb-6">
           <h1 className="text-2xl font-semibold">Complete regrade</h1>
