@@ -102,6 +102,48 @@ export async function GET(
           })
         : [];
 
+    let originalReviewContext: unknown = null;
+    if (review.status === "PENDING" && review.parentReviewId) {
+      const parent = await prisma.qATaskReview.findFirst({
+        where: { id: review.parentReviewId },
+        include: {
+          reviewer: { select: { id: true, name: true, email: true } },
+          templateVersion: {
+            select: {
+              id: true,
+              version: true,
+              template: { select: { displayName: true, taskType: true, slug: true } },
+            },
+          },
+          lineResults: {
+            include: {
+              line: { select: { id: true, slug: true } },
+            },
+          },
+        },
+      });
+      if (parent) {
+        const templateMode =
+          review.templateVersionId === parent.templateVersionId ? "same" : "latest";
+        originalReviewContext = {
+          id: parent.id,
+          reviewer: parent.reviewer,
+          submittedAt: parent.submittedAt?.toISOString() ?? null,
+          finalScore: parent.finalScore != null ? Number(parent.finalScore) : null,
+          templateVersion: parent.templateVersion,
+          parentTemplateVersionId: parent.templateVersionId,
+          templateMode,
+          lineResults: parent.lineResults.map((lr) => ({
+            lineId: lr.lineId,
+            slug: lr.line.slug,
+            response: lr.response,
+            comment: lr.comment,
+            labelSnapshot: lr.labelSnapshot,
+          })),
+        };
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -122,6 +164,8 @@ export async function GET(
         lines,
         lineResults: serializeForClientJson(lineResults),
         task: serializeForClientJson(task),
+        originalReviewContext:
+          originalReviewContext != null ? serializeForClientJson(originalReviewContext) : null,
       },
     });
   } catch (e: unknown) {

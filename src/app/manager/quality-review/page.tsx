@@ -8,8 +8,17 @@ import ThemeToggle from "@/app/_components/ThemeToggle";
 import SessionTimer from "@/app/_components/SessionTimer";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/app/_components/AutoLogoutWarning";
-import { computeQualityReviewScores } from "@/lib/quality-review-scoring";
-import { buildOrderedMetadataRows } from "@/lib/quality-review-task-display";
+import { QaReviewTaskContext } from "@/app/manager/quality-review/_components/QaReviewTaskContext";
+import {
+  computeLiveScorePreviewResult,
+  QaLiveScorePreviewBody,
+  QA_LIVE_SCORE_DISCLAIMER,
+} from "@/app/manager/quality-review/_components/qa-live-score-preview";
+import {
+  formatCompletedAt,
+  formatDispositionDisplay,
+  NO_DISPOSITION_LABEL,
+} from "@/app/manager/quality-review/_components/qa-review-formatters";
 import { QaSprintSummary } from "@/app/manager/quality-review/_components/QaSprintSummary";
 import type { QAReviewLineResponse, TaskType, WodIvcsSource } from "@prisma/client";
 
@@ -82,29 +91,9 @@ const DISPOSITION_ALL = "__ALL__";
 /** Must match API / eligibility filter for null/empty disposition. */
 const DISPOSITION_NONE = "__NONE__";
 
-const NO_DISPOSITION_LABEL = "No disposition";
-
-function formatDispositionDisplay(value: string | null | undefined): string {
-  if (value == null || value === "") return NO_DISPOSITION_LABEL;
-  if (value === DISPOSITION_NONE) return NO_DISPOSITION_LABEL;
-  return value;
-}
-
 function clampSample(n: number) {
   if (!Number.isFinite(n)) return 5;
   return Math.min(100, Math.max(1, Math.round(n)));
-}
-
-function formatCompletedAt(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return "—";
-  }
 }
 
 function QualityReviewContent() {
@@ -148,8 +137,6 @@ function QualityReviewContent() {
   const [previewSnippetExpanded, setPreviewSnippetExpanded] = useState<Record<string, boolean>>({});
   /** Mobile / small screens: expanded live score drawer */
   const [mobileLiveScoreOpen, setMobileLiveScoreOpen] = useState(false);
-  const [taskMoreFieldsOpen, setTaskMoreFieldsOpen] = useState(false);
-  const [taskPrimaryTextExpanded, setTaskPrimaryTextExpanded] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -261,29 +248,11 @@ function QualityReviewContent() {
     });
   }, [eligibility]);
 
-  const liveScorePreview = useMemo(() => {
-    if (!taskPayload) return null;
-    const map = new Map<string, QAReviewLineResponse>();
-    for (const line of taskPayload.lines) {
-      const r = responses[line.id];
-      if (!r) return { error: "missing_line" as const };
-      map.set(line.id, r);
-    }
-    const linesForScore = taskPayload.lines.map((l) => ({
-      id: l.id,
-      weight: { toNumber: () => Number(l.weight) },
-      isCritical: l.isCritical,
-      allowNa: l.allowNa,
-    }));
-    try {
-      return { breakdown: computeQualityReviewScores(linesForScore, map) };
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "";
-      if (msg.startsWith("NO_APPLICABLE_LINES")) return { error: "no_applicable" as const };
-      if (msg.startsWith("NA_NOT_ALLOWED")) return { error: "na_not_allowed" as const };
-      return { error: "other" as const };
-    }
-  }, [taskPayload, responses]);
+  const liveScoreResult = useMemo(
+    () =>
+      taskPayload ? computeLiveScorePreviewResult(taskPayload.lines, responses) : null,
+    [taskPayload, responses]
+  );
 
   useEffect(() => {
     if (step !== "review") setMobileLiveScoreOpen(false);
@@ -292,64 +261,6 @@ function QualityReviewContent() {
   useEffect(() => {
     setPreviewSnippetExpanded({});
   }, [eligibility]);
-
-  const liveScoreInner = useMemo(() => {
-    if (!liveScorePreview) {
-      return <p className="text-xs text-white/45">Load a task to see the estimate.</p>;
-    }
-    if ("breakdown" in liveScorePreview) {
-      const b = liveScorePreview.breakdown;
-      return (
-        <dl className="space-y-2.5 text-sm">
-          <div className="flex justify-between gap-2">
-            <dt className="text-white/45">Earned weight</dt>
-            <dd className="font-mono text-white tabular-nums">{b.earnedWeight.toFixed(2)}</dd>
-          </div>
-          <div className="flex justify-between gap-2">
-            <dt className="text-white/45">Possible weight</dt>
-            <dd className="font-mono text-white tabular-nums">{b.possibleWeight.toFixed(2)}</dd>
-          </div>
-          <div className="flex justify-between gap-2 border-t border-white/10 pt-2">
-            <dt className="text-white/45">Weighted %</dt>
-            <dd className="font-semibold text-violet-200 tabular-nums">{b.weightedPercent.toFixed(1)}%</dd>
-          </div>
-          <div className="flex justify-between gap-2">
-            <dt className="text-white/45">Critical fails</dt>
-            <dd className="tabular-nums text-white">{b.failedCriticalCount}</dd>
-          </div>
-          <div className="flex justify-between gap-2">
-            <dt className="text-white/45">Score cap</dt>
-            <dd className="tabular-nums text-white">{b.scoreCap != null ? `${b.scoreCap}%` : "—"}</dd>
-          </div>
-          <div className="flex justify-between gap-2 border-t border-white/10 pt-3">
-            <dt className="text-white/60 font-medium">Projected final</dt>
-            <dd className="text-lg font-bold text-emerald-300 tabular-nums">{b.finalScore.toFixed(1)}%</dd>
-          </div>
-        </dl>
-      );
-    }
-    return (
-      <div className="text-xs text-amber-200/85 leading-relaxed space-y-2">
-        <p className="font-medium text-white/70">Preview unavailable</p>
-        {liveScorePreview.error === "no_applicable" ? (
-          <p>
-            No scorable lines (all N/A or zero weight). Submit will be blocked until at least one
-            line counts toward the score.
-          </p>
-        ) : liveScorePreview.error === "na_not_allowed" ? (
-          <p>N/A is not allowed on one or more lines you marked N/A.</p>
-        ) : (
-          <p>Adjust responses to see a live estimate.</p>
-        )}
-      </div>
-    );
-  }, [liveScorePreview]);
-
-  const liveScoreDisclaimer = (
-    <p className="text-[10px] leading-snug text-white/38 mt-3 pt-2 border-t border-white/10">
-      Live preview only — submit confirms the official score.
-    </p>
-  );
 
   useEffect(() => {
     if (!eligibility) return;
@@ -435,8 +346,6 @@ function QualityReviewContent() {
       setReviewerNotes("");
       setLastScores(null);
       setMobileLiveScoreOpen(false);
-      setTaskMoreFieldsOpen(false);
-      setTaskPrimaryTextExpanded(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Task load failed");
     } finally {
@@ -566,25 +475,6 @@ function QualityReviewContent() {
     ),
     [timeLeft, extendSession]
   );
-
-  const taskHeaderSkipKeys = useMemo(() => {
-    const t = taskPayload?.task as Record<string, unknown> | undefined;
-    const s = new Set<string>();
-    if (!t) return s;
-    for (const k of ["brand", "status", "phone", "email"] as const) {
-      const v = t[k];
-      if (v != null && String(v).trim() !== "") s.add(k);
-    }
-    return s;
-  }, [taskPayload]);
-
-  const taskMetadataRows = useMemo(() => {
-    if (!taskPayload?.task) return [];
-    return buildOrderedMetadataRows(
-      taskPayload.task as Record<string, unknown>,
-      taskHeaderSkipKeys
-    );
-  }, [taskPayload, taskHeaderSkipKeys]);
 
   const groupedLines = useMemo(() => {
     if (!taskPayload) return [];
@@ -1048,248 +938,13 @@ function QualityReviewContent() {
                   </div>
                 )}
 
-                {taskPayload && (
+                {taskPayload && currentTaskId && (
                   <div className="rounded-2xl border border-white/12 bg-neutral-950/60 p-6 md:p-7 space-y-6 ring-1 ring-white/5">
-                    <div>
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-white/45 mb-3">
-                        Task context
-                      </h3>
-                      <div className="grid sm:grid-cols-2 gap-4 text-sm text-white/80 border-b border-white/10 pb-5">
-                        <div>
-                          <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">
-                            Task id
-                          </div>
-                          <div className="font-mono text-xs text-violet-200/90 break-all">
-                            {currentTaskId}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">
-                            Completed
-                          </div>
-                          <div className="tabular-nums">
-                            {taskPayload.task.endTime
-                              ? formatCompletedAt(String(taskPayload.task.endTime))
-                              : "—"}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">
-                            Type
-                          </div>
-                          <div>{String(taskPayload.task.taskType)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">
-                            Disposition
-                          </div>
-                          <div>
-                            {formatDispositionDisplay(taskPayload.task.disposition as string | null)}
-                          </div>
-                        </div>
-                        {taskPayload.task.brand != null &&
-                          String(taskPayload.task.brand).trim() !== "" && (
-                            <div>
-                              <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">
-                                Brand
-                              </div>
-                              <div>{String(taskPayload.task.brand)}</div>
-                            </div>
-                          )}
-                        {taskPayload.task.status != null &&
-                          String(taskPayload.task.status).trim() !== "" && (
-                            <div>
-                              <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">
-                                Status
-                              </div>
-                              <div className="font-mono text-xs">{String(taskPayload.task.status)}</div>
-                            </div>
-                          )}
-                        {taskPayload.task.phone != null &&
-                          String(taskPayload.task.phone).trim() !== "" && (
-                            <div>
-                              <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">
-                                Phone
-                              </div>
-                              <div>{String(taskPayload.task.phone)}</div>
-                            </div>
-                          )}
-                        {taskPayload.task.email != null &&
-                          String(taskPayload.task.email).trim() !== "" && (
-                            <div>
-                              <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">
-                                Email
-                              </div>
-                              <div className="break-all">{String(taskPayload.task.email)}</div>
-                            </div>
-                          )}
-                      </div>
-
-                      {(() => {
-                        const assigned = taskPayload.task.assignedTo as
-                          | { name?: string | null; email?: string | null }
-                          | null
-                          | undefined;
-                        const completedBy = taskPayload.task.completedByUser as
-                          | { name?: string | null; email?: string | null }
-                          | null
-                          | undefined;
-                        if (!assigned && !completedBy) return null;
-                        return (
-                          <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 space-y-2">
-                            <div className="text-[11px] font-bold uppercase tracking-widest text-white/40">
-                              People
-                            </div>
-                            {assigned ? (
-                              <div className="text-sm text-white/80">
-                                <span className="text-white/45">Assigned to: </span>
-                                {assigned.name || assigned.email || "—"}
-                                {assigned.email && assigned.name ? (
-                                  <span className="text-white/50"> ({assigned.email})</span>
-                                ) : null}
-                              </div>
-                            ) : null}
-                            {completedBy ? (
-                              <div className="text-sm text-white/80">
-                                <span className="text-white/45">Completed by: </span>
-                                {completedBy.name || completedBy.email || "—"}
-                                {completedBy.email && completedBy.name ? (
-                                  <span className="text-white/50"> ({completedBy.email})</span>
-                                ) : null}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })()}
-
-                      {(() => {
-                        const raw = taskPayload.task.rawMessage as
-                          | Record<string, unknown>
-                          | null
-                          | undefined;
-                        if (!raw || typeof raw !== "object") return null;
-                        const bits = ["brand", "phone", "email", "text"] as const;
-                        const hasAny = bits.some((k) => {
-                          const v = raw[k];
-                          return v != null && String(v).trim() !== "";
-                        });
-                        if (!hasAny) return null;
-                        return (
-                          <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 space-y-2">
-                            <div className="text-[11px] font-bold uppercase tracking-widest text-white/40">
-                              Source message
-                            </div>
-                            <dl className="grid gap-2 text-sm text-white/80">
-                              {raw.brand != null && String(raw.brand).trim() !== "" ? (
-                                <div className="flex gap-2">
-                                  <dt className="text-white/45 w-24 shrink-0">Brand</dt>
-                                  <dd className="min-w-0">{String(raw.brand)}</dd>
-                                </div>
-                              ) : null}
-                              {raw.phone != null && String(raw.phone).trim() !== "" ? (
-                                <div className="flex gap-2">
-                                  <dt className="text-white/45 w-24 shrink-0">Phone</dt>
-                                  <dd className="min-w-0">{String(raw.phone)}</dd>
-                                </div>
-                              ) : null}
-                              {raw.email != null && String(raw.email).trim() !== "" ? (
-                                <div className="flex gap-2">
-                                  <dt className="text-white/45 w-24 shrink-0">Email</dt>
-                                  <dd className="min-w-0 break-all">{String(raw.email)}</dd>
-                                </div>
-                              ) : null}
-                              {raw.text != null && String(raw.text).trim() !== "" ? (
-                                <div className="pt-1">
-                                  <dt className="text-white/45 text-xs mb-1">Raw message text</dt>
-                                  <dd className="text-xs text-white/70 whitespace-pre-wrap max-h-40 overflow-y-auto rounded-lg bg-black/30 p-2 border border-white/5">
-                                    {String(raw.text)}
-                                  </dd>
-                                </div>
-                              ) : null}
-                            </dl>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    {(() => {
-                      const taskText = String(taskPayload.task.text ?? "").trim();
-                      const raw = taskPayload.task.rawMessage as Record<string, unknown> | null | undefined;
-                      const rawText =
-                        raw && typeof raw === "object" && raw.text != null
-                          ? String(raw.text).trim()
-                          : "";
-                      const body = taskText || rawText;
-                      if (!body) {
-                        return (
-                          <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/45">
-                            No primary task text on this record. Check full task details below if
-                            fields exist on other columns.
-                          </div>
-                        );
-                      }
-                      const label = taskText ? "Primary task text" : "Source message text (task.text empty)";
-                      return (
-                        <div>
-                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                            <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide">
-                              {label}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setTaskPrimaryTextExpanded((e) => !e)}
-                              className="text-[11px] font-medium text-violet-300/90 hover:text-violet-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 rounded px-1"
-                            >
-                              {taskPrimaryTextExpanded ? "More compact" : "Expand text area"}
-                            </button>
-                          </div>
-                          <div
-                            className={`text-sm text-white/85 whitespace-pre-wrap rounded-xl bg-black/35 p-4 border border-white/8 leading-relaxed overflow-y-auto transition-[max-height] duration-200 ${
-                              taskPrimaryTextExpanded
-                                ? "max-h-[min(75vh,36rem)]"
-                                : "max-h-52"
-                            }`}
-                          >
-                            {body}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {taskMetadataRows.length > 0 ? (
-                      <div className="rounded-xl border border-white/10 bg-black/20 overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() => setTaskMoreFieldsOpen((o) => !o)}
-                          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium text-white/90 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500/40"
-                          aria-expanded={taskMoreFieldsOpen}
-                        >
-                          <span>
-                            Full task details
-                            <span className="text-white/40 font-normal ml-2">
-                              ({taskMetadataRows.length} fields)
-                            </span>
-                          </span>
-                          <span className="text-white/45 text-xs shrink-0" aria-hidden>
-                            {taskMoreFieldsOpen ? "▲" : "▼"}
-                          </span>
-                        </button>
-                        {taskMoreFieldsOpen && (
-                          <div className="border-t border-white/10 px-4 py-3 max-h-[min(55vh,28rem)] overflow-y-auto">
-                            <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-2 text-sm">
-                              {taskMetadataRows.map((row) => (
-                                <div
-                                  key={row.key}
-                                  className="flex flex-col gap-0.5 border-b border-white/5 pb-2 sm:border-0 sm:pb-0"
-                                >
-                                  <dt className="text-[11px] text-white/45">{row.label}</dt>
-                                  <dd className="text-white/85 break-words">{row.value}</dd>
-                                </div>
-                              ))}
-                            </dl>
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
+                    <QaReviewTaskContext
+                      variant="plain"
+                      taskId={currentTaskId}
+                      task={taskPayload.task as Record<string, unknown>}
+                    />
 
                     <div className="space-y-8 pt-2">
                       {groupedLines.map(([key, lines]) => (
@@ -1378,8 +1033,8 @@ function QualityReviewContent() {
                     <p className="text-[11px] font-bold uppercase tracking-widest text-white/45 mb-3">
                       Live score preview
                     </p>
-                    {liveScoreInner}
-                    {liveScoreDisclaimer}
+                    <QaLiveScorePreviewBody result={liveScoreResult} />
+                    {QA_LIVE_SCORE_DISCLAIMER}
                   </div>
                 </aside>
               )}
@@ -1400,24 +1055,24 @@ function QualityReviewContent() {
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
                       Live score preview
                     </p>
-                    {liveScorePreview && "breakdown" in liveScorePreview ? (
+                    {liveScoreResult?.kind === "breakdown" ? (
                       <p className="text-xs text-white/85 tabular-nums truncate">
                         <span className="text-white/50">E</span>{" "}
-                        {liveScorePreview.breakdown.earnedWeight.toFixed(1)}/
-                        {liveScorePreview.breakdown.possibleWeight.toFixed(1)}
+                        {liveScoreResult.breakdown.earnedWeight.toFixed(1)}/
+                        {liveScoreResult.breakdown.possibleWeight.toFixed(1)}
                         <span className="text-white/40 mx-1.5">·</span>
-                        {liveScorePreview.breakdown.weightedPercent.toFixed(0)}%
+                        {liveScoreResult.breakdown.weightedPercent.toFixed(0)}%
                         <span className="text-white/40 mx-1.5">·</span>
-                        CF {liveScorePreview.breakdown.failedCriticalCount}
-                        {liveScorePreview.breakdown.scoreCap != null && (
+                        CF {liveScoreResult.breakdown.failedCriticalCount}
+                        {liveScoreResult.breakdown.scoreCap != null && (
                           <>
                             <span className="text-white/40 mx-1.5">·</span>
-                            cap {liveScorePreview.breakdown.scoreCap}%
+                            cap {liveScoreResult.breakdown.scoreCap}%
                           </>
                         )}
                         <span className="text-white/40 mx-1.5">·</span>
                         <span className="font-semibold text-emerald-300">
-                          → {liveScorePreview.breakdown.finalScore.toFixed(0)}%
+                          → {liveScoreResult.breakdown.finalScore.toFixed(0)}%
                         </span>
                       </p>
                     ) : (
@@ -1430,8 +1085,10 @@ function QualityReviewContent() {
                 </button>
                 {mobileLiveScoreOpen && (
                   <div className="border-t border-white/10 px-3 pb-3 max-h-[42vh] overflow-y-auto overscroll-contain">
-                    <div className="pt-3">{liveScoreInner}</div>
-                    {liveScoreDisclaimer}
+                    <div className="pt-3">
+                      <QaLiveScorePreviewBody result={liveScoreResult} />
+                    </div>
+                    {QA_LIVE_SCORE_DISCLAIMER}
                   </div>
                 )}
                 {!mobileLiveScoreOpen && (
