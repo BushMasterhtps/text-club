@@ -27,9 +27,8 @@ function serializeForClientJson<T>(value: T): T {
   );
 }
 
+/** Relation `include` only — scalars (e.g. finalScore, submittedAt) load by default and must not appear here. */
 const reviewInclude = {
-  finalScore: true,
-  submittedAt: true,
   templateVersion: {
     select: { template: { select: { taskType: true } } },
   },
@@ -50,9 +49,21 @@ const reviewInclude = {
   },
 } as const;
 
+/** Same “official %” as coverage: `finalScore` after submit; `weightedScore` only as legacy fallback. */
+function officialPercentFromReview(r: {
+  finalScore: unknown;
+  weightedScore?: unknown;
+  submittedAt: Date | null;
+}): number | null {
+  if (r.finalScore != null && r.finalScore !== "") return Number(r.finalScore);
+  if (r.weightedScore != null && r.weightedScore !== "") return Number(r.weightedScore);
+  return null;
+}
+
 function mapReviews(
   rows: Array<{
-    finalScore: { toString(): string } | null;
+    finalScore: unknown;
+    weightedScore?: unknown;
     submittedAt: Date | null;
     templateVersion: { template: { taskType: string } };
     lineResults: Array<{
@@ -69,7 +80,7 @@ function mapReviews(
   }>
 ): ReviewForTrend[] {
   return rows.map((r) => ({
-    finalScore: r.finalScore != null ? Number(r.finalScore) : null,
+    finalScore: officialPercentFromReview(r),
     submittedAt: r.submittedAt,
     templateVersion: r.templateVersion,
     lineResults: r.lineResults.map((lr) => ({
