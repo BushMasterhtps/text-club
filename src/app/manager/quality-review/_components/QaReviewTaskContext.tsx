@@ -2,7 +2,11 @@
 
 import React, { useMemo, useState } from "react";
 import { buildOrderedMetadataRows } from "@/lib/quality-review-task-display";
-import { formatCompletedAt, formatDispositionDisplay } from "./qa-review-formatters";
+import {
+  formatCompletedAt,
+  formatDispositionDisplay,
+  resolveTaskCompletedAtIso,
+} from "./qa-review-formatters";
 
 type Props = {
   taskId: string;
@@ -15,18 +19,60 @@ export function QaReviewTaskContext({ taskId, task, variant = "card" }: Props) {
   const [taskMoreFieldsOpen, setTaskMoreFieldsOpen] = useState(false);
   const [taskPrimaryTextExpanded, setTaskPrimaryTextExpanded] = useState(false);
 
-  const taskHeaderSkipKeys = useMemo(() => {
-    const s = new Set<string>();
-    for (const k of ["brand", "status", "phone", "email"] as const) {
-      const v = task[k];
-      if (v != null && String(v).trim() !== "") s.add(k);
-    }
-    return s;
+  const displayPhone = useMemo(() => {
+    const p = task.phone;
+    if (p != null && String(p).trim() !== "") return String(p);
+    const h = task.holdsPhoneNumber;
+    if (h != null && String(h).trim() !== "") return String(h);
+    return "";
   }, [task]);
 
+  const displayEmail = useMemo(() => {
+    for (const k of ["email", "holdsCustomerEmail", "yotpoEmail"] as const) {
+      const v = task[k];
+      if (v != null && String(v).trim() !== "") return String(v);
+    }
+    return "";
+  }, [task]);
+
+  const displayBrand = useMemo(() => {
+    const b = task.brand;
+    if (b != null && String(b).trim() !== "") return String(b);
+    return "";
+  }, [task]);
+
+  const taskHeaderSkipKeys = useMemo(() => {
+    const s = new Set<string>();
+    if (displayBrand) s.add("brand");
+    const st = task.status;
+    if (st != null && String(st).trim() !== "") s.add("status");
+    if (displayPhone) {
+      s.add("phone");
+      s.add("holdsPhoneNumber");
+    }
+    if (displayEmail) {
+      s.add("email");
+      s.add("holdsCustomerEmail");
+      s.add("yotpoEmail");
+    }
+    return s;
+  }, [task, displayBrand, displayPhone, displayEmail]);
+
+  const metadataSkipKeys = useMemo(() => {
+    const s = new Set<string>(taskHeaderSkipKeys);
+    const tt = String(task.text ?? "").trim();
+    const yr = String(task.yotpoReview ?? "").trim();
+    const hn = String(task.holdsNotes ?? "").trim();
+    const det = String(task.details ?? "").trim();
+    if (!tt && yr) s.add("yotpoReview");
+    else if (!tt && !yr && hn) s.add("holdsNotes");
+    else if (!tt && !yr && !hn && det) s.add("details");
+    return s;
+  }, [task, taskHeaderSkipKeys]);
+
   const taskMetadataRows = useMemo(
-    () => buildOrderedMetadataRows(task, taskHeaderSkipKeys),
-    [task, taskHeaderSkipKeys]
+    () => buildOrderedMetadataRows(task, metadataSkipKeys),
+    [task, metadataSkipKeys]
   );
 
   const shell =
@@ -50,7 +96,7 @@ export function QaReviewTaskContext({ taskId, task, variant = "card" }: Props) {
               Completed
             </div>
             <div className="tabular-nums">
-              {task.endTime ? formatCompletedAt(String(task.endTime)) : "—"}
+              {formatCompletedAt(resolveTaskCompletedAtIso(task))}
             </div>
           </div>
           <div>
@@ -63,30 +109,30 @@ export function QaReviewTaskContext({ taskId, task, variant = "card" }: Props) {
             </div>
             <div>{formatDispositionDisplay(task.disposition as string | null)}</div>
           </div>
-          {task.brand != null && String(task.brand).trim() !== "" && (
+          {displayBrand ? (
             <div>
               <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">Brand</div>
-              <div>{String(task.brand)}</div>
+              <div>{displayBrand}</div>
             </div>
-          )}
+          ) : null}
           {task.status != null && String(task.status).trim() !== "" && (
             <div>
               <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">Status</div>
               <div className="font-mono text-xs">{String(task.status)}</div>
             </div>
           )}
-          {task.phone != null && String(task.phone).trim() !== "" && (
+          {displayPhone ? (
             <div>
               <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">Phone</div>
-              <div>{String(task.phone)}</div>
+              <div>{displayPhone}</div>
             </div>
-          )}
-          {task.email != null && String(task.email).trim() !== "" && (
+          ) : null}
+          {displayEmail ? (
             <div>
               <div className="text-[11px] font-medium text-white/40 uppercase tracking-wide mb-1">Email</div>
-              <div className="break-all">{String(task.email)}</div>
+              <div className="break-all">{displayEmail}</div>
             </div>
-          )}
+          ) : null}
         </div>
 
         {(() => {
@@ -104,7 +150,7 @@ export function QaReviewTaskContext({ taskId, task, variant = "card" }: Props) {
               <div className="text-[11px] font-bold uppercase tracking-widest text-white/40">People</div>
               {assigned ? (
                 <div className="text-sm text-white/80">
-                  <span className="text-white/45">Assigned to: </span>
+                  <span className="text-white/45">Assigned agent: </span>
                   {assigned.name || assigned.email || "—"}
                   {assigned.email && assigned.name ? (
                     <span className="text-white/50"> ({assigned.email})</span>
@@ -173,10 +219,13 @@ export function QaReviewTaskContext({ taskId, task, variant = "card" }: Props) {
 
       {(() => {
         const taskText = String(task.text ?? "").trim();
+        const yotpoReview = String(task.yotpoReview ?? "").trim();
+        const holdsNotes = String(task.holdsNotes ?? "").trim();
+        const details = String(task.details ?? "").trim();
         const raw = task.rawMessage as Record<string, unknown> | null | undefined;
         const rawText =
           raw && typeof raw === "object" && raw.text != null ? String(raw.text).trim() : "";
-        const body = taskText || rawText;
+        const body = taskText || yotpoReview || holdsNotes || details || rawText;
         if (!body) {
           return (
             <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/45">
@@ -185,7 +234,15 @@ export function QaReviewTaskContext({ taskId, task, variant = "card" }: Props) {
             </div>
           );
         }
-        const label = taskText ? "Primary task text" : "Source message text (task.text empty)";
+        const label = taskText
+          ? "Primary task text"
+          : yotpoReview
+            ? "Primary task text (Yotpo review)"
+            : holdsNotes
+              ? "Primary task text (Holds notes)"
+              : details
+                ? "Primary task text (details)"
+                : "Source message text (task.text empty)";
         return (
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">

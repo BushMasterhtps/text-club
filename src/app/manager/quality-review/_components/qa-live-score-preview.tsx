@@ -66,6 +66,10 @@ export function QaLiveScorePreviewBody({ result }: { result: LiveScorePreviewRes
           <dd className="font-semibold text-violet-200 tabular-nums">{b.weightedPercent.toFixed(1)}%</dd>
         </div>
         <div className="flex justify-between gap-2">
+          <dt className="text-white/45">Weighted score</dt>
+          <dd className="font-mono text-white/85 tabular-nums">{b.weightedScore.toFixed(1)}%</dd>
+        </div>
+        <div className="flex justify-between gap-2">
           <dt className="text-white/45">Critical fails</dt>
           <dd className="tabular-nums text-white">{b.failedCriticalCount}</dd>
         </div>

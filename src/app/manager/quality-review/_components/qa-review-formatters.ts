@@ -20,3 +20,15 @@ export function formatCompletedAt(iso: string | null): string {
     return "—";
   }
 }
+
+/**
+ * Different task workflows stamp completion on different columns; QA should show the best
+ * available timestamp without guessing timezone semantics beyond ISO parsing.
+ */
+export function resolveTaskCompletedAtIso(task: Record<string, unknown>): string | null {
+  for (const key of ["endTime", "completedAt", "completionTime"] as const) {
+    const v = task[key];
+    if (v != null && String(v).trim() !== "") return String(v);
+  }
+  return null;
+}

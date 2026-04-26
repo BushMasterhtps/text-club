@@ -46,6 +46,7 @@ type OriginalLineResult = {
   slug: string;
   response: QAReviewLineResponse;
   comment: string | null;
+  /** Checklist label at the time of the original review (helps when template text drifted). */
   labelSnapshot: string;
 };
 
@@ -127,11 +128,8 @@ function RegradeReviewPageContent() {
           version: d.review.templateVersion?.version ?? 0,
         });
         setOriginalContext((d.originalReviewContext as OriginalReviewContext | null) ?? null);
-        const init: Record<string, QAReviewLineResponse> = {};
-        for (const line of d.lines as LineRow[]) {
-          init[line.id] = "PASS";
-        }
-        setResponses(init);
+        /** Fresh regrade: no line pre-selected (parent decisions shown separately for reference). */
+        setResponses({});
         setLineComments({});
         setReviewerNotes("");
         setLastScores(null);
@@ -165,17 +163,33 @@ function RegradeReviewPageContent() {
     [lines, responses]
   );
 
+  const responsesComplete = useMemo(
+    () =>
+      lines.length > 0 &&
+      lines.every((line) => {
+        const r = responses[line.id];
+        return r === "PASS" || r === "FAIL" || r === "NA";
+      }),
+    [lines, responses]
+  );
+
   const submit = async () => {
-    if (!lines.length) return;
+    if (!lines.length || !responsesComplete) return;
     setBusy(true);
     setError(null);
     try {
       const body = {
-        responses: lines.map((line) => ({
-          lineId: line.id,
-          response: responses[line.id]!,
-          comment: lineComments[line.id]?.trim() || undefined,
-        })),
+        responses: lines.map((line) => {
+          const r = responses[line.id];
+          if (r !== "PASS" && r !== "FAIL" && r !== "NA") {
+            throw new Error("Each checklist line needs a response.");
+          }
+          return {
+            lineId: line.id,
+            response: r,
+            comment: lineComments[line.id]?.trim() || undefined,
+          };
+        }),
         reviewerNotes: reviewerNotes.trim() || undefined,
       };
       const res = await fetch(`/api/manager/quality-review/task-reviews/${reviewId}/submit`, {
@@ -243,222 +257,252 @@ function RegradeReviewPageContent() {
         {busy && !task && <p className="text-sm text-white/45">Loading…</p>}
 
         {task && taskId && (
-          <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8 lg:items-start">
-            <div className="space-y-6 min-w-0">
-              <QaReviewTaskContext taskId={taskId} task={task} />
+          <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-950/20 via-neutral-950/50 to-neutral-950/90 p-5 md:p-7 ring-1 ring-white/5 shadow-xl shadow-black/25 space-y-6">
+            <QaReviewTaskContext variant="plain" taskId={taskId} task={task} />
 
-              {originalContext && (
-                <div className="rounded-xl border border-amber-400/25 bg-amber-950/30 p-4 text-sm space-y-2 lg:hidden">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-amber-200/90">
-                    Original review
-                  </p>
-                  <p className="text-white/80">
-                    Reviewer:{" "}
-                    <span className="font-medium">
-                      {originalContext.reviewer.name || originalContext.reviewer.email}
-                    </span>
-                  </p>
-                  <p className="text-white/55 text-xs">
-                    Submitted:{" "}
-                    {originalContext.submittedAt
-                      ? formatCompletedAt(originalContext.submittedAt)
-                      : "—"}{" "}
-                    · Score:{" "}
-                    {originalContext.finalScore != null
-                      ? `${originalContext.finalScore.toFixed(1)}%`
-                      : "—"}
-                  </p>
-                  <p className="text-white/55 text-xs">
-                    Template: {originalContext.templateVersion.template.displayName} v
-                    {originalContext.templateVersion.version} · Regrade checklist:{" "}
-                    <span className="text-amber-100/90">
-                      {originalContext.templateMode === "same"
-                        ? "Same template version"
-                        : "Latest active template"}
-                    </span>
-                  </p>
-                  {meta?.regradeReason ? (
-                    <p className="text-amber-100/85 text-xs border-t border-amber-500/20 pt-2 mt-2">
-                      <span className="font-semibold">Reason: </span>
-                      {meta.regradeReason}
+            <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8 lg:items-start border-t border-white/10 pt-6">
+              <div className="space-y-6 min-w-0">
+                {originalContext && (
+                  <div className="rounded-xl border border-amber-400/25 bg-amber-950/30 p-4 text-sm space-y-2 lg:hidden">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-amber-200/90">
+                      Original review
                     </p>
-                  ) : null}
-                </div>
-              )}
+                    <p className="text-white/80">
+                      Original reviewer:{" "}
+                      <span className="font-medium">
+                        {originalContext.reviewer.name || originalContext.reviewer.email}
+                      </span>
+                    </p>
+                    <p className="text-white/55 text-xs">
+                      Original submitted:{" "}
+                      {originalContext.submittedAt
+                        ? formatCompletedAt(originalContext.submittedAt)
+                        : "—"}{" "}
+                      · Original final score:{" "}
+                      {originalContext.finalScore != null
+                        ? `${originalContext.finalScore.toFixed(1)}%`
+                        : "—"}
+                    </p>
+                    <p className="text-white/55 text-xs">
+                      Original template: {originalContext.templateVersion.template.displayName} v
+                      {originalContext.templateVersion.version}
+                    </p>
+                    <p className="text-white/55 text-xs">
+                      This regrade&apos;s checklist: {meta?.templateLabel ?? "—"} v{meta?.version ?? "—"}{" "}
+                      ·{" "}
+                      <span className="text-amber-100/90">
+                        {originalContext.templateMode === "same"
+                          ? "Same template version as original"
+                          : "Latest active template (line slugs matched to prior decisions where possible)"}
+                      </span>
+                    </p>
+                    {meta?.regradeReason ? (
+                      <p className="text-amber-100/85 text-xs border-t border-amber-500/20 pt-2 mt-2">
+                        <span className="font-semibold">Regrade reason: </span>
+                        {meta.regradeReason}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
 
-              {lines.length > 0 && (
-                <div className="space-y-8">
-                  {groupedLines.map(([key, sectionLines]) => (
-                    <div key={key}>
-                      <h3 className="text-xs font-bold text-amber-200/95 mb-3 tracking-widest uppercase border-l-2 border-amber-400/60 pl-3">
-                        {sectionLines[0]?.sectionTitle}
-                      </h3>
-                      <div className="space-y-4">
-                        {sectionLines.map((line) => {
-                          const orig =
-                            originalContext && templateVersionId
-                              ? matchOriginalLineResult(line, templateVersionId, originalContext)
-                              : null;
-                          return (
-                            <div
-                              key={line.id}
-                              className="rounded-xl bg-white/[0.04] border border-white/10 p-4 md:p-5 space-y-3"
-                            >
-                              <div className="text-xs text-white/40">
-                                {line.sectionTitle} · line {line.lineOrder}
-                              </div>
-                              <div className="text-sm font-medium text-white">{line.label}</div>
-                              {line.helpText ? (
-                                <div className="text-xs text-white/45 leading-relaxed">{line.helpText}</div>
-                              ) : null}
-                              <div className="text-xs text-white/35">
-                                Weight {Number(line.weight).toFixed(2)}
-                                {line.isCritical ? " · Critical" : ""}
-                                {line.allowNa ? " · N/A allowed" : ""}
-                              </div>
-                              {orig ? (
-                                <div className="rounded-lg border border-white/10 bg-black/35 px-3 py-2 text-[11px] space-y-1 text-white/65">
-                                  <div className="font-semibold text-white/55 uppercase tracking-wide text-[10px]">
-                                    Previous review
+                {lines.length > 0 && (
+                  <div className="space-y-8">
+                    {!responsesComplete && (
+                      <p className="text-xs text-amber-200/90 rounded-lg border border-amber-500/25 bg-amber-950/25 px-3 py-2">
+                        Select PASS, FAIL, or N/A on every line. Prior decisions are shown for reference
+                        only and are not copied into this regrade.
+                      </p>
+                    )}
+                    {groupedLines.map(([key, sectionLines]) => (
+                      <div key={key}>
+                        <h3 className="text-xs font-bold text-amber-200/95 mb-3 tracking-widest uppercase border-l-2 border-amber-400/60 pl-3">
+                          {sectionLines[0]?.sectionTitle}
+                        </h3>
+                        <div className="space-y-4">
+                          {sectionLines.map((line) => {
+                            const orig =
+                              originalContext && templateVersionId
+                                ? matchOriginalLineResult(line, templateVersionId, originalContext)
+                                : null;
+                            const snapshotDiffers =
+                              orig &&
+                              orig.labelSnapshot &&
+                              orig.labelSnapshot.trim() !== line.label.trim();
+                            return (
+                              <div
+                                key={line.id}
+                                className="rounded-xl bg-white/[0.04] border border-white/10 p-4 md:p-5 space-y-3"
+                              >
+                                <div className="text-xs text-white/40">
+                                  {line.sectionTitle} · line {line.lineOrder}
+                                </div>
+                                <div className="text-sm font-medium text-white">{line.label}</div>
+                                {snapshotDiffers ? (
+                                  <div className="text-[11px] text-white/50 italic border-l-2 border-white/15 pl-2">
+                                    Original line wording: {orig!.labelSnapshot}
                                   </div>
-                                  <div>
-                                    <span className="text-white/40">Decision: </span>
-                                    <span className="text-violet-200/95 font-medium">{orig.response}</span>
-                                  </div>
-                                  {orig.comment ? (
-                                    <div>
-                                      <span className="text-white/40">Note: </span>
-                                      {orig.comment}
+                                ) : null}
+                                {line.helpText ? (
+                                  <div className="text-xs text-white/45 leading-relaxed">{line.helpText}</div>
+                                ) : null}
+                                <div className="text-xs text-white/35">
+                                  Weight {Number(line.weight).toFixed(2)}
+                                  {line.isCritical ? " · Critical" : ""}
+                                  {line.allowNa ? " · N/A allowed" : ""}
+                                </div>
+                                {orig ? (
+                                  <div className="rounded-lg border border-white/10 bg-black/35 px-3 py-2 text-[11px] space-y-1 text-white/65">
+                                    <div className="font-semibold text-white/55 uppercase tracking-wide text-[10px]">
+                                      Original line result
                                     </div>
-                                  ) : null}
-                                  <div className="text-white/40">
-                                    Grader:{" "}
-                                    {originalContext?.reviewer.name ||
-                                      originalContext?.reviewer.email ||
-                                      "—"}
-                                    {originalContext?.submittedAt ? (
-                                      <>
-                                        {" "}
-                                        · {formatCompletedAt(originalContext.submittedAt)}
-                                      </>
-                                    ) : null}
+                                    <div>
+                                      <span className="text-white/40">Previous: </span>
+                                      <span className="text-violet-200/95 font-medium">{orig.response}</span>
+                                    </div>
+                                    {orig.comment ? (
+                                      <div>
+                                        <span className="text-white/40">Previous note: </span>
+                                        {orig.comment}
+                                      </div>
+                                    ) : (
+                                      <div className="text-white/35">Previous note: —</div>
+                                    )}
+                                    <div className="text-white/40">
+                                      Original reviewer:{" "}
+                                      {originalContext?.reviewer.name ||
+                                        originalContext?.reviewer.email ||
+                                        "—"}
+                                      {originalContext?.submittedAt ? (
+                                        <>
+                                          {" "}
+                                          · Submitted: {formatCompletedAt(originalContext.submittedAt)}
+                                        </>
+                                      ) : null}
+                                    </div>
                                   </div>
+                                ) : (
+                                  <div className="text-[10px] text-white/35 italic">
+                                    No matching line on the original checklist (template may have changed).
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap gap-4 text-sm">
+                                  {(["PASS", "FAIL", "NA"] as const).map((opt) => (
+                                    <label key={opt} className="inline-flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="radio"
+                                        className="accent-violet-500"
+                                        name={`ln-${line.id}`}
+                                        checked={responses[line.id] === opt}
+                                        disabled={opt === "NA" && !line.allowNa}
+                                        onChange={() => setResponses((p) => ({ ...p, [line.id]: opt }))}
+                                      />
+                                      <span>{opt}</span>
+                                    </label>
+                                  ))}
                                 </div>
-                              ) : (
-                                <div className="text-[10px] text-white/35 italic">
-                                  No matching line on the original checklist (template may have changed).
-                                </div>
-                              )}
-                              <div className="flex flex-wrap gap-4 text-sm">
-                                {(["PASS", "FAIL", "NA"] as const).map((opt) => (
-                                  <label key={opt} className="inline-flex items-center gap-2 cursor-pointer">
-                                    <input
-                                      type="radio"
-                                      className="accent-violet-500"
-                                      name={`ln-${line.id}`}
-                                      checked={responses[line.id] === opt}
-                                      disabled={opt === "NA" && !line.allowNa}
-                                      onChange={() => setResponses((p) => ({ ...p, [line.id]: opt }))}
-                                    />
-                                    <span>{opt}</span>
-                                  </label>
-                                ))}
+                                <input
+                                  placeholder="Optional line comment"
+                                  value={lineComments[line.id] ?? ""}
+                                  onChange={(e) =>
+                                    setLineComments((p) => ({ ...p, [line.id]: e.target.value }))
+                                  }
+                                  className="w-full rounded-lg bg-black/40 border border-white/15 px-2 py-1.5 text-xs"
+                                />
                               </div>
-                              <input
-                                placeholder="Optional line comment"
-                                value={lineComments[line.id] ?? ""}
-                                onChange={(e) =>
-                                  setLineComments((p) => ({ ...p, [line.id]: e.target.value }))
-                                }
-                                className="w-full rounded-lg bg-black/40 border border-white/15 px-2 py-1.5 text-xs"
-                              />
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
 
-                  <label className="block text-xs text-white/50">
-                    Overall reviewer notes
-                    <textarea
-                      value={reviewerNotes}
-                      onChange={(e) => setReviewerNotes(e.target.value)}
-                      rows={2}
-                      className="mt-1 w-full rounded-lg bg-black/40 border border-white/15 px-2 py-1.5 text-sm"
-                    />
-                  </label>
+                    <label className="block text-xs text-white/50">
+                      Overall reviewer notes
+                      <textarea
+                        value={reviewerNotes}
+                        onChange={(e) => setReviewerNotes(e.target.value)}
+                        rows={2}
+                        className="mt-1 w-full rounded-lg bg-black/40 border border-white/15 px-2 py-1.5 text-sm"
+                      />
+                    </label>
 
-                  {lastScores && (
-                    <div className="rounded-xl border border-emerald-500/35 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-50">
-                      Submitted. Redirecting to QA dashboard…
-                    </div>
-                  )}
+                    {lastScores && (
+                      <div className="rounded-xl border border-emerald-500/35 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-50">
+                        Submitted. Redirecting to QA dashboard…
+                      </div>
+                    )}
 
-                  <button
-                    type="button"
-                    disabled={busy || !!lastScores}
-                    onClick={() => void submit()}
-                    className="w-full sm:w-auto px-8 py-3 rounded-xl bg-violet-600 text-white font-semibold disabled:opacity-40 shadow-lg shadow-violet-950/40"
-                  >
-                    {busy ? "…" : "Submit regrade"}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <aside className="hidden lg:block space-y-4 shrink-0 lg:sticky lg:top-4">
-              {originalContext ? (
-                <div className="rounded-xl border border-amber-400/25 bg-amber-950/25 p-4 text-sm space-y-2">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-amber-200/90">
-                    Original review
-                  </p>
-                  <p className="text-white/80">
-                    Reviewer:{" "}
-                    <span className="font-medium">
-                      {originalContext.reviewer.name || originalContext.reviewer.email}
-                    </span>
-                  </p>
-                  <p className="text-white/55 text-xs">
-                    Submitted:{" "}
-                    {originalContext.submittedAt
-                      ? formatCompletedAt(originalContext.submittedAt)
-                      : "—"}
-                  </p>
-                  <p className="text-white/55 text-xs">
-                    Score:{" "}
-                    {originalContext.finalScore != null
-                      ? `${originalContext.finalScore.toFixed(1)}%`
-                      : "—"}
-                  </p>
-                  <p className="text-white/55 text-xs">
-                    Template: {originalContext.templateVersion.template.displayName} v
-                    {originalContext.templateVersion.version}
-                  </p>
-                  <p className="text-white/55 text-xs">
-                    This regrade uses:{" "}
-                    <span className="text-amber-100/90 font-medium">
-                      {originalContext.templateMode === "same"
-                        ? "Same template version"
-                        : "Latest active template"}
-                    </span>
-                  </p>
-                  {meta?.regradeReason ? (
-                    <p className="text-amber-100/85 text-xs border-t border-amber-500/20 pt-2">
-                      <span className="font-semibold">Regrade reason: </span>
-                      {meta.regradeReason}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-              <div className="rounded-xl border border-white/12 bg-neutral-900/90 p-4 shadow-lg">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-white/45 mb-3">
-                  Live score preview
-                </p>
-                <QaLiveScorePreviewBody result={liveScoreResult} />
-                {QA_LIVE_SCORE_DISCLAIMER}
+                    <button
+                      type="button"
+                      disabled={busy || !!lastScores || !responsesComplete}
+                      onClick={() => void submit()}
+                      className="w-full sm:w-auto px-8 py-3 rounded-xl bg-violet-600 text-white font-semibold disabled:opacity-40 shadow-lg shadow-violet-950/40"
+                    >
+                      {busy ? "…" : "Submit regrade"}
+                    </button>
+                  </div>
+                )}
               </div>
-            </aside>
+
+              <aside className="hidden lg:block space-y-4 shrink-0 lg:sticky lg:top-4">
+                <div className="rounded-xl border border-white/12 bg-neutral-900/90 p-4 shadow-lg space-y-2 text-sm">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/45">
+                    This regrade&apos;s checklist
+                  </p>
+                  <p className="text-white/85 font-medium">{meta?.templateLabel ?? "—"}</p>
+                  <p className="text-white/55 text-xs">Version {meta?.version ?? "—"}</p>
+                </div>
+                {originalContext ? (
+                  <div className="rounded-xl border border-amber-400/25 bg-amber-950/25 p-4 text-sm space-y-2">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-amber-200/90">
+                      Original review
+                    </p>
+                    <p className="text-white/80">
+                      Original reviewer:{" "}
+                      <span className="font-medium">
+                        {originalContext.reviewer.name || originalContext.reviewer.email}
+                      </span>
+                    </p>
+                    <p className="text-white/55 text-xs">
+                      Original submitted:{" "}
+                      {originalContext.submittedAt
+                        ? formatCompletedAt(originalContext.submittedAt)
+                        : "—"}
+                    </p>
+                    <p className="text-white/55 text-xs">
+                      Original final score:{" "}
+                      {originalContext.finalScore != null
+                        ? `${originalContext.finalScore.toFixed(1)}%`
+                        : "—"}
+                    </p>
+                    <p className="text-white/55 text-xs">
+                      Original template: {originalContext.templateVersion.template.displayName} v
+                      {originalContext.templateVersion.version}
+                    </p>
+                    <p className="text-white/55 text-xs">
+                      Template mode:{" "}
+                      <span className="text-amber-100/90 font-medium">
+                        {originalContext.templateMode === "same"
+                          ? "Same template version as original"
+                          : "Latest active template"}
+                      </span>
+                    </p>
+                    {meta?.regradeReason ? (
+                      <p className="text-amber-100/85 text-xs border-t border-amber-500/20 pt-2">
+                        <span className="font-semibold">Regrade reason: </span>
+                        {meta.regradeReason}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="rounded-xl border border-white/12 bg-neutral-900/90 p-4 shadow-lg">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/45 mb-3">
+                    Live score preview
+                  </p>
+                  <QaLiveScorePreviewBody result={liveScoreResult} />
+                  {QA_LIVE_SCORE_DISCLAIMER}
+                </div>
+              </aside>
+            </div>
           </div>
         )}
 

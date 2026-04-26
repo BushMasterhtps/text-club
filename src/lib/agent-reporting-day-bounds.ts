@@ -64,6 +64,12 @@ export function getAgentReportingTodayYmd(now: Date = new Date()): string {
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
+/** Map an absolute instant to the PST-fixed reporting calendar label containing it. */
+export function reportingYmdFromUtcInstant(instant: Date): string {
+  const { year, month, day } = ymdFromInstantInPstFixed(instant);
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
 /**
  * Add whole calendar days to a PST reporting calendar label (YYYY-MM-DD).
  * Uses Gregorian civil date arithmetic on the label (same calendar system as reporting days).

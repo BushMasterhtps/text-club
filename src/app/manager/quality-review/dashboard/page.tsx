@@ -24,6 +24,7 @@ import {
   QA_TEAM_FILTER_UNASSIGNED,
 } from "@/lib/quality-review-dashboard";
 import { DashboardNavigationProvider } from "@/contexts/DashboardNavigationContext";
+import { QaAgentTrendsPanel } from "@/app/manager/quality-review/dashboard/_components/QaAgentTrendsPanel";
 
 type CoverageRow = QaAgentCoverageRow;
 
@@ -187,6 +188,11 @@ function DashboardInner() {
   useEffect(() => {
     void loadCoverage();
   }, [loadCoverage]);
+
+  const selectedAgentRow = useMemo(
+    () => rows.find((r) => r.agentId === selectedAgentId) ?? null,
+    [rows, selectedAgentId]
+  );
 
   const teamSelectOptions = useMemo(() => {
     if (
@@ -561,6 +567,19 @@ function DashboardInner() {
             </table>
           </div>
         </div>
+
+        {selectedAgentId && (
+          <QaAgentTrendsPanel
+            agentId={selectedAgentId}
+            startDate={startDate}
+            endDate={endDate}
+            agentLabel={
+              selectedAgentRow?.name ||
+              selectedAgentRow?.email ||
+              `Agent ${selectedAgentId.slice(0, 8)}…`
+            }
+          />
+        )}
 
         {selectedAgentId && (
           <section className="rounded-2xl border border-violet-500/25 bg-neutral-950/60 p-4 md:p-6 space-y-4">
