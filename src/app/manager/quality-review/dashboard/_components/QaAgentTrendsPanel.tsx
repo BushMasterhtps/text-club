@@ -201,7 +201,14 @@ export function QaAgentTrendsPanel({ agentId, startDate, endDate, agentLabel }: 
                             (payload?.[0] as { payload?: { dateYmd?: string } })?.payload?.dateYmd ?? ""
                           }
                         />
-                        <Line type="monotone" dataKey="avgScore" stroke="#22d3ee" strokeWidth={2} dot />
+                        <Line
+                          type="monotone"
+                          dataKey="avgScore"
+                          stroke="#22d3ee"
+                          strokeWidth={2}
+                          dot
+                          isAnimationActive={false}
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -277,7 +284,12 @@ export function QaAgentTrendsPanel({ agentId, startDate, endDate, agentLabel }: 
                             contentStyle={{ background: "#171717", border: "1px solid #333", fontSize: 12 }}
                             formatter={(v: number) => [`${v}%`, "Fail rate"]}
                           />
-                          <Bar dataKey="failRatePct" fill="#f97316" radius={[0, 4, 4, 0]} />
+                          <Bar
+                            dataKey="failRatePct"
+                            fill="#f97316"
+                            radius={[0, 4, 4, 0]}
+                            isAnimationActive={false}
+                          />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
