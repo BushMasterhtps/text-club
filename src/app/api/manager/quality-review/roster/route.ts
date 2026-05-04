@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
         role: true,
         qaIsTracked: true,
         qaTeam: true,
+        rosterTeam: true,
         qaExemptReason: true,
       },
       orderBy: [{ name: "asc" }, { email: "asc" }],
@@ -130,6 +131,7 @@ export async function PATCH(request: NextRequest) {
         role: true,
         qaIsTracked: true,
         qaTeam: true,
+        rosterTeam: true,
         qaExemptReason: true,
       },
     });

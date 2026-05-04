@@ -28,6 +28,7 @@ interface AgentScorecard {
   id: string;
   name: string;
   email: string;
+  rosterTeam: string | null;
 
   tasksCompleted: number;
   trelloCompleted: number;
@@ -345,6 +346,7 @@ export async function GET(request: NextRequest) {
         id: agent.id,
         name: agent.name || agent.email,
         email: agent.email,
+        rosterTeam: agent.rosterTeam,
         tasksCompleted: portalTasks.length,
         trelloCompleted: trelloCount,
         totalCompleted,

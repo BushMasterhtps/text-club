@@ -157,6 +157,7 @@ export async function GET(req: NextRequest) {
         id: subject.id,
         name: subject.name,
         email: subject.email,
+        rosterTeam: subject.rosterTeam,
       };
       const trelloCount = trelloByAgent[agentId] || 0;
       const trelloWorkDates = trelloDates[agentId] || new Set();
@@ -309,6 +310,7 @@ interface AgentScorecard {
   id: string;
   name: string;
   email: string;
+  rosterTeam: string | null;
   overallScore: number;
   volumeScore: number;
   speedScore: number;
@@ -415,7 +417,7 @@ function calculateDynamicTargets(tasks: TaskData[], dateStart: Date, dateEnd: Da
 // ============================================================================
 
 function calculateAgentScore(
-  agent: { id: string; name: string | null; email: string },
+  agent: { id: string; name: string | null; email: string; rosterTeam: string | null },
   tasks: TaskData[],
   targets: DynamicTargets,
   dateStart: Date,
@@ -530,6 +532,7 @@ function calculateAgentScore(
     id: agent.id,
     name: agent.name || agent.email,
     email: agent.email,
+    rosterTeam: agent.rosterTeam,
     overallScore,
     volumeScore: Math.round(volumeScore),
     speedScore: Math.round(speedScore),

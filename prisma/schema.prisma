@@ -107,6 +107,8 @@ model User {
   qaIsTracked     Boolean  @default(true)
   /// Optional QA team label for filtering (e.g. manager-defined group); null = unassigned team.
   qaTeam          String?
+  /// Neutral org roster label (TEXT, same storage class as qaTeam); may diverge from qaTeam in later phases.
+  rosterTeam      String?
   /// Optional note shown internally when exempt or for roster context.
   qaExemptReason  String?  @db.Text
 
@@ -132,6 +134,7 @@ model User {
   @@index([isLive, lastSeen])
   @@index([qaIsTracked])
   @@index([qaTeam])
+  @@index([rosterTeam])
   @@index([productivityEligible])
 }
 

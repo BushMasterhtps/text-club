@@ -43,7 +43,15 @@ export async function GET(request: NextRequest) {
     const [agents, taskCountsByAgent] = await Promise.all([
       prisma.user.findMany({
         where,
-        select: { id: true, email: true, name: true, isLive: true, lastSeen: true, agentTypes: true },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          isLive: true,
+          lastSeen: true,
+          agentTypes: true,
+          rosterTeam: true,
+        },
         orderBy: { createdAt: "asc" },
       }),
       // Single query to get all task counts grouped by agent and task type
@@ -99,6 +107,7 @@ export async function GET(request: NextRequest) {
         isLive: a.isLive ?? false,
         lastSeen: a.lastSeen ?? null,
         agentTypes: a.agentTypes ?? [],
+        rosterTeam: a.rosterTeam ?? null,
       };
     });
 

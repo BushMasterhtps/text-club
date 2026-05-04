@@ -13,6 +13,7 @@ export type ProductivityScorecardSubject = {
   id: string;
   name: string | null;
   email: string;
+  rosterTeam: string | null;
 };
 
 /**
@@ -36,7 +37,7 @@ export async function resolveProductivityScorecardSubjects(
 
   return db.user.findMany({
     where,
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, rosterTeam: true },
     orderBy: [{ name: "asc" }, { email: "asc" }],
   });
 }

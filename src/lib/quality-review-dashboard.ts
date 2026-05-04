@@ -31,6 +31,7 @@ export type QaAgentCoverageRow = {
   email: string;
   qaIsTracked: boolean;
   qaTeam: string | null;
+  rosterTeam: string | null;
   qaExemptReason: string | null;
   eligibleTaskCount: number;
   reviewsCompleted: number;
@@ -193,6 +194,7 @@ export async function loadQaAgentCoverageRows(
       email: true,
       qaIsTracked: true,
       qaTeam: true,
+      rosterTeam: true,
       qaExemptReason: true,
     },
     orderBy: [{ name: "asc" }, { email: "asc" }],
@@ -310,6 +312,7 @@ export async function loadQaAgentCoverageRows(
       email: a.email,
       qaIsTracked: a.qaIsTracked,
       qaTeam: a.qaTeam,
+      rosterTeam: a.rosterTeam,
       qaExemptReason: a.qaExemptReason,
       eligibleTaskCount,
       reviewsCompleted,
