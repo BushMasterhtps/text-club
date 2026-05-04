@@ -8,6 +8,7 @@ import {
 } from '@/lib/sprint-utils';
 import { getTaskWeight, getAllWeights, WEIGHT_SUMMARY } from '@/lib/task-weights';
 import { apiAuthDeniedResponse, requireStaffApiAuth } from "@/lib/auth";
+import { resolveProductivityScorecardSubjects } from '@/lib/productivity-scorecard-subjects';
 
 const SPRINT_DURATION_DAYS = 14;
 
@@ -27,32 +28,52 @@ interface AgentScorecard {
   id: string;
   name: string;
   email: string;
-  
-  // Performance
+
   tasksCompleted: number;
   trelloCompleted: number;
   totalCompleted: number;
+  totalTasks: number;
   daysWorked: number;
-  
-  // Scores
+
   weightedPoints: number;
   weightedDailyAvg: number;
   tasksPerDay: number;
   hybridScore: number;
-  
-  // Rankings
+
   rankByPtsPerDay: number;
   rankByTasksPerDay: number;
+  rankByPtsPerHour: number;
   rankByHybrid: number;
   lifetimeRank: number;
-  
-  // Metadata
+
   tier: string;
   percentile: number;
   avgHandleTimeSec: number;
   totalTimeSec: number;
-  
-  // Flags
+
+  activeHours: number;
+  ptsPerActiveHour: number;
+  tasksPerActiveHour: number;
+
+  breakdown: Record<
+    string,
+    {
+      count: number;
+      weightedPoints: number;
+      avgSec: number;
+      totalSec: number;
+      dispositions?: Array<{
+        disposition: string;
+        count: number;
+        points: number;
+        avgTime: string;
+        totalSec: number;
+      }>;
+    }
+  >;
+  hourlyBreakdown: Record<number, { count: number; points: number }>;
+  dailyBreakdown: Record<string, { count: number; points: number; activeHours: number }>;
+
   isSenior: boolean;
   isChampion: boolean;
   isTopThree: boolean;
@@ -111,33 +132,13 @@ export async function GET(request: NextRequest) {
       isCurrentSprint = sprintNumber === getCurrentSprint().number;
     }
 
-    // Get all agents (including seniors for tracking, but excluding Holds-only agents)
-    const allAgents = await prisma.user.findMany({
-      where: {
-        role: { in: ['AGENT', 'MANAGER_AGENT'] },
-        isLive: true
-      },
-      select: { id: true, name: true, email: true, agentTypes: true }
+    const filteredAgents = await resolveProductivityScorecardSubjects(prisma, {
+      mode: 'sprint_rankings',
+      dateRange:
+        mode === 'custom' && customStart && customEnd
+          ? { start: customStart, end: customEnd }
+          : undefined,
     });
-    
-    // Filter out Holds-only agents (agents who ONLY have HOLDS in agentTypes)
-    const holdsOnlyAgentIds = new Set(
-      allAgents
-        .filter(agent => 
-          agent.agentTypes && 
-          Array.isArray(agent.agentTypes) && 
-          agent.agentTypes.length === 1 && 
-          agent.agentTypes[0] === 'HOLDS'
-        )
-        .map(agent => agent.id)
-    );
-    
-    console.log(`[Sprint Rankings] Total agents: ${allAgents.length}, Holds-only agents: ${holdsOnlyAgentIds.size}`);
-    
-    // Filter out Holds-only agents
-    const filteredAgents = allAgents.filter(agent => !holdsOnlyAgentIds.has(agent.id));
-    
-    console.log(`[Sprint Rankings] Filtered agents (excluding Holds-only): ${filteredAgents.length}`);
 
     const agentScorecards: AgentScorecard[] = [];
 
@@ -331,11 +332,9 @@ export async function GET(request: NextRequest) {
         ? Math.round(totalHandleTimeSec / portalTasks.length) 
         : 0;
 
-      // Skip if no work done
-      if (totalCompleted === 0 || daysWorked === 0) continue;
-
-      const weightedDailyAvg = totalWeightedPoints / daysWorked;
-      const tasksPerDay = totalCompleted / daysWorked;
+      const weightedDailyAvg =
+        daysWorked > 0 ? totalWeightedPoints / daysWorked : 0;
+      const tasksPerDay = daysWorked > 0 ? totalCompleted / daysWorked : 0;
 
       // Calculate active hours from task completion times (NEW for efficiency rankings)
       const activeHours = totalHandleTimeSec / 3600; // Convert seconds to hours

@@ -110,6 +110,11 @@ model User {
   /// Optional note shown internally when exempt or for roster context.
   qaExemptReason  String?  @db.Text
 
+  /// When false, user is excluded from manager productivity scorecard / sprint ranking subject lists.
+  productivityEligible    Boolean  @default(true)
+  /// Optional internal note for productivity roster / exemption context.
+  productivityExemptReason String? @db.Text
+
   tasks             Task[]              @relation("UserTasks")
   sentBackTasks     Task[]              @relation("SentBackTasks")
   completedTasks    Task[]              @relation("CompletedTasks")
@@ -127,6 +132,7 @@ model User {
   @@index([isLive, lastSeen])
   @@index([qaIsTracked])
   @@index([qaTeam])
+  @@index([productivityEligible])
 }
 
 model Task {

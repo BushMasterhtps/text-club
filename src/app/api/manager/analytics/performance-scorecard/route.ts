@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTaskWeight, getAllWeights, WEIGHT_SUMMARY } from "@/lib/task-weights";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { resolveProductivityScorecardSubjects } from "@/lib/productivity-scorecard-subjects";
 
 /**
  * Performance Scorecard API
@@ -92,28 +93,10 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Calculate targets based on actual workload during this period
-    const targets = calculateDynamicTargets(completedTasks, dateStart, dateEnd);
+    const completedTasksTyped = completedTasks as unknown as TaskData[];
 
-    // Get unique agents who completed tasks in this period
-    // Include both assignedToId and completedBy to catch all agents
-    const agentIdsFromAssigned = completedTasks.map(t => t.assignedToId).filter(Boolean) as string[];
-    const agentIdsFromCompletedBy = completedTasks.map(t => t.completedBy).filter(Boolean) as string[];
-    const allUniqueAgentIds = Array.from(new Set([...agentIdsFromAssigned, ...agentIdsFromCompletedBy])) as string[];
-    
-    console.log(`[Performance Scorecard] Agent IDs from assignedToId: ${agentIdsFromAssigned.length}`);
-    console.log(`[Performance Scorecard] Agent IDs from completedBy: ${agentIdsFromCompletedBy.length}`);
-    console.log(`[Performance Scorecard] Total unique agent IDs: ${allUniqueAgentIds.length}`);
-    
-    if (allUniqueAgentIds.length === 0) {
-      return NextResponse.json({
-        success: true,
-        period: { start: dateStart.toISOString(), end: dateEnd.toISOString(), days: daysDiff },
-        targets,
-        agents: [],
-        message: "No completed tasks found in this period"
-      });
-    }
+    // Calculate targets based on actual workload during this period
+    const targets = calculateDynamicTargets(completedTasksTyped, dateStart, dateEnd);
 
     // Get Trello completions for this period
     const trelloCompletions = await prisma.trelloCompletion.findMany({
@@ -157,154 +140,41 @@ export async function GET(req: NextRequest) {
       return acc;
     }, {} as Record<string, Set<string>>);
 
-    // Combine portal agents with Trello-only agents
-    const allAgentIds = Array.from(new Set([
-      ...allUniqueAgentIds,
-      ...Object.keys(trelloByAgent)
-    ]));
-    
-    console.log(`[Performance Scorecard] Total agent IDs (including Trello): ${allAgentIds.length}`);
-
-    // Fetch all agent data upfront to filter out Holds-only agents
-    const agentsWithTypes = await prisma.user.findMany({
-      where: {
-        id: { in: allAgentIds }
-      },
-      select: {
-        id: true,
-        agentTypes: true
-      }
+    const subjects = await resolveProductivityScorecardSubjects(prisma, {
+      mode: "performance_scorecard",
+      dateRange:
+        dateStartStr && dateEndStr
+          ? { start: dateStartStr, end: dateEndStr }
+          : undefined,
     });
 
-    // Create a map of Holds-only agents for quick lookup
-    // An agent is "Holds-only" if their agentTypes array contains ONLY "HOLDS" (case-sensitive)
-    // IMPORTANT: Empty agentTypes arrays default to TEXT_CLUB (legacy agents), so they are NOT Holds-only
-    const holdsOnlyAgentIds = new Set(
-      agentsWithTypes
-        .filter(agent => {
-          // Must have agentTypes array
-          if (!agent.agentTypes || !Array.isArray(agent.agentTypes)) {
-            // Empty/null agentTypes = legacy agent = TEXT_CLUB, NOT Holds-only
-            return false;
-          }
-          // Empty array = legacy agent = TEXT_CLUB, NOT Holds-only
-          if (agent.agentTypes.length === 0) {
-            return false;
-          }
-          // Must have exactly 1 type
-          if (agent.agentTypes.length !== 1) {
-            return false;
-          }
-          // That type must be "HOLDS" (case-sensitive match)
-          const isHoldsOnly = agent.agentTypes[0] === 'HOLDS';
-          
-          // Debug logging for Holds-only agents
-          if (isHoldsOnly) {
-            console.log(`[Performance Scorecard] Found Holds-only agent: ${agent.id}, agentTypes:`, agent.agentTypes);
-          }
-          
-          return isHoldsOnly;
-        })
-        .map(agent => agent.id)
-    );
-    
-    // Debug: Log all agents and their types
-    console.log(`[Performance Scorecard] Total agents with types: ${agentsWithTypes.length}`);
-    console.log(`[Performance Scorecard] Holds-only agents found: ${holdsOnlyAgentIds.size}`);
-    agentsWithTypes.forEach(agent => {
-      console.log(`[Performance Scorecard] Agent ${agent.id}: agentTypes =`, agent.agentTypes || 'null/undefined');
+    const agentScores = subjects.map((subject) => {
+      const agentId = subject.id;
+      const agentTasks = completedTasks
+        .filter((t) => t.assignedToId === agentId || t.completedBy === agentId)
+        .filter((t): t is (typeof t & { endTime: Date }) => t.endTime != null) as unknown as TaskData[];
+      const agent = {
+        id: subject.id,
+        name: subject.name,
+        email: subject.email,
+      };
+      const trelloCount = trelloByAgent[agentId] || 0;
+      const trelloWorkDates = trelloDates[agentId] || new Set();
+      return calculateAgentScore(
+        agent,
+        agentTasks,
+        targets,
+        dateStart,
+        dateEnd,
+        trelloCount,
+        trelloWorkDates
+      );
     });
 
-    // Filter out Holds-only agents from the list
-    const filteredAgentIds = allAgentIds.filter(agentId => {
-      const isHoldsOnly = holdsOnlyAgentIds.has(agentId);
-      if (isHoldsOnly) {
-        console.log(`[Performance Scorecard] Filtering out Holds-only agent ID: ${agentId} from filteredAgentIds`);
-      }
-      return !isHoldsOnly;
-    });
-    
-    console.log(`[Performance Scorecard] filteredAgentIds: ${filteredAgentIds.length} (removed ${allAgentIds.length - filteredAgentIds.length} Holds-only agents)`);
+    const validScores = agentScores;
 
-    // Calculate scorecard for each agent (Holds-only agents already filtered out)
-    const agentScores = await Promise.all(
-      filteredAgentIds.map(async (agentId) => {
-        // Include tasks where agent is assigned OR where agent completed it (for Holds unassigning dispos)
-        const agentTasks = completedTasks.filter(t => 
-          t.assignedToId === agentId || t.completedBy === agentId
-        );
-        
-        // CRITICAL CHECK: Exclude agents who are Holds-only OR who only completed Holds tasks
-        // This catches cases where agentTypes might be empty/incorrect but they only work on Holds
-        
-        // First check: Is agent in the holdsOnlyAgentIds set?
-        if (holdsOnlyAgentIds.has(agentId)) {
-          console.log(`[Performance Scorecard] Excluding agent ${agentId}: Found in holdsOnlyAgentIds set (agentTypes = HOLDS only)`);
-          return null; // Skip Holds-only agents
-        }
-        
-        // Second check: Did agent only complete Holds tasks in this period?
-        const taskTypes = new Set(agentTasks.map(t => t.taskType));
-        const hasOnlyHoldsTasks = taskTypes.size === 1 && taskTypes.has('HOLDS') && !trelloByAgent[agentId];
-        
-        if (hasOnlyHoldsTasks) {
-          console.log(`[Performance Scorecard] Excluding agent ${agentId}: Only completed Holds tasks (${agentTasks.length} tasks, no other task types, no Trello)`);
-          return null; // Skip agents who only did Holds work
-        }
-        
-        // Third check: If agent has any Holds tasks AND no other task types, exclude them
-        // This is more aggressive - even if they have Trello, if all portal tasks are Holds, exclude
-        const hasHoldsTasks = taskTypes.has('HOLDS');
-        const hasOtherTaskTypes = taskTypes.size > 1 || (taskTypes.size === 1 && !taskTypes.has('HOLDS'));
-        
-        if (hasHoldsTasks && !hasOtherTaskTypes && agentTasks.length > 0) {
-          // Agent only has Holds tasks (no TEXT_CLUB, WOD_IVCS, EMAIL_REQUESTS, YOTPO)
-          console.log(`[Performance Scorecard] Excluding agent ${agentId}: Only has Holds tasks (${agentTasks.length} tasks, taskTypes: ${Array.from(taskTypes).join(', ')})`);
-          return null; // Skip agents who only have Holds tasks
-        }
-        
-        // Try to get agent from assigned tasks first
-        let agent = agentTasks.find(t => t.assignedToId === agentId)?.assignedTo;
-        
-        // If not found, try from completedBy
-        if (!agent) {
-          agent = agentTasks.find(t => t.completedBy === agentId)?.completedByUser;
-        }
-        
-        // If agent has no portal tasks, fetch from Trello completion
-        if (!agent && trelloByAgent[agentId]) {
-          const trelloEntry = trelloCompletions.find(tc => tc.agentId === agentId);
-          agent = trelloEntry?.agent;
-        }
-        
-        if (!agent) return null;
-
-        const trelloCount = trelloByAgent[agentId] || 0;
-        const trelloWorkDates = trelloDates[agentId] || new Set();
-        return calculateAgentScore(agent, agentTasks, targets, dateStart, dateEnd, trelloCount, trelloWorkDates);
-      })
-    );
-
-    // Filter out nulls and separate eligible vs ineligible agents
-    const validScores = agentScores.filter(Boolean) as AgentScorecard[];
-    
-    console.log(`[Performance Scorecard] Valid scores after filtering nulls: ${validScores.length}`);
-    
-    // Filter out Holds-only agents (similar to how seniors are filtered in sprint-rankings)
-    // This is a double-check to ensure Holds-only agents are excluded even if they somehow got through
-    const nonHoldsAgents = validScores.filter(agent => {
-      // Check if this agent is in the holdsOnlyAgentIds set
-      if (holdsOnlyAgentIds.has(agent.id)) {
-        console.log(`[Performance Scorecard] Removing Holds-only agent from validScores: ${agent.id} (${agent.name || agent.email})`);
-        return false; // Exclude Holds-only agents
-      }
-      return true; // Include all other agents
-    });
-    
-    console.log(`[Performance Scorecard] Non-Holds agents after filter: ${nonHoldsAgents.length} (removed ${validScores.length - nonHoldsAgents.length})`);
-    
-    const eligibleAgents = nonHoldsAgents.filter(a => a.isEligible);
-    const ineligibleAgents = nonHoldsAgents.filter(a => !a.isEligible);
+    const eligibleAgents = validScores.filter((a) => a.isEligible);
+    const ineligibleAgents = validScores.filter((a) => !a.isEligible);
     
     // Sort eligible agents by overall score descending
     eligibleAgents.sort((a, b) => b.overallScore - a.overallScore);
@@ -351,71 +221,20 @@ export async function GET(req: NextRequest) {
     }));
 
     // Combine: eligible agents first (ranked), then ineligible
-    let allAgents = [...rankedAgents, ...ineligibleRanked];
+    const allAgents = [...rankedAgents, ...ineligibleRanked];
 
-    // FINAL SAFETY CHECK: Filter out any Holds-only agents that somehow got through
-    // Fetch agentTypes for all agents in the final list to ensure none are Holds-only
-    const finalAgentIds = allAgents.map(a => a.id);
-    console.log(`[Performance Scorecard] Final agent IDs to check:`, finalAgentIds);
-    
-    const finalAgentTypesCheck = await prisma.user.findMany({
-      where: { id: { in: finalAgentIds } },
-      select: { id: true, email: true, name: true, agentTypes: true }
-    });
+    const finalEligibleCount = allAgents.filter((a) => a.rank !== null).length;
+    const finalIneligibleCount = allAgents.filter((a) => a.rank === null).length;
 
-    console.log(`[Performance Scorecard] Final agent types check: ${finalAgentTypesCheck.length} agents fetched`);
-    finalAgentTypesCheck.forEach(agent => {
-      console.log(`[Performance Scorecard] Final check - Agent: ${agent.email} (${agent.name}), ID: ${agent.id}, agentTypes:`, agent.agentTypes || 'null/undefined');
-    });
-
-    const finalHoldsOnlySet = new Set(
-      finalAgentTypesCheck
-        .filter(agent => {
-          if (!agent.agentTypes || !Array.isArray(agent.agentTypes) || agent.agentTypes.length === 0) {
-            return false; // Empty = TEXT_CLUB, not Holds-only
-          }
-          const isHoldsOnly = agent.agentTypes.length === 1 && agent.agentTypes[0] === 'HOLDS';
-          
-          // Debug logging
-          if (isHoldsOnly) {
-            console.log(`[Performance Scorecard] FINAL CHECK: Found Holds-only agent in final list: ${agent.email} (${agent.name}), ID: ${agent.id}, agentTypes:`, agent.agentTypes);
-          }
-          
-          return isHoldsOnly;
-        })
-        .map(agent => agent.id)
-    );
-
-    // Debug: Log what we're filtering
-    console.log(`[Performance Scorecard] Final check: ${allAgents.length} agents before filter, ${finalHoldsOnlySet.size} Holds-only to remove`);
-    if (finalHoldsOnlySet.size > 0) {
-      console.log(`[Performance Scorecard] Holds-only agent IDs in final list:`, Array.from(finalHoldsOnlySet));
-    }
-
-    // Remove any Holds-only agents from the final list
-    const beforeCount = allAgents.length;
-    allAgents = allAgents.filter(agent => {
-      const shouldRemove = finalHoldsOnlySet.has(agent.id);
-      if (shouldRemove) {
-        console.log(`[Performance Scorecard] FINAL REMOVAL: Removing agent ${agent.id} (${agent.name || agent.email}) from final list`);
-      }
-      return !shouldRemove;
-    });
-    const afterCount = allAgents.length;
-    
-    console.log(`[Performance Scorecard] Final filter: ${beforeCount} -> ${afterCount} agents (removed ${beforeCount - afterCount})`);
-
-    // Recalculate eligible/ineligible counts after final filter
-    const finalEligibleCount = allAgents.filter(a => a.rank !== null).length;
-    const finalIneligibleCount = allAgents.filter(a => a.rank === null).length;
-
-    // If specific agent requested, include detailed breakdown
     if (agentId) {
-      const agentData = allAgents.find(a => a.id === agentId);
+      const agentData = allAgents.find((a) => a.id === agentId);
       if (agentData) {
+        const drillTasks = completedTasks
+          .filter((t) => t.assignedToId === agentId)
+          .filter((t): t is (typeof t & { endTime: Date }) => t.endTime != null) as unknown as TaskData[];
         const detailedBreakdown = await calculateDetailedBreakdown(
           agentId,
-          completedTasks.filter(t => t.assignedToId === agentId),
+          drillTasks,
           dateStart,
           dateEnd
         );
@@ -423,24 +242,13 @@ export async function GET(req: NextRequest) {
           success: true,
           period: { start: dateStart.toISOString(), end: dateEnd.toISOString(), days: daysDiff },
           targets,
-          agent: { ...agentData, ...detailedBreakdown }
+          agent: { ...agentData, ...detailedBreakdown },
         });
       }
-    }
-
-    // Final debug: Log all agents being returned
-    console.log(`[Performance Scorecard] FINAL RESULT: Returning ${allAgents.length} agents`);
-    allAgents.forEach((agent, index) => {
-      console.log(`[Performance Scorecard] Agent #${index + 1}: ${agent.name || agent.email} (ID: ${agent.id})`);
-    });
-    
-    // Verify no Holds-only agents in final list
-    const finalAgentIdsCheck = allAgents.map(a => a.id);
-    const holdsOnlyInFinal = finalAgentIdsCheck.filter(id => holdsOnlyAgentIds.has(id));
-    if (holdsOnlyInFinal.length > 0) {
-      console.error(`[Performance Scorecard] ERROR: Found ${holdsOnlyInFinal.length} Holds-only agents in final list!`, holdsOnlyInFinal);
-    } else {
-      console.log(`[Performance Scorecard] SUCCESS: No Holds-only agents in final list ✓`);
+      return NextResponse.json(
+        { success: false, error: "Agent not found or not on productivity roster." },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({
@@ -506,6 +314,8 @@ interface AgentScorecard {
   speedScore: number;
   daysWorked: number;
   tasksCompleted: number;
+  portalTasksCompleted: number;
+  trelloCardsCompleted: number;
   dailyAvg: number;
   weightedPoints: number; // NEW: Total weighted points
   weightedDailyAvg: number; // NEW: Weighted points per day
