@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/app/_components/DashboardLayout";
 import ThemeToggle from "@/app/_components/ThemeToggle";
@@ -24,6 +24,8 @@ type TeamRosterUser = {
   agentTypes: string[];
 };
 
+const ROSTER_TEAM_MAX = 120;
+
 const QUEUE_LABELS: Record<string, string> = {
   TEXT_CLUB: "Text Club",
   HOLDS: "Holds",
@@ -41,12 +43,61 @@ function formatQueues(types: string[]): string {
     .join(", ");
 }
 
+function draftToStored(draft: string): string | null {
+  const t = draft.trim();
+  return t ? t : null;
+}
+
+function rosterDirty(draft: string | undefined, server: string | null): boolean {
+  return draftToStored(draft ?? "") !== (server ?? null);
+}
+
+type RowFeedback = {
+  state: "idle" | "saving" | "saved" | "error";
+  message?: string;
+};
+
 export default function TeamRosterPage() {
   const { timeLeft, extendSession, showWarning } = useAutoLogout();
   const [q, setQ] = useState("");
   const [users, setUsers] = useState<TeamRosterUser[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [rowFeedback, setRowFeedback] = useState<Record<string, RowFeedback>>({});
+  const savedTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const clearSavedTimer = useCallback((userId: string) => {
+    const t = savedTimers.current.get(userId);
+    if (t) clearTimeout(t);
+    savedTimers.current.delete(userId);
+  }, []);
+
+  const scheduleSavedClear = useCallback(
+    (userId: string) => {
+      clearSavedTimer(userId);
+      const t = setTimeout(() => {
+        setRowFeedback((prev) => {
+          const cur = prev[userId];
+          if (cur?.state !== "saved") return prev;
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+        savedTimers.current.delete(userId);
+      }, 2500);
+      savedTimers.current.set(userId, t);
+    },
+    [clearSavedTimer]
+  );
+
+  useEffect(() => {
+    return () => {
+      for (const t of savedTimers.current.values()) clearTimeout(t);
+      savedTimers.current.clear();
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +112,12 @@ export default function TeamRosterPage() {
       if (!json.success) throw new Error(json.error || "Failed to load roster");
       const list = json.data.users as TeamRosterUser[];
       setUsers(list);
+      const d: Record<string, string> = {};
+      for (const u of list) {
+        d[u.id] = u.rosterTeam ?? "";
+      }
+      setDrafts(d);
+      setRowFeedback({});
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -71,6 +128,48 @@ export default function TeamRosterPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const save = async (userId: string) => {
+    const draft = drafts[userId];
+    if (draft === undefined) return;
+    const serverUser = users.find((u) => u.id === userId);
+    if (!serverUser || !rosterDirty(draft, serverUser.rosterTeam)) return;
+
+    clearSavedTimer(userId);
+    setRowFeedback((prev) => ({
+      ...prev,
+      [userId]: { state: "saving" },
+    }));
+
+    try {
+      const res = await fetch("/api/manager/team-roster", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          rosterTeam: draftToStored(draft),
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Save failed");
+
+      const updated = json.data.user as TeamRosterUser;
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+      setDrafts((prev) => ({ ...prev, [userId]: updated.rosterTeam ?? "" }));
+      setRowFeedback((prev) => ({
+        ...prev,
+        [userId]: { state: "saved" },
+      }));
+      scheduleSavedClear(userId);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Save failed";
+      setRowFeedback((prev) => ({
+        ...prev,
+        [userId]: { state: "error", message: msg },
+      }));
+    }
+  };
 
   const headerActions = (
     <>
@@ -114,8 +213,12 @@ export default function TeamRosterPage() {
             </p>
             <h1 className="text-3xl font-semibold tracking-tight">Team Roster Configuration</h1>
             <p className="text-sm text-white/55 mt-2 max-w-3xl">
-              Read-only overview of agent roster fields: identity, org team label, QA settings,
-              productivity eligibility, and work queues. Editing will be added in a later release.
+              Edit the neutral Roster team label per agent. Other columns remain read-only here; use QA roster,
+              Settings, or future updates for those fields.
+            </p>
+            <p className="text-xs text-white/45 mt-3 max-w-3xl leading-relaxed">
+              Roster Team controls the neutral team/supervisor label. QA Team is still used by QA dashboard
+              filters until a later cutover.
             </p>
           </header>
 
@@ -152,7 +255,7 @@ export default function TeamRosterPage() {
                     <th colSpan={4} className={`${groupHead} pl-3 text-left`}>
                       Identity
                     </th>
-                    <th colSpan={1} className={groupHead}>
+                    <th colSpan={2} className={groupHead}>
                       Team / supervisor
                     </th>
                     <th colSpan={3} className={groupHead}>
@@ -171,6 +274,7 @@ export default function TeamRosterPage() {
                     <th className="px-3 py-2">Role</th>
                     <th className="px-3 py-2">Live</th>
                     <th className="px-3 py-2 border-l border-white/10">Roster team</th>
+                    <th className="px-3 py-2">Save</th>
                     <th className="px-3 py-2 border-l border-white/10">Tracked</th>
                     <th className="px-3 py-2">QA team</th>
                     <th className="px-3 py-2 min-w-[8rem]">QA note</th>
@@ -184,50 +288,94 @@ export default function TeamRosterPage() {
                 <tbody className="divide-y divide-white/5">
                   {loading ? (
                     <tr>
-                      <td colSpan={11} className="px-3 py-6 text-center text-white/45">
+                      <td colSpan={12} className="px-3 py-6 text-center text-white/45">
                         Loading…
                       </td>
                     </tr>
                   ) : users.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-3 py-6 text-center text-white/45">
+                      <td colSpan={12} className="px-3 py-6 text-center text-white/45">
                         No matching users.
                       </td>
                     </tr>
                   ) : (
-                    users.map((u) => (
-                      <tr key={u.id} className="hover:bg-white/[0.03] align-top">
-                        <td className="px-3 py-2 border-l border-white/5">
-                          <div className="font-medium">{u.name || u.email}</div>
-                        </td>
-                        <td className="px-3 py-2 text-white/70 text-xs">{u.email}</td>
-                        <td className="px-3 py-2 text-xs text-white/50 whitespace-nowrap">{u.role}</td>
-                        <td className="px-3 py-2 text-xs">{u.isLive ? "Yes" : "No"}</td>
-                        <td className="px-3 py-2 border-l border-white/10 text-white/80 max-w-[10rem] truncate" title={u.rosterTeam ?? ""}>
-                          {u.rosterTeam ?? "—"}
-                        </td>
-                        <td className="px-3 py-2 border-l border-white/10 text-xs">{u.qaIsTracked ? "Yes" : "No"}</td>
-                        <td className="px-3 py-2 text-white/70 max-w-[8rem] truncate" title={u.qaTeam ?? ""}>
-                          {u.qaTeam ?? "—"}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-white/55 max-w-[14rem]">
-                          <span className="line-clamp-2" title={u.qaExemptReason ?? ""}>
-                            {u.qaExemptReason?.trim() ? u.qaExemptReason : "—"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 border-l border-white/10 text-xs">
-                          {u.productivityEligible ? "Yes" : "No"}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-white/55 max-w-[14rem]">
-                          <span className="line-clamp-2" title={u.productivityExemptReason ?? ""}>
-                            {u.productivityExemptReason?.trim() ? u.productivityExemptReason : "—"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 border-l border-white/10 text-xs text-white/70 pr-3">
-                          {formatQueues(u.agentTypes ?? [])}
-                        </td>
-                      </tr>
-                    ))
+                    users.map((u) => {
+                      const draft = drafts[u.id];
+                      const dirty = rosterDirty(draft, u.rosterTeam);
+                      const fb = rowFeedback[u.id];
+                      const saving = fb?.state === "saving";
+                      const saved = fb?.state === "saved";
+                      const err = fb?.state === "error";
+
+                      return (
+                        <tr key={u.id} className="hover:bg-white/[0.03] align-top">
+                          <td className="px-3 py-2 border-l border-white/5">
+                            <div className="font-medium">{u.name || u.email}</div>
+                          </td>
+                          <td className="px-3 py-2 text-white/70 text-xs">{u.email}</td>
+                          <td className="px-3 py-2 text-xs text-white/50 whitespace-nowrap">{u.role}</td>
+                          <td className="px-3 py-2 text-xs">{u.isLive ? "Yes" : "No"}</td>
+                          <td className="px-3 py-2 border-l border-white/10">
+                            <input
+                              value={draft ?? ""}
+                              onChange={(e) =>
+                                setDrafts((prev) => ({
+                                  ...prev,
+                                  [u.id]: e.target.value,
+                                }))
+                              }
+                              maxLength={ROSTER_TEAM_MAX}
+                              placeholder="Team label"
+                              disabled={saving}
+                              className="w-full max-w-[11rem] rounded-lg bg-black/40 border border-white/15 px-2 py-1 text-xs"
+                              aria-label={`Roster team for ${u.name || u.email}`}
+                            />
+                          </td>
+                          <td className="px-3 py-2 align-top">
+                            <div className="flex flex-col gap-1 items-start">
+                              <button
+                                type="button"
+                                disabled={!dirty || saving}
+                                onClick={() => void save(u.id)}
+                                className="text-xs font-semibold px-2 py-1 rounded-lg bg-emerald-600/85 text-white disabled:opacity-35 disabled:pointer-events-none hover:bg-emerald-600"
+                              >
+                                {saving ? "Saving…" : "Save"}
+                              </button>
+                              {saved && (
+                                <span className="text-[10px] text-emerald-400/90">Saved</span>
+                              )}
+                              {err && fb?.message && (
+                                <span className="text-[10px] text-red-300/95 max-w-[9rem] leading-tight">
+                                  {fb.message}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 border-l border-white/10 text-xs">
+                            {u.qaIsTracked ? "Yes" : "No"}
+                          </td>
+                          <td className="px-3 py-2 text-white/70 max-w-[8rem] truncate" title={u.qaTeam ?? ""}>
+                            {u.qaTeam ?? "—"}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-white/55 max-w-[14rem]">
+                            <span className="line-clamp-2" title={u.qaExemptReason ?? ""}>
+                              {u.qaExemptReason?.trim() ? u.qaExemptReason : "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 border-l border-white/10 text-xs">
+                            {u.productivityEligible ? "Yes" : "No"}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-white/55 max-w-[14rem]">
+                            <span className="line-clamp-2" title={u.productivityExemptReason ?? ""}>
+                              {u.productivityExemptReason?.trim() ? u.productivityExemptReason : "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 border-l border-white/10 text-xs text-white/70 pr-3">
+                            {formatQueues(u.agentTypes ?? [])}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
