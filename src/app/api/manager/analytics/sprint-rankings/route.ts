@@ -81,6 +81,7 @@ interface AgentScorecard {
   isChampion: boolean;
   isTopThree: boolean;
   qualified: boolean;
+  holdsHasMissingDurations?: boolean;
 }
 
 function calculateTier(percentile: number): string {
@@ -151,24 +152,55 @@ export async function GET(request: NextRequest) {
     for (const agent of filteredAgents) {
       const isSenior = isSeniorAgent(agent.email);
 
-      // Get portal tasks completed in sprint (or lifetime)
-      const portalTasks = await prisma.task.findMany({
-        where: {
-          assignedToId: agent.id,
-          status: 'COMPLETED',
-          endTime: mode === 'lifetime' 
-            ? { not: null } 
-            : { gte: sprintStart, lte: sprintEnd },
-          disposition: { not: null },
-          durationSec: { not: null }
-        },
-        select: {
-          disposition: true,
-          durationSec: true,
-          endTime: true,
-          taskType: true
-        }
-      });
+      const endTimeWhere =
+        mode === 'lifetime'
+          ? { not: null }
+          : { gte: sprintStart, lte: sprintEnd };
+
+      // Non-HOLDS: keep current assignedTo attribution and duration requirement.
+      // HOLDS: use completedBy attribution for productivity credit; duration may be null.
+      const [nonHoldsTasks, holdsTasks] = await Promise.all([
+        prisma.task.findMany({
+          where: {
+            assignedToId: agent.id,
+            taskType: { not: 'HOLDS' },
+            status: 'COMPLETED',
+            endTime: endTimeWhere,
+            disposition: { not: null },
+            durationSec: { not: null }
+          },
+          select: {
+            id: true,
+            disposition: true,
+            durationSec: true,
+            endTime: true,
+            taskType: true
+          }
+        }),
+        prisma.task.findMany({
+          where: {
+            completedBy: agent.id,
+            taskType: 'HOLDS',
+            status: 'COMPLETED',
+            endTime: endTimeWhere,
+            disposition: { not: null }
+          },
+          select: {
+            id: true,
+            disposition: true,
+            durationSec: true,
+            endTime: true,
+            taskType: true
+          }
+        })
+      ]);
+
+      // Dedupe by task id for mixed attribution edge-cases.
+      const portalTasks = Array.from(
+        new Map(
+          [...nonHoldsTasks, ...holdsTasks].map((task) => [task.id, task])
+        ).values()
+      );
 
       // Get Trello completions in sprint (or lifetime)
       // Handle 1-day lag: Only count Trello up to yesterday
@@ -205,6 +237,8 @@ export async function GET(request: NextRequest) {
       // Calculate weighted points and task type breakdown
       let totalWeightedPoints = 0;
       let totalHandleTimeSec = 0;
+      let timedPortalTaskCount = 0;
+      let holdsHasMissingDurations = false;
       const breakdown: Record<string, { 
         count: number; 
         weightedPoints: number; 
@@ -220,7 +254,8 @@ export async function GET(request: NextRequest) {
       }> = {};
       
       // Track dispositions per task type
-      const dispositionTracker: Record<string, Record<string, { count: number; points: number; totalSec: number }>> = {};
+      const dispositionTracker: Record<string, Record<string, { count: number; points: number; totalSec: number; timedCount: number }>> = {};
+      const timedBreakdownCounts: Record<string, number> = {};
       
       // NEW: Hourly and daily productivity tracking
       const hourlyBreakdown: Record<number, { count: number; points: number }> = {};
@@ -229,7 +264,14 @@ export async function GET(request: NextRequest) {
       for (const task of portalTasks) {
         const weight = getTaskWeight(task.taskType, task.disposition);
         totalWeightedPoints += weight;
-        totalHandleTimeSec += task.durationSec || 0;
+        const taskDurationSec = task.durationSec ?? null;
+        if (task.taskType === 'HOLDS' && taskDurationSec === null) {
+          holdsHasMissingDurations = true;
+        }
+        if (taskDurationSec !== null) {
+          totalHandleTimeSec += taskDurationSec;
+          timedPortalTaskCount++;
+        }
 
         // Track breakdown by task type
         if (!breakdown[task.taskType]) {
@@ -237,7 +279,11 @@ export async function GET(request: NextRequest) {
         }
         breakdown[task.taskType].count++;
         breakdown[task.taskType].weightedPoints += weight;
-        breakdown[task.taskType].totalSec += task.durationSec || 0;
+        if (taskDurationSec !== null) {
+          breakdown[task.taskType].totalSec += taskDurationSec;
+          timedBreakdownCounts[task.taskType] =
+            (timedBreakdownCounts[task.taskType] || 0) + 1;
+        }
         
         // Track disposition within task type
         if (task.disposition) {
@@ -245,11 +291,19 @@ export async function GET(request: NextRequest) {
             dispositionTracker[task.taskType] = {};
           }
           if (!dispositionTracker[task.taskType][task.disposition]) {
-            dispositionTracker[task.taskType][task.disposition] = { count: 0, points: 0, totalSec: 0 };
+            dispositionTracker[task.taskType][task.disposition] = {
+              count: 0,
+              points: 0,
+              totalSec: 0,
+              timedCount: 0
+            };
           }
           dispositionTracker[task.taskType][task.disposition].count++;
           dispositionTracker[task.taskType][task.disposition].points += weight;
-          dispositionTracker[task.taskType][task.disposition].totalSec += task.durationSec || 0;
+          if (taskDurationSec !== null) {
+            dispositionTracker[task.taskType][task.disposition].totalSec += taskDurationSec;
+            dispositionTracker[task.taskType][task.disposition].timedCount++;
+          }
         }
         
         // NEW: Track hourly and daily productivity (PST timezone)
@@ -272,23 +326,26 @@ export async function GET(request: NextRequest) {
           }
           dailyBreakdown[dayKey].count++;
           dailyBreakdown[dayKey].points += weight;
-          if (task.durationSec) {
-            dailyBreakdown[dayKey].activeHours += task.durationSec / 3600;
+          if (taskDurationSec !== null) {
+            dailyBreakdown[dayKey].activeHours += taskDurationSec / 3600;
           }
         }
       }
 
       // Calculate averages for each task type
       for (const taskType in breakdown) {
-        if (breakdown[taskType].count > 0) {
-          breakdown[taskType].avgSec = Math.round(breakdown[taskType].totalSec / breakdown[taskType].count);
+        const timedCount = timedBreakdownCounts[taskType] || 0;
+        if (timedCount > 0) {
+          breakdown[taskType].avgSec = Math.round(
+            breakdown[taskType].totalSec / timedCount
+          );
         }
       }
       
       // Add disposition details to breakdown
       for (const taskType in dispositionTracker) {
         const dispositions = Object.entries(dispositionTracker[taskType]).map(([disposition, data]) => {
-          const avgSec = data.count > 0 ? Math.round(data.totalSec / data.count) : 0;
+          const avgSec = data.timedCount > 0 ? Math.round(data.totalSec / data.timedCount) : 0;
           const minutes = Math.floor(avgSec / 60);
           const seconds = avgSec % 60;
           const avgTime = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
@@ -334,8 +391,8 @@ export async function GET(request: NextRequest) {
 
       // Calculate metrics
       const totalCompleted = portalTasks.length + trelloCount;
-      const avgHandleTimeSec = portalTasks.length > 0 
-        ? Math.round(totalHandleTimeSec / portalTasks.length) 
+      const avgHandleTimeSec = timedPortalTaskCount > 0
+        ? Math.round(totalHandleTimeSec / timedPortalTaskCount)
         : 0;
 
       const weightedDailyAvg =
@@ -379,6 +436,7 @@ export async function GET(request: NextRequest) {
         isSenior,
         isChampion: false,
         isTopThree: false,
+        holdsHasMissingDurations,
         qualified: mode === 'lifetime' 
           ? totalCompleted >= MINIMUM_TASKS_FOR_RANKING
           : mode === 'custom'

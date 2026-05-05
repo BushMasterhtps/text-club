@@ -577,6 +577,11 @@ export default function PerformanceScorecard({
                         <div className="bg-white/5 rounded-lg p-2">
                           <div className="text-white/50 text-xs">⏱️ Avg handle time</div>
                           <div className="text-white font-semibold">{Math.floor(agent.avgHandleTimeSec / 60)}m {agent.avgHandleTimeSec % 60}s</div>
+                          {rankingMode === 'hybrid' && agent.holdsHasMissingDurations && (
+                            <div className="text-[10px] text-white/40">
+                              Holds AHT excludes actions without recorded duration.
+                            </div>
+                          )}
                         </div>
                         <div className="bg-white/5 rounded-lg p-2">
                           <div className="text-white/50 text-xs">📅 Days worked</div>
