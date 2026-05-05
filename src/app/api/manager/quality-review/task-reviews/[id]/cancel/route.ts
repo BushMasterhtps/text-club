@@ -63,7 +63,11 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({ success: true, data: { reviewId } });
+    return NextResponse.json({
+      success: true,
+      redirectTo: "/manager/quality-review/dashboard",
+      data: { reviewId },
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("[quality-review/task-reviews/cancel]", e);

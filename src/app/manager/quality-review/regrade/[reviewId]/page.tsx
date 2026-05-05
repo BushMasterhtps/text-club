@@ -111,6 +111,8 @@ function RegradeReviewPageContent() {
   const [cancelBusy, setCancelBusy] = useState(false);
   const [lastScores, setLastScores] = useState<ScoreFeedback | null>(null);
   const [mobileLiveScoreOpen, setMobileLiveScoreOpen] = useState(false);
+  /** GET returned 404/410 — draft gone (e.g. after cancel + refresh). */
+  const [reviewMissing, setReviewMissing] = useState(false);
   const errorBannerRef = useRef<HTMLDivElement | null>(null);
 
   /** True after successful submit or explicit cancel — skips best-effort abandon cleanup. */
@@ -131,6 +133,14 @@ function RegradeReviewPageContent() {
       errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [error]);
+
+  useEffect(() => {
+    if (!reviewMissing) return;
+    const t = window.setTimeout(() => {
+      window.location.assign(QA_DASHBOARD_PATH);
+    }, 1000);
+    return () => window.clearTimeout(t);
+  }, [reviewMissing]);
 
   /** Best-effort: closing the tab or navigating away releases the PENDING draft (same as Cancel). */
   useEffect(() => {
@@ -158,6 +168,7 @@ function RegradeReviewPageContent() {
       }
       setPageBusy(true);
       setError(null);
+      setReviewMissing(false);
       try {
         const res = await fetch(
           `/api/manager/quality-review/task-reviews/${encodeURIComponent(reviewId)}`,
@@ -165,10 +176,27 @@ function RegradeReviewPageContent() {
             credentials: "include",
           }
         );
-        const json = await res.json();
+        let json: { success?: boolean; error?: string; data?: unknown } = {};
+        try {
+          json = (await res.json()) as typeof json;
+        } catch {
+          json = {};
+        }
+        if (res.status === 404 || res.status === 410) {
+          if (!cancelled) {
+            setReviewMissing(true);
+            setError(json.error || "Review not found.");
+          }
+          return;
+        }
         if (!json.success) throw new Error(json.error || "Failed to load review");
         if (cancelled) return;
-        const d = json.data;
+        const d = json.data as {
+          review: { status: string; taskId: string; templateVersionId: string; regradeReason: string | null; templateVersion?: { template?: { displayName?: string }; version?: number } };
+          lines: LineRow[];
+          task: Record<string, unknown>;
+          originalReviewContext: OriginalReviewContext | null;
+        };
         if (d.review.status !== "PENDING") {
           throw new Error("This review is not pending. Open it from the QA dashboard if needed.");
         }
@@ -332,17 +360,28 @@ function RegradeReviewPageContent() {
         throw new Error(errMsg);
       }
 
-      // 2xx: succeed unless JSON explicitly says success:false
+      // Any 2xx: navigate immediately (no setState). Optional JSON may override redirect.
+      let redirectTo = QA_DASHBOARD_PATH;
       const trimmed = raw.trim();
       if (trimmed) {
         try {
-          const parsed = JSON.parse(trimmed) as { success?: boolean; error?: string };
+          const parsed = JSON.parse(trimmed) as {
+            success?: boolean;
+            error?: string;
+            redirectTo?: string;
+          };
           if (parsed?.success === false) {
             throw new Error(parsed.error || "Cancel was not accepted");
           }
+          if (
+            typeof parsed.redirectTo === "string" &&
+            parsed.redirectTo.startsWith("/")
+          ) {
+            redirectTo = parsed.redirectTo;
+          }
         } catch (e: unknown) {
           if (e instanceof SyntaxError) {
-            /* Non-JSON body on 2xx → still treat as success */
+            /* ignore; use default dashboard */
           } else {
             throw e;
           }
@@ -351,7 +390,7 @@ function RegradeReviewPageContent() {
 
       console.log("[qa-regrade-cancel] cancel success, hard redirecting");
       navigatedAway = true;
-      window.location.replace(QA_DASHBOARD_PATH);
+      window.location.assign(redirectTo);
     } catch (e: unknown) {
       intentionalFinishRef.current = false;
       const msg = e instanceof Error ? e.message : "Could not cancel";
@@ -408,11 +447,27 @@ function RegradeReviewPageContent() {
 
         {error && (
           <div
-            ref={errorBannerRef}
+            ref={reviewMissing ? undefined : errorBannerRef}
             role="alert"
-            className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100 mb-6"
+            className={`rounded-xl px-4 py-3 text-sm mb-6 ${
+              reviewMissing
+                ? "border border-amber-500/35 bg-amber-950/25 text-amber-50"
+                : "border border-red-500/35 bg-red-500/10 text-red-100"
+            }`}
           >
-            {error}
+            <p>{error}</p>
+            {reviewMissing ? (
+              <div className="mt-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => window.location.assign(QA_DASHBOARD_PATH)}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-violet-600 text-white font-medium hover:bg-violet-500"
+                >
+                  Back to QA dashboard
+                </button>
+                <p className="text-xs text-white/45">Redirecting automatically in 1 second…</p>
+              </div>
+            ) : null}
           </div>
         )}
 
