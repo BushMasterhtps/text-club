@@ -362,9 +362,9 @@ function DashboardInner() {
           <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-50/95">
             <p className="font-semibold text-amber-100">Historical / non-default window</p>
             <p className="text-xs text-amber-100/75 mt-1 leading-relaxed">
-              You are outside the current default sprint. The table still reflects coverage for the
-              selected dates; drill-down history may span more tasks and older regrades than a typical
-              sprint check.
+              You are outside the current productivity sprint window (same 14-day calendar as sprint
+              rankings). The table still reflects coverage for the selected dates; drill-down history may span
+              more tasks and older regrades than a typical sprint check.
             </p>
           </div>
         )}

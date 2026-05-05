@@ -164,9 +164,10 @@ export function QaSprintSummary() {
               {summary.agentsTracked ?? 0} tracked in scope
             </p>
             <p className="text-[10px] text-white/35 mt-1 max-w-xl leading-snug">
-              Default sprint (PST). Pool <span className="text-white/55">Tracked</span> focuses on
-              QA-tracked agents; switch to <span className="text-white/55">Everyone</span> to include
-              exempt rows in counts. Team narrows all tiles and lists.
+              Window uses the same fixed 14-day sprint calendar as productivity sprint rankings (PST
+              reporting labels). Pool <span className="text-white/55">Tracked</span> focuses on QA-tracked
+              agents; switch to <span className="text-white/55">Everyone</span> to include exempt rows in
+              counts. Team narrows all tiles and lists.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 items-end shrink-0">
