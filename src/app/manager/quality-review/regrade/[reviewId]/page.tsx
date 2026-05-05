@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+
+const QA_DASHBOARD_PATH = "/manager/quality-review/dashboard";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import DashboardLayout from "@/app/_components/DashboardLayout";
@@ -79,8 +81,11 @@ function matchOriginalLineResult(
 }
 
 function RegradeReviewPageContent() {
-  const params = useParams<{ reviewId: string }>();
-  const reviewId = params.reviewId;
+  const params = useParams<{ reviewId: string | string[] }>();
+  const reviewId = useMemo(
+    () => (Array.isArray(params.reviewId) ? params.reviewId[0] : params.reviewId) ?? "",
+    [params.reviewId]
+  );
   const router = useRouter();
   const { timeLeft, extendSession, showWarning } = useAutoLogout();
 
@@ -101,6 +106,7 @@ function RegradeReviewPageContent() {
   const [busy, setBusy] = useState(true);
   const [lastScores, setLastScores] = useState<ScoreFeedback | null>(null);
   const [mobileLiveScoreOpen, setMobileLiveScoreOpen] = useState(false);
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
 
   /** True after successful submit or explicit cancel — skips best-effort abandon cleanup. */
   const intentionalFinishRef = useRef(false);
@@ -115,13 +121,19 @@ function RegradeReviewPageContent() {
     busyRef.current = busy;
   }, [busy]);
 
+  useEffect(() => {
+    if (error) {
+      errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [error]);
+
   /** Best-effort: closing the tab or navigating away releases the PENDING draft (same as Cancel). */
   useEffect(() => {
     const onPageHide = () => {
       if (intentionalFinishRef.current || busyRef.current) return;
       const id = reviewIdRef.current;
       if (!id) return;
-      void fetch(`/api/manager/quality-review/task-reviews/${id}/cancel`, {
+      void fetch(`/api/manager/quality-review/task-reviews/${encodeURIComponent(id)}/cancel`, {
         method: "POST",
         credentials: "include",
         keepalive: true,
@@ -134,12 +146,20 @@ function RegradeReviewPageContent() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (!reviewId) {
+        setBusy(false);
+        setError("Missing review id in the URL.");
+        return;
+      }
       setBusy(true);
       setError(null);
       try {
-        const res = await fetch(`/api/manager/quality-review/task-reviews/${reviewId}`, {
-          credentials: "include",
-        });
+        const res = await fetch(
+          `/api/manager/quality-review/task-reviews/${encodeURIComponent(reviewId)}`,
+          {
+            credentials: "include",
+          }
+        );
         const json = await res.json();
         if (!json.success) throw new Error(json.error || "Failed to load review");
         if (cancelled) return;
@@ -232,7 +252,7 @@ function RegradeReviewPageContent() {
       intentionalFinishRef.current = true;
       setLastScores(json.data.scores as ScoreFeedback);
       setTimeout(() => {
-        router.push("/manager/quality-review/dashboard");
+        router.replace(QA_DASHBOARD_PATH);
       }, 1200);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Submit failed");
@@ -249,20 +269,54 @@ function RegradeReviewPageContent() {
     ) {
       return;
     }
+    if (!reviewId) {
+      setError("Missing review id. Refresh the page and try again.");
+      return;
+    }
+
     intentionalFinishRef.current = true;
     setBusy(true);
     setError(null);
+    const cancelUrl = `/api/manager/quality-review/task-reviews/${encodeURIComponent(reviewId)}/cancel`;
+
     try {
-      const res = await fetch(`/api/manager/quality-review/task-reviews/${reviewId}/cancel`, {
+      const res = await fetch(cancelUrl, {
         method: "POST",
         credentials: "include",
+        headers: { Accept: "application/json" },
       });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error || "Could not cancel");
-      router.push("/manager/quality-review/dashboard");
+
+      const raw = await res.text();
+      let body: { success?: boolean; error?: string } = {};
+      if (raw) {
+        try {
+          body = JSON.parse(raw) as { success?: boolean; error?: string };
+        } catch {
+          const snippet = raw.replace(/\s+/g, " ").slice(0, 180);
+          throw new Error(
+            `Cancel failed (${res.status}). ${snippet || "Server returned a non-JSON response."}`
+          );
+        }
+      }
+
+      if (!res.ok || !body.success) {
+        throw new Error(body.error || `Cancel failed (${res.status})`);
+      }
+
+      router.replace(QA_DASHBOARD_PATH);
+      router.refresh();
+      window.setTimeout(() => {
+        if (window.location.pathname.includes("/quality-review/regrade/")) {
+          window.location.assign(QA_DASHBOARD_PATH);
+        }
+      }, 400);
     } catch (e: unknown) {
       intentionalFinishRef.current = false;
-      setError(e instanceof Error ? e.message : "Could not cancel");
+      const msg = e instanceof Error ? e.message : "Could not cancel";
+      setError(msg);
+      if (process.env.NODE_ENV === "development") {
+        console.error("[quality-review/regrade] cancel failed", { cancelUrl, err: e });
+      }
     } finally {
       setBusy(false);
     }
@@ -273,7 +327,7 @@ function RegradeReviewPageContent() {
       <ThemeToggle />
       <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
       <Link
-        href="/manager/quality-review/dashboard"
+        href={QA_DASHBOARD_PATH}
         className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20"
       >
         QA dashboard
@@ -311,7 +365,11 @@ function RegradeReviewPageContent() {
         </header>
 
         {error && (
-          <div className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100 mb-6">
+          <div
+            ref={errorBannerRef}
+            role="alert"
+            className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100 mb-6"
+          >
             {error}
           </div>
         )}

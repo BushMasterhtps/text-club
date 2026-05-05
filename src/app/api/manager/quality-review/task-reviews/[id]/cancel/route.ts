@@ -8,7 +8,7 @@ import { deleteExpiredQaPendingReviewsForTask } from "@/lib/quality-review-pendi
  * Batch-backed reviews must use batch cancel or be completed in the batch flow.
  */
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireManagerApiAuth(request);
