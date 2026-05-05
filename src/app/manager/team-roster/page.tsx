@@ -212,14 +212,42 @@ export default function TeamRosterPage() {
               Manager tools
             </p>
             <h1 className="text-3xl font-semibold tracking-tight">Team Roster Configuration</h1>
-            <p className="text-sm text-white/55 mt-2 max-w-3xl">
-              Edit the neutral Roster team label per agent. Other columns remain read-only here; use QA roster,
-              Settings, or future updates for those fields.
+            <p className="text-sm text-white/55 mt-2 max-w-4xl">
+              Use this page to edit each agent&apos;s <span className="text-white/75">Roster team</span> label.
+              Everything else in the table is read-only for now (change QA fields on QA roster; change queues in
+              Settings).
             </p>
-            <p className="text-xs text-white/45 mt-3 max-w-3xl leading-relaxed">
-              Roster Team controls the neutral team/supervisor label. QA Team is still used by QA dashboard
-              filters until a later cutover.
-            </p>
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-xs text-white/50 max-w-4xl leading-relaxed border-t border-white/10 pt-4">
+              <div>
+                <dt className="font-medium text-white/65">Roster Team</dt>
+                <dd className="mt-0.5">
+                  Neutral org / supervisor grouping. Editable here. Not used for QA dashboard filters yet.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-white/65">QA Team</dt>
+                <dd className="mt-0.5">
+                  Current QA dashboard grouping and filters. Unchanged for now; edit on the QA roster page.
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-white/65">Productivity · Eligible</dt>
+                <dd className="mt-0.5">
+                  Controls whether the user is included in manager productivity scorecard and sprint-ranking
+                  subject lists (same rules as before).
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-white/65">Work queues · Capabilities</dt>
+                <dd className="mt-0.5">
+                  Reflects the same specialization flags as the manager task queues. Managed today from{" "}
+                  <Link href="/manager" className="text-emerald-300/90 underline hover:text-emerald-200/90">
+                    Manager → Settings → Agent Specializations
+                  </Link>
+                  .
+                </dd>
+              </div>
+            </dl>
           </header>
 
           <div className="flex flex-wrap gap-3 items-end">
@@ -264,8 +292,19 @@ export default function TeamRosterPage() {
                     <th colSpan={2} className={groupHead}>
                       Productivity
                     </th>
-                    <th colSpan={1} className={`${groupHead} pr-3`}>
-                      Work queues
+                    <th colSpan={1} className={`${groupHead} pr-3 py-2 align-bottom`}>
+                      <div className="flex flex-col items-center gap-1">
+                        <span>Work queues</span>
+                        <span className="max-w-[14rem] font-normal normal-case tracking-normal text-[10px] leading-snug text-white/40">
+                          Capabilities:{" "}
+                          <Link
+                            href="/manager"
+                            className="text-emerald-300/85 underline hover:text-emerald-200/90"
+                          >
+                            Settings → Agent Specializations
+                          </Link>
+                        </span>
+                      </div>
                     </th>
                   </tr>
                   <tr className="bg-black/40 text-left text-[11px] uppercase tracking-wide text-white/45 border-b border-white/10">
@@ -273,15 +312,24 @@ export default function TeamRosterPage() {
                     <th className="px-3 py-2">Email</th>
                     <th className="px-3 py-2">Role</th>
                     <th className="px-3 py-2">Live</th>
-                    <th className="px-3 py-2 border-l border-white/10">Roster team</th>
-                    <th className="px-3 py-2">Save</th>
+                    <th className="px-3 py-2 border-l border-white/10 min-w-[18rem] w-[min(22rem,28vw)]">
+                      Roster team
+                    </th>
+                    <th className="px-3 py-2 w-[5.5rem]">Save</th>
                     <th className="px-3 py-2 border-l border-white/10">Tracked</th>
                     <th className="px-3 py-2">QA team</th>
                     <th className="px-3 py-2 min-w-[8rem]">QA note</th>
                     <th className="px-3 py-2 border-l border-white/10">Eligible</th>
                     <th className="px-3 py-2 min-w-[8rem]">Productivity note</th>
-                    <th className="px-3 py-2 border-l border-white/10 pr-3 min-w-[12rem]">
-                      Capabilities
+                    <th className="px-3 py-2 border-l border-white/10 pr-3 min-w-[14rem] max-w-[22rem]">
+                      <span className="block">Capabilities</span>
+                      <span className="mt-1 block font-normal normal-case tracking-normal text-[10px] leading-snug text-white/40">
+                        Queue capabilities are currently managed in{" "}
+                        <Link href="/manager" className="text-emerald-300/85 underline hover:text-emerald-200/90">
+                          Settings → Agent Specializations
+                        </Link>
+                        .
+                      </span>
                     </th>
                   </tr>
                 </thead>
@@ -315,7 +363,7 @@ export default function TeamRosterPage() {
                           <td className="px-3 py-2 text-white/70 text-xs">{u.email}</td>
                           <td className="px-3 py-2 text-xs text-white/50 whitespace-nowrap">{u.role}</td>
                           <td className="px-3 py-2 text-xs">{u.isLive ? "Yes" : "No"}</td>
-                          <td className="px-3 py-2 border-l border-white/10">
+                          <td className="px-3 py-2 border-l border-white/10 min-w-[18rem] w-[min(22rem,28vw)] align-top">
                             <input
                               value={draft ?? ""}
                               onChange={(e) =>
@@ -325,9 +373,9 @@ export default function TeamRosterPage() {
                                 }))
                               }
                               maxLength={ROSTER_TEAM_MAX}
-                              placeholder="Team label"
+                              placeholder="e.g. Team Daniel, Social Media"
                               disabled={saving}
-                              className="w-full max-w-[11rem] rounded-lg bg-black/40 border border-white/15 px-2 py-1 text-xs"
+                              className="w-full min-h-[2.5rem] rounded-lg bg-black/40 border border-white/15 px-3 py-2 text-sm text-white/95 placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50"
                               aria-label={`Roster team for ${u.name || u.email}`}
                             />
                           </td>
@@ -370,7 +418,7 @@ export default function TeamRosterPage() {
                               {u.productivityExemptReason?.trim() ? u.productivityExemptReason : "—"}
                             </span>
                           </td>
-                          <td className="px-3 py-2 border-l border-white/10 text-xs text-white/70 pr-3">
+                          <td className="px-3 py-2 border-l border-white/10 text-sm text-white/75 pr-3 min-w-[14rem] max-w-[22rem] whitespace-normal break-words">
                             {formatQueues(u.agentTypes ?? [])}
                           </td>
                         </tr>
