@@ -135,6 +135,14 @@ export default function QaRosterPage() {
               Control who appears on the coverage dashboard, optional team labels for filters, and
               internal notes. Exempt users are not counted toward sprint coverage targets.
             </p>
+            <p className="text-xs text-white/40 mt-3 max-w-2xl">
+              A read-only{" "}
+              <Link href="/manager/team-roster" className="text-violet-300/90 underline hover:text-violet-200">
+                Team Roster Configuration
+              </Link>{" "}
+              page is available for a full-field overview (editing here remains the place to change QA roster
+              fields for now).
+            </p>
           </header>
 
           <div className="flex flex-wrap gap-3 items-end">

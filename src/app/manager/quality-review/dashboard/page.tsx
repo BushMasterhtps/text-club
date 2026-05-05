@@ -300,6 +300,13 @@ function DashboardInner() {
       <ThemeToggle />
       <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
       <Link
+        href="/manager/team-roster"
+        className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20"
+        title="Read-only full roster overview"
+      >
+        Team roster
+      </Link>
+      <Link
         href="/manager/quality-review/roster"
         className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20"
       >

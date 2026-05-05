@@ -4147,6 +4147,13 @@ function ManagerPageContent() {
         onExtend={extendSession} 
       />
       <a
+        href="/manager/team-roster"
+        className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white/10 text-white/90 hover:bg-white/20"
+        title="View team roster fields (read-only)"
+      >
+        Team roster
+      </a>
+      <a
         href="/manager/quality-review"
         className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-violet-600/80 text-white hover:bg-violet-600"
         title="Quality Review sampling and scoring"
