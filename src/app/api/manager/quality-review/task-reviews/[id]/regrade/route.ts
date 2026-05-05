@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { resolveActiveTemplateForTaskType } from "@/lib/quality-review-template";
-import { QA_PENDING_REVIEW_TTL_MS } from "@/lib/quality-review-constants";
+import { QA_PENDING_REGRADE_TTL_MS } from "@/lib/quality-review-constants";
+import { deleteExpiredQaPendingReviewsForTask } from "@/lib/quality-review-pending-lock";
 
 export async function POST(
   request: NextRequest,
@@ -58,19 +59,6 @@ export async function POST(
       );
     }
 
-    const pending = await prisma.qATaskReview.findFirst({
-      where: { taskId: parent.taskId, status: "PENDING" },
-    });
-    if (pending) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "This task already has a pending QA review. Finish or cancel it first.",
-        },
-        { status: 409 }
-      );
-    }
-
     let templateVersionId = parent.templateVersionId;
     if (mode === "latest") {
       const resolved = await resolveActiveTemplateForTaskType(parent.task.taskType);
@@ -87,23 +75,43 @@ export async function POST(
       templateVersionId = resolved.templateVersionId;
     }
 
-    const expiresAt = new Date(Date.now() + QA_PENDING_REVIEW_TTL_MS);
+    const expiresAt = new Date(Date.now() + QA_PENDING_REGRADE_TTL_MS);
 
-    const created = await prisma.qATaskReview.create({
-      data: {
-        batchId: null,
-        taskId: parent.taskId,
-        templateVersionId,
-        reviewerId: auth.userId,
-        subjectAgentId: parent.subjectAgentId,
-        parentReviewId: parent.id,
-        status: "PENDING",
-        isCurrentVersion: false,
-        regradeReason: reason,
-        expiresAt,
-      },
-      select: { id: true, templateVersionId: true },
+    const created = await prisma.$transaction(async (tx) => {
+      await deleteExpiredQaPendingReviewsForTask(tx, parent.taskId);
+      const pending = await tx.qATaskReview.findFirst({
+        where: { taskId: parent.taskId, status: "PENDING" },
+      });
+      if (pending) {
+        return null;
+      }
+      return tx.qATaskReview.create({
+        data: {
+          batchId: null,
+          taskId: parent.taskId,
+          templateVersionId,
+          reviewerId: auth.userId,
+          subjectAgentId: parent.subjectAgentId,
+          parentReviewId: parent.id,
+          status: "PENDING",
+          isCurrentVersion: false,
+          regradeReason: reason,
+          expiresAt,
+        },
+        select: { id: true, templateVersionId: true },
+      });
     });
+
+    if (!created) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "This task already has a pending QA review. Finish it, or open the regrade screen and use “Cancel regrade”, or cancel a batch from the Quality Review page.",
+        },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

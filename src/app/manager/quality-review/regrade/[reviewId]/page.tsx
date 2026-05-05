@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import DashboardLayout from "@/app/_components/DashboardLayout";
@@ -102,6 +102,35 @@ function RegradeReviewPageContent() {
   const [lastScores, setLastScores] = useState<ScoreFeedback | null>(null);
   const [mobileLiveScoreOpen, setMobileLiveScoreOpen] = useState(false);
 
+  /** True after successful submit or explicit cancel — skips best-effort abandon cleanup. */
+  const intentionalFinishRef = useRef(false);
+  const busyRef = useRef(false);
+  const reviewIdRef = useRef(reviewId);
+
+  useEffect(() => {
+    reviewIdRef.current = reviewId;
+  }, [reviewId]);
+
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
+  /** Best-effort: closing the tab or navigating away releases the PENDING draft (same as Cancel). */
+  useEffect(() => {
+    const onPageHide = () => {
+      if (intentionalFinishRef.current || busyRef.current) return;
+      const id = reviewIdRef.current;
+      if (!id) return;
+      void fetch(`/api/manager/quality-review/task-reviews/${id}/cancel`, {
+        method: "POST",
+        credentials: "include",
+        keepalive: true,
+      });
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -200,12 +229,40 @@ function RegradeReviewPageContent() {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Submit failed");
+      intentionalFinishRef.current = true;
       setLastScores(json.data.scores as ScoreFeedback);
       setTimeout(() => {
         router.push("/manager/quality-review/dashboard");
       }, 1200);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Submit failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancelRegrade = async () => {
+    if (
+      !window.confirm(
+        "Cancel this regrade? Nothing will be saved and the task can be regraded again."
+      )
+    ) {
+      return;
+    }
+    intentionalFinishRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/manager/quality-review/task-reviews/${reviewId}/cancel`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Could not cancel");
+      router.push("/manager/quality-review/dashboard");
+    } catch (e: unknown) {
+      intentionalFinishRef.current = false;
+      setError(e instanceof Error ? e.message : "Could not cancel");
     } finally {
       setBusy(false);
     }
@@ -238,13 +295,18 @@ function RegradeReviewPageContent() {
       />
       <div
         className={`max-w-6xl mx-auto text-white pb-16 px-4 ${
-          task && lines.length ? "max-lg:pb-44" : ""
+          task && lines.length ? "max-lg:pb-52" : ""
         }`}
       >
         <header className="border-b border-white/10 pb-6 mb-6">
           <h1 className="text-2xl font-semibold">Complete regrade</h1>
           <p className="text-xs text-white/45 mt-2">
             {meta?.templateLabel} · new checklist v{meta?.version}
+          </p>
+          <p className="text-xs text-white/40 mt-3 max-w-2xl leading-relaxed">
+            Use <span className="text-white/55">Complete regrade</span> to submit the official score.{" "}
+            <span className="text-white/55">Cancel regrade</span> discards this draft and releases the
+            task (same as closing the tab—best-effort).
           </p>
         </header>
 
@@ -431,14 +493,24 @@ function RegradeReviewPageContent() {
                       </div>
                     )}
 
-                    <button
-                      type="button"
-                      disabled={busy || !!lastScores || !responsesComplete}
-                      onClick={() => void submit()}
-                      className="w-full sm:w-auto px-8 py-3 rounded-xl bg-violet-600 text-white font-semibold disabled:opacity-40 shadow-lg shadow-violet-950/40"
-                    >
-                      {busy ? "…" : "Submit regrade"}
-                    </button>
+                    <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap gap-3 sm:items-center">
+                      <button
+                        type="button"
+                        disabled={busy || !!lastScores}
+                        onClick={() => void cancelRegrade()}
+                        className="w-full sm:w-auto px-6 py-3 rounded-xl border border-white/20 bg-white/5 text-white font-medium hover:bg-white/10 disabled:opacity-40"
+                      >
+                        Cancel regrade
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy || !!lastScores || !responsesComplete}
+                        onClick={() => void submit()}
+                        className="w-full sm:w-auto px-8 py-3 rounded-xl bg-violet-600 text-white font-semibold disabled:opacity-40 shadow-lg shadow-violet-950/40"
+                      >
+                        {busy ? "…" : "Complete regrade"}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -511,6 +583,24 @@ function RegradeReviewPageContent() {
             className="lg:hidden fixed inset-x-0 bottom-0 z-30 border-t border-white/15 bg-neutral-950/95 backdrop-blur-md shadow-[0_-12px_40px_rgba(0,0,0,0.5)]"
             style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
           >
+            <div className="grid grid-cols-2 gap-2 px-3 pt-2 border-b border-white/10">
+              <button
+                type="button"
+                disabled={busy || !!lastScores}
+                onClick={() => void cancelRegrade()}
+                className="min-h-[44px] rounded-lg border border-white/20 bg-white/5 text-sm font-medium text-white disabled:opacity-40"
+              >
+                Cancel regrade
+              </button>
+              <button
+                type="button"
+                disabled={busy || !!lastScores || !responsesComplete}
+                onClick={() => void submit()}
+                className="min-h-[44px] rounded-lg bg-violet-600 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                {busy ? "…" : "Complete regrade"}
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => setMobileLiveScoreOpen((o) => !o)}

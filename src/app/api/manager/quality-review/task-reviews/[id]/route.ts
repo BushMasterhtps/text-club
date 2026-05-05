@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { deleteExpiredQaPendingReviewsForTask } from "@/lib/quality-review-pending-lock";
 
 function serializeForClientJson<T>(value: T): T {
   return JSON.parse(
@@ -52,6 +53,18 @@ export async function GET(
         return NextResponse.json(
           { success: false, error: "Batch was cancelled" },
           { status: 400 }
+        );
+      }
+      const now = new Date();
+      if (review.expiresAt && review.expiresAt < now) {
+        await deleteExpiredQaPendingReviewsForTask(prisma, review.taskId, now);
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "This draft review expired. Start a new regrade from the QA dashboard if you still need one.",
+          },
+          { status: 410 }
         );
       }
     }
