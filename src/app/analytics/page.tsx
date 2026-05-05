@@ -801,11 +801,11 @@ export default function AnalyticsPage() {
                 )}
               </CollapsibleSection>
 
-              {/* Section 3: Performance Scorecard & One-on-One Notes */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Performance Scorecard + parallel QA panel (same API scope) */}
-                <div className="space-y-6">
+              {/* Section 3: Performance Scorecard | Quality Review (row); One-on-One Notes full width */}
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-stretch">
                   <PerformanceScorecard
+                    className="h-full min-h-0"
                     scorecardData={scorecardData}
                     loading={loadingScorecard}
                     onRefresh={loadScorecardData}
@@ -817,14 +817,15 @@ export default function AnalyticsPage() {
                       ? getDateRange()
                       : undefined}
                   />
-                  <ScorecardQaPanel scorecardData={scorecardData} loading={loadingScorecard} />
+                  <ScorecardQaPanel
+                    className="min-h-0"
+                    scorecardData={scorecardData}
+                    loading={loadingScorecard}
+                  />
                 </div>
 
-                {/* One-on-One Notes */}
-                <div>
-                  <OneOnOneNotes 
-                    agents={allAgents}
-                  />
+                <div className="w-full">
+                  <OneOnOneNotes agents={allAgents} />
                 </div>
               </div>
 

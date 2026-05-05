@@ -17,6 +17,8 @@ interface Props {
   /** Matches Team Analytics filter; passed through to sprint-rankings API. */
   rosterTeamFilter?: string;
   dateRange?: { start: string; end: string }; // Custom date range from parent
+  /** Optional root classes (e.g. Team Analytics side-by-side height). */
+  className?: string;
 }
 
 function appendRosterTeamToUrl(url: string, rosterTeamFilter?: string): string {
@@ -37,6 +39,7 @@ export default function PerformanceScorecard({
   onLoadAgentDetail,
   rosterTeamFilter,
   dateRange,
+  className,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
@@ -140,7 +143,9 @@ export default function PerformanceScorecard({
   };
 
   return (
-    <div className="rounded-2xl bg-white/[0.02] ring-1 ring-white/10 backdrop-blur-md p-6 border-2 border-yellow-500/30 bg-gradient-to-br from-yellow-500/5 to-orange-500/5">
+    <div
+      className={`rounded-2xl bg-white/[0.02] ring-1 ring-white/10 backdrop-blur-md p-6 border-2 border-yellow-500/30 bg-gradient-to-br from-yellow-500/5 to-orange-500/5 ${className ?? ''}`}
+    >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <span className="text-3xl">🏆</span>

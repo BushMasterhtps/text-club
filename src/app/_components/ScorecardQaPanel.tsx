@@ -8,15 +8,19 @@ import { buildQaDashboardUrl } from '@/lib/quality-review-dashboard';
 type Props = {
   scorecardData: any;
   loading: boolean;
+  /** Optional Card/root classes (e.g. Team Analytics side-by-side height). */
+  className?: string;
 };
 
 /**
  * Read-only QA pillar for Team Analytics: same agents/date/rosterTeam scope as Performance Scorecard API.
  */
-export default function ScorecardQaPanel({ scorecardData, loading }: Props) {
+export default function ScorecardQaPanel({ scorecardData, loading, className }: Props) {
   if (loading) {
     return (
-      <Card className="p-5 border border-cyan-500/20 bg-cyan-950/10">
+      <Card
+        className={`p-5 h-full min-h-[12rem] flex flex-col justify-center border border-cyan-500/20 bg-cyan-950/10 ${className ?? ''}`}
+      >
         <p className="text-sm text-white/60">Loading quality review metrics…</p>
       </Card>
     );
@@ -32,8 +36,10 @@ export default function ScorecardQaPanel({ scorecardData, loading }: Props) {
     | undefined;
 
   return (
-    <Card className="p-5 border border-cyan-500/30 bg-gradient-to-br from-cyan-950/30 to-transparent ring-1 ring-cyan-500/15">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-4">
+    <Card
+      className={`p-5 h-full min-h-0 flex flex-col border border-cyan-500/30 bg-gradient-to-br from-cyan-950/30 to-transparent ring-1 ring-cyan-500/15 ${className ?? ''}`}
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-4 shrink-0">
         <div>
           <h3 className="text-base font-semibold text-cyan-200 tracking-tight flex items-center gap-2">
             <span aria-hidden>✅</span> Quality Review
@@ -51,7 +57,7 @@ export default function ScorecardQaPanel({ scorecardData, loading }: Props) {
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-white/10">
+      <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-white/10">
         <table className="w-full text-sm text-left min-w-[720px]">
           <thead>
             <tr className="border-b border-white/10 bg-white/5 text-xs text-white/55 uppercase tracking-wide">
@@ -130,7 +136,7 @@ export default function ScorecardQaPanel({ scorecardData, loading }: Props) {
         </table>
       </div>
 
-      <p className="text-[11px] text-white/40 mt-3 leading-relaxed">
+      <p className="text-[11px] text-white/40 mt-3 leading-relaxed shrink-0">
         Official QA workflows and filters are unchanged on the Quality Review dashboard. This table is a
         parallel view for the scorecard roster only.
       </p>
