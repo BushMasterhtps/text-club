@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '@/app/_components/Card';
 import { SmallButton } from '@/app/_components/SmallButton';
 import PerformanceScorecard from '@/app/_components/PerformanceScorecard';
-import ScorecardQaPanel from '@/app/_components/ScorecardQaPanel';
 import OneOnOneNotes from '@/app/_components/OneOnOneNotes';
 import { formatYmdStringForDisplay } from '@/lib/format-ymd-label';
 import {
@@ -801,28 +800,20 @@ export default function AnalyticsPage() {
                 )}
               </CollapsibleSection>
 
-              {/* Section 3: Performance Scorecard | Quality Review (row); One-on-One Notes full width */}
+              {/* Section 3: Performance Scorecard (QA per agent in-card); One-on-One Notes full width */}
               <div className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-stretch">
-                  <PerformanceScorecard
-                    className="h-full min-h-0"
-                    scorecardData={scorecardData}
-                    loading={loadingScorecard}
-                    onRefresh={loadScorecardData}
-                    onLoadAgentDetail={loadAgentDetail}
-                    rosterTeamFilter={rosterTeamFilter}
-                    dateRange={selectedDateRange === 'custom' && customStartDate && customEndDate 
-                      ? { start: customStartDate, end: customEndDate }
-                      : selectedDateRange !== 'custom'
-                      ? getDateRange()
-                      : undefined}
-                  />
-                  <ScorecardQaPanel
-                    className="min-h-0"
-                    scorecardData={scorecardData}
-                    loading={loadingScorecard}
-                  />
-                </div>
+                <PerformanceScorecard
+                  scorecardData={scorecardData}
+                  loading={loadingScorecard}
+                  onRefresh={loadScorecardData}
+                  onLoadAgentDetail={loadAgentDetail}
+                  rosterTeamFilter={rosterTeamFilter}
+                  dateRange={selectedDateRange === 'custom' && customStartDate && customEndDate 
+                    ? { start: customStartDate, end: customEndDate }
+                    : selectedDateRange !== 'custom'
+                    ? getDateRange()
+                    : undefined}
+                />
 
                 <div className="w-full">
                   <OneOnOneNotes agents={allAgents} />
