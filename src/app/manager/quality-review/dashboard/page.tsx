@@ -25,6 +25,7 @@ import {
 } from "@/lib/quality-review-dashboard";
 import { DashboardNavigationProvider } from "@/contexts/DashboardNavigationContext";
 import { QaAgentTrendsPanel } from "@/app/manager/quality-review/dashboard/_components/QaAgentTrendsPanel";
+import { QaReviewCoachingModal } from "@/app/manager/quality-review/dashboard/_components/QaReviewCoachingModal";
 
 type CoverageRow = QaAgentCoverageRow;
 
@@ -124,6 +125,7 @@ function DashboardInner() {
   const [regradeMode, setRegradeMode] = useState<"same" | "latest">("same");
   const [regradeReason, setRegradeReason] = useState("");
   const [regradeBusy, setRegradeBusy] = useState(false);
+  const [coachingReviewId, setCoachingReviewId] = useState<string | null>(null);
 
   const loadCoverage = useCallback(async () => {
     setLoading(true);
@@ -658,19 +660,30 @@ function DashboardInner() {
                           {rev.reviewerNotes ? (
                             <div className="text-white/50">Notes: {rev.reviewerNotes}</div>
                           ) : null}
-                          {rev.status === "SUBMITTED" && rev.isCurrentVersion && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRegradeFor(rev);
-                                setRegradeReason("");
-                                setRegradeMode("same");
-                              }}
-                              className="mt-1 text-[11px] font-semibold text-violet-300 hover:text-violet-200"
-                            >
-                              Regrade review
-                            </button>
-                          )}
+                          <div className="flex flex-wrap gap-x-4 gap-y-2 mt-1">
+                            {rev.status === "SUBMITTED" && (
+                              <button
+                                type="button"
+                                onClick={() => setCoachingReviewId(rev.id)}
+                                className="text-[11px] font-semibold text-sky-300 hover:text-sky-200"
+                              >
+                                Review Task
+                              </button>
+                            )}
+                            {rev.status === "SUBMITTED" && rev.isCurrentVersion && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRegradeFor(rev);
+                                  setRegradeReason("");
+                                  setRegradeMode("same");
+                                }}
+                                className="text-[11px] font-semibold text-violet-300 hover:text-violet-200"
+                              >
+                                Regrade review
+                              </button>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -680,6 +693,11 @@ function DashboardInner() {
             )}
           </section>
         )}
+
+        <QaReviewCoachingModal
+          reviewId={coachingReviewId}
+          onClose={() => setCoachingReviewId(null)}
+        />
 
         {regradeFor && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">

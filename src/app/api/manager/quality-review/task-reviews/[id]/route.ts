@@ -31,6 +31,8 @@ export async function GET(
       where: { id: reviewId },
       include: {
         batch: { select: { id: true, status: true, reviewerId: true } },
+        reviewer: { select: { id: true, name: true, email: true } },
+        subjectAgent: { select: { id: true, name: true, email: true } },
         templateVersion: {
           select: {
             id: true,
@@ -111,6 +113,9 @@ export async function GET(
               response: true,
               comment: true,
               labelSnapshot: true,
+              weightSnapshot: true,
+              isCriticalSnapshot: true,
+              allowNaSnapshot: true,
             },
           })
         : [];
@@ -171,10 +176,20 @@ export async function GET(
           regradeReason: review.regradeReason,
           reviewerNotes: review.reviewerNotes,
           submittedAt: review.submittedAt?.toISOString() ?? null,
+          weightedScore:
+            review.weightedScore != null ? Number(review.weightedScore) : null,
+          failedCriticalCount: review.failedCriticalCount ?? null,
+          scoreCap: review.scoreCap != null ? Number(review.scoreCap) : null,
           finalScore: review.finalScore != null ? Number(review.finalScore) : null,
+          taskSnapshot:
+            review.taskSnapshot != null
+              ? (serializeForClientJson(review.taskSnapshot) as Record<string, unknown>)
+              : null,
           templateVersion: review.templateVersion,
+          reviewer: review.reviewer,
+          subjectAgent: review.subjectAgent,
         },
-        lines,
+        lines: serializeForClientJson(lines),
         lineResults: serializeForClientJson(lineResults),
         task: serializeForClientJson(task),
         originalReviewContext:
