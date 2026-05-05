@@ -1,10 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-
-const QA_DASHBOARD_PATH = "/manager/quality-review/dashboard";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import DashboardLayout from "@/app/_components/DashboardLayout";
 import ThemeToggle from "@/app/_components/ThemeToggle";
 import SessionTimer from "@/app/_components/SessionTimer";
@@ -19,6 +17,11 @@ import {
   QA_LIVE_SCORE_DISCLAIMER,
 } from "@/app/manager/quality-review/_components/qa-live-score-preview";
 import { formatCompletedAt } from "@/app/manager/quality-review/_components/qa-review-formatters";
+
+const QA_DASHBOARD_PATH = "/manager/quality-review/dashboard";
+
+/** Set true locally to trace cancel flow in the console (`[qa-regrade-cancel]`). */
+const QA_REGRADE_CANCEL_DEBUG = false;
 
 type LineRow = {
   id: string;
@@ -86,7 +89,6 @@ function RegradeReviewPageContent() {
     () => (Array.isArray(params.reviewId) ? params.reviewId[0] : params.reviewId) ?? "",
     [params.reviewId]
   );
-  const router = useRouter();
   const { timeLeft, extendSession, showWarning } = useAutoLogout();
 
   const [lines, setLines] = useState<LineRow[]>([]);
@@ -103,7 +105,10 @@ function RegradeReviewPageContent() {
   const [lineComments, setLineComments] = useState<Record<string, string>>({});
   const [reviewerNotes, setReviewerNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(true);
+  /** Initial GET for review + lines only — not submit/cancel. */
+  const [pageBusy, setPageBusy] = useState(true);
+  const [submitBusy, setSubmitBusy] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
   const [lastScores, setLastScores] = useState<ScoreFeedback | null>(null);
   const [mobileLiveScoreOpen, setMobileLiveScoreOpen] = useState(false);
   const errorBannerRef = useRef<HTMLDivElement | null>(null);
@@ -118,8 +123,8 @@ function RegradeReviewPageContent() {
   }, [reviewId]);
 
   useEffect(() => {
-    busyRef.current = busy;
-  }, [busy]);
+    busyRef.current = pageBusy || submitBusy || cancelBusy;
+  }, [pageBusy, submitBusy, cancelBusy]);
 
   useEffect(() => {
     if (error) {
@@ -147,11 +152,11 @@ function RegradeReviewPageContent() {
     let cancelled = false;
     (async () => {
       if (!reviewId) {
-        setBusy(false);
+        setPageBusy(false);
         setError("Missing review id in the URL.");
         return;
       }
-      setBusy(true);
+      setPageBusy(true);
       setError(null);
       try {
         const res = await fetch(
@@ -185,7 +190,7 @@ function RegradeReviewPageContent() {
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Load failed");
       } finally {
-        if (!cancelled) setBusy(false);
+        if (!cancelled) setPageBusy(false);
       }
     })();
     return () => {
@@ -224,7 +229,7 @@ function RegradeReviewPageContent() {
 
   const submit = async () => {
     if (!lines.length || !responsesComplete) return;
-    setBusy(true);
+    setSubmitBusy(true);
     setError(null);
     try {
       const body = {
@@ -252,32 +257,50 @@ function RegradeReviewPageContent() {
       intentionalFinishRef.current = true;
       setLastScores(json.data.scores as ScoreFeedback);
       setTimeout(() => {
-        router.replace(QA_DASHBOARD_PATH);
+        window.location.href = QA_DASHBOARD_PATH;
       }, 1200);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Submit failed");
     } finally {
-      setBusy(false);
+      setSubmitBusy(false);
     }
   };
 
   const cancelRegrade = async () => {
+    if (QA_REGRADE_CANCEL_DEBUG) {
+      console.log("[qa-regrade-cancel] onClick fired", {
+        reviewIdLen: reviewId?.length ?? 0,
+        pageBusy,
+        submitBusy,
+        cancelBusy,
+        lastScores: !!lastScores,
+      });
+    }
+
     if (
       !window.confirm(
         "Cancel this regrade? Nothing will be saved and the task can be regraded again."
       )
     ) {
+      if (QA_REGRADE_CANCEL_DEBUG) console.log("[qa-regrade-cancel] confirm dismissed");
       return;
     }
+
+    if (QA_REGRADE_CANCEL_DEBUG) console.log("[qa-regrade-cancel] confirm accepted");
+
     if (!reviewId) {
       setError("Missing review id. Refresh the page and try again.");
       return;
     }
 
     intentionalFinishRef.current = true;
-    setBusy(true);
+    setCancelBusy(true);
     setError(null);
     const cancelUrl = `/api/manager/quality-review/task-reviews/${encodeURIComponent(reviewId)}/cancel`;
+
+    if (QA_REGRADE_CANCEL_DEBUG) {
+      console.log("[qa-regrade-cancel] fetch start", { cancelUrl });
+    }
 
     try {
       const res = await fetch(cancelUrl, {
@@ -287,6 +310,14 @@ function RegradeReviewPageContent() {
       });
 
       const raw = await res.text();
+      if (QA_REGRADE_CANCEL_DEBUG) {
+        console.log("[qa-regrade-cancel] response", {
+          status: res.status,
+          ok: res.ok,
+          bodyPreview: raw.replace(/\s+/g, " ").slice(0, 300),
+        });
+      }
+
       let body: { success?: boolean; error?: string } = {};
       if (raw) {
         try {
@@ -303,22 +334,19 @@ function RegradeReviewPageContent() {
         throw new Error(body.error || `Cancel failed (${res.status})`);
       }
 
-      router.replace(QA_DASHBOARD_PATH);
-      router.refresh();
-      window.setTimeout(() => {
-        if (window.location.pathname.includes("/quality-review/regrade/")) {
-          window.location.assign(QA_DASHBOARD_PATH);
-        }
-      }, 400);
+      if (QA_REGRADE_CANCEL_DEBUG) {
+        console.log("[qa-regrade-cancel] success — redirect", { to: QA_DASHBOARD_PATH });
+      }
+      window.location.href = QA_DASHBOARD_PATH;
     } catch (e: unknown) {
       intentionalFinishRef.current = false;
       const msg = e instanceof Error ? e.message : "Could not cancel";
       setError(msg);
-      if (process.env.NODE_ENV === "development") {
-        console.error("[quality-review/regrade] cancel failed", { cancelUrl, err: e });
+      if (QA_REGRADE_CANCEL_DEBUG) {
+        console.error("[qa-regrade-cancel] error", e);
       }
     } finally {
-      setBusy(false);
+      setCancelBusy(false);
     }
   };
 
@@ -374,7 +402,7 @@ function RegradeReviewPageContent() {
           </div>
         )}
 
-        {busy && !task && <p className="text-sm text-white/45">Loading…</p>}
+        {pageBusy && !task && <p className="text-sm text-white/45">Loading…</p>}
 
         {task && taskId && (
           <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-950/20 via-neutral-950/50 to-neutral-950/90 p-5 md:p-7 ring-1 ring-white/5 shadow-xl shadow-black/25 space-y-6">
@@ -554,19 +582,21 @@ function RegradeReviewPageContent() {
                     <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap gap-3 sm:items-center">
                       <button
                         type="button"
-                        disabled={busy || !!lastScores}
+                        disabled={!!lastScores || submitBusy || cancelBusy}
                         onClick={() => void cancelRegrade()}
                         className="w-full sm:w-auto px-6 py-3 rounded-xl border border-white/20 bg-white/5 text-white font-medium hover:bg-white/10 disabled:opacity-40"
                       >
-                        Cancel regrade
+                        {cancelBusy ? "…" : "Cancel regrade"}
                       </button>
                       <button
                         type="button"
-                        disabled={busy || !!lastScores || !responsesComplete}
+                        disabled={
+                          pageBusy || !!lastScores || !responsesComplete || submitBusy || cancelBusy
+                        }
                         onClick={() => void submit()}
                         className="w-full sm:w-auto px-8 py-3 rounded-xl bg-violet-600 text-white font-semibold disabled:opacity-40 shadow-lg shadow-violet-950/40"
                       >
-                        {busy ? "…" : "Complete regrade"}
+                        {submitBusy ? "…" : "Complete regrade"}
                       </button>
                     </div>
                   </div>
@@ -638,25 +668,27 @@ function RegradeReviewPageContent() {
 
         {task && lines.length > 0 && (
           <div
-            className="lg:hidden fixed inset-x-0 bottom-0 z-30 border-t border-white/15 bg-neutral-950/95 backdrop-blur-md shadow-[0_-12px_40px_rgba(0,0,0,0.5)]"
+            className="lg:hidden fixed inset-x-0 bottom-0 z-[45] border-t border-white/15 bg-neutral-950/95 backdrop-blur-md shadow-[0_-12px_40px_rgba(0,0,0,0.5)]"
             style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
           >
             <div className="grid grid-cols-2 gap-2 px-3 pt-2 border-b border-white/10">
               <button
                 type="button"
-                disabled={busy || !!lastScores}
+                disabled={!!lastScores || submitBusy || cancelBusy}
                 onClick={() => void cancelRegrade()}
                 className="min-h-[44px] rounded-lg border border-white/20 bg-white/5 text-sm font-medium text-white disabled:opacity-40"
               >
-                Cancel regrade
+                {cancelBusy ? "…" : "Cancel regrade"}
               </button>
               <button
                 type="button"
-                disabled={busy || !!lastScores || !responsesComplete}
+                disabled={
+                  pageBusy || !!lastScores || !responsesComplete || submitBusy || cancelBusy
+                }
                 onClick={() => void submit()}
                 className="min-h-[44px] rounded-lg bg-violet-600 text-sm font-semibold text-white disabled:opacity-40"
               >
-                {busy ? "…" : "Complete regrade"}
+                {submitBusy ? "…" : "Complete regrade"}
               </button>
             </div>
             <button
