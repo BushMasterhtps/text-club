@@ -302,6 +302,7 @@ function RegradeReviewPageContent() {
       console.log("[qa-regrade-cancel] fetch start", { cancelUrl });
     }
 
+    let navigatedAway = false;
     try {
       const res = await fetch(cancelUrl, {
         method: "POST",
@@ -318,26 +319,39 @@ function RegradeReviewPageContent() {
         });
       }
 
-      let body: { success?: boolean; error?: string } = {};
-      if (raw) {
+      if (!res.ok) {
+        let errMsg = `Cancel failed (${res.status})`;
+        if (raw.trim()) {
+          try {
+            const parsed = JSON.parse(raw) as { error?: string };
+            if (parsed?.error) errMsg = parsed.error;
+          } catch {
+            /* use errMsg */
+          }
+        }
+        throw new Error(errMsg);
+      }
+
+      // 2xx: succeed unless JSON explicitly says success:false
+      const trimmed = raw.trim();
+      if (trimmed) {
         try {
-          body = JSON.parse(raw) as { success?: boolean; error?: string };
-        } catch {
-          const snippet = raw.replace(/\s+/g, " ").slice(0, 180);
-          throw new Error(
-            `Cancel failed (${res.status}). ${snippet || "Server returned a non-JSON response."}`
-          );
+          const parsed = JSON.parse(trimmed) as { success?: boolean; error?: string };
+          if (parsed?.success === false) {
+            throw new Error(parsed.error || "Cancel was not accepted");
+          }
+        } catch (e: unknown) {
+          if (e instanceof SyntaxError) {
+            /* Non-JSON body on 2xx → still treat as success */
+          } else {
+            throw e;
+          }
         }
       }
 
-      if (!res.ok || !body.success) {
-        throw new Error(body.error || `Cancel failed (${res.status})`);
-      }
-
-      if (QA_REGRADE_CANCEL_DEBUG) {
-        console.log("[qa-regrade-cancel] success — redirect", { to: QA_DASHBOARD_PATH });
-      }
-      window.location.href = QA_DASHBOARD_PATH;
+      console.log("[qa-regrade-cancel] cancel success, hard redirecting");
+      navigatedAway = true;
+      window.location.replace(QA_DASHBOARD_PATH);
     } catch (e: unknown) {
       intentionalFinishRef.current = false;
       const msg = e instanceof Error ? e.message : "Could not cancel";
@@ -346,7 +360,7 @@ function RegradeReviewPageContent() {
         console.error("[qa-regrade-cancel] error", e);
       }
     } finally {
-      setCancelBusy(false);
+      if (!navigatedAway) setCancelBusy(false);
     }
   };
 
