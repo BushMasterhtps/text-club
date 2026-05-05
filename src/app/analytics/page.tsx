@@ -491,70 +491,73 @@ export default function AnalyticsPage() {
             </button>
           </div>
           
-          {/* Time Period + Team (scorecard) */}
-          <Card className="p-4">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              <div className="flex-1 space-y-4 w-full min-w-0">
-            <div className="flex items-center justify-between mb-4">
-              <H3 className="text-lg">📅 Time Period</H3>
+          {/* Unified dashboard filters: date range + scorecard team scope */}
+          <Card className="p-4 sm:p-5">
+            <div className="border-b border-white/10 pb-3 mb-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                Filters
+              </p>
             </div>
-            <div className="space-y-4">
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => handleTimePeriodChange('today')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    selectedDateRange === 'today'
-                      ? 'bg-blue-600 text-white shadow-lg'
-                      : 'bg-white/10 text-white/70 hover:bg-white/20'
-                  }`}
-                >
-                  Today
-                </button>
-                <button
-                  onClick={() => handleTimePeriodChange('custom')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    selectedDateRange === 'custom'
-                      ? 'bg-blue-600 text-white shadow-lg'
-                      : 'bg-white/10 text-white/70 hover:bg-white/20'
-                  }`}
-                >
-                  Custom Range
-                </button>
-              </div>
-              
-              {selectedDateRange === 'custom' && (
-                <div className="flex gap-4 items-center">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-white/60">From:</label>
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="px-3 py-2 rounded-lg bg-white/10 text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 lg:items-start">
+              <div className="space-y-4 min-w-0">
+                <H3 className="text-lg">📅 Time Period</H3>
+                <div className="space-y-4">
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={() => handleTimePeriodChange('today')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        selectedDateRange === 'today'
+                          ? 'bg-blue-600 text-white shadow-lg'
+                          : 'bg-white/10 text-white/70 hover:bg-white/20'
+                      }`}
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => handleTimePeriodChange('custom')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        selectedDateRange === 'custom'
+                          ? 'bg-blue-600 text-white shadow-lg'
+                          : 'bg-white/10 text-white/70 hover:bg-white/20'
+                      }`}
+                    >
+                      Custom Range
+                    </button>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-white/60">To:</label>
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="px-3 py-2 rounded-lg bg-white/10 text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <SmallButton 
-                    onClick={handleCustomDateApply}
-                    disabled={!customStartDate || !customEndDate}
-                  >
-                    Apply
-                  </SmallButton>
+
+                  {selectedDateRange === 'custom' && (
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4 sm:items-end">
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-white/60 shrink-0">From:</label>
+                        <input
+                          type="date"
+                          value={customStartDate}
+                          onChange={(e) => setCustomStartDate(e.target.value)}
+                          className="px-3 py-2 rounded-lg bg-white/10 text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-white/60 shrink-0">To:</label>
+                        <input
+                          type="date"
+                          value={customEndDate}
+                          onChange={(e) => setCustomEndDate(e.target.value)}
+                          className="px-3 py-2 rounded-lg bg-white/10 text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
+                        />
+                      </div>
+                      <SmallButton
+                        onClick={handleCustomDateApply}
+                        disabled={!customStartDate || !customEndDate}
+                      >
+                        Apply
+                      </SmallButton>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
               </div>
 
-              <div className="w-full lg:w-72 shrink-0 space-y-2">
-                <H3 className="text-lg">👥 Team (Performance Scorecard)</H3>
+              <div className="space-y-2 min-w-0 lg:max-w-md">
+                <H3 className="text-lg">👥 Team</H3>
                 <select
                   value={rosterTeamFilter}
                   onChange={(e) => setRosterTeamFilter(e.target.value)}
@@ -574,8 +577,7 @@ export default function AnalyticsPage() {
                   ))}
                 </select>
                 <p className="text-xs text-white/45 leading-snug">
-                  Applies to the Performance Scorecard and its sprint rankings panel. Overview metrics,
-                  team performance table, and agent status use all agents for the selected dates.
+                  Applies to Performance Scorecard and sprint rankings only.
                 </p>
               </div>
             </div>
