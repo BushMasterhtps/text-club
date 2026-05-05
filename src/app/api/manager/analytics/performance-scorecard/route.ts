@@ -3,6 +3,17 @@ import { prisma } from "@/lib/prisma";
 import { getTaskWeight, getAllWeights, WEIGHT_SUMMARY } from "@/lib/task-weights";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { resolveProductivityScorecardSubjects } from "@/lib/productivity-scorecard-subjects";
+import {
+  loadQaAgentCoverageRows,
+  QA_ROSTER_SCOPE_ALL,
+  QA_TEAM_FILTER_ANY,
+  type QaAgentCoverageRow,
+} from "@/lib/quality-review-dashboard";
+import { QA_COVERAGE_TARGET_REVIEWS_PER_AGENT } from "@/lib/quality-review-constants";
+import {
+  addCalendarDaysToReportingYmd,
+  getAgentReportingTodayYmd,
+} from "@/lib/agent-reporting-day-bounds";
 
 /**
  * Performance Scorecard API
@@ -60,65 +71,100 @@ export async function GET(req: NextRequest) {
 
     const daysDiff = Math.ceil((dateEnd.getTime() - dateStart.getTime()) / (1000 * 60 * 60 * 24));
 
-    // Get all completed tasks in the date range
-    // Include both assignedToId and completedBy to catch all completions (especially for Holds)
-    const completedTasks = await prisma.task.findMany({
-      where: {
-        status: "COMPLETED",
-        endTime: {
-          gte: dateStart,
-          lte: dateEnd
-        }
-      },
-      select: {
-        id: true,
-        assignedToId: true,
-        completedBy: true, // Include completedBy for Holds tasks that were unassigned
-        taskType: true,
-        disposition: true, // Added for weighted scoring
-        durationSec: true,
-        endTime: true,
-        createdAt: true,
-        assignedTo: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        },
-        completedByUser: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
-      }
+    /** QA reporting window (PST calendar labels) — aligned with `loadQaAgentCoverageRows` / dashboard. */
+    let qaStartYmd: string;
+    let qaEndYmd: string;
+    if (dateStartStr && dateEndStr) {
+      qaStartYmd = dateStartStr;
+      qaEndYmd = dateEndStr;
+    } else {
+      const endY = getAgentReportingTodayYmd();
+      qaStartYmd = addCalendarDaysToReportingYmd(endY, -29);
+      qaEndYmd = endY;
+    }
+
+    const subjects = await resolveProductivityScorecardSubjects(prisma, {
+      mode: "performance_scorecard",
+      dateRange:
+        dateStartStr && dateEndStr
+          ? { start: dateStartStr, end: dateEndStr }
+          : undefined,
+      rosterTeam,
     });
+
+    const [completedTasks, trelloCompletions, qaLoadResult] = await Promise.all([
+      prisma.task.findMany({
+        where: {
+          status: "COMPLETED",
+          endTime: {
+            gte: dateStart,
+            lte: dateEnd,
+          },
+        },
+        select: {
+          id: true,
+          assignedToId: true,
+          completedBy: true,
+          taskType: true,
+          disposition: true,
+          durationSec: true,
+          endTime: true,
+          createdAt: true,
+          assignedTo: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          completedByUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      }),
+      prisma.trelloCompletion.findMany({
+        where: {
+          date: {
+            gte: dateStart,
+            lte: dateEnd,
+          },
+        },
+        include: {
+          agent: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      }),
+      subjects.length > 0
+        ? loadQaAgentCoverageRows(prisma, {
+            startYmd: qaStartYmd,
+            endYmd: qaEndYmd,
+            agentIds: subjects.map((s) => s.id),
+            rosterScope: QA_ROSTER_SCOPE_ALL,
+            qaTeamFilter: QA_TEAM_FILTER_ANY,
+            coverageStatus: null,
+          }).catch((err) => {
+            console.error("[performance-scorecard] QA coverage merge failed:", err);
+            return { rows: [], teamOptions: [] };
+          })
+        : Promise.resolve({ rows: [], teamOptions: [] }),
+    ]);
+
+    const qaByAgentId = new Map<string, QaAgentCoverageRow>(
+      qaLoadResult.rows.map((r) => [r.agentId, r])
+    );
 
     const completedTasksTyped = completedTasks as unknown as TaskData[];
 
-    // Calculate targets based on actual workload during this period
     const targets = calculateDynamicTargets(completedTasksTyped, dateStart, dateEnd);
-
-    // Get Trello completions for this period
-    const trelloCompletions = await prisma.trelloCompletion.findMany({
-      where: {
-        date: {
-          gte: dateStart,
-          lte: dateEnd
-        }
-      },
-      include: {
-        agent: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
-      }
-    });
 
     // Group Trello completions by agent
     const trelloByAgent = trelloCompletions.reduce((acc, tc) => {
@@ -143,14 +189,33 @@ export async function GET(req: NextRequest) {
       return acc;
     }, {} as Record<string, Set<string>>);
 
-    const subjects = await resolveProductivityScorecardSubjects(prisma, {
-      mode: "performance_scorecard",
-      dateRange:
-        dateStartStr && dateEndStr
-          ? { start: dateStartStr, end: dateEndStr }
-          : undefined,
-      rosterTeam,
-    });
+    function attachQaMetrics<T extends { id: string; rosterTeam?: string | null }>(
+      agent: T
+    ): T & {
+      qaReviewsCompleted: number;
+      qaAvgScore: number | null;
+      qaCoverageStatus: QaAgentCoverageRow["coverageStatus"] | null;
+      qaCoverageTarget: number;
+      qaLastReviewedAt: string | null;
+      qaLastReviewedBy: QaAgentCoverageRow["lastReviewedBy"];
+      qaIsTracked: boolean;
+      qaTeam: string | null;
+      rosterTeam: string | null;
+    } {
+      const q = qaByAgentId.get(agent.id);
+      return {
+        ...agent,
+        rosterTeam: agent.rosterTeam ?? q?.rosterTeam ?? null,
+        qaReviewsCompleted: q?.reviewsCompleted ?? 0,
+        qaAvgScore: q?.avgScore ?? null,
+        qaCoverageStatus: q?.coverageStatus ?? null,
+        qaCoverageTarget: q?.coverageTarget ?? QA_COVERAGE_TARGET_REVIEWS_PER_AGENT,
+        qaLastReviewedAt: q?.lastReviewedAt ?? null,
+        qaLastReviewedBy: q?.lastReviewedBy ?? null,
+        qaIsTracked: q?.qaIsTracked ?? false,
+        qaTeam: q?.qaTeam ?? null,
+      };
+    }
 
     const agentScores = subjects.map((subject) => {
       const agentId = subject.id;
@@ -207,25 +272,26 @@ export async function GET(req: NextRequest) {
         tierBadge = "⚠️";
       }
 
-      return {
+      const row = {
         ...agent,
         rank,
         percentile: Math.round(percentile),
         tier,
-        tierBadge
+        tierBadge,
       };
+      return attachQaMetrics(row);
     });
 
-    // Add ineligible agents at the end with special tier
-    const ineligibleRanked = ineligibleAgents.map((agent) => ({
-      ...agent,
-      rank: null,
-      percentile: 0,
-      tier: "Insufficient Data",
-      tierBadge: "📊"
-    }));
+    const ineligibleRanked = ineligibleAgents.map((agent) =>
+      attachQaMetrics({
+        ...agent,
+        rank: null,
+        percentile: 0,
+        tier: "Insufficient Data",
+        tierBadge: "📊",
+      })
+    );
 
-    // Combine: eligible agents first (ranked), then ineligible
     const allAgents = [...rankedAgents, ...ineligibleRanked];
 
     const finalEligibleCount = allAgents.filter((a) => a.rank !== null).length;
@@ -246,6 +312,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           success: true,
           period: { start: dateStart.toISOString(), end: dateEnd.toISOString(), days: daysDiff },
+          qaReportingPeriod: { startYmd: qaStartYmd, endYmd: qaEndYmd },
           targets,
           agent: { ...agentData, ...detailedBreakdown },
         });
@@ -259,6 +326,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       period: { start: dateStart.toISOString(), end: dateEnd.toISOString(), days: daysDiff },
+      qaReportingPeriod: { startYmd: qaStartYmd, endYmd: qaEndYmd },
       targets,
       agents: allAgents,
       eligibleCount: finalEligibleCount,

@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { getAgentReportingRangeBoundsUtc } from "@/lib/agent-reporting-day-bounds";
 import {
   QA_COVERAGE_TARGET_REVIEWS_PER_AGENT,
@@ -144,6 +144,11 @@ export async function loadQaAgentCoverageRows(
     agentSearch?: string | null;
     /** When set, only this user id (still subject to role/active filters). */
     agentId?: string | null;
+    /**
+     * When set (and `agentId` is not), only these user ids. Used to scope scorecard/merge
+     * without changing row math. Still subject to role/active filters.
+     */
+    agentIds?: string[] | null;
     /** `all` (default) or `tracked` (qaIsTracked only). */
     rosterScope?: string | null;
     /** `__any__` / absent = any team; `__unassigned__` = qaTeam null; else exact qaTeam string. */
@@ -171,12 +176,26 @@ export async function loadQaAgentCoverageRows(
     rosterScope === QA_ROSTER_SCOPE_TRACKED ? { qaIsTracked: true } : {};
 
   const agentId = params.agentId?.trim() || null;
+  /** When non-null, caller scoped by id list (e.g. scorecard). Empty array = no agents. */
+  const agentIdsFiltered: string[] | null =
+    !agentId && params.agentIds != null
+      ? [...new Set(params.agentIds.map((id) => id.trim()).filter(Boolean))]
+      : null;
+
+  if (agentIdsFiltered !== null && agentIdsFiltered.length === 0) {
+    return { rows: [], teamOptions: [] };
+  }
+
+  const subjectAgentScope =
+    agentIdsFiltered !== null && agentIdsFiltered.length > 0
+      ? ({ in: agentIdsFiltered } as const)
+      : ({ not: null } as const);
 
   const agents = await db.user.findMany({
     where: {
       isActive: true,
       OR: [{ role: "AGENT" }, { role: "MANAGER_AGENT" }],
-      ...(agentId ? { id: agentId } : {}),
+      ...(agentId ? { id: agentId } : agentIdsFiltered?.length ? { id: { in: agentIdsFiltered } } : {}),
       ...rosterClause,
       ...teamClause,
       ...(q
@@ -200,26 +219,35 @@ export async function loadQaAgentCoverageRows(
     orderBy: [{ name: "asc" }, { email: "asc" }],
   });
 
-  const teamGroups = await db.user.groupBy({
-    by: ["qaTeam"],
-    where: {
-      isActive: true,
-      OR: [{ role: "AGENT" }, { role: "MANAGER_AGENT" }],
-      qaIsTracked: true,
-      qaTeam: { not: null },
-    },
-  });
-  const teamOptions = teamGroups
-    .map((g) => g.qaTeam)
-    .filter((t): t is string => Boolean(t))
-    .sort((a, b) => a.localeCompare(b));
+  let teamOptions: string[];
+  if (agentIdsFiltered !== null) {
+    teamOptions = [
+      ...new Set(
+        agents.map((a) => a.qaTeam).filter((t): t is string => Boolean(t))
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+  } else {
+    const teamGroups = await db.user.groupBy({
+      by: ["qaTeam"],
+      where: {
+        isActive: true,
+        OR: [{ role: "AGENT" }, { role: "MANAGER_AGENT" }],
+        qaIsTracked: true,
+        qaTeam: { not: null },
+      },
+    });
+    teamOptions = teamGroups
+      .map((g) => g.qaTeam)
+      .filter((t): t is string => Boolean(t))
+      .sort((a, b) => a.localeCompare(b));
+  }
 
   const grouped = await db.qATaskReview.groupBy({
     by: ["subjectAgentId"],
     where: {
       status: "SUBMITTED",
       isCurrentVersion: true,
-      subjectAgentId: { not: null },
+      subjectAgentId: subjectAgentScope,
       submittedAt: { gte: startUtc, lt: endExclusiveUtc },
     },
     _count: { id: true },
@@ -246,19 +274,34 @@ export async function loadQaAgentCoverageRows(
     reviewerId: string;
   };
 
-  const distinctLatest = await db.$queryRaw<DistinctRow[]>`
-    SELECT DISTINCT ON ("subjectAgentId")
-      "subjectAgentId",
-      "submittedAt",
-      "reviewerId"
-    FROM "QATaskReview"
-    WHERE "status" = 'SUBMITTED'
-      AND "isCurrentVersion" = true
-      AND "subjectAgentId" IS NOT NULL
-      AND "submittedAt" >= ${startUtc}
-      AND "submittedAt" < ${endExclusiveUtc}
-    ORDER BY "subjectAgentId", "submittedAt" DESC
-  `;
+  const distinctLatest =
+    agentIdsFiltered !== null && agentIdsFiltered.length > 0
+      ? await db.$queryRaw<DistinctRow[]>`
+          SELECT DISTINCT ON ("subjectAgentId")
+            "subjectAgentId",
+            "submittedAt",
+            "reviewerId"
+          FROM "QATaskReview"
+          WHERE "status" = 'SUBMITTED'
+            AND "isCurrentVersion" = true
+            AND "subjectAgentId" IN (${Prisma.join(agentIdsFiltered)})
+            AND "submittedAt" >= ${startUtc}
+            AND "submittedAt" < ${endExclusiveUtc}
+          ORDER BY "subjectAgentId", "submittedAt" DESC
+        `
+      : await db.$queryRaw<DistinctRow[]>`
+          SELECT DISTINCT ON ("subjectAgentId")
+            "subjectAgentId",
+            "submittedAt",
+            "reviewerId"
+          FROM "QATaskReview"
+          WHERE "status" = 'SUBMITTED'
+            AND "isCurrentVersion" = true
+            AND "subjectAgentId" IS NOT NULL
+            AND "submittedAt" >= ${startUtc}
+            AND "submittedAt" < ${endExclusiveUtc}
+          ORDER BY "subjectAgentId", "submittedAt" DESC
+        `;
 
   const reviewerIds = [...new Set(distinctLatest.map((r) => r.reviewerId))];
   const reviewers = await db.user.findMany({

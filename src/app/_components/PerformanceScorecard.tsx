@@ -28,6 +28,19 @@ function appendRosterTeamToUrl(url: string, rosterTeamFilter?: string): string {
   return `${url}${sep}rosterTeam=${encodeURIComponent(rosterTeamFilter)}`;
 }
 
+const QA_STATUS_LABEL: Record<string, string> = {
+  exempt: "Exempt",
+  no_eligible_work: "No eligible work",
+  complete: "At target",
+  below: "Below target",
+  none: "No reviews",
+};
+
+function formatQaCoverageStatus(s: string | null | undefined): string {
+  if (s == null || s === "") return "—";
+  return QA_STATUS_LABEL[s] ?? s;
+}
+
 export default function PerformanceScorecard({
   scorecardData,
   loading,
@@ -1234,6 +1247,18 @@ export default function PerformanceScorecard({
                     ✓ {scorecardData.eligibleCount} ranked • {scorecardData.ineligibleCount} need 20+ tasks to be eligible
                   </div>
                 )}
+                <div className="rounded-lg border border-cyan-500/25 bg-cyan-950/40 p-3 space-y-2 text-xs text-white/75 leading-relaxed">
+                  <p>Quality metrics are read-only here and come from submitted current-version QA reviews.</p>
+                  <p>QA scores are not blended into productivity scoring yet.</p>
+                  <p>Official QA dashboard behavior is unchanged.</p>
+                  {scorecardData.qaReportingPeriod?.startYmd && scorecardData.qaReportingPeriod?.endYmd && (
+                    <p className="text-white/50 pt-1 border-t border-white/10">
+                      QA reporting window:{' '}
+                      {formatYmdStringForDisplay(scorecardData.qaReportingPeriod.startYmd)} –{' '}
+                      {formatYmdStringForDisplay(scorecardData.qaReportingPeriod.endYmd)}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Dynamic Targets Display */}
@@ -1448,6 +1473,69 @@ export default function PerformanceScorecard({
                             {Math.floor(agent.totalTimeSec / 3600)}h {Math.floor((agent.totalTimeSec % 3600) / 60)}m
                           </div>
                           <div className="text-xs text-white/40">(all tasks)</div>
+                        </div>
+                      </div>
+
+                      {/* Quality (read-only; same source as QA dashboard coverage rows) */}
+                      <div className="mt-4 pt-4 border-t border-cyan-500/35 rounded-b-lg">
+                        <div className="text-xs font-semibold text-cyan-300/95 mb-3 uppercase tracking-wide">
+                          Quality
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-sm">
+                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
+                            <div className="text-white/50 text-xs">Reviews / target</div>
+                            <div className="text-white font-semibold">
+                              {agent.qaReviewsCompleted ?? 0} / {agent.qaCoverageTarget ?? "—"}
+                            </div>
+                          </div>
+                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
+                            <div className="text-white/50 text-xs">Avg QA score</div>
+                            <div className="text-white font-semibold">
+                              {agent.qaAvgScore != null && !Number.isNaN(agent.qaAvgScore)
+                                ? Number(agent.qaAvgScore).toFixed(1)
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
+                            <div className="text-white/50 text-xs">Coverage status</div>
+                            <div className="text-white font-semibold">
+                              {formatQaCoverageStatus(agent.qaCoverageStatus)}
+                            </div>
+                          </div>
+                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
+                            <div className="text-white/50 text-xs">Last QA review</div>
+                            <div className="text-white font-semibold text-xs leading-snug">
+                              {agent.qaLastReviewedAt
+                                ? new Date(agent.qaLastReviewedAt).toLocaleString()
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
+                            <div className="text-white/50 text-xs">Reviewed by</div>
+                            <div className="text-white font-semibold text-xs truncate" title={agent.qaLastReviewedBy?.email}>
+                              {agent.qaLastReviewedBy
+                                ? agent.qaLastReviewedBy.name?.trim() || agent.qaLastReviewedBy.email
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
+                            <div className="text-white/50 text-xs">QA tracked</div>
+                            <div className="text-white font-semibold">
+                              {agent.qaIsTracked ? "Yes" : "No"}
+                            </div>
+                          </div>
+                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
+                            <div className="text-white/50 text-xs">QA team</div>
+                            <div className="text-white font-semibold text-xs truncate" title={agent.qaTeam ?? ""}>
+                              {agent.qaTeam ?? "—"}
+                            </div>
+                          </div>
+                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
+                            <div className="text-white/50 text-xs">Roster team</div>
+                            <div className="text-white font-semibold text-xs truncate" title={agent.rosterTeam ?? ""}>
+                              {agent.rosterTeam ?? "—"}
+                            </div>
+                          </div>
                         </div>
                       </div>
 
