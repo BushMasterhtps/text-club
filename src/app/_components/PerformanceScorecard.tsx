@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatYmdStringForDisplay } from '@/lib/format-ymd-label';
+import { formatQaCoverageStatus } from '@/lib/qa-coverage-display';
+import { buildQaDashboardUrl } from '@/lib/quality-review-dashboard';
 import { PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY } from '@/lib/productivity-scorecard-subjects';
 
 type RankingMode = 'sprint' | 'lifetime-points' | 'task-day' | 'hybrid';
@@ -26,19 +28,6 @@ function appendRosterTeamToUrl(url: string, rosterTeamFilter?: string): string {
   }
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}rosterTeam=${encodeURIComponent(rosterTeamFilter)}`;
-}
-
-const QA_STATUS_LABEL: Record<string, string> = {
-  exempt: "Exempt",
-  no_eligible_work: "No eligible work",
-  complete: "At target",
-  below: "Below target",
-  none: "No reviews",
-};
-
-function formatQaCoverageStatus(s: string | null | undefined): string {
-  if (s == null || s === "") return "—";
-  return QA_STATUS_LABEL[s] ?? s;
 }
 
 export default function PerformanceScorecard({
@@ -1247,18 +1236,6 @@ export default function PerformanceScorecard({
                     ✓ {scorecardData.eligibleCount} ranked • {scorecardData.ineligibleCount} need 20+ tasks to be eligible
                   </div>
                 )}
-                <div className="rounded-lg border border-cyan-500/25 bg-cyan-950/40 p-3 space-y-2 text-xs text-white/75 leading-relaxed">
-                  <p>Quality metrics are read-only here and come from submitted current-version QA reviews.</p>
-                  <p>QA scores are not blended into productivity scoring yet.</p>
-                  <p>Official QA dashboard behavior is unchanged.</p>
-                  {scorecardData.qaReportingPeriod?.startYmd && scorecardData.qaReportingPeriod?.endYmd && (
-                    <p className="text-white/50 pt-1 border-t border-white/10">
-                      QA reporting window:{' '}
-                      {formatYmdStringForDisplay(scorecardData.qaReportingPeriod.startYmd)} –{' '}
-                      {formatYmdStringForDisplay(scorecardData.qaReportingPeriod.endYmd)}
-                    </p>
-                  )}
-                </div>
               </div>
 
               {/* Dynamic Targets Display */}
@@ -1476,69 +1453,6 @@ export default function PerformanceScorecard({
                         </div>
                       </div>
 
-                      {/* Quality (read-only; same source as QA dashboard coverage rows) */}
-                      <div className="mt-4 pt-4 border-t border-cyan-500/35 rounded-b-lg">
-                        <div className="text-xs font-semibold text-cyan-300/95 mb-3 uppercase tracking-wide">
-                          Quality
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-sm">
-                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
-                            <div className="text-white/50 text-xs">Reviews / target</div>
-                            <div className="text-white font-semibold">
-                              {agent.qaReviewsCompleted ?? 0} / {agent.qaCoverageTarget ?? "—"}
-                            </div>
-                          </div>
-                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
-                            <div className="text-white/50 text-xs">Avg QA score</div>
-                            <div className="text-white font-semibold">
-                              {agent.qaAvgScore != null && !Number.isNaN(agent.qaAvgScore)
-                                ? Number(agent.qaAvgScore).toFixed(1)
-                                : "—"}
-                            </div>
-                          </div>
-                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
-                            <div className="text-white/50 text-xs">Coverage status</div>
-                            <div className="text-white font-semibold">
-                              {formatQaCoverageStatus(agent.qaCoverageStatus)}
-                            </div>
-                          </div>
-                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
-                            <div className="text-white/50 text-xs">Last QA review</div>
-                            <div className="text-white font-semibold text-xs leading-snug">
-                              {agent.qaLastReviewedAt
-                                ? new Date(agent.qaLastReviewedAt).toLocaleString()
-                                : "—"}
-                            </div>
-                          </div>
-                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
-                            <div className="text-white/50 text-xs">Reviewed by</div>
-                            <div className="text-white font-semibold text-xs truncate" title={agent.qaLastReviewedBy?.email}>
-                              {agent.qaLastReviewedBy
-                                ? agent.qaLastReviewedBy.name?.trim() || agent.qaLastReviewedBy.email
-                                : "—"}
-                            </div>
-                          </div>
-                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
-                            <div className="text-white/50 text-xs">QA tracked</div>
-                            <div className="text-white font-semibold">
-                              {agent.qaIsTracked ? "Yes" : "No"}
-                            </div>
-                          </div>
-                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
-                            <div className="text-white/50 text-xs">QA team</div>
-                            <div className="text-white font-semibold text-xs truncate" title={agent.qaTeam ?? ""}>
-                              {agent.qaTeam ?? "—"}
-                            </div>
-                          </div>
-                          <div className="bg-cyan-950/30 rounded-lg p-2 border border-cyan-500/20">
-                            <div className="text-white/50 text-xs">Roster team</div>
-                            <div className="text-white font-semibold text-xs truncate" title={agent.rosterTeam ?? ""}>
-                              {agent.rosterTeam ?? "—"}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
                       {/* Click to expand indicator */}
                       <div className="mt-3 text-center text-xs text-white/40">
                         {expandedAgentId === agent.id ? '▲ Click to collapse details' : '▼ Click to view detailed breakdown'}
@@ -1548,28 +1462,88 @@ export default function PerformanceScorecard({
                     {/* Expanded Detail View */}
                     {expandedAgentId === agent.id && agentDetailData && (
                       <div className="mt-3 bg-white/5 rounded-lg p-6 border border-white/10 space-y-6">
-                        {/* Work Schedule */}
-                        <div>
-                          <h4 className="font-semibold text-white mb-3 flex items-center gap-2">
-                            📅 Work Schedule
+                        {/* Quality Review summary (read-only; same fields as scorecard API merge) */}
+                        <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-3">
+                          <h4 className="font-semibold text-cyan-200 flex items-center gap-2">
+                            ✅ Quality Review summary
                           </h4>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                            <div className="bg-white/5 rounded p-3">
-                              <div className="text-white/50">Days Worked</div>
-                              <div className="text-xl font-bold text-white">{agentDetailData.workSchedule?.daysWorked}</div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-sm">
+                            <div>
+                              <div className="text-white/50 text-xs">Reviews / target</div>
+                              <div className="text-white font-semibold">
+                                {agentDetailData.qaReviewsCompleted ?? 0} /{' '}
+                                {agentDetailData.qaCoverageTarget ?? "—"}
+                              </div>
                             </div>
-                            <div className="bg-white/5 rounded p-3">
-                              <div className="text-white/50">Days Off</div>
-                              <div className="text-xl font-bold text-white">{agentDetailData.workSchedule?.daysOff}</div>
+                            <div>
+                              <div className="text-white/50 text-xs">Average QA score</div>
+                              <div className="text-white font-semibold">
+                                {agentDetailData.qaAvgScore != null &&
+                                !Number.isNaN(agentDetailData.qaAvgScore)
+                                  ? Number(agentDetailData.qaAvgScore).toFixed(1)
+                                  : "—"}
+                              </div>
                             </div>
-                            <div className="bg-white/5 rounded p-3">
-                              <div className="text-white/50">Total Days</div>
-                              <div className="text-xl font-bold text-white">{agentDetailData.workSchedule?.totalDays}</div>
+                            <div>
+                              <div className="text-white/50 text-xs">Coverage status</div>
+                              <div className="text-white font-semibold">
+                                {formatQaCoverageStatus(agentDetailData.qaCoverageStatus)}
+                              </div>
                             </div>
-                            <div className="bg-white/5 rounded p-3">
-                              <div className="text-white/50">Attendance</div>
-                              <div className="text-xl font-bold text-green-400">{agentDetailData.workSchedule?.attendanceRate}%</div>
+                            <div>
+                              <div className="text-white/50 text-xs">Last QA review</div>
+                              <div className="text-white font-semibold text-xs">
+                                {agentDetailData.qaLastReviewedAt
+                                  ? new Date(agentDetailData.qaLastReviewedAt).toLocaleString()
+                                  : "—"}
+                              </div>
                             </div>
+                            <div>
+                              <div className="text-white/50 text-xs">Reviewed by</div>
+                              <div className="text-white font-semibold text-xs truncate" title={agentDetailData.qaLastReviewedBy?.email}>
+                                {agentDetailData.qaLastReviewedBy
+                                  ? agentDetailData.qaLastReviewedBy.name?.trim() ||
+                                    agentDetailData.qaLastReviewedBy.email
+                                  : "—"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-white/50 text-xs">QA tracked</div>
+                              <div className="text-white font-semibold">
+                                {agentDetailData.qaIsTracked ? "Yes" : "No"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-white/50 text-xs">QA team</div>
+                              <div className="text-white font-semibold text-xs truncate" title={agentDetailData.qaTeam ?? ""}>
+                                {agentDetailData.qaTeam ?? "—"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-white/50 text-xs">Roster team</div>
+                              <div className="text-white font-semibold text-xs truncate" title={agentDetailData.rosterTeam ?? ""}>
+                                {agentDetailData.rosterTeam ?? "—"}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="pt-2 border-t border-cyan-500/20">
+                            {scorecardData?.qaReportingPeriod?.startYmd &&
+                            scorecardData?.qaReportingPeriod?.endYmd ? (
+                              <a
+                                href={buildQaDashboardUrl({
+                                  startYmd: scorecardData.qaReportingPeriod.startYmd,
+                                  endYmd: scorecardData.qaReportingPeriod.endYmd,
+                                  agentId: agent.id,
+                                })}
+                                className="inline-flex text-sm font-medium text-cyan-400 hover:text-cyan-300"
+                              >
+                                View QA review details in Quality Review dashboard →
+                              </a>
+                            ) : (
+                              <p className="text-xs text-white/45">
+                                Open the Quality Review dashboard from the manager portal for full review history and workflows.
+                              </p>
+                            )}
                           </div>
                         </div>
 

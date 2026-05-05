@@ -633,16 +633,8 @@ async function calculateDetailedBreakdown(
   dateStart: Date,
   dateEnd: Date
 ) {
-  // Days worked (distinct dates where agent completed tasks)
-  const workedDates = new Set(
-    tasks.map(t => t.endTime.toISOString().split('T')[0])
-  );
-  const daysWorked = workedDates.size;
-  
-  // Calculate total calendar days
+  // Calendar span of the scorecard period (for single-day vs multi-day UI only; not an attendance model)
   const totalDays = Math.ceil((dateEnd.getTime() - dateStart.getTime()) / (1000 * 60 * 60 * 24));
-  const daysOff = totalDays - daysWorked;
-  const attendanceRate = Math.round((daysWorked / totalDays) * 100);
 
   // Daily performance (tasks per day)
   const dailyPerformance = new Map<string, number>();
@@ -714,12 +706,6 @@ async function calculateDetailedBreakdown(
   };
 
   return {
-    workSchedule: {
-      daysWorked,
-      daysOff,
-      totalDays,
-      attendanceRate
-    },
     dailyPerformance: dailyTasks,
     peakHours,
     topDays: dailyBreakdown, // Top performing days (for multi-day periods)

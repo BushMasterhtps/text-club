@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '@/app/_components/Card';
 import { SmallButton } from '@/app/_components/SmallButton';
 import PerformanceScorecard from '@/app/_components/PerformanceScorecard';
+import ScorecardQaPanel from '@/app/_components/ScorecardQaPanel';
 import OneOnOneNotes from '@/app/_components/OneOnOneNotes';
 import { formatYmdStringForDisplay } from '@/lib/format-ymd-label';
 import {
@@ -802,8 +803,8 @@ export default function AnalyticsPage() {
 
               {/* Section 3: Performance Scorecard & One-on-One Notes */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Performance Scorecard */}
-                <div>
+                {/* Performance Scorecard + parallel QA panel (same API scope) */}
+                <div className="space-y-6">
                   <PerformanceScorecard
                     scorecardData={scorecardData}
                     loading={loadingScorecard}
@@ -816,6 +817,7 @@ export default function AnalyticsPage() {
                       ? getDateRange()
                       : undefined}
                   />
+                  <ScorecardQaPanel scorecardData={scorecardData} loading={loadingScorecard} />
                 </div>
 
                 {/* One-on-One Notes */}
