@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 
-/** Same max length as QA team label (`quality-review/roster`). */
+/** Neutral roster label max (aligned with QA team string cap). */
 const ROSTER_TEAM_MAX = 120;
+/** Same cap as `quality-review/roster` PATCH for `qaTeam`. */
+const QA_TEAM_MAX = 120;
 
 const teamRosterSelect = {
   id: true,
@@ -28,6 +30,22 @@ function normalizeRosterTeam(input: unknown): string | null {
     throw new Error(`Roster team must be at most ${ROSTER_TEAM_MAX} characters.`);
   }
   return s;
+}
+
+function normalizeQaTeam(input: unknown): string | null {
+  if (input === null || input === undefined) return null;
+  const s = String(input).trim();
+  if (!s) return null;
+  if (s.length > QA_TEAM_MAX) {
+    throw new Error(`QA team must be at most ${QA_TEAM_MAX} characters.`);
+  }
+  return s;
+}
+
+function normalizeQaExemptReason(input: unknown): string | null {
+  if (input === null || input === undefined) return null;
+  const s = String(input).trim();
+  return s.length ? s : null;
 }
 
 function normalizeProductivityExemptReason(input: unknown): string | null {
@@ -71,8 +89,8 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * Sparse update: any of `rosterTeam`, `productivityEligible`, `productivityExemptReason`.
- * Only keys present in the body are written. QA fields and agentTypes are never updated here.
+ * Sparse update: any of roster, QA, productivity fields below.
+ * Only keys present in the body are written. `agentTypes` is never updated here.
  */
 export async function PATCH(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
@@ -87,6 +105,9 @@ export async function PATCH(request: NextRequest) {
 
     const data: {
       rosterTeam?: string | null;
+      qaIsTracked?: boolean;
+      qaTeam?: string | null;
+      qaExemptReason?: string | null;
       productivityEligible?: boolean;
       productivityExemptReason?: string | null;
     } = {};
@@ -98,6 +119,29 @@ export async function PATCH(request: NextRequest) {
         const msg = e instanceof Error ? e.message : "Invalid roster team.";
         return NextResponse.json({ success: false, error: msg }, { status: 400 });
       }
+    }
+
+    if ("qaIsTracked" in body) {
+      if (typeof body.qaIsTracked !== "boolean") {
+        return NextResponse.json(
+          { success: false, error: "qaIsTracked must be a boolean when provided." },
+          { status: 400 }
+        );
+      }
+      data.qaIsTracked = body.qaIsTracked;
+    }
+
+    if ("qaTeam" in body) {
+      try {
+        data.qaTeam = normalizeQaTeam(body.qaTeam);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Invalid QA team.";
+        return NextResponse.json({ success: false, error: msg }, { status: 400 });
+      }
+    }
+
+    if ("qaExemptReason" in body) {
+      data.qaExemptReason = normalizeQaExemptReason(body.qaExemptReason);
     }
 
     if ("productivityEligible" in body) {
@@ -119,7 +163,7 @@ export async function PATCH(request: NextRequest) {
         {
           success: false,
           error:
-            "No updatable fields supplied. Send one or more of: rosterTeam, productivityEligible, productivityExemptReason.",
+            "No updatable fields supplied. Send one or more of: rosterTeam, qaIsTracked, qaTeam, qaExemptReason, productivityEligible, productivityExemptReason.",
         },
         { status: 400 }
       );

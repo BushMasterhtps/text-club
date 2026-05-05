@@ -25,6 +25,7 @@ type TeamRosterUser = {
 };
 
 const ROSTER_TEAM_MAX = 120;
+const QA_TEAM_MAX = 120;
 
 const QUEUE_LABELS: Record<string, string> = {
   TEXT_CLUB: "Text Club",
@@ -58,9 +59,23 @@ function productivityNoteDirty(draft: string, server: string | null): boolean {
 
 type RowDraft = {
   rosterTeam: string;
+  qaIsTracked: boolean;
+  qaTeam: string;
+  qaExemptReason: string;
   productivityEligible: boolean;
   productivityExemptReason: string;
 };
+
+function draftFromUser(u: TeamRosterUser): RowDraft {
+  return {
+    rosterTeam: u.rosterTeam ?? "",
+    qaIsTracked: u.qaIsTracked,
+    qaTeam: u.qaTeam ?? "",
+    qaExemptReason: u.qaExemptReason ?? "",
+    productivityEligible: u.productivityEligible,
+    productivityExemptReason: u.productivityExemptReason ?? "",
+  };
+}
 
 type RowFeedback = {
   state: "idle" | "saving" | "saved" | "error";
@@ -124,11 +139,7 @@ export default function TeamRosterPage() {
       setUsers(list);
       const d: Record<string, RowDraft> = {};
       for (const u of list) {
-        d[u.id] = {
-          rosterTeam: u.rosterTeam ?? "",
-          productivityEligible: u.productivityEligible,
-          productivityExemptReason: u.productivityExemptReason ?? "",
-        };
+        d[u.id] = draftFromUser(u);
       }
       setRowDrafts(d);
       setRowFeedback({});
@@ -150,15 +161,30 @@ export default function TeamRosterPage() {
     if (!serverUser) return;
 
     const dirtyRoster = rosterDirty(draft.rosterTeam, serverUser.rosterTeam);
+    const dirtyQaTracked = draft.qaIsTracked !== serverUser.qaIsTracked;
+    const dirtyQaTeam = rosterDirty(draft.qaTeam, serverUser.qaTeam);
+    const dirtyQaNote = productivityNoteDirty(draft.qaExemptReason, serverUser.qaExemptReason);
     const dirtyProdEligible = draft.productivityEligible !== serverUser.productivityEligible;
     const dirtyProdNote = productivityNoteDirty(
       draft.productivityExemptReason,
       serverUser.productivityExemptReason
     );
-    if (!dirtyRoster && !dirtyProdEligible && !dirtyProdNote) return;
+    if (
+      !dirtyRoster &&
+      !dirtyQaTracked &&
+      !dirtyQaTeam &&
+      !dirtyQaNote &&
+      !dirtyProdEligible &&
+      !dirtyProdNote
+    ) {
+      return;
+    }
 
     const body: Record<string, unknown> = { userId };
     if (dirtyRoster) body.rosterTeam = draftToStored(draft.rosterTeam);
+    if (dirtyQaTracked) body.qaIsTracked = draft.qaIsTracked;
+    if (dirtyQaTeam) body.qaTeam = draftToStored(draft.qaTeam);
+    if (dirtyQaNote) body.qaExemptReason = draftToStored(draft.qaExemptReason);
     if (dirtyProdEligible) body.productivityEligible = draft.productivityEligible;
     if (dirtyProdNote) {
       body.productivityExemptReason = draftToStored(draft.productivityExemptReason);
@@ -184,11 +210,7 @@ export default function TeamRosterPage() {
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
       setRowDrafts((prev) => ({
         ...prev,
-        [userId]: {
-          rosterTeam: updated.rosterTeam ?? "",
-          productivityEligible: updated.productivityEligible,
-          productivityExemptReason: updated.productivityExemptReason ?? "",
-        },
+        [userId]: draftFromUser(updated),
       }));
       setRowFeedback((prev) => ({
         ...prev,
@@ -246,21 +268,34 @@ export default function TeamRosterPage() {
             </p>
             <h1 className="text-3xl font-semibold tracking-tight">Team Roster Configuration</h1>
             <p className="text-sm text-white/55 mt-2 max-w-4xl">
-              Edit each agent&apos;s <span className="text-white/75">Roster team</span> and{" "}
-              <span className="text-white/75">productivity eligibility</span> (and optional productivity note) below.
-              QA columns and work queues stay read-only here; use the QA roster page and Settings for those.
+              Edit <span className="text-white/75">Roster team</span>, <span className="text-white/75">QA roster</span>{" "}
+              fields, and <span className="text-white/75">productivity eligibility</span> per row (one Save). Work
+              queues stay read-only; manage them in Settings → Agent Specializations. The standalone QA roster page
+              remains available.
             </p>
             <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-xs text-white/50 max-w-4xl leading-relaxed border-t border-white/10 pt-4">
               <div>
                 <dt className="font-medium text-white/65">Roster Team</dt>
-                <dd className="mt-0.5">
-                  Neutral org / supervisor grouping. Editable here. Not used for QA dashboard filters yet.
+                <dd className="mt-0.5 space-y-1.5">
+                  <p>Roster Team is the neutral future team/supervisor field.</p>
+                  <p>QA Team is still the field currently used by QA dashboard filters.</p>
+                  <p>
+                    A later phase will cut QA dashboards over to Roster Team after validation. Until then, filters
+                    keep using QA Team.
+                  </p>
                 </dd>
               </div>
               <div>
-                <dt className="font-medium text-white/65">QA Team</dt>
-                <dd className="mt-0.5">
-                  Current QA dashboard grouping and filters. Unchanged for now; edit on the QA roster page.
+                <dt className="font-medium text-white/65">QA roster (tracked, team, note)</dt>
+                <dd className="mt-0.5 space-y-1.5">
+                  <p>Same data as the QA roster page: coverage expectations, QA team label for filters, and notes.</p>
+                  <p>
+                    You can still use{" "}
+                    <Link href="/manager/quality-review/roster" className="text-violet-300/90 underline hover:text-violet-200/90">
+                      QA roster
+                    </Link>{" "}
+                    if you prefer that layout.
+                  </p>
                 </dd>
               </div>
               <div>
@@ -323,14 +358,19 @@ export default function TeamRosterPage() {
                     <th colSpan={2} className={groupHead}>
                       Team / supervisor
                     </th>
-                    <th colSpan={3} className={groupHead}>
-                      QA
+                    <th colSpan={3} className={`${groupHead} align-bottom`}>
+                      <div className="flex flex-col items-center gap-0.5 py-1">
+                        <span>QA</span>
+                        <span className="max-w-[16rem] font-normal normal-case tracking-normal text-[10px] leading-snug text-white/40">
+                          Tracked / QA team / note — same row Save
+                        </span>
+                      </div>
                     </th>
                     <th colSpan={2} className={`${groupHead} align-bottom`}>
                       <div className="flex flex-col items-center gap-0.5 py-1">
                         <span>Productivity</span>
                         <span className="max-w-[16rem] font-normal normal-case tracking-normal text-[10px] leading-snug text-white/40">
-                          Eligible / note — same row Save as Roster team
+                          Eligible / note — same row Save (with Roster + QA)
                         </span>
                       </div>
                     </th>
@@ -358,9 +398,9 @@ export default function TeamRosterPage() {
                       Roster team
                     </th>
                     <th className="px-3 py-2 w-[5.5rem]">Save</th>
-                    <th className="px-3 py-2 border-l border-white/10">Tracked</th>
-                    <th className="px-3 py-2">QA team</th>
-                    <th className="px-3 py-2 min-w-[8rem]">QA note</th>
+                    <th className="px-3 py-2 border-l border-white/10 min-w-[6.5rem]">Tracked</th>
+                    <th className="px-3 py-2 min-w-[12rem] max-w-[18rem]">QA team</th>
+                    <th className="px-3 py-2 min-w-[10rem] max-w-[18rem]">QA note</th>
                     <th className="px-3 py-2 border-l border-white/10 min-w-[7rem]">Eligible</th>
                     <th className="px-3 py-2 min-w-[12rem] max-w-[18rem]">Productivity note</th>
                     <th className="px-3 py-2 border-l border-white/10 pr-3 min-w-[14rem] max-w-[22rem]">
@@ -398,7 +438,18 @@ export default function TeamRosterPage() {
                       const dirtyProdNote = draft
                         ? productivityNoteDirty(draft.productivityExemptReason, u.productivityExemptReason)
                         : false;
-                      const dirty = dirtyRoster || dirtyProdEligible || dirtyProdNote;
+                      const dirtyQaTracked = draft ? draft.qaIsTracked !== u.qaIsTracked : false;
+                      const dirtyQaTeam = draft ? rosterDirty(draft.qaTeam, u.qaTeam) : false;
+                      const dirtyQaNote = draft
+                        ? productivityNoteDirty(draft.qaExemptReason, u.qaExemptReason)
+                        : false;
+                      const dirty =
+                        dirtyRoster ||
+                        dirtyQaTracked ||
+                        dirtyQaTeam ||
+                        dirtyQaNote ||
+                        dirtyProdEligible ||
+                        dirtyProdNote;
                       const fb = rowFeedback[u.id];
                       const saving = fb?.state === "saving";
                       const saved = fb?.state === "saved";
@@ -419,11 +470,7 @@ export default function TeamRosterPage() {
                                 setRowDrafts((prev) => ({
                                   ...prev,
                                   [u.id]: {
-                                    ...(prev[u.id] ?? {
-                                      rosterTeam: "",
-                                      productivityEligible: u.productivityEligible,
-                                      productivityExemptReason: u.productivityExemptReason ?? "",
-                                    }),
+                                    ...(prev[u.id] ?? draftFromUser(u)),
                                     rosterTeam: e.target.value,
                                   },
                                 }))
@@ -455,16 +502,70 @@ export default function TeamRosterPage() {
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-2 border-l border-white/10 text-xs">
-                            {u.qaIsTracked ? "Yes" : "No"}
+                          <td className="px-3 py-2 border-l border-white/10 text-xs align-top">
+                            <label className="flex flex-col gap-1 cursor-pointer select-none">
+                              <span className="text-[10px] uppercase tracking-wide text-white/35">QA tracked</span>
+                              <input
+                                type="checkbox"
+                                checked={draft?.qaIsTracked ?? u.qaIsTracked}
+                                onChange={(e) =>
+                                  setRowDrafts((prev) => ({
+                                    ...prev,
+                                    [u.id]: {
+                                      ...(prev[u.id] ?? draftFromUser(u)),
+                                      qaIsTracked: e.target.checked,
+                                    },
+                                  }))
+                                }
+                                disabled={saving || !draft}
+                                className="w-4 h-4 rounded accent-violet-500"
+                                aria-label={`QA tracked for ${u.name || u.email}`}
+                              />
+                            </label>
                           </td>
-                          <td className="px-3 py-2 text-white/70 max-w-[8rem] truncate" title={u.qaTeam ?? ""}>
-                            {u.qaTeam ?? "—"}
+                          <td className="px-3 py-2 text-white/80 max-w-[18rem] align-top">
+                            <label className="block text-[10px] uppercase tracking-wide text-white/35 mb-1">
+                              QA team (dashboard filters)
+                            </label>
+                            <input
+                              value={draft?.qaTeam ?? ""}
+                              onChange={(e) =>
+                                setRowDrafts((prev) => ({
+                                  ...prev,
+                                  [u.id]: {
+                                    ...(prev[u.id] ?? draftFromUser(u)),
+                                    qaTeam: e.target.value,
+                                  },
+                                }))
+                              }
+                              maxLength={QA_TEAM_MAX}
+                              placeholder="e.g. Team A"
+                              disabled={saving || !draft}
+                              className="w-full min-h-[2.25rem] rounded-lg bg-black/40 border border-white/15 px-2 py-1.5 text-xs text-white/95 placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/50"
+                              aria-label={`QA team for ${u.name || u.email}`}
+                            />
                           </td>
-                          <td className="px-3 py-2 text-xs text-white/55 max-w-[14rem]">
-                            <span className="line-clamp-2" title={u.qaExemptReason ?? ""}>
-                              {u.qaExemptReason?.trim() ? u.qaExemptReason : "—"}
-                            </span>
+                          <td className="px-3 py-2 text-xs text-white/55 max-w-[18rem] align-top">
+                            <label className="block text-[10px] uppercase tracking-wide text-white/35 mb-1">
+                              QA note / exempt reason
+                            </label>
+                            <textarea
+                              value={draft?.qaExemptReason ?? ""}
+                              onChange={(e) =>
+                                setRowDrafts((prev) => ({
+                                  ...prev,
+                                  [u.id]: {
+                                    ...(prev[u.id] ?? draftFromUser(u)),
+                                    qaExemptReason: e.target.value,
+                                  },
+                                }))
+                              }
+                              rows={2}
+                              disabled={saving || !draft}
+                              placeholder="Optional internal note"
+                              className="w-full min-w-[10rem] rounded-lg bg-black/40 border border-white/15 px-2 py-1.5 text-xs text-white/90 placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/50 resize-y min-h-[2.75rem]"
+                              aria-label={`QA exempt reason for ${u.name || u.email}`}
+                            />
                           </td>
                           <td className="px-3 py-2 border-l border-white/10 text-xs align-top">
                             <label className="flex flex-col gap-1 cursor-pointer select-none">
@@ -473,17 +574,13 @@ export default function TeamRosterPage() {
                                 type="checkbox"
                                 checked={draft?.productivityEligible ?? u.productivityEligible}
                                 onChange={(e) =>
-                                  setRowDrafts((prev) => ({
-                                    ...prev,
-                                    [u.id]: {
-                                      ...(prev[u.id] ?? {
-                                        rosterTeam: u.rosterTeam ?? "",
-                                        productivityEligible: u.productivityEligible,
-                                        productivityExemptReason: u.productivityExemptReason ?? "",
-                                      }),
-                                      productivityEligible: e.target.checked,
-                                    },
-                                  }))
+                                setRowDrafts((prev) => ({
+                                  ...prev,
+                                  [u.id]: {
+                                    ...(prev[u.id] ?? draftFromUser(u)),
+                                    productivityEligible: e.target.checked,
+                                  },
+                                }))
                                 }
                                 disabled={saving || !draft}
                                 className="w-4 h-4 rounded accent-emerald-500"
@@ -501,11 +598,7 @@ export default function TeamRosterPage() {
                                 setRowDrafts((prev) => ({
                                   ...prev,
                                   [u.id]: {
-                                    ...(prev[u.id] ?? {
-                                      rosterTeam: u.rosterTeam ?? "",
-                                      productivityEligible: u.productivityEligible,
-                                      productivityExemptReason: u.productivityExemptReason ?? "",
-                                    }),
+                                    ...(prev[u.id] ?? draftFromUser(u)),
                                     productivityExemptReason: e.target.value,
                                   },
                                 }))
