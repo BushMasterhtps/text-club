@@ -113,6 +113,8 @@ function RegradeReviewPageContent() {
   const [mobileLiveScoreOpen, setMobileLiveScoreOpen] = useState(false);
   /** GET returned 404/410 — draft gone (e.g. after cancel + refresh). */
   const [reviewMissing, setReviewMissing] = useState(false);
+  /** Cancel API succeeded — show manual “Back” before/during navigation (Arc/privacy may block assign). */
+  const [cancelSuccessTarget, setCancelSuccessTarget] = useState<string | null>(null);
   const errorBannerRef = useRef<HTMLDivElement | null>(null);
 
   /** True after successful submit or explicit cancel — skips best-effort abandon cleanup. */
@@ -324,6 +326,7 @@ function RegradeReviewPageContent() {
     intentionalFinishRef.current = true;
     setCancelBusy(true);
     setError(null);
+    setCancelSuccessTarget(null);
     const cancelUrl = `/api/manager/quality-review/task-reviews/${encodeURIComponent(reviewId)}/cancel`;
 
     if (QA_REGRADE_CANCEL_DEBUG) {
@@ -390,7 +393,22 @@ function RegradeReviewPageContent() {
 
       console.log("[qa-regrade-cancel] cancel success, hard redirecting");
       navigatedAway = true;
-      window.location.assign(redirectTo);
+      setCancelBusy(false);
+      setCancelSuccessTarget(redirectTo);
+
+      // Defer navigation so the fallback button can paint (some browsers e.g. Arc may delay sync navigation).
+      const goDash = () => {
+        window.location.assign(redirectTo);
+      };
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(goDash);
+      });
+
+      window.setTimeout(() => {
+        if (window.location.pathname.includes("/quality-review/regrade")) {
+          window.location.href = QA_DASHBOARD_PATH;
+        }
+      }, 250);
     } catch (e: unknown) {
       intentionalFinishRef.current = false;
       const msg = e instanceof Error ? e.message : "Could not cancel";
@@ -428,6 +446,28 @@ function RegradeReviewPageContent() {
           window.location.href = "/login";
         }}
       />
+      {cancelSuccessTarget ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed left-4 right-4 top-20 z-[52] rounded-xl border border-emerald-500/40 bg-neutral-900/95 backdrop-blur-md px-4 py-4 shadow-xl shadow-black/40 max-w-lg mx-auto ring-1 ring-white/10"
+        >
+          <p className="text-sm font-medium text-emerald-100">Regrade cancelled.</p>
+          <p className="text-xs text-white/50 mt-1">
+            Taking you to the QA dashboard. If nothing happens, use the button below (some browsers block
+            automatic redirects).
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = cancelSuccessTarget || QA_DASHBOARD_PATH;
+            }}
+            className="mt-3 w-full sm:w-auto px-5 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-semibold hover:bg-violet-500"
+          >
+            Back to QA dashboard
+          </button>
+        </div>
+      ) : null}
       <div
         className={`max-w-6xl mx-auto text-white pb-16 px-4 ${
           task && lines.length ? "max-lg:pb-52" : ""
