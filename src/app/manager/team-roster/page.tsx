@@ -52,6 +52,16 @@ function rosterDirty(draft: string | undefined, server: string | null): boolean 
   return draftToStored(draft ?? "") !== (server ?? null);
 }
 
+function productivityNoteDirty(draft: string, server: string | null): boolean {
+  return draftToStored(draft) !== draftToStored(server ?? "");
+}
+
+type RowDraft = {
+  rosterTeam: string;
+  productivityEligible: boolean;
+  productivityExemptReason: string;
+};
+
 type RowFeedback = {
   state: "idle" | "saving" | "saved" | "error";
   message?: string;
@@ -61,7 +71,7 @@ export default function TeamRosterPage() {
   const { timeLeft, extendSession, showWarning } = useAutoLogout();
   const [q, setQ] = useState("");
   const [users, setUsers] = useState<TeamRosterUser[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [rowDrafts, setRowDrafts] = useState<Record<string, RowDraft>>({});
   const [rowFeedback, setRowFeedback] = useState<Record<string, RowFeedback>>({});
   const savedTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -112,11 +122,15 @@ export default function TeamRosterPage() {
       if (!json.success) throw new Error(json.error || "Failed to load roster");
       const list = json.data.users as TeamRosterUser[];
       setUsers(list);
-      const d: Record<string, string> = {};
+      const d: Record<string, RowDraft> = {};
       for (const u of list) {
-        d[u.id] = u.rosterTeam ?? "";
+        d[u.id] = {
+          rosterTeam: u.rosterTeam ?? "",
+          productivityEligible: u.productivityEligible,
+          productivityExemptReason: u.productivityExemptReason ?? "",
+        };
       }
-      setDrafts(d);
+      setRowDrafts(d);
       setRowFeedback({});
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -130,10 +144,25 @@ export default function TeamRosterPage() {
   }, [load]);
 
   const save = async (userId: string) => {
-    const draft = drafts[userId];
-    if (draft === undefined) return;
+    const draft = rowDrafts[userId];
+    if (!draft) return;
     const serverUser = users.find((u) => u.id === userId);
-    if (!serverUser || !rosterDirty(draft, serverUser.rosterTeam)) return;
+    if (!serverUser) return;
+
+    const dirtyRoster = rosterDirty(draft.rosterTeam, serverUser.rosterTeam);
+    const dirtyProdEligible = draft.productivityEligible !== serverUser.productivityEligible;
+    const dirtyProdNote = productivityNoteDirty(
+      draft.productivityExemptReason,
+      serverUser.productivityExemptReason
+    );
+    if (!dirtyRoster && !dirtyProdEligible && !dirtyProdNote) return;
+
+    const body: Record<string, unknown> = { userId };
+    if (dirtyRoster) body.rosterTeam = draftToStored(draft.rosterTeam);
+    if (dirtyProdEligible) body.productivityEligible = draft.productivityEligible;
+    if (dirtyProdNote) {
+      body.productivityExemptReason = draftToStored(draft.productivityExemptReason);
+    }
 
     clearSavedTimer(userId);
     setRowFeedback((prev) => ({
@@ -146,17 +175,21 @@ export default function TeamRosterPage() {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          rosterTeam: draftToStored(draft),
-        }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Save failed");
 
       const updated = json.data.user as TeamRosterUser;
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
-      setDrafts((prev) => ({ ...prev, [userId]: updated.rosterTeam ?? "" }));
+      setRowDrafts((prev) => ({
+        ...prev,
+        [userId]: {
+          rosterTeam: updated.rosterTeam ?? "",
+          productivityEligible: updated.productivityEligible,
+          productivityExemptReason: updated.productivityExemptReason ?? "",
+        },
+      }));
       setRowFeedback((prev) => ({
         ...prev,
         [userId]: { state: "saved" },
@@ -213,9 +246,9 @@ export default function TeamRosterPage() {
             </p>
             <h1 className="text-3xl font-semibold tracking-tight">Team Roster Configuration</h1>
             <p className="text-sm text-white/55 mt-2 max-w-4xl">
-              Use this page to edit each agent&apos;s <span className="text-white/75">Roster team</span> label.
-              Everything else in the table is read-only for now (change QA fields on QA roster; change queues in
-              Settings).
+              Edit each agent&apos;s <span className="text-white/75">Roster team</span> and{" "}
+              <span className="text-white/75">productivity eligibility</span> (and optional productivity note) below.
+              QA columns and work queues stay read-only here; use the QA roster page and Settings for those.
             </p>
             <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-xs text-white/50 max-w-4xl leading-relaxed border-t border-white/10 pt-4">
               <div>
@@ -232,9 +265,13 @@ export default function TeamRosterPage() {
               </div>
               <div>
                 <dt className="font-medium text-white/65">Productivity · Eligible</dt>
-                <dd className="mt-0.5">
-                  Controls whether the user is included in manager productivity scorecard and sprint-ranking
-                  subject lists (same rules as before).
+                <dd className="mt-0.5 space-y-1.5">
+                  <p>
+                    Productivity eligible controls whether this user can appear in manager productivity scorecard
+                    APIs.
+                  </p>
+                  <p>This does not affect QA tracking or QA scores.</p>
+                  <p>This does not change scoring formulas.</p>
                 </dd>
               </div>
               <div>
@@ -289,8 +326,13 @@ export default function TeamRosterPage() {
                     <th colSpan={3} className={groupHead}>
                       QA
                     </th>
-                    <th colSpan={2} className={groupHead}>
-                      Productivity
+                    <th colSpan={2} className={`${groupHead} align-bottom`}>
+                      <div className="flex flex-col items-center gap-0.5 py-1">
+                        <span>Productivity</span>
+                        <span className="max-w-[16rem] font-normal normal-case tracking-normal text-[10px] leading-snug text-white/40">
+                          Eligible / note — same row Save as Roster team
+                        </span>
+                      </div>
                     </th>
                     <th colSpan={1} className={`${groupHead} pr-3 py-2 align-bottom`}>
                       <div className="flex flex-col items-center gap-1">
@@ -319,8 +361,8 @@ export default function TeamRosterPage() {
                     <th className="px-3 py-2 border-l border-white/10">Tracked</th>
                     <th className="px-3 py-2">QA team</th>
                     <th className="px-3 py-2 min-w-[8rem]">QA note</th>
-                    <th className="px-3 py-2 border-l border-white/10">Eligible</th>
-                    <th className="px-3 py-2 min-w-[8rem]">Productivity note</th>
+                    <th className="px-3 py-2 border-l border-white/10 min-w-[7rem]">Eligible</th>
+                    <th className="px-3 py-2 min-w-[12rem] max-w-[18rem]">Productivity note</th>
                     <th className="px-3 py-2 border-l border-white/10 pr-3 min-w-[14rem] max-w-[22rem]">
                       <span className="block">Capabilities</span>
                       <span className="mt-1 block font-normal normal-case tracking-normal text-[10px] leading-snug text-white/40">
@@ -348,8 +390,15 @@ export default function TeamRosterPage() {
                     </tr>
                   ) : (
                     users.map((u) => {
-                      const draft = drafts[u.id];
-                      const dirty = rosterDirty(draft, u.rosterTeam);
+                      const draft = rowDrafts[u.id];
+                      const dirtyRoster = draft ? rosterDirty(draft.rosterTeam, u.rosterTeam) : false;
+                      const dirtyProdEligible = draft
+                        ? draft.productivityEligible !== u.productivityEligible
+                        : false;
+                      const dirtyProdNote = draft
+                        ? productivityNoteDirty(draft.productivityExemptReason, u.productivityExemptReason)
+                        : false;
+                      const dirty = dirtyRoster || dirtyProdEligible || dirtyProdNote;
                       const fb = rowFeedback[u.id];
                       const saving = fb?.state === "saving";
                       const saved = fb?.state === "saved";
@@ -365,11 +414,18 @@ export default function TeamRosterPage() {
                           <td className="px-3 py-2 text-xs">{u.isLive ? "Yes" : "No"}</td>
                           <td className="px-3 py-2 border-l border-white/10 min-w-[18rem] w-[min(22rem,28vw)] align-top">
                             <input
-                              value={draft ?? ""}
+                              value={draft?.rosterTeam ?? ""}
                               onChange={(e) =>
-                                setDrafts((prev) => ({
+                                setRowDrafts((prev) => ({
                                   ...prev,
-                                  [u.id]: e.target.value,
+                                  [u.id]: {
+                                    ...(prev[u.id] ?? {
+                                      rosterTeam: "",
+                                      productivityEligible: u.productivityEligible,
+                                      productivityExemptReason: u.productivityExemptReason ?? "",
+                                    }),
+                                    rosterTeam: e.target.value,
+                                  },
                                 }))
                               }
                               maxLength={ROSTER_TEAM_MAX}
@@ -393,7 +449,7 @@ export default function TeamRosterPage() {
                                 <span className="text-[10px] text-emerald-400/90">Saved</span>
                               )}
                               {err && fb?.message && (
-                                <span className="text-[10px] text-red-300/95 max-w-[9rem] leading-tight">
+                                <span className="text-[10px] text-red-300/95 max-w-[11rem] leading-tight">
                                   {fb.message}
                                 </span>
                               )}
@@ -410,13 +466,56 @@ export default function TeamRosterPage() {
                               {u.qaExemptReason?.trim() ? u.qaExemptReason : "—"}
                             </span>
                           </td>
-                          <td className="px-3 py-2 border-l border-white/10 text-xs">
-                            {u.productivityEligible ? "Yes" : "No"}
+                          <td className="px-3 py-2 border-l border-white/10 text-xs align-top">
+                            <label className="flex flex-col gap-1 cursor-pointer select-none">
+                              <span className="text-[10px] uppercase tracking-wide text-white/35">Eligible</span>
+                              <input
+                                type="checkbox"
+                                checked={draft?.productivityEligible ?? u.productivityEligible}
+                                onChange={(e) =>
+                                  setRowDrafts((prev) => ({
+                                    ...prev,
+                                    [u.id]: {
+                                      ...(prev[u.id] ?? {
+                                        rosterTeam: u.rosterTeam ?? "",
+                                        productivityEligible: u.productivityEligible,
+                                        productivityExemptReason: u.productivityExemptReason ?? "",
+                                      }),
+                                      productivityEligible: e.target.checked,
+                                    },
+                                  }))
+                                }
+                                disabled={saving || !draft}
+                                className="w-4 h-4 rounded accent-emerald-500"
+                                aria-label={`Productivity eligible for ${u.name || u.email}`}
+                              />
+                            </label>
                           </td>
-                          <td className="px-3 py-2 text-xs text-white/55 max-w-[14rem]">
-                            <span className="line-clamp-2" title={u.productivityExemptReason ?? ""}>
-                              {u.productivityExemptReason?.trim() ? u.productivityExemptReason : "—"}
-                            </span>
+                          <td className="px-3 py-2 text-xs text-white/55 max-w-[18rem] align-top">
+                            <label className="block text-[10px] uppercase tracking-wide text-white/35 mb-1">
+                              Note / exempt reason
+                            </label>
+                            <textarea
+                              value={draft?.productivityExemptReason ?? ""}
+                              onChange={(e) =>
+                                setRowDrafts((prev) => ({
+                                  ...prev,
+                                  [u.id]: {
+                                    ...(prev[u.id] ?? {
+                                      rosterTeam: u.rosterTeam ?? "",
+                                      productivityEligible: u.productivityEligible,
+                                      productivityExemptReason: u.productivityExemptReason ?? "",
+                                    }),
+                                    productivityExemptReason: e.target.value,
+                                  },
+                                }))
+                              }
+                              rows={2}
+                              disabled={saving || !draft}
+                              placeholder="Optional internal note"
+                              className="w-full min-w-[10rem] rounded-lg bg-black/40 border border-white/15 px-2 py-1.5 text-xs text-white/90 placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 resize-y min-h-[2.75rem]"
+                              aria-label={`Productivity exempt reason for ${u.name || u.email}`}
+                            />
                           </td>
                           <td className="px-3 py-2 border-l border-white/10 text-sm text-white/75 pr-3 min-w-[14rem] max-w-[22rem] whitespace-normal break-words">
                             {formatQueues(u.agentTypes ?? [])}

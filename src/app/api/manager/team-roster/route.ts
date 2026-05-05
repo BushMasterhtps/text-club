@@ -30,6 +30,12 @@ function normalizeRosterTeam(input: unknown): string | null {
   return s;
 }
 
+function normalizeProductivityExemptReason(input: unknown): string | null {
+  if (input === null || input === undefined) return null;
+  const s = String(input).trim();
+  return s.length ? s : null;
+}
+
 /** Team roster snapshot for Team Roster Configuration. */
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
@@ -64,7 +70,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** Update `rosterTeam` only (Phase 2.1). */
+/**
+ * Sparse update: any of `rosterTeam`, `productivityEligible`, `productivityExemptReason`.
+ * Only keys present in the body are written. QA fields and agentTypes are never updated here.
+ */
 export async function PATCH(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
@@ -75,19 +84,45 @@ export async function PATCH(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ success: false, error: "userId is required." }, { status: 400 });
     }
-    if (!("rosterTeam" in body)) {
-      return NextResponse.json(
-        { success: false, error: "rosterTeam is required (use null or empty string to clear)." },
-        { status: 400 }
-      );
+
+    const data: {
+      rosterTeam?: string | null;
+      productivityEligible?: boolean;
+      productivityExemptReason?: string | null;
+    } = {};
+
+    if ("rosterTeam" in body) {
+      try {
+        data.rosterTeam = normalizeRosterTeam(body.rosterTeam);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Invalid roster team.";
+        return NextResponse.json({ success: false, error: msg }, { status: 400 });
+      }
     }
 
-    let normalized: string | null;
-    try {
-      normalized = normalizeRosterTeam(body.rosterTeam);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Invalid roster team.";
-      return NextResponse.json({ success: false, error: msg }, { status: 400 });
+    if ("productivityEligible" in body) {
+      if (typeof body.productivityEligible !== "boolean") {
+        return NextResponse.json(
+          { success: false, error: "productivityEligible must be a boolean when provided." },
+          { status: 400 }
+        );
+      }
+      data.productivityEligible = body.productivityEligible;
+    }
+
+    if ("productivityExemptReason" in body) {
+      data.productivityExemptReason = normalizeProductivityExemptReason(body.productivityExemptReason);
+    }
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "No updatable fields supplied. Send one or more of: rosterTeam, productivityEligible, productivityExemptReason.",
+        },
+        { status: 400 }
+      );
     }
 
     const existing = await prisma.user.findFirst({
@@ -107,7 +142,7 @@ export async function PATCH(request: NextRequest) {
 
     const user = await prisma.user.update({
       where: { id: userId },
-      data: { rosterTeam: normalized },
+      data,
       select: teamRosterSelect,
     });
 
