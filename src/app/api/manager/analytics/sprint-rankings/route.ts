@@ -19,6 +19,8 @@ const SPRINT_DURATION_DAYS = 14;
  * 2. Lifetime Weighted Points
  * 3. 2-Week Sprint Points
  * 4. Hybrid 30/70
+ *
+ * Query `rosterTeam` (or `team`): optional — `__any__`/omit = all teams; `__unassigned__` = null/blank rosterTeam; else exact User.rosterTeam.
  */
 
 const MINIMUM_TASKS_FOR_RANKING = 20; // Lifetime minimum
@@ -95,6 +97,8 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const mode = searchParams.get('mode') || 'current'; // 'current', 'lifetime', 'sprint-{number}', or 'custom'
+    const rosterTeam =
+      searchParams.get('rosterTeam') ?? searchParams.get('team');
     
     // Custom date range support
     const customStart = searchParams.get('startDate');
@@ -139,6 +143,7 @@ export async function GET(request: NextRequest) {
         mode === 'custom' && customStart && customEnd
           ? { start: customStart, end: customEnd }
           : undefined,
+      rosterTeam,
     });
 
     const agentScorecards: AgentScorecard[] = [];

@@ -12,6 +12,7 @@ import { resolveProductivityScorecardSubjects } from "@/lib/productivity-scoreca
  * - dateStart: ISO date string (e.g., "2025-10-01")
  * - dateEnd: ISO date string (e.g., "2025-10-31")
  * - agentId: Optional - for detailed drill-down
+ * - rosterTeam (or `team`): Optional - `__any__`/omit = all teams; `__unassigned__` = null/blank rosterTeam; else exact User.rosterTeam
  */
 export async function GET(req: NextRequest) {
   const auth = await requireManagerApiAuth(req);
@@ -21,6 +22,8 @@ export async function GET(req: NextRequest) {
     const dateStartStr = url.searchParams.get("dateStart");
     const dateEndStr = url.searchParams.get("dateEnd");
     const agentId = url.searchParams.get("agentId");
+    const rosterTeam =
+      url.searchParams.get("rosterTeam") ?? url.searchParams.get("team");
 
     // Parse dates with PST timezone boundaries (matching Agent Status API)
     // PST = UTC - 8 hours, so PST day boundaries are:
@@ -146,6 +149,7 @@ export async function GET(req: NextRequest) {
         dateStartStr && dateEndStr
           ? { start: dateStartStr, end: dateEndStr }
           : undefined,
+      rosterTeam,
     });
 
     const agentScores = subjects.map((subject) => {

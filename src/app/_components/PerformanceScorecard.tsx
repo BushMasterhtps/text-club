@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatYmdStringForDisplay } from '@/lib/format-ymd-label';
+import { PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY } from '@/lib/productivity-scorecard-subjects';
 
 type RankingMode = 'sprint' | 'lifetime-points' | 'task-day' | 'hybrid';
 
@@ -11,10 +12,30 @@ interface Props {
   loading: boolean;
   onRefresh: () => void;
   onLoadAgentDetail: (agentId: string) => Promise<any>;
+  /** Matches Team Analytics filter; passed through to sprint-rankings API. */
+  rosterTeamFilter?: string;
   dateRange?: { start: string; end: string }; // Custom date range from parent
 }
 
-export default function PerformanceScorecard({ scorecardData, loading, onRefresh, onLoadAgentDetail, dateRange }: Props) {
+function appendRosterTeamToUrl(url: string, rosterTeamFilter?: string): string {
+  if (
+    !rosterTeamFilter ||
+    rosterTeamFilter === PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY
+  ) {
+    return url;
+  }
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}rosterTeam=${encodeURIComponent(rosterTeamFilter)}`;
+}
+
+export default function PerformanceScorecard({
+  scorecardData,
+  loading,
+  onRefresh,
+  onLoadAgentDetail,
+  rosterTeamFilter,
+  dateRange,
+}: Props) {
   const [expanded, setExpanded] = useState(false);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const [agentDetailData, setAgentDetailData] = useState<any>(null);
@@ -41,7 +62,7 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
     if (expanded) {
       loadSprintHistory();
     }
-  }, [expanded, rankingMode, dateRange?.start, dateRange?.end, selectedSprintNumber]);
+  }, [expanded, rankingMode, dateRange?.start, dateRange?.end, selectedSprintNumber, rosterTeamFilter]);
   
   // Reset to current sprint only when first switching TO sprint mode from another mode
   // But preserve user's manual selection if they've already selected a sprint
@@ -76,7 +97,9 @@ export default function PerformanceScorecard({ scorecardData, loading, onRefresh
         // Fallback to current sprint if no date range
         url += '?mode=current';
       }
-      
+
+      url = appendRosterTeamToUrl(url, rosterTeamFilter);
+
       const res = await fetch(url);
       const data = await res.json();
       

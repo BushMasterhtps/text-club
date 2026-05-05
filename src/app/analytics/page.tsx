@@ -6,6 +6,10 @@ import { SmallButton } from '@/app/_components/SmallButton';
 import PerformanceScorecard from '@/app/_components/PerformanceScorecard';
 import OneOnOneNotes from '@/app/_components/OneOnOneNotes';
 import { formatYmdStringForDisplay } from '@/lib/format-ymd-label';
+import {
+  PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY,
+  PRODUCTIVITY_ROSTER_TEAM_FILTER_UNASSIGNED,
+} from '@/lib/productivity-scorecard-subjects';
 
 // Typography components
 function H1({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -146,6 +150,15 @@ export default function AnalyticsPage() {
   const [scorecardData, setScorecardData] = useState<any>(null);
   const [loadingScorecard, setLoadingScorecard] = useState(false);
 
+  /** Distinct roster labels + whether Unassigned should appear (Team Analytics / scorecard filter only). */
+  const [rosterTeamOptions, setRosterTeamOptions] = useState<{
+    teams: string[];
+    hasUnassigned: boolean;
+  } | null>(null);
+  const [rosterTeamFilter, setRosterTeamFilter] = useState<string>(
+    PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY
+  );
+
   // Tab navigation state
   const [selectedTab, setSelectedTab] = useState<'overview' | 'agents'>('overview');
   
@@ -284,6 +297,11 @@ export default function AnalyticsPage() {
     }
   };
 
+  const productivityRosterTeamQuery = () =>
+    !rosterTeamFilter || rosterTeamFilter === PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY
+      ? ''
+      : `&rosterTeam=${encodeURIComponent(rosterTeamFilter)}`;
+
   // Load performance scorecard data
   const loadScorecardData = async () => {
     setLoadingScorecard(true);
@@ -292,7 +310,7 @@ export default function AnalyticsPage() {
       // Add cache-busting parameter to ensure fresh data
       const cacheBuster = `&_t=${Date.now()}`;
       const response = await fetch(
-        `/api/manager/analytics/performance-scorecard?dateStart=${dateRange.start}&dateEnd=${dateRange.end}${cacheBuster}`,
+        `/api/manager/analytics/performance-scorecard?dateStart=${dateRange.start}&dateEnd=${dateRange.end}${productivityRosterTeamQuery()}${cacheBuster}`,
         { cache: 'no-store' }
       );
       const data = await response.json();
@@ -312,7 +330,7 @@ export default function AnalyticsPage() {
     try {
       const dateRange = getDateRange();
       const response = await fetch(
-        `/api/manager/analytics/performance-scorecard?dateStart=${dateRange.start}&dateEnd=${dateRange.end}&agentId=${agentId}`
+        `/api/manager/analytics/performance-scorecard?dateStart=${dateRange.start}&dateEnd=${dateRange.end}&agentId=${agentId}${productivityRosterTeamQuery()}`
       );
       const data = await response.json();
       
@@ -327,6 +345,25 @@ export default function AnalyticsPage() {
   };
 
   useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/manager/analytics/roster-team-options', {
+          cache: 'no-store',
+        });
+        const d = await r.json();
+        if (d.success) {
+          setRosterTeamOptions({
+            teams: d.teams ?? [],
+            hasUnassigned: !!d.hasUnassigned,
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load roster team options:', e);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     try {
       loadOverviewData();
       loadTeamPerformanceData();
@@ -335,7 +372,7 @@ export default function AnalyticsPage() {
       console.error('Error in useEffect:', error);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDateRange, customStartDate, customEndDate]);
+  }, [selectedDateRange, customStartDate, customEndDate, rosterTeamFilter]);
 
   // Also reload data when custom dates change
   useEffect(() => {
@@ -454,8 +491,10 @@ export default function AnalyticsPage() {
             </button>
           </div>
           
-          {/* Time Period Selector */}
+          {/* Time Period + Team (scorecard) */}
           <Card className="p-4">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex-1 space-y-4 w-full min-w-0">
             <div className="flex items-center justify-between mb-4">
               <H3 className="text-lg">📅 Time Period</H3>
             </div>
@@ -511,6 +550,34 @@ export default function AnalyticsPage() {
                   </SmallButton>
                 </div>
               )}
+            </div>
+              </div>
+
+              <div className="w-full lg:w-72 shrink-0 space-y-2">
+                <H3 className="text-lg">👥 Team (Performance Scorecard)</H3>
+                <select
+                  value={rosterTeamFilter}
+                  onChange={(e) => setRosterTeamFilter(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-white/10 text-white border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="Filter performance scorecard by roster team"
+                >
+                  <option value={PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY}>All teams</option>
+                  {rosterTeamOptions?.hasUnassigned ? (
+                    <option value={PRODUCTIVITY_ROSTER_TEAM_FILTER_UNASSIGNED}>
+                      Unassigned
+                    </option>
+                  ) : null}
+                  {(rosterTeamOptions?.teams ?? []).map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-white/45 leading-snug">
+                  Applies to the Performance Scorecard and its sprint rankings panel. Overview metrics,
+                  team performance table, and agent status use all agents for the selected dates.
+                </p>
+              </div>
             </div>
           </Card>
         </div>
@@ -740,6 +807,7 @@ export default function AnalyticsPage() {
                     loading={loadingScorecard}
                     onRefresh={loadScorecardData}
                     onLoadAgentDetail={loadAgentDetail}
+                    rosterTeamFilter={rosterTeamFilter}
                     dateRange={selectedDateRange === 'custom' && customStartDate && customEndDate 
                       ? { start: customStartDate, end: customEndDate }
                       : selectedDateRange !== 'custom'
