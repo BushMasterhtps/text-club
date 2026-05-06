@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card } from '@/app/_components/Card';
 import { SmallButton } from '@/app/_components/SmallButton';
 import PerformanceScorecard from '@/app/_components/PerformanceScorecard';
-import OneOnOneNotes from '@/app/_components/OneOnOneNotes';
+import OneOnOneNotes, { type OneOnOneNotesHandle } from '@/app/_components/OneOnOneNotes';
 import { formatYmdStringForDisplay } from '@/lib/format-ymd-label';
 import {
   PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY,
@@ -166,6 +166,8 @@ export default function AnalyticsPage() {
   const [rosterTeamFilter, setRosterTeamFilter] = useState<string>(
     PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY
   );
+
+  const oneOnOneNotesRef = useRef<OneOnOneNotesHandle>(null);
 
   // Tab navigation state
   const [selectedTab, setSelectedTab] = useState<'overview' | 'agents'>('overview');
@@ -862,10 +864,13 @@ export default function AnalyticsPage() {
                     : selectedDateRange !== 'custom'
                     ? getDateRange()
                     : undefined}
+                  onRequestCoachingNote={(ctx) =>
+                    oneOnOneNotesRef.current?.openCoachingNoteFromPerformance(ctx)
+                  }
                 />
 
                 <div className="w-full">
-                  <OneOnOneNotes agents={allAgents} />
+                  <OneOnOneNotes ref={oneOnOneNotesRef} agents={allAgents} />
                 </div>
               </div>
 

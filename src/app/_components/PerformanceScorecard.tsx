@@ -5,7 +5,11 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { formatYmdStringForDisplay } from '@/lib/format-ymd-label';
 import { formatQaCoverageStatus } from '@/lib/qa-coverage-display';
 import { buildQaDashboardUrl } from '@/lib/quality-review-dashboard';
-import { PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY } from '@/lib/productivity-scorecard-subjects';
+import {
+  PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY,
+  PRODUCTIVITY_ROSTER_TEAM_FILTER_UNASSIGNED,
+} from '@/lib/productivity-scorecard-subjects';
+import type { CoachingPerformanceContext } from '@/app/_components/OneOnOneNotes';
 
 type RankingMode = 'sprint' | 'lifetime-points' | 'hybrid';
 
@@ -19,6 +23,8 @@ interface Props {
   dateRange?: { start: string; end: string }; // Custom date range from parent
   /** Optional root classes (e.g. Team Analytics side-by-side height). */
   className?: string;
+  /** Team Analytics: open One-on-One form with performance context prefilled. */
+  onRequestCoachingNote?: (ctx: CoachingPerformanceContext) => void;
 }
 
 function appendRosterTeamToUrl(url: string, rosterTeamFilter?: string): string {
@@ -40,6 +46,7 @@ export default function PerformanceScorecard({
   rosterTeamFilter,
   dateRange,
   className,
+  onRequestCoachingNote,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
@@ -515,6 +522,88 @@ export default function PerformanceScorecard({
                             )}
                           </div>
                           <div className="text-sm text-white/50">{agent.email}</div>
+                          {onRequestCoachingNote && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const qaRow = scorecardAgentById.get(agent.id) as
+                                  | Record<string, unknown>
+                                  | undefined;
+                                const qv = (k: string) =>
+                                  qaRow?.[k] !== undefined && qaRow?.[k] !== null
+                                    ? qaRow[k]
+                                    : (agent as Record<string, unknown>)[k];
+                                const qaAvg = qv('qaAvgScore');
+                                const qaAvgLabel =
+                                  qaAvg != null && !Number.isNaN(Number(qaAvg))
+                                    ? Number(qaAvg).toFixed(1)
+                                    : '—';
+                                const qaCov = formatQaCoverageStatus(
+                                  qv('qaCoverageStatus') as string | null | undefined
+                                );
+
+                                let dateRangeLabel = '—';
+                                if (dateRange?.start && dateRange?.end) {
+                                  dateRangeLabel =
+                                    dateRange.start === dateRange.end
+                                      ? formatYmdStringForDisplay(dateRange.start)
+                                      : `${formatYmdStringForDisplay(dateRange.start)} – ${formatYmdStringForDisplay(dateRange.end)}`;
+                                } else if (sprintData?.dateRange) {
+                                  if (rankingMode === 'sprint' && sprintData.sprint?.period) {
+                                    dateRangeLabel = String(sprintData.sprint.period);
+                                  } else if (sprintData.dateRange.isLifetime) {
+                                    dateRangeLabel = 'All time (lifetime)';
+                                  } else {
+                                    dateRangeLabel = `${new Date(sprintData.dateRange.start).toLocaleDateString()} – ${new Date(sprintData.dateRange.end).toLocaleDateString()}`;
+                                  }
+                                }
+
+                                let teamFilterLabel = 'All teams';
+                                if (
+                                  rosterTeamFilter &&
+                                  rosterTeamFilter !== PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY
+                                ) {
+                                  teamFilterLabel =
+                                    rosterTeamFilter === PRODUCTIVITY_ROSTER_TEAM_FILTER_UNASSIGNED
+                                      ? 'Unassigned roster'
+                                      : rosterTeamFilter;
+                                }
+
+                                let rankingViewLabel = 'Hybrid 30/70';
+                                if (rankingMode === 'sprint') {
+                                  rankingViewLabel =
+                                    selectedSprintNumber === 'current'
+                                      ? 'Sprint (pts/day) · current'
+                                      : `Sprint (pts/day) · #${selectedSprintNumber}`;
+                                } else if (rankingMode === 'lifetime-points') {
+                                  rankingViewLabel = 'Lifetime (pts/day)';
+                                }
+
+                                const totalRanked = sprintData.rankings.competitive.length;
+                                const rankLabel = `#${displayRank} of ${totalRanked} ranked`;
+                                const scoreLabel =
+                                  rankingMode === 'hybrid'
+                                    ? `${displayScore.toFixed(1)} hybrid (30/70) · top ${agent.percentile ?? '—'}%`
+                                    : `${Math.round(displayScore)} pts/day · top ${agent.percentile ?? '—'}%`;
+
+                                onRequestCoachingNote({
+                                  agentId: agent.id,
+                                  agentName: String(agent.name ?? agent.email ?? ''),
+                                  agentEmail: String(agent.email ?? ''),
+                                  dateRangeLabel,
+                                  teamFilterLabel,
+                                  rankingViewLabel,
+                                  rankLabel,
+                                  scoreLabel,
+                                  qaAvgScoreLabel: qaAvgLabel,
+                                  qaCoverageLabel: qaCov,
+                                });
+                              }}
+                              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-sky-300 hover:text-sky-200 border border-sky-500/40 rounded-lg px-2.5 py-1 bg-sky-500/10 hover:bg-sky-500/20 transition-colors"
+                            >
+                              Add coaching note
+                            </button>
+                          )}
                         </div>
 
                         <div className="text-right relative group">

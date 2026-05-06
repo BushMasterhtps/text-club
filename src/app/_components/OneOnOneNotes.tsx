@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
 import { Card } from '@/app/_components/Card';
 import { SmallButton } from '@/app/_components/SmallButton';
 
@@ -41,6 +41,39 @@ interface Agent {
 
 interface OneOnOneNotesProps {
   agents: Agent[];
+}
+
+/** Prefill payload from Performance Scorecard “Add coaching note” (stored in discussionPoints preamble). */
+export type CoachingPerformanceContext = {
+  agentId: string;
+  agentName: string;
+  agentEmail: string;
+  dateRangeLabel: string;
+  teamFilterLabel: string;
+  rankingViewLabel: string;
+  rankLabel: string;
+  scoreLabel: string;
+  qaAvgScoreLabel: string;
+  qaCoverageLabel: string;
+};
+
+export type OneOnOneNotesHandle = {
+  openCoachingNoteFromPerformance: (ctx: CoachingPerformanceContext) => void;
+};
+
+function buildPerformanceDiscussionPreamble(ctx: CoachingPerformanceContext): string {
+  return [
+    '--- Performance snapshot (Team Analytics) ---',
+    `Date / period: ${ctx.dateRangeLabel}`,
+    `Team filter: ${ctx.teamFilterLabel}`,
+    `Ranking view: ${ctx.rankingViewLabel}`,
+    `Rank: ${ctx.rankLabel}`,
+    `Score: ${ctx.scoreLabel}`,
+    `QA avg score: ${ctx.qaAvgScoreLabel}`,
+    `QA coverage: ${ctx.qaCoverageLabel}`,
+    '-------------------------------------------',
+    '',
+  ].join('\n');
 }
 
 // Component to display notes grouped by agent
@@ -181,9 +214,14 @@ function NotesGroupedByAgent({
   );
 }
 
-export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
+const OneOnOneNotes = forwardRef<OneOnOneNotesHandle, OneOnOneNotesProps>(function OneOnOneNotes(
+  { agents },
+  ref
+) {
   const [notes, setNotes] = useState<OneOnOneNote[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+  const saveLockRef = useRef(false);
   const [showForm, setShowForm] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [selectedNote, setSelectedNote] = useState<OneOnOneNote | null>(null);
@@ -191,6 +229,7 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [generatedEmail, setGeneratedEmail] = useState('');
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
+  const [coachingPrefillActive, setCoachingPrefillActive] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -206,7 +245,7 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
 
   // Load all notes
   const loadNotes = async () => {
-    setLoading(true);
+    setNotesLoading(true);
     try {
       const response = await fetch('/api/manager/one-on-one');
       const data = await response.json();
@@ -217,13 +256,49 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
     } catch (error) {
       console.error('Error loading one-on-one notes:', error);
     } finally {
-      setLoading(false);
+      setNotesLoading(false);
     }
   };
 
   useEffect(() => {
     loadNotes();
   }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openCoachingNoteFromPerformance: (ctx: CoachingPerformanceContext) => {
+        const agent =
+          agents.find((a) => a.id === ctx.agentId) ?? {
+            id: ctx.agentId,
+            name: ctx.agentName,
+            email: ctx.agentEmail,
+          };
+        const preamble = buildPerformanceDiscussionPreamble(ctx);
+        setSelectedNote(null);
+        setCoachingPrefillActive(true);
+        setSelectedAgent(agent);
+        setShowForm(true);
+        setFormData({
+          meetingDate: new Date().toISOString().split('T')[0],
+          discussionPoints: `${preamble}(Coaching discussion — add details below.)\n`,
+          strengths: '',
+          areasForImprovement: '',
+          notes: '',
+          actionItems: [],
+          nextMeetingDate: '',
+          followUpRequired: false,
+        });
+        void loadPreviousActionItems(agent.id);
+        requestAnimationFrame(() => {
+          document
+            .getElementById('one-on-one-notes-section')
+            ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      },
+    }),
+    [agents]
+  );
 
   // Load previous action items when agent is selected
   const loadPreviousActionItems = async (agentId: string) => {
@@ -244,6 +319,7 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
 
   // Handle agent selection
   const handleAgentSelect = (agent: Agent) => {
+    setCoachingPrefillActive(false);
     setSelectedAgent(agent);
     setShowForm(true);
     setSelectedNote(null);
@@ -343,9 +419,10 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
 
   // Save note
   const handleSaveNote = async () => {
-    if (!selectedAgent) return;
-    
-    setLoading(true);
+    if (!selectedAgent || saveLockRef.current) return;
+
+    saveLockRef.current = true;
+    setSavingNote(true);
     try {
       const emailTemplate = generateEmailTemplate();
       
@@ -367,7 +444,8 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
         alert('One-on-one note saved successfully!');
         setShowForm(false);
         setSelectedAgent(null);
-        loadNotes();
+        setCoachingPrefillActive(false);
+        await loadNotes();
       } else {
         alert('Error saving note: ' + data.error);
       }
@@ -375,7 +453,8 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
       console.error('Error saving note:', error);
       alert('Error saving note');
     } finally {
-      setLoading(false);
+      saveLockRef.current = false;
+      setSavingNote(false);
     }
   };
 
@@ -396,7 +475,7 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div id="one-on-one-notes-section" className="space-y-6 scroll-mt-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -407,7 +486,11 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
         </div>
         {!showForm && (
           <SmallButton
-            onClick={() => setShowForm(true)}
+            onClick={() => {
+              setCoachingPrefillActive(false);
+              setShowForm(true);
+              setSelectedAgent(null);
+            }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2"
           >
             + New One-on-One
@@ -427,12 +510,21 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
                 onClick={() => {
                   setShowForm(false);
                   setSelectedAgent(null);
+                  setCoachingPrefillActive(false);
                 }}
                 className="bg-gray-600 hover:bg-gray-700 text-white"
               >
                 ✕ Cancel
               </SmallButton>
             </div>
+
+            {coachingPrefillActive && selectedAgent && (
+              <p className="text-xs text-sky-200/95 bg-sky-500/15 border border-sky-500/30 rounded-lg px-3 py-2 leading-relaxed">
+                This note is linked to the selected agent and current performance view. The block in{" "}
+                <span className="font-medium text-white/90">Key discussion points</span> is a snapshot you can edit
+                before saving.
+              </p>
+            )}
 
             {/* Agent Selector */}
             {!selectedAgent && (
@@ -648,11 +740,11 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
                     📧 Preview Email
                   </SmallButton>
                   <SmallButton
-                    onClick={handleSaveNote}
-                    disabled={loading}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2"
+                    onClick={() => void handleSaveNote()}
+                    disabled={savingNote}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 disabled:opacity-50"
                   >
-                    {loading ? 'Saving...' : '💾 Save Note'}
+                    {savingNote ? 'Saving…' : '💾 Save Note'}
                   </SmallButton>
                 </div>
               </>
@@ -664,7 +756,7 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
       {/* Notes History - Grouped by Agent */}
       <Card className="p-6">
         <h4 className="text-lg font-semibold text-white mb-4">📚 Recent One-on-One Notes</h4>
-        {loading && !showForm ? (
+        {notesLoading && !showForm ? (
           <div className="text-white/60 text-center py-8">Loading notes...</div>
         ) : notes.length === 0 ? (
           <div className="text-white/60 text-center py-8">
@@ -807,5 +899,8 @@ export default function OneOnOneNotes({ agents }: OneOnOneNotesProps) {
       )}
     </div>
   );
-}
+});
 
+OneOnOneNotes.displayName = 'OneOnOneNotes';
+
+export default OneOnOneNotes;
