@@ -13,6 +13,8 @@ type QueueItem = {
   endTime: string | null;
   disposition: string | null;
   emailRequestFor: string | null;
+  submittedName: string | null;
+  submittedEmail: string | null;
   details: string | null;
   salesforceCaseNumber: string | null;
   review: {
@@ -154,10 +156,13 @@ export default function EmailRequestsDispositionReview() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+      <div className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-2">
         <p className="text-sm text-amber-200/90 leading-relaxed">
           This review does not change the agent&apos;s original disposition. It is used for internal
           reporting and coaching.
+        </p>
+        <p className="text-xs text-white/55 leading-relaxed">
+          Submitted Name/Email are pulled from the Email Request import fields.
         </p>
       </div>
 
@@ -213,6 +218,8 @@ export default function EmailRequestsDispositionReview() {
                 <th className="px-3 py-2">Created</th>
                 <th className="px-3 py-2">Case #</th>
                 <th className="px-3 py-2">Request for</th>
+                <th className="px-3 py-2">Submitted Name</th>
+                <th className="px-3 py-2">Submitted Email</th>
                 <th className="px-3 py-2">Agent</th>
                 <th className="px-3 py-2">Review</th>
                 <th className="px-3 py-2 w-[100px]" />
@@ -221,14 +228,14 @@ export default function EmailRequestsDispositionReview() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-white/50">
+                  <td colSpan={8} className="px-3 py-8 text-center text-white/50">
                     Loading…
                   </td>
                 </tr>
               )}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-white/50">
+                  <td colSpan={8} className="px-3 py-8 text-center text-white/50">
                     No tasks in this queue for the selected range and filters.
                   </td>
                 </tr>
@@ -242,6 +249,12 @@ export default function EmailRequestsDispositionReview() {
                     </td>
                     <td className="px-3 py-2 text-white/80 max-w-[200px] truncate">
                       {row.emailRequestFor || '—'}
+                    </td>
+                    <td className="px-3 py-2 text-white/80 max-w-[140px] truncate" title={row.submittedName || undefined}>
+                      {row.submittedName || '—'}
+                    </td>
+                    <td className="px-3 py-2 text-white/80 max-w-[180px] truncate font-mono text-xs" title={row.submittedEmail || undefined}>
+                      {row.submittedEmail || '—'}
                     </td>
                     <td className="px-3 py-2 text-white/80">
                       {row.agent?.name || row.agent?.email || '—'}
@@ -279,9 +292,14 @@ export default function EmailRequestsDispositionReview() {
               </button>
             </div>
             <div className="p-4 overflow-y-auto flex-1 space-y-4 text-sm">
-              <div className="rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-amber-100/90 text-xs">
-                This review does not change the agent&apos;s original disposition. It is used for
-                internal reporting and coaching.
+              <div className="rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-amber-100/90 text-xs space-y-2">
+                <p>
+                  This review does not change the agent&apos;s original disposition. It is used for
+                  internal reporting and coaching.
+                </p>
+                <p className="text-amber-200/75">
+                  Submitted Name/Email are pulled from the Email Request import fields.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 gap-2 text-white/85">
@@ -291,6 +309,14 @@ export default function EmailRequestsDispositionReview() {
                 </div>
                 <div>
                   <span className="text-white/50">Request for</span> {drawerItem.emailRequestFor || '—'}
+                </div>
+                <div>
+                  <span className="text-white/50">Submitted Name</span>{' '}
+                  <span className="text-white">{drawerItem.submittedName || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-white/50">Submitted Email</span>{' '}
+                  <span className="font-mono text-sm">{drawerItem.submittedEmail || '—'}</span>
                 </div>
                 <div>
                   <span className="text-white/50">Agent (assigned)</span>{' '}

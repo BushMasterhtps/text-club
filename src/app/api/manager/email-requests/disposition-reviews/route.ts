@@ -68,6 +68,8 @@ export async function GET(request: NextRequest) {
         details: true,
         salesforceCaseNumber: true,
         emailRequestFor: true,
+        text: true,
+        email: true,
         createdAt: true,
         endTime: true,
         assignedTo: { select: { id: true, email: true, name: true } },
@@ -95,6 +97,8 @@ export async function GET(request: NextRequest) {
       endTime: t.endTime ? t.endTime.toISOString() : null,
       disposition: t.disposition,
       emailRequestFor: t.emailRequestFor,
+      submittedName: t.text,
+      submittedEmail: t.email,
       details: t.details,
       salesforceCaseNumber: t.salesforceCaseNumber,
       review: t.emailRequestDispositionReview
