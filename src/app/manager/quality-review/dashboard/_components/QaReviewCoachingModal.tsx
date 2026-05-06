@@ -3,10 +3,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { QaReviewTaskContext } from "@/app/manager/quality-review/_components/QaReviewTaskContext";
 
-type TemplateVersion = {
+export type QaRegradeFlowAnchor = {
   id: string;
-  version: number;
-  template: { displayName: string; taskType: string; slug: string };
+  templateVersion: {
+    id: string;
+    version: number;
+    template: { displayName: string; taskType: string; slug: string };
+  };
 };
 
 type LineDef = {
@@ -44,7 +47,7 @@ type ReviewHeader = {
   reviewerNotes: string | null;
   isCurrentVersion: boolean;
   regradeReason: string | null;
-  templateVersion: TemplateVersion;
+  templateVersion: QaRegradeFlowAnchor["templateVersion"];
   reviewer: { id: string; name: string | null; email: string };
   subjectAgent: { id: string; name: string | null; email: string } | null;
   taskSnapshot: Record<string, unknown> | null;
@@ -53,6 +56,8 @@ type ReviewHeader = {
 type Props = {
   reviewId: string | null;
   onClose: () => void;
+  /** Opens the dashboard regrade dialog (reason + template mode); same API + navigation as “Regrade review”. */
+  onRequestRegrade?: (anchor: QaRegradeFlowAnchor) => void;
 };
 
 function formatWeight(w: unknown): string {
@@ -68,7 +73,7 @@ function responseStyle(r: string): string {
   return "bg-white/5 text-white/60 border-white/15";
 }
 
-export function QaReviewCoachingModal({ reviewId, onClose }: Props) {
+export function QaReviewCoachingModal({ reviewId, onClose, onRequestRegrade }: Props) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [payload, setPayload] = useState<{
@@ -380,19 +385,55 @@ export function QaReviewCoachingModal({ reviewId, onClose }: Props) {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-dashed border-white/15 bg-black/20 px-3 py-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[11px] text-white/40">
-                  Corrections use the existing <strong className="text-white/55">Regrade review</strong> action
-                  from QA dashboard history — not implemented on this screen yet.
+              <div className="rounded-lg border border-white/15 bg-black/20 px-3 py-3 space-y-2">
+                <p className="text-[11px] text-white/55 leading-relaxed">
+                  Use this if the submitted score needs correction. Regrading creates a new review version.
                 </p>
-                <button
-                  type="button"
-                  disabled
-                  className="text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-white/10 text-white/30 cursor-not-allowed"
-                  title="Planned: start a regrade from this view"
-                >
-                  Regrade from here
-                </button>
+                {!payload.review.isCurrentVersion ? (
+                  <p className="text-[11px] text-amber-200/85">
+                    Regrading is only available for the <strong className="text-amber-100/90">current</strong>{" "}
+                    version in the chain. This review is superseded; open the latest submission in history to
+                    regrade.
+                  </p>
+                ) : null}
+                {!payload.review.subjectAgent ? (
+                  <p className="text-[11px] text-red-200/85">
+                    This review is missing a QA subject agent; regrade is blocked until data is repaired.
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={
+                      !onRequestRegrade ||
+                      !payload.review.isCurrentVersion ||
+                      !payload.review.subjectAgent
+                    }
+                    onClick={() => {
+                      if (
+                        !onRequestRegrade ||
+                        !payload.review.isCurrentVersion ||
+                        !payload.review.subjectAgent
+                      ) {
+                        return;
+                      }
+                      onRequestRegrade({
+                        id: payload.review.id,
+                        templateVersion: payload.review.templateVersion,
+                      });
+                    }}
+                    className="text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-violet-500/50 bg-violet-600/90 text-white hover:bg-violet-600 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-white/10 disabled:border-white/10 disabled:text-white/35"
+                    title={
+                      !payload.review.isCurrentVersion
+                        ? "Only the current version can be regraded"
+                        : !payload.review.subjectAgent
+                          ? "Missing QA subject on this review"
+                          : "Start regrade (reason required on next step)"
+                    }
+                  >
+                    Regrade from here
+                  </button>
+                </div>
               </div>
             </>
           )}

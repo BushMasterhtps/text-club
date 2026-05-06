@@ -25,7 +25,10 @@ import {
 } from "@/lib/quality-review-dashboard";
 import { DashboardNavigationProvider } from "@/contexts/DashboardNavigationContext";
 import { QaAgentTrendsPanel } from "@/app/manager/quality-review/dashboard/_components/QaAgentTrendsPanel";
-import { QaReviewCoachingModal } from "@/app/manager/quality-review/dashboard/_components/QaReviewCoachingModal";
+import {
+  QaReviewCoachingModal,
+  type QaRegradeFlowAnchor,
+} from "@/app/manager/quality-review/dashboard/_components/QaReviewCoachingModal";
 
 type CoverageRow = QaAgentCoverageRow;
 
@@ -121,7 +124,7 @@ function DashboardInner() {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<ReviewHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [regradeFor, setRegradeFor] = useState<ReviewHistoryRow | null>(null);
+  const [regradeFor, setRegradeFor] = useState<QaRegradeFlowAnchor | null>(null);
   const [regradeMode, setRegradeMode] = useState<"same" | "latest">("same");
   const [regradeReason, setRegradeReason] = useState("");
   const [regradeBusy, setRegradeBusy] = useState(false);
@@ -674,7 +677,10 @@ function DashboardInner() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setRegradeFor(rev);
+                                  setRegradeFor({
+                                    id: rev.id,
+                                    templateVersion: rev.templateVersion,
+                                  });
                                   setRegradeReason("");
                                   setRegradeMode("same");
                                 }}
@@ -697,6 +703,12 @@ function DashboardInner() {
         <QaReviewCoachingModal
           reviewId={coachingReviewId}
           onClose={() => setCoachingReviewId(null)}
+          onRequestRegrade={(anchor) => {
+            setCoachingReviewId(null);
+            setRegradeFor(anchor);
+            setRegradeReason("");
+            setRegradeMode("same");
+          }}
         />
 
         {regradeFor && (
