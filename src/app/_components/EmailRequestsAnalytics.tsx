@@ -343,10 +343,11 @@ export default function EmailRequestsAnalytics() {
     setDetailsPage(1);
   }, [statusFilter, dispositionFilter, startDate, endDate]);
 
+  /** Display-only labels; aligns with Unable / Unfeasible Review UI (enum values unchanged). */
   const formatVerdictLabel = (verdict: ReviewedReportItem['managerVerdict']) => {
-    if (verdict === 'CORRECT') return 'Correct';
-    if (verdict === 'INCORRECT') return 'Incorrect';
-    return 'Needs follow-up';
+    if (verdict === 'CORRECT') return 'Correct Unable/Unfeasible disposition';
+    if (verdict === 'INCORRECT') return 'Incorrect — should have been completed/actioned';
+    return 'Needs follow-up / more review';
   };
 
   const downloadReviewedCSV = () => {
@@ -847,15 +848,15 @@ export default function EmailRequestsAnalytics() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div className="bg-emerald-900/30 border border-emerald-500/30 rounded-lg p-4">
                 <div className="text-2xl font-semibold text-emerald-300">{reviewedReport?.summary.correct || 0}</div>
-                <div className="text-sm text-emerald-100/80">Correct</div>
+                <div className="text-xs text-emerald-100/80 leading-snug">Correct Unable/Unfeasible disposition</div>
               </div>
               <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-4">
                 <div className="text-2xl font-semibold text-red-300">{reviewedReport?.summary.incorrect || 0}</div>
-                <div className="text-sm text-red-100/80">Incorrect</div>
+                <div className="text-xs text-red-100/80 leading-snug">Incorrect — should have been completed/actioned</div>
               </div>
               <div className="bg-amber-900/30 border border-amber-500/30 rounded-lg p-4">
                 <div className="text-2xl font-semibold text-amber-300">{reviewedReport?.summary.needsFollowUp || 0}</div>
-                <div className="text-sm text-amber-100/80">Needs follow-up</div>
+                <div className="text-xs text-amber-100/80 leading-snug">Needs follow-up / more review</div>
               </div>
               <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-4">
                 <div className="text-2xl font-semibold text-blue-300">{reviewedReport?.summary.totalReviewed || 0}</div>
@@ -872,9 +873,9 @@ export default function EmailRequestsAnalytics() {
                   className="w-full p-2 bg-gray-700 border border-gray-600 text-white rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="all">All reviewed</option>
-                  <option value="correct">Correct</option>
-                  <option value="incorrect">Incorrect</option>
-                  <option value="needs_follow_up">Needs follow-up</option>
+                  <option value="correct">Correct Unable/Unfeasible disposition</option>
+                  <option value="incorrect">Incorrect — should have been completed/actioned</option>
+                  <option value="needs_follow_up">Needs follow-up / more review</option>
                 </select>
               </div>
             </div>
@@ -929,7 +930,12 @@ export default function EmailRequestsAnalytics() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-200 whitespace-nowrap">{new Date(row.createdAt).toLocaleString()}</td>
                         <td className="px-4 py-3 text-sm text-gray-200 whitespace-nowrap">{row.completedAt ? new Date(row.completedAt).toLocaleString() : '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-200 whitespace-nowrap">{formatVerdictLabel(row.managerVerdict)}</td>
+                        <td
+                          className="px-4 py-3 text-xs text-gray-200 max-w-[260px] leading-snug align-top"
+                          title={formatVerdictLabel(row.managerVerdict)}
+                        >
+                          {formatVerdictLabel(row.managerVerdict)}
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-200 max-w-[260px] truncate" title={row.managerReviewNote || undefined}>
                           {row.managerReviewNote || '—'}
                         </td>

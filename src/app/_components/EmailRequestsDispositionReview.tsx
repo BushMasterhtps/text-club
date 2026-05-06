@@ -36,11 +36,18 @@ type QueueSummary = {
   needsFollowUp: number;
 };
 
+/** Display-only labels; API/enum values stay CORRECT / INCORRECT / NEEDS_FOLLOW_UP */
+function verdictDisplayLabel(verdict: 'CORRECT' | 'INCORRECT' | 'NEEDS_FOLLOW_UP'): string {
+  if (verdict === 'CORRECT') return 'Correct Unable/Unfeasible disposition';
+  if (verdict === 'INCORRECT') return 'Incorrect — should have been completed/actioned';
+  return 'Needs follow-up / more review';
+}
+
 const VERDICT_OPTIONS: { value: VerdictFilter; label: string }[] = [
   { value: 'unreviewed', label: 'Unreviewed' },
-  { value: 'correct', label: 'Correct' },
-  { value: 'incorrect', label: 'Incorrect' },
-  { value: 'needs_follow_up', label: 'Needs follow-up' },
+  { value: 'correct', label: 'Correct Unable/Unfeasible disposition' },
+  { value: 'incorrect', label: 'Incorrect — should have been completed/actioned' },
+  { value: 'needs_follow_up', label: 'Needs follow-up / more review' },
   { value: 'all', label: 'All' },
 ];
 
@@ -56,9 +63,7 @@ function fmt(ts: string | null | undefined) {
 
 function verdictLabel(v: QueueItem['review']) {
   if (!v) return 'Unreviewed';
-  if (v.verdict === 'CORRECT') return 'Correct';
-  if (v.verdict === 'INCORRECT') return 'Incorrect';
-  return 'Needs follow-up';
+  return verdictDisplayLabel(v.verdict);
 }
 
 export default function EmailRequestsDispositionReview() {
@@ -235,15 +240,21 @@ export default function EmailRequestsDispositionReview() {
             <div className="text-lg font-semibold text-amber-200">{summary.unreviewed}</div>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-white/45">Correct</div>
+            <div className="text-[10px] leading-snug text-white/55 uppercase tracking-wide">
+              Correct Unable/Unfeasible
+            </div>
             <div className="text-lg font-semibold text-white">{summary.correct}</div>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-white/45">Incorrect</div>
+            <div className="text-[10px] leading-snug text-white/55 uppercase tracking-wide">
+              Incorrect · should action
+            </div>
             <div className="text-lg font-semibold text-white">{summary.incorrect}</div>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-white/45">Needs follow-up</div>
+            <div className="text-[10px] leading-snug text-white/55 uppercase tracking-wide">
+              Needs follow-up / more review
+            </div>
             <div className="text-lg font-semibold text-white">{summary.needsFollowUp}</div>
           </div>
         </div>
@@ -266,8 +277,8 @@ export default function EmailRequestsDispositionReview() {
                 <th className="px-3 py-2">Submitted Name</th>
                 <th className="px-3 py-2">Submitted Email</th>
                 <th className="px-3 py-2">Agent</th>
-                <th className="px-3 py-2">Review</th>
-                <th className="px-3 py-2 w-[100px]" />
+                <th className="px-3 py-2 min-w-[220px]">Review</th>
+                <th className="px-3 py-2 min-w-[120px]" />
               </tr>
             </thead>
             <tbody>
@@ -304,13 +315,15 @@ export default function EmailRequestsDispositionReview() {
                     <td className="px-3 py-2 text-white/80">
                       {row.agent?.name || row.agent?.email || '—'}
                     </td>
-                    <td className="px-3 py-2 text-white/80">{verdictLabel(row.review)}</td>
+                    <td className="px-3 py-2 text-white/80 max-w-[280px] text-xs leading-snug">
+                      {verdictLabel(row.review)}
+                    </td>
                     <td className="px-3 py-2">
                       <SmallButton
                         onClick={() => openDrawer(row)}
                         className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs"
                       >
-                        Review
+                        {row.review ? 'Edit review' : 'Review'}
                       </SmallButton>
                     </td>
                   </tr>
@@ -326,6 +339,9 @@ export default function EmailRequestsDispositionReview() {
             <div className="p-4 border-b border-white/10 flex items-start justify-between gap-2">
               <div>
                 <h3 className="text-lg font-semibold text-white">Unable / Unfeasible review</h3>
+                <p className="text-xs text-sky-200/85 mt-0.5">
+                  {drawerItem.review ? 'Edit review' : 'New review'}
+                </p>
                 <p className="text-xs text-white/50 mt-1 font-mono">{drawerItem.taskId}</p>
               </div>
               <button
@@ -390,19 +406,26 @@ export default function EmailRequestsDispositionReview() {
                   </span>
                 </div>
                 {drawerItem.review && (
-                  <div className="border-t border-white/10 pt-3 text-xs text-white/60">
+                  <div className="border-t border-white/10 pt-3 text-xs text-white/60 space-y-1">
                     <div>
-                      Current: <strong className="text-white/90">{verdictLabel(drawerItem.review)}</strong>
+                      <span className="text-white/50">Current verdict</span>{' '}
+                      <strong className="text-white/90">{verdictDisplayLabel(drawerItem.review.verdict)}</strong>
                     </div>
-                    {drawerItem.review.reviewer && (
-                      <div>
-                        By {drawerItem.review.reviewer.name || drawerItem.review.reviewer.email} ·{' '}
-                        {fmt(drawerItem.review.reviewedAt)}
-                      </div>
-                    )}
-                    {drawerItem.review.note && (
-                      <div className="mt-1 text-white/75 whitespace-pre-wrap">{drawerItem.review.note}</div>
-                    )}
+                    <div>
+                      <span className="text-white/50">Reviewed by</span>{' '}
+                      {drawerItem.review.reviewer?.name ||
+                        drawerItem.review.reviewer?.email ||
+                        '—'}
+                    </div>
+                    <div>
+                      <span className="text-white/50">Reviewed at</span> {fmt(drawerItem.review.reviewedAt)}
+                    </div>
+                    <div className="pt-1">
+                      <span className="text-white/50 block mb-0.5">Existing note</span>
+                      <span className="text-white/75 whitespace-pre-wrap">
+                        {drawerItem.review.note ?? '—'}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -411,17 +434,24 @@ export default function EmailRequestsDispositionReview() {
                 <div className="text-white/90 font-medium text-xs uppercase tracking-wide">
                   Manager verdict
                 </div>
+                <p className="text-[11px] text-white/50 leading-relaxed">
+                  Correct means the agent properly marked this request as Unable/Unfeasible. Incorrect means the
+                  request appears actionable and should not have been marked Unable/Unfeasible.
+                </p>
+                <p className="text-[11px] text-amber-200/70 leading-relaxed">
+                  Changing a review updates the current manager verdict for this task.
+                </p>
                 <div className="space-y-2">
                   {(
                     [
-                      ['CORRECT', 'Correct'],
-                      ['INCORRECT', 'Incorrect'],
-                      ['NEEDS_FOLLOW_UP', 'Needs follow-up'],
+                      ['CORRECT', verdictDisplayLabel('CORRECT')],
+                      ['INCORRECT', verdictDisplayLabel('INCORRECT')],
+                      ['NEEDS_FOLLOW_UP', verdictDisplayLabel('NEEDS_FOLLOW_UP')],
                     ] as const
                   ).map(([val, label]) => (
                     <label
                       key={val}
-                      className="flex items-center gap-2 text-white/85 cursor-pointer"
+                      className="flex items-start gap-2 text-white/85 cursor-pointer"
                       title={
                         val === 'NEEDS_FOLLOW_UP'
                           ? 'Use Needs follow-up when the item requires additional action or review before it can be considered final.'
@@ -433,14 +463,14 @@ export default function EmailRequestsDispositionReview() {
                         name="verdict"
                         checked={draftVerdict === val}
                         onChange={() => setDraftVerdict(val)}
-                        className="accent-sky-500"
+                        className="accent-sky-500 mt-0.5 shrink-0"
                       />
-                      {label}
+                      <span className="leading-snug text-xs">{label}</span>
                     </label>
                   ))}
                 </div>
                 <p className="text-[11px] text-white/45 leading-snug">
-                  <strong className="text-white/55">Needs follow-up:</strong> Use when the item requires
+                  <strong className="text-white/55">Needs follow-up / more review:</strong> Use when the item requires
                   additional action or review before it can be considered final. This does not create tasks or
                   change queue status yet.
                 </p>
