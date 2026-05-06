@@ -50,6 +50,36 @@ interface AnalyticsData {
   }>;
 }
 
+type ReviewedVerdictFilter = 'all' | 'correct' | 'incorrect' | 'needs_follow_up';
+
+interface ReviewedReportItem {
+  taskId: string;
+  salesforceCaseNumber: string | null;
+  emailRequestFor: string | null;
+  submittedName: string | null;
+  submittedEmail: string | null;
+  assignedAgent: { id: string; name: string | null; email: string } | null;
+  completedBy: { id: string; name: string | null; email: string } | null;
+  originalDisposition: string | null;
+  requestDetails: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  managerVerdict: 'CORRECT' | 'INCORRECT' | 'NEEDS_FOLLOW_UP';
+  managerReviewNote: string | null;
+  reviewedBy: { id: string; name: string | null; email: string };
+  reviewedAt: string;
+}
+
+interface ReviewedReportData {
+  summary: {
+    correct: number;
+    incorrect: number;
+    needsFollowUp: number;
+    totalReviewed: number;
+  };
+  items: ReviewedReportItem[];
+}
+
 export default function EmailRequestsAnalytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -60,6 +90,10 @@ export default function EmailRequestsAnalytics() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [dispositionFilter, setDispositionFilter] = useState('all');
+  const [reviewedReport, setReviewedReport] = useState<ReviewedReportData | null>(null);
+  const [reviewedLoading, setReviewedLoading] = useState(false);
+  const [reviewedError, setReviewedError] = useState<string | null>(null);
+  const [reviewedVerdictFilter, setReviewedVerdictFilter] = useState<ReviewedVerdictFilter>('all');
 
   useEffect(() => {
     // Initialize dates to current month
@@ -72,20 +106,22 @@ export default function EmailRequestsAnalytics() {
   useEffect(() => {
     if (startDate && endDate) {
       loadAnalytics();
+      loadReviewedReport();
     }
-  }, [startDate, endDate, comparePeriod]);
+  }, [startDate, endDate, comparePeriod, reviewedVerdictFilter]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (autoRefresh) {
       interval = setInterval(() => {
         loadAnalytics();
+        loadReviewedReport();
       }, 30000); // 30 seconds
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [autoRefresh, startDate, endDate, comparePeriod]);
+  }, [autoRefresh, startDate, endDate, comparePeriod, reviewedVerdictFilter]);
 
   const loadAnalytics = async () => {
     if (!startDate || !endDate) return;
@@ -122,6 +158,37 @@ export default function EmailRequestsAnalytics() {
       setError(`Failed to fetch analytics: ${errorMsg}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadReviewedReport = async () => {
+    if (!startDate || !endDate) return;
+    setReviewedLoading(true);
+    setReviewedError(null);
+    try {
+      const response = await fetch(
+        `/api/manager/email-requests/disposition-reviews/report?startDate=${startDate}&endDate=${endDate}&verdict=${reviewedVerdictFilter}`,
+        { cache: 'no-store' }
+      );
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        setReviewedError(`Failed to fetch reviewed report (${response.status}): ${errorText.substring(0, 200)}`);
+        return;
+      }
+      const data = await response.json();
+      if (!data.success) {
+        setReviewedError(data.error || 'Failed to load reviewed report');
+        return;
+      }
+      setReviewedReport({
+        summary: data.summary,
+        items: data.items || [],
+      });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load reviewed report';
+      setReviewedError(errorMsg);
+    } finally {
+      setReviewedLoading(false);
     }
   };
 
@@ -260,6 +327,80 @@ export default function EmailRequestsAnalytics() {
     document.body.removeChild(link);
   };
 
+  const formatVerdictLabel = (verdict: ReviewedReportItem['managerVerdict']) => {
+    if (verdict === 'CORRECT') return 'Correct';
+    if (verdict === 'INCORRECT') return 'Incorrect';
+    return 'Needs follow-up';
+  };
+
+  const downloadReviewedCSV = () => {
+    const rows = reviewedReport?.items || [];
+    if (!rows.length) return;
+
+    const headers = [
+      'Task ID',
+      'Salesforce Case Number',
+      'Request / Email Request For',
+      'Submitted Name',
+      'Submitted Email',
+      'Assigned Agent',
+      'Completed By',
+      'Original Disposition',
+      'Request Details / Notes',
+      'Created At',
+      'Completed At',
+      'Manager Verdict',
+      'Manager Review Note',
+      'Reviewed By',
+      'Reviewed At',
+    ];
+
+    const csvRows = rows.map((row) => [
+      row.taskId || '',
+      row.salesforceCaseNumber || '',
+      row.emailRequestFor || '',
+      row.submittedName || '',
+      row.submittedEmail || '',
+      row.assignedAgent?.name || row.assignedAgent?.email || '',
+      row.completedBy?.name || row.completedBy?.email || '',
+      row.originalDisposition || '',
+      row.requestDetails || '',
+      row.createdAt ? new Date(row.createdAt).toLocaleString() : '',
+      row.completedAt ? new Date(row.completedAt).toLocaleString() : '',
+      formatVerdictLabel(row.managerVerdict),
+      row.managerReviewNote || '',
+      row.reviewedBy?.name || row.reviewedBy?.email || '',
+      row.reviewedAt ? new Date(row.reviewedAt).toLocaleString() : '',
+    ]);
+
+    const csvContent = [headers, ...csvRows]
+      .map((row) =>
+        row
+          .map((cell) => {
+            const cellStr = String(cell || '');
+            if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+              return '"' + cellStr.replace(/"/g, '""') + '"';
+            }
+            return cellStr;
+          })
+          .join(',')
+      )
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute(
+      'download',
+      `Email_Request_Details_After_Review_${startDate}_to_${endDate}_${reviewedVerdictFilter}.csv`
+    );
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const formatComparison = (value: number, isPercentage = false) => {
     if (value > 0) {
       return <span className="text-green-400">+{isPercentage ? value.toFixed(1) + '%' : value}</span>;
@@ -350,7 +491,10 @@ export default function EmailRequestsAnalytics() {
           </div>
           <div className="flex items-end">
             <button
-              onClick={loadAnalytics}
+              onClick={() => {
+                loadAnalytics();
+                loadReviewedReport();
+              }}
               className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-md font-medium hover:from-blue-700 hover:to-blue-800 transition-colors"
             >
               Load Analytics
@@ -640,6 +784,130 @@ export default function EmailRequestsAnalytics() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Email Request Details After Review */}
+          <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Email Request Details After Review</h3>
+                <p className="text-sm text-gray-300 mt-1">
+                  Raw analytics are based on the original agent disposition. This section reflects manager-reviewed Unable / Unfeasible requests for coaching and corrected reporting.
+                </p>
+              </div>
+              <button
+                onClick={downloadReviewedCSV}
+                disabled={!reviewedReport?.items?.length}
+                className="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                📥 Download Reviewed CSV
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+              <div className="bg-emerald-900/30 border border-emerald-500/30 rounded-lg p-4">
+                <div className="text-2xl font-semibold text-emerald-300">{reviewedReport?.summary.correct || 0}</div>
+                <div className="text-sm text-emerald-100/80">Correct</div>
+              </div>
+              <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-4">
+                <div className="text-2xl font-semibold text-red-300">{reviewedReport?.summary.incorrect || 0}</div>
+                <div className="text-sm text-red-100/80">Incorrect</div>
+              </div>
+              <div className="bg-amber-900/30 border border-amber-500/30 rounded-lg p-4">
+                <div className="text-2xl font-semibold text-amber-300">{reviewedReport?.summary.needsFollowUp || 0}</div>
+                <div className="text-sm text-amber-100/80">Needs follow-up</div>
+              </div>
+              <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-4">
+                <div className="text-2xl font-semibold text-blue-300">{reviewedReport?.summary.totalReviewed || 0}</div>
+                <div className="text-sm text-blue-100/80">Total reviewed</div>
+              </div>
+            </div>
+
+            <div className="flex gap-4 mb-4">
+              <div className="w-full md:w-80">
+                <label className="block text-sm font-medium text-gray-300 mb-1">Manager Verdict Filter</label>
+                <select
+                  value={reviewedVerdictFilter}
+                  onChange={(e) => setReviewedVerdictFilter(e.target.value as ReviewedVerdictFilter)}
+                  className="w-full p-2 bg-gray-700 border border-gray-600 text-white rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="all">All reviewed</option>
+                  <option value="correct">Correct</option>
+                  <option value="incorrect">Incorrect</option>
+                  <option value="needs_follow_up">Needs follow-up</option>
+                </select>
+              </div>
+            </div>
+
+            {reviewedError && (
+              <div className="bg-red-900/20 border border-red-500/30 rounded-md p-3 mb-4 text-red-300 text-sm">
+                {reviewedError}
+              </div>
+            )}
+
+            {reviewedLoading ? (
+              <div className="text-gray-300 py-8 text-center">Loading reviewed details...</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-600">
+                  <thead className="bg-gray-700">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Task ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">SF Case #</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Request</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Submitted Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Submitted Email</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Assigned Agent</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Completed By</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Original Disposition</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Request Details / Notes</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Created At</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Completed At</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Manager Verdict</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Manager Review Note</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Reviewed By</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Reviewed At</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-gray-800 divide-y divide-gray-600">
+                    {(reviewedReport?.items || []).map((row) => (
+                      <tr key={row.taskId}>
+                        <td className="px-4 py-3 text-xs text-gray-200 font-mono">{row.taskId}</td>
+                        <td className="px-4 py-3 text-sm text-gray-200">{row.salesforceCaseNumber || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-200 max-w-[220px] truncate" title={row.emailRequestFor || undefined}>
+                          {row.emailRequestFor || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-200">{row.submittedName || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-200">{row.submittedEmail || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-200">{row.assignedAgent?.name || row.assignedAgent?.email || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-200">{row.completedBy?.name || row.completedBy?.email || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-200 max-w-[260px] truncate" title={row.originalDisposition || undefined}>
+                          {row.originalDisposition || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-200 max-w-[280px] truncate" title={row.requestDetails || undefined}>
+                          {row.requestDetails || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-200 whitespace-nowrap">{new Date(row.createdAt).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-sm text-gray-200 whitespace-nowrap">{row.completedAt ? new Date(row.completedAt).toLocaleString() : '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-200 whitespace-nowrap">{formatVerdictLabel(row.managerVerdict)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-200 max-w-[260px] truncate" title={row.managerReviewNote || undefined}>
+                          {row.managerReviewNote || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-200">{row.reviewedBy?.name || row.reviewedBy?.email || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-200 whitespace-nowrap">{new Date(row.reviewedAt).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    {!reviewedReport?.items?.length && (
+                      <tr>
+                        <td colSpan={15} className="px-4 py-8 text-center text-gray-400">
+                          No manager-reviewed Unable / Unfeasible tasks found for this date range/filter.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}
