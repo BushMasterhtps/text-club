@@ -27,6 +27,15 @@ type QueueItem = {
 
 type VerdictFilter = 'unreviewed' | 'correct' | 'incorrect' | 'needs_follow_up' | 'all';
 
+type QueueSummary = {
+  totalUnable: number;
+  unreviewed: number;
+  reviewed: number;
+  correct: number;
+  incorrect: number;
+  needsFollowUp: number;
+};
+
 const VERDICT_OPTIONS: { value: VerdictFilter; label: string }[] = [
   { value: 'unreviewed', label: 'Unreviewed' },
   { value: 'correct', label: 'Correct' },
@@ -57,6 +66,7 @@ export default function EmailRequestsDispositionReview() {
   const [endDate, setEndDate] = useState('');
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>('unreviewed');
   const [items, setItems] = useState<QueueItem[]>([]);
+  const [summary, setSummary] = useState<QueueSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawerItem, setDrawerItem] = useState<QueueItem | null>(null);
@@ -89,12 +99,19 @@ export default function EmailRequestsDispositionReview() {
       if (!res.ok || !data.success) {
         setError(data.error || `Request failed (${res.status})`);
         setItems([]);
+        setSummary(null);
         return;
       }
       setItems(data.items as QueueItem[]);
+      if (data.summary && typeof data.summary === 'object') {
+        setSummary(data.summary as QueueSummary);
+      } else {
+        setSummary(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load queue');
       setItems([]);
+      setSummary(null);
     } finally {
       setLoading(false);
     }
@@ -138,16 +155,8 @@ export default function EmailRequestsDispositionReview() {
         setSaveMessage(data.error || 'Save failed');
         return;
       }
-      setSaveState('ok');
-      setSaveMessage('Review saved.');
-      const review = data.review as QueueItem['review'];
-      setDrawerItem((prev) =>
-        prev && prev.taskId === drawerItem.taskId ? { ...prev, review } : prev
-      );
-      setItems((prev) =>
-        prev.map((it) => (it.taskId === drawerItem.taskId ? { ...it, review } : it))
-      );
       await loadQueue();
+      closeDrawer();
     } catch (e) {
       setSaveState('err');
       setSaveMessage(e instanceof Error ? e.message : 'Save failed');
@@ -203,6 +212,42 @@ export default function EmailRequestsDispositionReview() {
           Refresh
         </SmallButton>
       </div>
+
+      {verdictFilter === 'unreviewed' && (
+        <p className="text-xs text-sky-200/80 leading-relaxed max-w-3xl">
+          Reviewing items will remove them from this list after saving. Use All or verdict filters to view
+          completed reviews.
+        </p>
+      )}
+
+      {summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Unable / Unfeasible (range)</div>
+            <div className="text-lg font-semibold text-white">{summary.totalUnable}</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Reviewed</div>
+            <div className="text-lg font-semibold text-emerald-300">{summary.reviewed}</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Unreviewed</div>
+            <div className="text-lg font-semibold text-amber-200">{summary.unreviewed}</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Correct</div>
+            <div className="text-lg font-semibold text-white">{summary.correct}</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Incorrect</div>
+            <div className="text-lg font-semibold text-white">{summary.incorrect}</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-white/45">Needs follow-up</div>
+            <div className="text-lg font-semibold text-white">{summary.needsFollowUp}</div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-red-200 text-sm">
@@ -374,7 +419,15 @@ export default function EmailRequestsDispositionReview() {
                       ['NEEDS_FOLLOW_UP', 'Needs follow-up'],
                     ] as const
                   ).map(([val, label]) => (
-                    <label key={val} className="flex items-center gap-2 text-white/85 cursor-pointer">
+                    <label
+                      key={val}
+                      className="flex items-center gap-2 text-white/85 cursor-pointer"
+                      title={
+                        val === 'NEEDS_FOLLOW_UP'
+                          ? 'Use Needs follow-up when the item requires additional action or review before it can be considered final.'
+                          : undefined
+                      }
+                    >
                       <input
                         type="radio"
                         name="verdict"
@@ -386,6 +439,11 @@ export default function EmailRequestsDispositionReview() {
                     </label>
                   ))}
                 </div>
+                <p className="text-[11px] text-white/45 leading-snug">
+                  <strong className="text-white/55">Needs follow-up:</strong> Use when the item requires
+                  additional action or review before it can be considered final. This does not create tasks or
+                  change queue status yet.
+                </p>
                 <div>
                   <label className="block text-xs text-white/50 mb-1">Optional note</label>
                   <textarea

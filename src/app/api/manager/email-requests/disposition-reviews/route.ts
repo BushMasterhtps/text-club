@@ -52,38 +52,58 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const verdictParam = searchParams.get('verdict');
 
+  const baseWhere: Prisma.TaskWhereInput = {
+    taskType: 'EMAIL_REQUESTS',
+    status: 'COMPLETED',
+    disposition: { contains: UNABLE_SUBSTR, mode: 'insensitive' },
+    createdAt: { gte: utcStart, lte: utcEnd },
+  };
+
   try {
-    const tasks = await prisma.task.findMany({
-      where: {
-        taskType: 'EMAIL_REQUESTS',
-        status: 'COMPLETED',
-        disposition: { contains: UNABLE_SUBSTR, mode: 'insensitive' },
-        createdAt: { gte: utcStart, lte: utcEnd },
-        ...verdictWhere(verdictParam),
-      },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        disposition: true,
-        details: true,
-        salesforceCaseNumber: true,
-        emailRequestFor: true,
-        text: true,
-        email: true,
-        createdAt: true,
-        endTime: true,
-        assignedTo: { select: { id: true, email: true, name: true } },
-        completedByUser: { select: { id: true, email: true, name: true } },
-        emailRequestDispositionReview: {
-          select: {
-            verdict: true,
-            note: true,
-            reviewedAt: true,
-            reviewer: { select: { id: true, email: true, name: true } },
+    const [tasks, totalUnable, unreviewedCount, correctCount, incorrectCount, needsFollowUpCount] =
+      await Promise.all([
+        prisma.task.findMany({
+          where: {
+            ...baseWhere,
+            ...verdictWhere(verdictParam),
           },
-        },
-      },
-    });
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            disposition: true,
+            details: true,
+            salesforceCaseNumber: true,
+            emailRequestFor: true,
+            text: true,
+            email: true,
+            createdAt: true,
+            endTime: true,
+            assignedTo: { select: { id: true, email: true, name: true } },
+            completedByUser: { select: { id: true, email: true, name: true } },
+            emailRequestDispositionReview: {
+              select: {
+                verdict: true,
+                note: true,
+                reviewedAt: true,
+                reviewer: { select: { id: true, email: true, name: true } },
+              },
+            },
+          },
+        }),
+        prisma.task.count({ where: baseWhere }),
+        prisma.task.count({
+          where: { ...baseWhere, emailRequestDispositionReview: null },
+        }),
+        prisma.task.count({
+          where: { ...baseWhere, emailRequestDispositionReview: { verdict: 'CORRECT' } },
+        }),
+        prisma.task.count({
+          where: { ...baseWhere, emailRequestDispositionReview: { verdict: 'INCORRECT' } },
+        }),
+        prisma.task.count({
+          where: { ...baseWhere, emailRequestDispositionReview: { verdict: 'NEEDS_FOLLOW_UP' } },
+        }),
+      ]);
 
     const items = tasks.map((t) => ({
       taskId: t.id,
@@ -111,7 +131,20 @@ export async function GET(request: NextRequest) {
         : null,
     }));
 
-    return NextResponse.json({ success: true, items });
+    const reviewedCount = totalUnable - unreviewedCount;
+
+    return NextResponse.json({
+      success: true,
+      items,
+      summary: {
+        totalUnable,
+        unreviewed: unreviewedCount,
+        reviewed: reviewedCount,
+        correct: correctCount,
+        incorrect: incorrectCount,
+        needsFollowUp: needsFollowUpCount,
+      },
+    });
   } catch (e) {
     console.error('[disposition-reviews GET]', e);
     return NextResponse.json(
