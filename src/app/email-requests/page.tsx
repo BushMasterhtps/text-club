@@ -17,6 +17,7 @@ import ThemeToggle from '@/app/_components/ThemeToggle';
 import { Badge } from "@/app/_components/Badge";
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import EmailRequestsAnalytics from '@/app/_components/EmailRequestsAnalytics';
+import EmailRequestsDispositionReview from '@/app/_components/EmailRequestsDispositionReview';
 
 // Utility functions
 function clamp(value: number | null | undefined): number {
@@ -1061,6 +1062,15 @@ function EmailRequestsPageContent() {
         {activeSection === "analytics" && (
           <div className="space-y-8">
             <EmailRequestsAnalytics />
+          </div>
+        )}
+
+        {activeSection === "disposition-review" && (
+          <div className="space-y-8">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <H2>Unable / Unfeasible Review</H2>
+            </div>
+            <EmailRequestsDispositionReview />
           </div>
         )}
 

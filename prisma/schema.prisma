@@ -83,6 +83,12 @@ enum QAReviewLineResponse {
   NA
 }
 
+enum EmailRequestDispositionReviewVerdict {
+  CORRECT
+  INCORRECT
+  NEEDS_FOLLOW_UP
+}
+
 /////////////////////////////////////
 // Core user & task models
 /////////////////////////////////////
@@ -130,6 +136,7 @@ model User {
   qaSampleBatchesAsSubject  QASampleBatch[]     @relation("QASampleBatchSubject")
   qaTaskReviewsAsReviewer   QATaskReview[]      @relation("QATaskReviewReviewer")
   qaTaskReviewsAsSubject    QATaskReview[]      @relation("QATaskReviewSubject")
+  emailRequestDispositionReviews EmailRequestDispositionReview[] @relation("EmailRequestDispositionReviewer")
 
   @@index([isLive, lastSeen])
   @@index([qaIsTracked])
@@ -254,6 +261,8 @@ model Task {
 
   qaSampleBatchTasks QASampleBatchTask[]
   qaTaskReviews      QATaskReview[]
+
+  emailRequestDispositionReview EmailRequestDispositionReview?
 
   @@index([assignedToId])
   @@index([status, createdAt])
@@ -800,4 +809,24 @@ model QALineResult {
 
   @@unique([taskReviewId, lineId])
   @@index([taskReviewId])
+}
+
+/////////////////////////////////////
+// Email Request disposition review (manager coaching / internal reporting)
+/////////////////////////////////////
+
+model EmailRequestDispositionReview {
+  id         String                             @id @default(cuid())
+  taskId     String                             @unique
+  task       Task                               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  reviewerId String
+  reviewer   User                               @relation("EmailRequestDispositionReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  verdict    EmailRequestDispositionReviewVerdict
+  note       String?                            @db.Text
+  reviewedAt DateTime
+  createdAt  DateTime                           @default(now())
+  updatedAt  DateTime                           @updatedAt
+
+  @@index([reviewerId])
+  @@index([reviewedAt])
 }

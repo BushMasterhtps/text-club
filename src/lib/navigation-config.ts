@@ -70,7 +70,14 @@ export const commonNavigationItems: NavigationItem[] = [
 export const dashboardSpecificItems: Record<DashboardType, NavigationItem[]> = {
   'text-club': [],
   'wod-ivcs': [],
-  'email-requests': [],
+  'email-requests': [
+    {
+      id: 'disposition-review',
+      label: 'Unable / Unfeasible Review',
+      icon: '🔎',
+      description: 'Manager review of Unable / Unfeasible email request dispositions',
+    },
+  ],
   'yotpo': [
     {
       id: 'submissions',
