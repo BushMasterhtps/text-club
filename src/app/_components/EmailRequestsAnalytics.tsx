@@ -91,13 +91,15 @@ interface OperationsSummaryData {
     incorrectUnable: number;
     needsFollowUp: number;
     unreviewedUnable: number;
+    pendingReview: number;
   };
-  reviewedCompletionRate: {
+  rates: {
     reviewedCompleted: number;
     reviewedUnable: number;
-    ratePercent: number | null;
-    excludesNeedsFollowUpAndUnreviewed: boolean;
-    note: string;
+    pendingReview: number;
+    reviewedCompletionRatePercent: number | null;
+    reviewedUnableRatePercent: number | null;
+    pendingReviewRatePercent: number | null;
   };
   breakdowns: {
     confirmedUnableByDisposition: Record<string, number>;
@@ -222,7 +224,7 @@ export default function EmailRequestsAnalytics() {
       setOperationsSummary({
         raw: data.raw,
         reviewed: data.reviewed,
-        reviewedCompletionRate: data.reviewedCompletionRate,
+        rates: data.rates,
         breakdowns: data.breakdowns,
       });
     } catch (err) {
@@ -1019,7 +1021,7 @@ export default function EmailRequestsAnalytics() {
                     Population: Email Request tasks in the selected date range (by <code className="text-gray-300">createdAt</code>
                     ), matching raw analytics. <strong className="text-gray-300">Outcome total</strong> = raw completed (not unable) + raw unable to complete (completed with unable disposition).
                   </p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3 mb-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                     <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
                       <div className="text-2xl font-semibold text-white">{operationsSummary.raw.totalCompleted}</div>
                       <div className="text-xs text-gray-400 leading-snug">Raw total completed</div>
@@ -1032,23 +1034,48 @@ export default function EmailRequestsAnalytics() {
                       <div className="text-2xl font-semibold text-gray-200">{operationsSummary.raw.outcomeTotal}</div>
                       <div className="text-xs text-gray-400 leading-snug">Outcome total (completed + unable)</div>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                     <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
                       <div className="text-2xl font-semibold text-emerald-300">
-                        {operationsSummary.reviewedCompletionRate.ratePercent != null
-                          ? `${operationsSummary.reviewedCompletionRate.ratePercent.toFixed(1)}%`
+                        {operationsSummary.rates.reviewedCompletionRatePercent != null
+                          ? `${operationsSummary.rates.reviewedCompletionRatePercent.toFixed(1)}%`
                           : '—'}
                       </div>
                       <div className="text-xs text-gray-400 leading-snug">Reviewed completion rate</div>
                     </div>
+                    <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                      <div className="text-2xl font-semibold text-orange-200">
+                        {operationsSummary.rates.reviewedUnableRatePercent != null
+                          ? `${operationsSummary.rates.reviewedUnableRatePercent.toFixed(1)}%`
+                          : '—'}
+                      </div>
+                      <div className="text-xs text-gray-400 leading-snug">Reviewed unable rate</div>
+                    </div>
+                    <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                      <div className="text-2xl font-semibold text-amber-200">
+                        {operationsSummary.rates.pendingReviewRatePercent != null
+                          ? `${operationsSummary.rates.pendingReviewRatePercent.toFixed(1)}%`
+                          : '—'}
+                      </div>
+                      <div className="text-xs text-gray-400 leading-snug">Pending internal review rate</div>
+                    </div>
                   </div>
+
                   <p className="text-[11px] text-gray-500 mb-4 leading-relaxed">
-                    <strong className="text-gray-400">Reviewed completion rate:</strong>{' '}
-                    reviewedCompleted = raw completed + incorrect unable (
-                    {operationsSummary.reviewedCompletionRate.reviewedCompleted}), reviewedUnable = confirmed unable (
-                    {operationsSummary.reviewedCompletionRate.reviewedUnable}). Rate = reviewedCompleted ÷ (reviewedCompleted
-                    + reviewedUnable).{' '}
-                    <span className="text-amber-200/90">
-                      Needs follow-up and unreviewed unable are excluded from this denominator.
+                    <strong className="text-gray-400">Reviewed completion rate</strong> reflects completed/actionable outcomes after manager review, using the full request population for the selected period (
+                    <strong className="text-gray-300">outcome total</strong> = {operationsSummary.raw.outcomeTotal}).
+                    <br />
+                    <span className="text-gray-400">
+                      reviewedCompleted = raw completed + incorrect unable ({operationsSummary.rates.reviewedCompleted});{' '}
+                      reviewedUnable = confirmed unable ({operationsSummary.rates.reviewedUnable}); pendingReview = unreviewed
+                      unable + needs follow-up ({operationsSummary.rates.pendingReview}).
+                    </span>
+                    <br />
+                    <span className="text-gray-400">
+                      Rates: reviewed completion ÷ outcome total; reviewed unable ÷ outcome total; pending review ÷ outcome
+                      total.
                     </span>
                   </p>
 

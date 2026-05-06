@@ -108,9 +108,14 @@ export async function GET(request: NextRequest) {
 
     const reviewedCompleted = rawTotalCompleted + incorrectUnable;
     const reviewedUnable = confirmedUnable;
-    const reviewedDenominator = reviewedCompleted + reviewedUnable;
+    const pendingReview = unreviewedUnable + needsFollowUp;
+
     const reviewedCompletionRatePercent =
-      reviewedDenominator > 0 ? (reviewedCompleted / reviewedDenominator) * 100 : null;
+      outcomeTotal > 0 ? (reviewedCompleted / outcomeTotal) * 100 : null;
+    const reviewedUnableRatePercent =
+      outcomeTotal > 0 ? (reviewedUnable / outcomeTotal) * 100 : null;
+    const pendingReviewRatePercent =
+      outcomeTotal > 0 ? (pendingReview / outcomeTotal) * 100 : null;
 
     const [confirmedRows, incorrectRows, needsRows] = await Promise.all([
       prisma.task.groupBy({
@@ -151,14 +156,15 @@ export async function GET(request: NextRequest) {
         incorrectUnable,
         needsFollowUp,
         unreviewedUnable,
+        pendingReview,
       },
-      reviewedCompletionRate: {
+      rates: {
         reviewedCompleted,
         reviewedUnable,
-        ratePercent: reviewedCompletionRatePercent,
-        excludesNeedsFollowUpAndUnreviewed: true,
-        note:
-          'Rate uses reviewedCompleted = rawCompleted + incorrectUnable and reviewedUnable = confirmedUnable only. Needs follow-up and unreviewed unable are excluded from the denominator.',
+        pendingReview,
+        reviewedCompletionRatePercent,
+        reviewedUnableRatePercent,
+        pendingReviewRatePercent,
       },
       breakdowns: {
         confirmedUnableByDisposition: groupByDisposition(confirmedRows),
