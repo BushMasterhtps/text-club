@@ -229,10 +229,11 @@ export default function AnalyticsPage() {
       const dateRange = getDateRange();
       
       // Load all analytics data in parallel
+      const rosterQ = productivityRosterTeamQuery();
       const [overviewRes, taskStatsRes, agentsRes, allAgentsRes] = await Promise.all([
-        fetch(`/api/analytics/overview?startDate=${dateRange.start}&endDate=${dateRange.end}`),
-        fetch(`/api/analytics/task-types?startDate=${dateRange.start}&endDate=${dateRange.end}`),
-        fetch(`/api/analytics/agent-status?startDate=${dateRange.start}&endDate=${dateRange.end}`),
+        fetch(`/api/analytics/overview?startDate=${dateRange.start}&endDate=${dateRange.end}${rosterQ}`),
+        fetch(`/api/analytics/task-types?startDate=${dateRange.start}&endDate=${dateRange.end}${rosterQ}`),
+        fetch(`/api/analytics/agent-status?startDate=${dateRange.start}&endDate=${dateRange.end}${rosterQ}`),
         fetch('/api/manager/agents') // Fetch all agents for One-on-One Notes (includes paused agents - no date filter)
       ]);
 
@@ -282,7 +283,7 @@ export default function AnalyticsPage() {
       const dateRange = getDateRange();
       // Add cache-busting and timestamp to ensure fresh data
       const timestamp = new Date().getTime();
-      const response = await fetch(`/api/analytics/team-performance?startDate=${dateRange.start}&endDate=${dateRange.end}&_t=${timestamp}`, {
+      const response = await fetch(`/api/analytics/team-performance?startDate=${dateRange.start}&endDate=${dateRange.end}${productivityRosterTeamQuery()}&_t=${timestamp}`, {
         cache: 'no-store' // Prevent caching
       });
       const data = await response.json();
@@ -373,15 +374,6 @@ export default function AnalyticsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDateRange, customStartDate, customEndDate, rosterTeamFilter]);
-
-  // Also reload data when custom dates change
-  useEffect(() => {
-    if (selectedDateRange === 'custom' && customStartDate && customEndDate) {
-      loadOverviewData();
-      loadTeamPerformanceData();
-      loadScorecardData();
-    }
-  }, [customStartDate, customEndDate]);
 
   // Format duration helper
   const formatDuration = (seconds: number) => {

@@ -1,17 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { resolveTeamAnalyticsSubjectIds } from "@/lib/team-analytics-roster";
 
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
 
   try {
-    // Get all agents and manager-agents
+    const rosterTeam =
+      request.nextUrl.searchParams.get("rosterTeam") ??
+      request.nextUrl.searchParams.get("team");
+
+    const { filterActive, subjectIds } = await resolveTeamAnalyticsSubjectIds(
+      prisma,
+      rosterTeam
+    );
+
+    if (filterActive && subjectIds!.length === 0) {
+      return NextResponse.json({ success: true, data: [] });
+    }
+
     const agents = await prisma.user.findMany({
       where: {
         role: { in: ["AGENT", "MANAGER_AGENT"] },
-        isLive: true
+        isLive: true,
+        ...(subjectIds ? { id: { in: subjectIds } } : {}),
       },
       select: {
         id: true,
@@ -20,6 +34,10 @@ export async function GET(request: NextRequest) {
         lastSeen: true
       }
     });
+
+    if (agents.length === 0) {
+      return NextResponse.json({ success: true, data: [] });
+    }
 
     // Get today's date range in PST timezone (matching other APIs)
     // PST = UTC - 8 hours

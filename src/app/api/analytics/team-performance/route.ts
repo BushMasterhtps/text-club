@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { resolveTeamAnalyticsSubjectIds } from "@/lib/team-analytics-roster";
 
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
@@ -10,6 +11,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const rosterTeam =
+      searchParams.get("rosterTeam") ?? searchParams.get("team");
 
     if (!startDate || !endDate) {
       return NextResponse.json({
@@ -35,10 +38,19 @@ export async function GET(request: NextRequest) {
     // End: 7:59 AM UTC on day after end date (11:59 PM PST on end date)
     const end = new Date(Date.UTC(endDateParts.year, endDateParts.month, endDateParts.day + 1, 7, 59, 59, 999));
 
-    // Get all agents (including manager-agents)
+    const { filterActive, subjectIds } = await resolveTeamAnalyticsSubjectIds(
+      prisma,
+      rosterTeam
+    );
+
+    if (filterActive && subjectIds!.length === 0) {
+      return NextResponse.json({ success: true, data: [] });
+    }
+
     const agents = await prisma.user.findMany({
       where: {
-        role: { in: ["AGENT", "MANAGER_AGENT"] }
+        role: { in: ["AGENT", "MANAGER_AGENT"] },
+        ...(subjectIds ? { id: { in: subjectIds } } : {}),
       },
       select: {
         id: true,

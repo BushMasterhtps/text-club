@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import type { Prisma } from "@prisma/client";
+import {
+  HOLDS_ACTIVE_WORKFLOW_QUEUES,
+  resolveTeamAnalyticsSubjectIds,
+  teamAttributedTaskWhere,
+} from "@/lib/team-analytics-roster";
 
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
@@ -10,6 +16,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const rosterTeam =
+      searchParams.get("rosterTeam") ?? searchParams.get("team");
 
     // Parse dates with proper timezone handling
     let dateStart: Date;
@@ -32,60 +40,98 @@ export async function GET(request: NextRequest) {
     const utcDateStart = dateStart;
     const utcDateEnd = dateEnd;
 
+    const { filterActive, subjectIds } = await resolveTeamAnalyticsSubjectIds(
+      prisma,
+      rosterTeam
+    );
+
+    if (filterActive && subjectIds!.length === 0) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          textclub: { completed: 0, pending: 0, avgDuration: 0 },
+          wodivcs: { completed: 0, pending: 0, avgDuration: 0 },
+          emailrequests: { completed: 0, pending: 0, avgDuration: 0 },
+          holds: { completed: 0, pending: 0, avgDuration: 0 },
+          yotpo: { completed: 0, pending: 0, avgDuration: 0 },
+        },
+      });
+    }
+
+    const teamScope = subjectIds
+      ? teamAttributedTaskWhere(subjectIds)
+      : null;
+    const assignedToTeam: Prisma.TaskWhereInput | null = subjectIds
+      ? { assignedToId: { in: subjectIds } }
+      : null;
+
+    const completedForType = (taskType: string): Prisma.TaskWhereInput => ({
+      taskType: taskType as any,
+      OR: [
+        {
+          status: "COMPLETED",
+          endTime: { gte: utcDateStart, lte: utcDateEnd },
+        },
+        {
+          status: "PENDING",
+          sentBackBy: { not: null },
+          endTime: { gte: utcDateStart, lte: utcDateEnd },
+        },
+      ],
+    });
+
+    const avgForType = (taskType: string): Prisma.TaskWhereInput => ({
+      taskType: taskType as any,
+      OR: [
+        {
+          status: "COMPLETED",
+          endTime: { gte: utcDateStart, lte: utcDateEnd },
+          durationSec: { not: null },
+        },
+        {
+          status: "PENDING",
+          sentBackBy: { not: null },
+          endTime: { gte: utcDateStart, lte: utcDateEnd },
+          durationSec: { not: null },
+        },
+      ],
+    });
+
     // Get stats for each task type
     const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'HOLDS', 'YOTPO'];
     const taskTypeStats: any = {};
 
     for (const taskType of taskTypes) {
-      // Get completed tasks for this type
-      // Count ALL COMPLETED tasks (status = COMPLETED, endTime in range)
-      // This matches the Holds resolved report logic
       const completed = await prisma.task.count({
-        where: {
-          taskType: taskType as any,
-          OR: [
-            {
-              status: "COMPLETED",
-              endTime: { gte: utcDateStart, lte: utcDateEnd }
-            },
-            {
-              status: "PENDING",
-              sentBackBy: { not: null },
-              endTime: { gte: utcDateStart, lte: utcDateEnd }
-            }
-          ]
-        }
+        where: teamScope
+          ? { AND: [completedForType(taskType), teamScope] }
+          : completedForType(taskType),
       });
 
-      // Get pending tasks for this type
+      const pendingWhere: Prisma.TaskWhereInput =
+        taskType === "HOLDS"
+          ? {
+              taskType: "HOLDS",
+              holdsStatus: { in: [...HOLDS_ACTIVE_WORKFLOW_QUEUES] },
+              ...(assignedToTeam ?? {}),
+            }
+          : {
+              taskType: taskType as any,
+              status: "PENDING",
+              ...(assignedToTeam ?? {}),
+            };
+
       const pending = await prisma.task.count({
-        where: {
-          taskType: taskType as any,
-          status: "PENDING"
-        }
+        where: pendingWhere,
       });
 
-      // Get average duration for completed tasks
       const avgDurationResult = await prisma.task.aggregate({
-        where: {
-          taskType: taskType as any,
-          OR: [
-            {
-              status: "COMPLETED",
-              endTime: { gte: utcDateStart, lte: utcDateEnd },
-              durationSec: { not: null }
-            },
-            {
-              status: "PENDING",
-              sentBackBy: { not: null },
-              endTime: { gte: utcDateStart, lte: utcDateEnd },
-              durationSec: { not: null }
-            }
-          ]
-        },
+        where: teamScope
+          ? { AND: [avgForType(taskType), teamScope] }
+          : avgForType(taskType),
         _avg: {
-          durationSec: true
-        }
+          durationSec: true,
+        },
       });
 
       const key = taskType.toLowerCase().replace(/_/g, '');
