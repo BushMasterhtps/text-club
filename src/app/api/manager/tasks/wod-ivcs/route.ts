@@ -9,6 +9,7 @@ type StatusKey =
   | "assigned_not_started"  // NEW: Assigned but not started (PENDING with assignedToId)
   | "in_progress"
   | "assistance_required"
+  | "resolved"
   | "completed"
   | "all";
 
@@ -19,6 +20,7 @@ function parseStatus(s: string | null): StatusKey {
     case "assigned_not_started":  // NEW: Handle assigned_not_started
     case "in_progress":
     case "assistance_required":
+    case "resolved":
     case "completed":
     case "all":
       return v;
@@ -82,6 +84,8 @@ export async function GET(req: NextRequest) {
         return { status: "IN_PROGRESS" };
       case "assistance_required":
         return { status: "ASSISTANCE_REQUIRED" };
+      case "resolved":
+        return { status: "RESOLVED" };
       case "completed":
         return { status: "COMPLETED" };
       case "all":

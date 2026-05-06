@@ -85,6 +85,7 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
         : statusFilter === "PENDING" ? "pending"
         : statusFilter === "IN_PROGRESS" ? "in_progress"
         : statusFilter === "ASSISTANCE_REQUIRED" ? "assistance_required"
+        : statusFilter === "RESOLVED" ? "resolved"
         : statusFilter === "COMPLETED" ? "completed"
         : statusFilter === "ALL" ? "all"
         : statusFilter.toLowerCase();
@@ -440,6 +441,7 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
             <option value="assigned_not_started">Assigned - Not Started</option>
             <option value="IN_PROGRESS">In Progress</option>
             <option value="ASSISTANCE_REQUIRED">Assistance Required</option>
+            <option value="RESOLVED">Manager Resolved — In Progress</option>
             <option value="COMPLETED">Completed</option>
             <option value="ALL">All</option>
           </select>

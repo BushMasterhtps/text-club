@@ -548,6 +548,8 @@ function PendingTasksSection() {
             <option value="pending">Pending (Unassigned)</option>
             <option value="assigned_not_started">Assigned - Not Started</option>
             <option value="in_progress">In Progress</option>
+            <option value="assistance_required">Assistance Required</option>
+            <option value="resolved">Manager Resolved — In Progress</option>
             <option value="completed">Completed</option>
           </select>
         </div>

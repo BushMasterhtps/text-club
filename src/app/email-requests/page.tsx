@@ -1359,6 +1359,8 @@ function PendingEmailRequestTasksSection() {
       const apiStatus = statusFilter === "assigned_not_started" ? "assigned_not_started"
         : statusFilter === "PENDING" ? "pending"
         : statusFilter === "IN_PROGRESS" ? "in_progress"
+        : statusFilter === "ASSISTANCE_REQUIRED" ? "assistance_required"
+        : statusFilter === "RESOLVED" ? "resolved"
         : statusFilter === "COMPLETED" ? "completed"
         : statusFilter.toLowerCase();
       
@@ -1615,6 +1617,8 @@ function PendingEmailRequestTasksSection() {
             <option value="PENDING">Pending (Unassigned)</option>
             <option value="assigned_not_started">Assigned - Not Started</option>
             <option value="IN_PROGRESS">In Progress</option>
+            <option value="ASSISTANCE_REQUIRED">Assistance Required</option>
+            <option value="RESOLVED">Manager Resolved — In Progress</option>
             <option value="COMPLETED">Completed</option>
             <option value="all">All</option>
           </select>

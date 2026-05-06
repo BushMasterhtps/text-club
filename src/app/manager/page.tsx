@@ -1025,7 +1025,7 @@ function PendingTasksSection({ onTasksMutated }: { onTasksMutated?: () => Promis
           <option value="in_progress">In Progress</option>
           <option value="assistance_required">Assistance Required</option>
           <option value="spam_review">Spam Review</option>
-          <option value="resolved">Resolved</option>
+          <option value="resolved">Manager Resolved — In Progress</option>
           <option value="completed">Completed</option>
           <option value="all">All</option>
         </select>
