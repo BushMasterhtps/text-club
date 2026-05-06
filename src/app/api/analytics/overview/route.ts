@@ -8,6 +8,38 @@ import {
   teamAttributedTaskWhere,
 } from "@/lib/team-analytics-roster";
 
+/** Org-wide counts for tasks with no assignee (team-filtered overview only; not part of team totals). */
+async function fetchSharedUnassignedBacklog() {
+  const [pendingUnassignedByType, rawMessageReady, holdsUnassignedWorkflow] =
+    await Promise.all([
+      prisma.task.groupBy({
+        by: ["taskType"],
+        where: { status: "PENDING", assignedToId: null },
+        _count: { id: true },
+      }),
+      prisma.rawMessage.count({ where: { status: "READY" } }),
+      prisma.task.count({
+        where: {
+          taskType: "HOLDS",
+          holdsStatus: { in: [...HOLDS_ACTIVE_WORKFLOW_QUEUES] },
+          assignedToId: null,
+        },
+      }),
+    ]);
+
+  const m = new Map(
+    pendingUnassignedByType.map((row) => [row.taskType, row._count.id])
+  );
+
+  return {
+    textClub: (m.get("TEXT_CLUB") || 0) + rawMessageReady,
+    wodIvcs: m.get("WOD_IVCS") || 0,
+    emailRequests: m.get("EMAIL_REQUESTS") || 0,
+    holds: holdsUnassignedWorkflow,
+    yotpo: m.get("YOTPO") || 0,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
@@ -45,6 +77,11 @@ export async function GET(request: NextRequest) {
       rosterTeam
     );
 
+    const rosterTeamFilterSelected = subjectIds !== null;
+    const sharedUnassignedBacklog = rosterTeamFilterSelected
+      ? await fetchSharedUnassignedBacklog()
+      : undefined;
+
     if (filterActive && subjectIds!.length === 0) {
       return NextResponse.json({
         success: true,
@@ -63,6 +100,7 @@ export async function GET(request: NextRequest) {
             holds: 0,
             yotpo: 0,
           },
+          sharedUnassignedBacklog,
         },
       });
     }
@@ -223,7 +261,10 @@ export async function GET(request: NextRequest) {
         emailRequests: emailRequestsPending,
         holds: holdsPending,
         yotpo: yotpoPending
-      }
+      },
+      ...(sharedUnassignedBacklog != null
+        ? { sharedUnassignedBacklog }
+        : {}),
     };
 
     return NextResponse.json({

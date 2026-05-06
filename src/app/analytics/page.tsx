@@ -53,6 +53,14 @@ interface OverviewStats {
     holds: number;
     yotpo: number;
   };
+  /** Present when a roster team filter is selected; org-wide unassigned pool, not part of team totals. */
+  sharedUnassignedBacklog?: {
+    textClub: number;
+    wodIvcs: number;
+    emailRequests: number;
+    holds: number;
+    yotpo: number;
+  };
 }
 
 interface TaskTypeStats {
@@ -672,6 +680,12 @@ export default function AnalyticsPage() {
                         <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                           📋 Pending Work in Queues
                         </h4>
+                        {rosterTeamFilter !== PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY && (
+                          <p className="text-sm text-white/65 mb-3 leading-relaxed">
+                            Team view shows work currently assigned to this team. Unassigned queue backlog is
+                            shared and appears in All Teams.
+                          </p>
+                        )}
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-blue-500/10 rounded-lg p-3 border border-blue-500/20">
                             <div className="text-blue-300 text-xs font-medium">Text Club</div>
@@ -704,6 +718,49 @@ export default function AnalyticsPage() {
                             </div>
                           </div>
                         </div>
+                        {rosterTeamFilter !== PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY &&
+                          overviewStats.sharedUnassignedBacklog && (
+                            <div className="mt-4 pt-4 border-t border-white/10">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-amber-200/90 mb-2">
+                                Shared unassigned backlog
+                              </p>
+                              <p className="text-xs text-white/55 mb-3">
+                                Org-wide items with no assignee (not included in team totals above).
+                              </p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="rounded-md bg-white/5 px-2 py-1.5 border border-white/10">
+                                  <div className="text-[10px] text-blue-300/90">Text Club</div>
+                                  <div className="text-sm font-semibold text-white">
+                                    {overviewStats.sharedUnassignedBacklog.textClub}
+                                  </div>
+                                </div>
+                                <div className="rounded-md bg-white/5 px-2 py-1.5 border border-white/10">
+                                  <div className="text-[10px] text-purple-300/90">WOD/IVCS</div>
+                                  <div className="text-sm font-semibold text-white">
+                                    {overviewStats.sharedUnassignedBacklog.wodIvcs}
+                                  </div>
+                                </div>
+                                <div className="rounded-md bg-white/5 px-2 py-1.5 border border-white/10">
+                                  <div className="text-[10px] text-green-300/90">Email</div>
+                                  <div className="text-sm font-semibold text-white">
+                                    {overviewStats.sharedUnassignedBacklog.emailRequests}
+                                  </div>
+                                </div>
+                                <div className="rounded-md bg-white/5 px-2 py-1.5 border border-white/10">
+                                  <div className="text-[10px] text-yellow-300/90">Holds</div>
+                                  <div className="text-sm font-semibold text-white">
+                                    {overviewStats.sharedUnassignedBacklog.holds}
+                                  </div>
+                                </div>
+                                <div className="rounded-md bg-white/5 px-2 py-1.5 border border-white/10 col-span-2">
+                                  <div className="text-[10px] text-indigo-300/90">Yotpo</div>
+                                  <div className="text-sm font-semibold text-white">
+                                    {overviewStats.sharedUnassignedBacklog.yotpo}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                       </div>
                     </div>
                   </div>
