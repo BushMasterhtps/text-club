@@ -90,6 +90,7 @@ export default function EmailRequestsAnalytics() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [dispositionFilter, setDispositionFilter] = useState('all');
+  const [detailsPage, setDetailsPage] = useState(1);
   const [reviewedReport, setReviewedReport] = useState<ReviewedReportData | null>(null);
   const [reviewedLoading, setReviewedLoading] = useState(false);
   const [reviewedError, setReviewedError] = useState<string | null>(null);
@@ -252,6 +253,17 @@ export default function EmailRequestsAnalytics() {
     });
   };
 
+  const DETAILS_PAGE_SIZE = 50;
+  const filteredEmailDetails = getFilteredEmailDetails();
+  const totalDetailsPages = Math.max(1, Math.ceil(filteredEmailDetails.length / DETAILS_PAGE_SIZE));
+  const safeDetailsPage = Math.min(detailsPage, totalDetailsPages);
+  const paginatedEmailDetails = filteredEmailDetails.slice(
+    (safeDetailsPage - 1) * DETAILS_PAGE_SIZE,
+    safeDetailsPage * DETAILS_PAGE_SIZE
+  );
+  const showingStart = filteredEmailDetails.length === 0 ? 0 : (safeDetailsPage - 1) * DETAILS_PAGE_SIZE + 1;
+  const showingEnd = Math.min(safeDetailsPage * DETAILS_PAGE_SIZE, filteredEmailDetails.length);
+
   const downloadCSV = () => {
     const filteredDetails = getFilteredEmailDetails();
     if (!filteredDetails.length) return;
@@ -326,6 +338,10 @@ export default function EmailRequestsAnalytics() {
     link.click();
     document.body.removeChild(link);
   };
+
+  useEffect(() => {
+    setDetailsPage(1);
+  }, [statusFilter, dispositionFilter, startDate, endDate]);
 
   const formatVerdictLabel = (verdict: ReviewedReportItem['managerVerdict']) => {
     if (verdict === 'CORRECT') return 'Correct';
@@ -745,7 +761,7 @@ export default function EmailRequestsAnalytics() {
             {/* Results Count */}
             <div className="mb-4">
               <p className="text-sm text-gray-300">
-                Showing {getFilteredEmailDetails().length} of {analytics.emailDetails?.length || 0} records
+                Showing {filteredEmailDetails.length} of {analytics.emailDetails?.length || 0} records
               </p>
             </div>
             <div className="overflow-x-auto">
@@ -760,7 +776,7 @@ export default function EmailRequestsAnalytics() {
                   </tr>
                 </thead>
                 <tbody className="bg-gray-800 divide-y divide-gray-600">
-                  {getFilteredEmailDetails().map((task, index) => (
+                  {paginatedEmailDetails.map((task, index) => (
                     <tr key={index}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">{task.sfOrderNumber}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">{task.agentName}</td>
@@ -783,6 +799,30 @@ export default function EmailRequestsAnalytics() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <p className="text-sm text-gray-300">
+                Showing {showingStart}–{showingEnd} of {filteredEmailDetails.length} records
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setDetailsPage((prev) => Math.max(1, prev - 1))}
+                  disabled={safeDetailsPage <= 1}
+                  className="bg-gray-600 hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1 rounded-md text-sm"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-gray-300 px-2">
+                  Page {safeDetailsPage} of {totalDetailsPages}
+                </span>
+                <button
+                  onClick={() => setDetailsPage((prev) => Math.min(totalDetailsPages, prev + 1))}
+                  disabled={safeDetailsPage >= totalDetailsPages}
+                  className="bg-gray-600 hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1 rounded-md text-sm"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
 
