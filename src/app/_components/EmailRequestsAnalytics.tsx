@@ -80,6 +80,32 @@ interface ReviewedReportData {
   items: ReviewedReportItem[];
 }
 
+interface OperationsSummaryData {
+  raw: {
+    totalCompleted: number;
+    unableToComplete: number;
+    outcomeTotal: number;
+  };
+  reviewed: {
+    confirmedUnable: number;
+    incorrectUnable: number;
+    needsFollowUp: number;
+    unreviewedUnable: number;
+  };
+  reviewedCompletionRate: {
+    reviewedCompleted: number;
+    reviewedUnable: number;
+    ratePercent: number | null;
+    excludesNeedsFollowUpAndUnreviewed: boolean;
+    note: string;
+  };
+  breakdowns: {
+    confirmedUnableByDisposition: Record<string, number>;
+    incorrectUnableByDisposition: Record<string, number>;
+    needsFollowUpByDisposition: Record<string, number>;
+  };
+}
+
 export default function EmailRequestsAnalytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -95,6 +121,9 @@ export default function EmailRequestsAnalytics() {
   const [reviewedLoading, setReviewedLoading] = useState(false);
   const [reviewedError, setReviewedError] = useState<string | null>(null);
   const [reviewedVerdictFilter, setReviewedVerdictFilter] = useState<ReviewedVerdictFilter>('all');
+  const [operationsSummary, setOperationsSummary] = useState<OperationsSummaryData | null>(null);
+  const [operationsLoading, setOperationsLoading] = useState(false);
+  const [operationsError, setOperationsError] = useState<string | null>(null);
 
   useEffect(() => {
     // Initialize dates to current month
@@ -107,15 +136,22 @@ export default function EmailRequestsAnalytics() {
   useEffect(() => {
     if (startDate && endDate) {
       loadAnalytics();
+      loadOperationsSummary();
+    }
+  }, [startDate, endDate, comparePeriod]);
+
+  useEffect(() => {
+    if (startDate && endDate) {
       loadReviewedReport();
     }
-  }, [startDate, endDate, comparePeriod, reviewedVerdictFilter]);
+  }, [startDate, endDate, reviewedVerdictFilter]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (autoRefresh) {
       interval = setInterval(() => {
         loadAnalytics();
+        loadOperationsSummary();
         loadReviewedReport();
       }, 30000); // 30 seconds
     }
@@ -159,6 +195,41 @@ export default function EmailRequestsAnalytics() {
       setError(`Failed to fetch analytics: ${errorMsg}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadOperationsSummary = async () => {
+    if (!startDate || !endDate) return;
+    setOperationsLoading(true);
+    setOperationsError(null);
+    try {
+      const response = await fetch(
+        `/api/manager/email-requests/disposition-reviews/operations-summary?startDate=${startDate}&endDate=${endDate}`,
+        { cache: 'no-store' }
+      );
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        setOperationsError(`Failed to fetch operations summary (${response.status}): ${errorText.substring(0, 200)}`);
+        setOperationsSummary(null);
+        return;
+      }
+      const data = await response.json();
+      if (!data.success) {
+        setOperationsError(data.error || 'Failed to load operations summary');
+        setOperationsSummary(null);
+        return;
+      }
+      setOperationsSummary({
+        raw: data.raw,
+        reviewed: data.reviewed,
+        reviewedCompletionRate: data.reviewedCompletionRate,
+        breakdowns: data.breakdowns,
+      });
+    } catch (err) {
+      setOperationsError(err instanceof Error ? err.message : 'Failed to load operations summary');
+      setOperationsSummary(null);
+    } finally {
+      setOperationsLoading(false);
     }
   };
 
@@ -350,6 +421,92 @@ export default function EmailRequestsAnalytics() {
     return 'Needs follow-up / more review';
   };
 
+  const sortBreakdownEntries = (rec: Record<string, number>): [string, number][] =>
+    Object.entries(rec).sort((a, b) => b[1] - a[1]);
+
+  const renderDispositionBreakdown = (rec: Record<string, number>) => {
+    const entries = sortBreakdownEntries(rec);
+    if (entries.length === 0) {
+      return <li className="text-gray-500">None</li>;
+    }
+    return entries.map(([label, count]) => (
+      <li key={label} className="flex justify-between gap-2">
+        <span className="truncate" title={label}>
+          {label}
+        </span>
+        <span className="text-gray-400 shrink-0">{count}</span>
+      </li>
+    ));
+  };
+
+  const downloadReviewedOperationsCSV = async () => {
+    if (!startDate || !endDate) return;
+    try {
+      const response = await fetch(
+        `/api/manager/email-requests/disposition-reviews/report?startDate=${startDate}&endDate=${endDate}&verdict=all`,
+        { cache: 'no-store' }
+      );
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        console.error('Operations CSV: failed to load reviewed rows', data.error);
+        return;
+      }
+      const rows = (data.items || []) as ReviewedReportItem[];
+      if (!rows.length) return;
+
+      const headers = [
+        'Task ID',
+        'Manager Verdict',
+        'Original Disposition',
+        'Submitted Name',
+        'Submitted Email',
+        'Salesforce Case Number',
+        'Request Details / Notes',
+        'Manager Review Note',
+      ];
+
+      const csvRows = rows.map((row) => [
+        row.taskId || '',
+        formatVerdictLabel(row.managerVerdict),
+        row.originalDisposition || '',
+        row.submittedName || '',
+        row.submittedEmail || '',
+        row.salesforceCaseNumber || '',
+        row.requestDetails || '',
+        row.managerReviewNote || '',
+      ]);
+
+      const csvContent = [headers, ...csvRows]
+        .map((row) =>
+          row
+            .map((cell) => {
+              const cellStr = String(cell || '');
+              if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+                return '"' + cellStr.replace(/"/g, '""') + '"';
+              }
+              return cellStr;
+            })
+            .join(',')
+        )
+        .join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute(
+        'download',
+        `Email_Request_Reviewed_Operations_${startDate}_to_${endDate}.csv`
+      );
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.error('Operations CSV export failed', e);
+    }
+  };
+
   const downloadReviewedCSV = () => {
     const rows = reviewedReport?.items || [];
     if (!rows.length) return;
@@ -510,6 +667,7 @@ export default function EmailRequestsAnalytics() {
             <button
               onClick={() => {
                 loadAnalytics();
+                loadOperationsSummary();
                 loadReviewedReport();
               }}
               className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-md font-medium hover:from-blue-700 hover:to-blue-800 transition-colors"
@@ -829,6 +987,129 @@ export default function EmailRequestsAnalytics() {
 
           {/* Email Request Details After Review */}
           <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+            {/* Reviewed Analytics / Operations Report View */}
+            <div className="mb-10 pb-10 border-b border-gray-600">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Reviewed Analytics / Operations Report View</h3>
+                  <p className="text-sm text-gray-300 mt-1 max-w-3xl">
+                    Raw analytics show original agent dispositions. Reviewed analytics reflect manager decisions and are intended for operations reporting.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void downloadReviewedOperationsCSV()}
+                  className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shrink-0"
+                >
+                  📥 Download Reviewed Operations CSV
+                </button>
+              </div>
+
+              {operationsError && (
+                <div className="bg-red-900/20 border border-red-500/30 rounded-md p-3 mb-4 text-red-300 text-sm">
+                  {operationsError}
+                </div>
+              )}
+
+              {operationsLoading ? (
+                <div className="text-gray-300 py-6 text-center">Loading reviewed operations summary…</div>
+              ) : operationsSummary ? (
+                <>
+                  <p className="text-xs text-gray-400 mb-3">
+                    Population: Email Request tasks in the selected date range (by <code className="text-gray-300">createdAt</code>
+                    ), matching raw analytics. <strong className="text-gray-300">Outcome total</strong> = raw completed (not unable) + raw unable to complete (completed with unable disposition).
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3 mb-4">
+                    <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                      <div className="text-2xl font-semibold text-white">{operationsSummary.raw.totalCompleted}</div>
+                      <div className="text-xs text-gray-400 leading-snug">Raw total completed</div>
+                    </div>
+                    <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                      <div className="text-2xl font-semibold text-orange-300">{operationsSummary.raw.unableToComplete}</div>
+                      <div className="text-xs text-gray-400 leading-snug">Raw unable to complete</div>
+                    </div>
+                    <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                      <div className="text-2xl font-semibold text-gray-200">{operationsSummary.raw.outcomeTotal}</div>
+                      <div className="text-xs text-gray-400 leading-snug">Outcome total (completed + unable)</div>
+                    </div>
+                    <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                      <div className="text-2xl font-semibold text-emerald-300">
+                        {operationsSummary.reviewedCompletionRate.ratePercent != null
+                          ? `${operationsSummary.reviewedCompletionRate.ratePercent.toFixed(1)}%`
+                          : '—'}
+                      </div>
+                      <div className="text-xs text-gray-400 leading-snug">Reviewed completion rate</div>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mb-4 leading-relaxed">
+                    <strong className="text-gray-400">Reviewed completion rate:</strong>{' '}
+                    reviewedCompleted = raw completed + incorrect unable (
+                    {operationsSummary.reviewedCompletionRate.reviewedCompleted}), reviewedUnable = confirmed unable (
+                    {operationsSummary.reviewedCompletionRate.reviewedUnable}). Rate = reviewedCompleted ÷ (reviewedCompleted
+                    + reviewedUnable).{' '}
+                    <span className="text-amber-200/90">
+                      Needs follow-up and unreviewed unable are excluded from this denominator.
+                    </span>
+                  </p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                    <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3">
+                      <div className="text-xl font-semibold text-emerald-300">
+                        {operationsSummary.reviewed.confirmedUnable}
+                      </div>
+                      <div className="text-xs text-emerald-100/80 leading-snug">Confirmed unable (verdict correct)</div>
+                    </div>
+                    <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3">
+                      <div className="text-xl font-semibold text-red-300">
+                        {operationsSummary.reviewed.incorrectUnable}
+                      </div>
+                      <div className="text-xs text-red-100/80 leading-snug">Incorrect unable — should have been completed</div>
+                    </div>
+                    <div className="bg-amber-900/20 border border-amber-500/30 rounded-lg p-3">
+                      <div className="text-xl font-semibold text-amber-300">
+                        {operationsSummary.reviewed.needsFollowUp}
+                      </div>
+                      <div className="text-xs text-amber-100/80 leading-snug">Needs follow-up / more review</div>
+                    </div>
+                    <div className="bg-slate-700/40 border border-slate-500/30 rounded-lg p-3">
+                      <div className="text-xl font-semibold text-slate-200">
+                        {operationsSummary.reviewed.unreviewedUnable}
+                      </div>
+                      <div className="text-xs text-slate-300/80 leading-snug">Unreviewed unable (pending review)</div>
+                    </div>
+                  </div>
+
+                  <h4 className="text-sm font-semibold text-white mb-2">Disposition breakdown after review</h4>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div className="bg-gray-900/40 border border-gray-600 rounded-lg p-3">
+                      <div className="text-xs font-medium text-emerald-300/90 mb-2 uppercase tracking-wide">
+                        Confirmed unable (by original disposition)
+                      </div>
+                      <ul className="text-xs text-gray-300 space-y-1 max-h-48 overflow-y-auto">
+                        {renderDispositionBreakdown(operationsSummary.breakdowns.confirmedUnableByDisposition)}
+                      </ul>
+                    </div>
+                    <div className="bg-gray-900/40 border border-gray-600 rounded-lg p-3">
+                      <div className="text-xs font-medium text-red-300/90 mb-2 uppercase tracking-wide">
+                        Incorrect unable (by original disposition)
+                      </div>
+                      <ul className="text-xs text-gray-300 space-y-1 max-h-48 overflow-y-auto">
+                        {renderDispositionBreakdown(operationsSummary.breakdowns.incorrectUnableByDisposition)}
+                      </ul>
+                    </div>
+                    <div className="bg-gray-900/40 border border-gray-600 rounded-lg p-3">
+                      <div className="text-xs font-medium text-amber-300/90 mb-2 uppercase tracking-wide">
+                        Needs follow-up (by original disposition)
+                      </div>
+                      <ul className="text-xs text-gray-300 space-y-1 max-h-48 overflow-y-auto">
+                        {renderDispositionBreakdown(operationsSummary.breakdowns.needsFollowUpByDisposition)}
+                      </ul>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-white">Email Request Details After Review</h3>
