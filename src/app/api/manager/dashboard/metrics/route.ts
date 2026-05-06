@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
+import { logRouteTiming } from "@/lib/route-timing-log";
 
 const DEFAULT_METRICS = {
   pending: 0,
@@ -19,10 +20,14 @@ const DEFAULT_METRICS = {
 };
 
 export async function GET(request: NextRequest) {
+  const route = "GET /api/manager/dashboard/metrics";
+  const startedAt = Date.now();
+  let rowCount: number | undefined;
+
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
-    return await withSelfHealing(async () => {
+    const result = await withSelfHealing(async () => {
     try {
     // Same PST-fixed "reporting day" and half-open window as /api/analytics/text-club (incl. sent-back rows)
     const { startUtc, endExclusiveUtc } = getAgentReportingDayBoundsUtc(null);
@@ -98,6 +103,8 @@ export async function GET(request: NextRequest) {
     const totalAll = totalPending + spamReview + totalCompleted + activeWork + assistanceRequired;
     const pctDone = totalAll > 0 ? Math.round((totalCompleted / totalAll) * 100) : 0;
 
+    rowCount = totalAll;
+
     return NextResponse.json({
       success: true,
       metrics: {
@@ -132,14 +139,23 @@ export async function GET(request: NextRequest) {
       );
     }
   }, { service: 'database' });
+    return result;
   } catch (error: any) {
     // Graceful degradation: DB/circuit breaker failure should not block the portal
     console.error("Dashboard metrics unavailable (returning defaults):", error?.message || error);
+    rowCount = 0;
     return NextResponse.json({
       success: true,
       metrics: DEFAULT_METRICS,
       _degraded: true,
       _message: "Metrics temporarily unavailable; showing defaults.",
     }, { status: 200 });
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: auth.userEmail,
+    });
   }
 }

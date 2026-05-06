@@ -4,11 +4,16 @@ import { learnFromSpamDecision } from "@/lib/spam-detection";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
 import { cache } from "@/lib/cache";
 import { authorizeAgentTaskMutationBody, verifyAuth } from "@/lib/auth";
+import { logRouteTiming } from "@/lib/route-timing-log";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const route = 'POST /api/agent/tasks/[id]/complete';
+  const startedAt = Date.now();
+  let rowCount = 0;
+  let userEmail: string | null = null;
   try {
     const { id } = await params;
     const body = await req.json();
@@ -20,6 +25,7 @@ export async function POST(
     const session = await verifyAuth(req);
     const actor = authorizeAgentTaskMutationBody(session, body);
     if (!actor.ok) return actor.response;
+    userEmail = actor.userEmail;
 
     if (!disposition) {
       return NextResponse.json({ success: false, error: "Disposition required" }, { status: 400 });
@@ -218,6 +224,7 @@ export async function POST(
     }),
       { service: 'database', useRetry: true, useCircuitBreaker: true }
     );
+    rowCount = 1;
 
     // Learn from agent's decision (legitimate vs spam)
     try {
@@ -256,5 +263,12 @@ export async function POST(
       success: false, 
       error: err?.message || "Failed to complete task" 
     }, { status: 500 });
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: userEmail,
+    });
   }
 }

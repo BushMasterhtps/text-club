@@ -2,14 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizeAgentTargetEmail } from "@/lib/auth";
 import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
+import { logRouteTiming } from "@/lib/route-timing-log";
 
 export async function GET(req: NextRequest) {
+  const route = "GET /api/agent/completed-today";
+  const startedAt = Date.now();
+  let rowCount: number | undefined = undefined;
+  let userEmail: string | null = null;
+
   try {
     const { searchParams } = new URL(req.url);
     const email = searchParams.get("email");
 
     const gate = await authorizeAgentTargetEmail(req, email);
     if (!gate.ok) return gate.response;
+
+    userEmail = gate.targetEmail;
 
     // Find the user by email
     const user = await prisma.user.findUnique({
@@ -94,6 +102,8 @@ export async function GET(req: NextRequest) {
       rawMessage: undefined // Remove from response
     }));
 
+    rowCount = transformedTasks.length;
+
     return NextResponse.json({ 
       success: true, 
       tasks: transformedTasks 
@@ -104,5 +114,12 @@ export async function GET(req: NextRequest) {
       success: false, 
       error: err?.message || "Failed to fetch completed tasks" 
     }, { status: 500 });
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: userEmail,
+    });
   }
 }

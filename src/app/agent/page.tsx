@@ -9,6 +9,7 @@ import { Toast } from '@/app/_components/Toast';
 import { useTaskStore } from '@/stores/useTaskStore';
 import KanbanBoard from '@/app/agent/_components/KanbanBoard';
 import { generateTestTasks } from '@/lib/test-data-generator';
+import { parseFetchJsonSafely } from '@/lib/safe-fetch-json';
 
 /* ========== Tiny UI atoms (iOS-ish) ========== */
 function Card({
@@ -191,6 +192,9 @@ export default function AgentPage() {
   const [loading, setLoading] = useState(false);
   const [startedTasks, setStartedTasks] = useState<Set<string>>(new Set());
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const pollingInFlightRef = useRef(false);
+  const scorecardInFlightRef = useRef(false);
+  const lastPollErrorToastAtRef = useRef<number>(0);
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -435,9 +439,21 @@ export default function AgentPage() {
         `/api/agent/completed-today?email=${encodeURIComponent(email)}&date=${encodeURIComponent(date)}`,
         { cache: "no-store" }
       );
-      if (response.ok) {
-        const data = await response.json();
-        setCompletedTasksToday(data.tasks || []);
+      const parsed = await parseFetchJsonSafely(response);
+      if (
+        !response.ok ||
+        parsed.data === null ||
+        typeof parsed.data !== "object"
+      ) {
+        console.warn(
+          "Completed-today fetch failed or empty body; keeping existing completed list",
+          response.status,
+        );
+        return;
+      }
+      const data = parsed.data as { success?: boolean; tasks?: Task[] };
+      if (data.success && Array.isArray(data.tasks)) {
+        setCompletedTasksToday(data.tasks);
       }
     } catch (error) {
       console.error("Failed to load completed tasks:", error);
@@ -447,106 +463,127 @@ export default function AgentPage() {
   const startPolling = (orderOverride?: 'asc' | 'desc') => {
     if (pollingInterval) clearInterval(pollingInterval);
     console.log("🔄 Starting SIMPLE polling system...");
-    
-    // Scorecard polling counter (refresh every 15 cycles = 30 seconds)
-    let scorecardPollCount = 0;
-    
-    // Polling every 5 seconds (as per requirements)
+
     const interval = setInterval(async () => {
-      console.log("🔄 SIMPLE Polling for updates...");
-      const currentEmail = localStorage.getItem('agentEmail');
-      console.log("🔄 SIMPLE Current email:", currentEmail);
-      
-      if (currentEmail) {
-        try {
-          console.log("🔄 SIMPLE About to fetch tasks...");
-          const effectiveOrder = orderOverride ?? sortOrderRef.current;
-          const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${effectiveOrder}`;
-          console.log("🔄 SIMPLE Fetching from:", url);
-          
-          const res = await fetch(url);
-          console.log("🔄 SIMPLE Response status:", res.status);
-          
-          if (res.ok) {
-            const data = await res.json();
-            console.log("🔄 SIMPLE Response data:", data);
-            
-            if (data.success && Array.isArray(data.tasks)) {
-              const newTasks = data.tasks;
-              console.log("🔄 SIMPLE Loaded tasks:", newTasks.length);
-              
-              // CRITICAL: Only update if we have tasks - NEVER clear during polling
-              if (newTasks.length > 0) {
-                // Get current tasks from store for manager response detection
-                const storeState = useTaskStore.getState();
-                const currentStoreTasks = Array.from(storeState.tasks.values());
-                
-                // Check for new manager responses
-                const previousResponses = new Map(currentStoreTasks.map((t: any) => [t.id, t.managerResponse]));
-                const newResponses = newTasks.filter((t: any) => {
-                  const hadResponse = previousResponses.get(t.id);
-                  return t.managerResponse && !hadResponse;
-                });
-                
-                if (newResponses.length > 0) {
-                  console.log("🔄 SIMPLE Found new manager responses:", newResponses.length);
-                  const taskTypeInfo = newResponses[0].taskType === 'TEXT_CLUB' ? 'Text Club' :
-                                     newResponses[0].taskType === 'WOD_IVCS' ? 'WOD/IVCS' :
-                                     newResponses[0].taskType === 'EMAIL_REQUESTS' ? 'Email Request' :
-                                     newResponses[0].taskType === 'YOTPO' ? 'Yotpo' :
-                                     newResponses[0].taskType === 'HOLDS' ? 'Holds' : 'Task';
-                  setToastMessage(`💬 Manager responded to your ${taskTypeInfo} assistance request!`);
-                  setToastType('info');
-                }
-                
-                // Update tasks silently - use ref to get current viewMode
-                const currentViewMode = viewModeRef.current;
-                if (currentViewMode === 'kanban') {
-                  // Kanban: ONLY update store, don't touch local state (prevents flickering)
-                  mergeTasks(newTasks);
-                } else {
-                  // List view: update both
-                  setTasks(newTasks);
-                  setStoreTasks(newTasks);
-                }
-                // Only update lastUpdate, don't cause re-renders
-                setLastUpdate(new Date());
-              }
-              // If newTasks.length === 0, do nothing - keep existing tasks
-           } else {
-             console.warn("🔄 SIMPLE Polling got invalid response:", data);
-             // Don't clear tasks on invalid response - keep existing ones
-           }
-          } else {
-            console.error("🔄 SIMPLE Polling request failed:", res.status);
-            // Don't clear tasks on error - keep existing ones
-          }
-        } catch (error) {
-          console.error("🔄 SIMPLE Polling error:", error);
-        }
-        
-        // Refresh scorecard every 30 seconds (15 polling cycles)
-        // BUT only if viewing current sprint (historical sprints don't need auto-refresh)
-        scorecardPollCount++;
-        if (scorecardPollCount >= 15) {
-          // Only auto-refresh if viewing current sprint
-          // Historical sprints don't change, so no need to refresh them
-          // Use ref to get current value (closure-safe)
-          if (selectedSprintRef.current === 'current') {
-            console.log("📊 Auto-refreshing scorecard (current sprint)...");
-            // Skip cache during polling refresh to ensure we get fresh data
-            // This prevents stale cached data from overwriting recent task completions
-            loadScorecard(currentEmail, true).catch(err => console.error("Failed to refresh scorecard:", err));
-          } else {
-            console.log("📊 Skipping scorecard auto-refresh (viewing historical sprint)");
-          }
-          scorecardPollCount = 0; // Reset counter
-        }
-      } else {
-        console.log("🔄 SIMPLE No email available");
+      if (pollingInFlightRef.current) {
+        console.log("⏭️ SIMPLE Poll skipped: previous request still in flight");
+        return;
       }
-    }, 5000); // 5 seconds polling
-    
+
+      pollingInFlightRef.current = true;
+
+      try {
+        console.log("🔄 SIMPLE Polling for updates...");
+        const currentEmail = localStorage.getItem('agentEmail');
+        console.log("🔄 SIMPLE Current email:", currentEmail);
+
+        if (!currentEmail) {
+          console.log("🔄 SIMPLE No email available");
+          return;
+        }
+
+        console.log("🔄 SIMPLE About to fetch tasks...");
+        const effectiveOrder = orderOverride ?? sortOrderRef.current;
+        const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${effectiveOrder}`;
+        console.log("🔄 SIMPLE Fetching from:", url);
+
+        const res = await fetch(url);
+        console.log("🔄 SIMPLE Response status:", res.status);
+
+        const parsed = await parseFetchJsonSafely(res);
+
+        if (
+          !res.ok ||
+          parsed.data === null ||
+          typeof parsed.data !== "object"
+        ) {
+          console.warn(
+            "🔄 SIMPLE Polling failed or empty/invalid JSON body:",
+            res.status,
+          );
+          const now = Date.now();
+          if (now - lastPollErrorToastAtRef.current > 60000) {
+            setToastMessage("⚠️ Live task sync delayed. Retrying...");
+            setToastType("warning");
+            lastPollErrorToastAtRef.current = now;
+          }
+          return;
+        }
+
+        const data = parsed.data as { success?: boolean; tasks?: any[] };
+
+        if (!(data.success && Array.isArray(data.tasks))) {
+          console.warn("🔄 SIMPLE Polling got invalid response shape:", data);
+          const now = Date.now();
+          if (now - lastPollErrorToastAtRef.current > 60000) {
+            setToastMessage("⚠️ Live task sync delayed. Retrying...");
+            setToastType("warning");
+            lastPollErrorToastAtRef.current = now;
+          }
+          return;
+        }
+
+        const newTasks = data.tasks;
+        console.log("🔄 SIMPLE Loaded tasks:", newTasks.length);
+
+        // CRITICAL: Only update if we have tasks - NEVER clear during polling
+        if (newTasks.length > 0) {
+          const storeState = useTaskStore.getState();
+          const currentStoreTasks = Array.from(storeState.tasks.values());
+
+          const previousResponses = new Map(
+            currentStoreTasks.map((t: any) => [t.id, t.managerResponse]),
+          );
+          const newResponses = newTasks.filter((t: any) => {
+            const hadResponse = previousResponses.get(t.id);
+            return t.managerResponse && !hadResponse;
+          });
+
+          if (newResponses.length > 0) {
+            console.log(
+              "🔄 SIMPLE Found new manager responses:",
+              newResponses.length,
+            );
+            const taskTypeInfo =
+              newResponses[0].taskType === "TEXT_CLUB"
+                ? "Text Club"
+                : newResponses[0].taskType === "WOD_IVCS"
+                  ? "WOD/IVCS"
+                  : newResponses[0].taskType === "EMAIL_REQUESTS"
+                    ? "Email Request"
+                    : newResponses[0].taskType === "YOTPO"
+                      ? "Yotpo"
+                      : newResponses[0].taskType === "HOLDS"
+                        ? "Holds"
+                        : "Task";
+            setToastMessage(
+              `💬 Manager responded to your ${taskTypeInfo} assistance request!`,
+            );
+            setToastType("info");
+          }
+
+          const currentViewMode = viewModeRef.current;
+          if (currentViewMode === "kanban") {
+            mergeTasks(newTasks);
+          } else {
+            setTasks(newTasks);
+            setStoreTasks(newTasks);
+          }
+          setLastUpdate(new Date());
+        }
+      } catch (error) {
+        console.error("🔄 SIMPLE Polling error:", error);
+        const now = Date.now();
+        if (now - lastPollErrorToastAtRef.current > 60000) {
+          setToastMessage("⚠️ Live task sync delayed. Retrying...");
+          setToastType("warning");
+          lastPollErrorToastAtRef.current = now;
+        }
+      } finally {
+        pollingInFlightRef.current = false;
+      }
+    }, 5000);
+
     setPollingInterval(interval);
   };
 
@@ -555,6 +592,7 @@ export default function AgentPage() {
       clearInterval(pollingInterval);
       setPollingInterval(null);
     }
+    pollingInFlightRef.current = false;
   };
 
   useEffect(() => {
@@ -599,15 +637,21 @@ export default function AgentPage() {
       console.log("🌐 Fetching from:", url);
       const res = await fetch(url);
       console.log("📡 Response status:", res.status, res.statusText);
-      
-      if (!res.ok) {
-        console.error("❌ API call failed:", res.status, res.statusText);
+
+      const parsed = await parseFetchJsonSafely(res);
+
+      if (!res.ok || parsed.data === null || typeof parsed.data !== "object") {
+        console.warn(
+          "❌ loadTasks failed or empty/invalid JSON; preserving current tasks",
+          res.status,
+          res.statusText,
+        );
         return;
       }
-      
-      const data = await res.json();
+
+      const data = parsed.data as { success?: boolean; tasks?: Task[] };
       console.log("📦 Response data:", data);
-      if (data.success) {
+      if (data.success && Array.isArray(data.tasks)) {
         const newTasks = data.tasks;
         console.log("📥 Loaded tasks:", newTasks.length, "tasks");
         
@@ -655,7 +699,7 @@ export default function AgentPage() {
         
         console.log("✅ Tasks updated, last update set to:", new Date().toLocaleTimeString());
       } else {
-        console.error("❌ API returned success: false:", data);
+        console.warn("❌ loadTasks invalid payload; preserving current tasks:", data);
       }
     } catch (error) {
       console.error("❌ Failed to load tasks:", error);
@@ -759,26 +803,44 @@ export default function AgentPage() {
       return;
     }
 
+    if (scorecardInFlightRef.current) {
+      console.log("⏭️ Scorecard load skipped: previous request in flight");
+      return;
+    }
+
+    scorecardInFlightRef.current = true;
+
     console.log("📊 Loading scorecard for:", currentEmail, skipCache ? "(skipping cache)" : "");
     setLoadingScorecard(true);
     try {
       const cacheParam = skipCache ? "&skipCache=true" : "";
-      // Add cache-busting timestamp when skipping cache, and use no-store to prevent browser caching
       const timestamp = skipCache ? `&_t=${Date.now()}` : "";
       const response = await fetch(`/api/agent/personal-scorecard?email=${encodeURIComponent(currentEmail)}${cacheParam}${timestamp}`, {
-        cache: skipCache ? 'no-store' : 'default' // Prevent browser caching when refreshing after task completion
+        cache: skipCache ? 'no-store' : 'default'
       });
-      const data = await response.json();
+      const parsed = await parseFetchJsonSafely(response);
+
+      if (
+        !response.ok ||
+        parsed.data === null ||
+        typeof parsed.data !== "object"
+      ) {
+        console.warn(
+          "📊 Scorecard fetch failed or empty/invalid JSON; preserving displayed scorecard",
+          response.status,
+        );
+        return;
+      }
+
+      const data = parsed.data as Record<string, unknown>;
 
       console.log("📊 Scorecard API response:", data);
 
       if (data.success) {
-        console.log("✅ Scorecard loaded successfully:", data.agent?.name);
-        setScorecardData(data);
-        // Load sprint history when scorecard loads
+        console.log("✅ Scorecard loaded successfully:", (data as any).agent?.name);
+        setScorecardData(data as any);
         loadSprintHistory();
       } else {
-        // If user is Holds-only agent, don't show error - just don't display scorecard
         if (data.isHoldsOnlyAgent) {
           console.log("ℹ️ Holds-only agent - Performance Scorecard not available");
           setScorecardData(null);
@@ -790,8 +852,24 @@ export default function AgentPage() {
       console.error('❌ Error loading scorecard:', error);
     } finally {
       setLoadingScorecard(false);
+      scorecardInFlightRef.current = false;
     }
   };
+
+  /** Decoupled from 5s task poll: current sprint scorecard refresh every 30s without blocking tasks. */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (selectedSprintRef.current !== "current") return;
+      const stored =
+        typeof window !== "undefined"
+          ? localStorage.getItem("agentEmail")
+          : null;
+      if (!stored) return;
+      void loadScorecard(stored, true);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const loadStats = async (emailToUse?: string, dateToUse?: string) => {
     const currentEmail = emailToUse || email;

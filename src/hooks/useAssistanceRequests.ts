@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { fetchManagerAssistance } from '@/lib/manager-assistance-fetch';
 
 interface AssistanceRequest {
   id: string;
@@ -30,78 +31,78 @@ export function useAssistanceRequests(): UseAssistanceRequestsReturn {
   const previousPendingCountRef = useRef(0);
   const isInitialLoadRef = useRef(true);
 
-  const fetchAssistanceRequests = async () => {
+  const fetchAssistanceRequests = async (options?: { bypassCache?: boolean }) => {
     try {
       console.log("🔍 [Assistance] Fetching assistance requests...");
-      const response = await fetch("/api/manager/assistance", { cache: "no-store" });
-      
-      if (!response.ok) {
-        console.error("🔍 [Assistance] API error:", response.status, response.statusText);
+      const { ok, data } = await fetchManagerAssistance({
+        bypassCache: options?.bypassCache,
+      });
+
+      if (!ok || !data || data.success !== true) {
+        if (options?.bypassCache) {
+          console.warn("🔍 [Assistance] API error or unusable payload; keeping existing list state");
+        }
         return;
       }
 
-      const data = await response.json();
-      
-      if (data.success) {
-        // Filter out HOLDS tasks - they should only appear in Holds dashboard
-        const allNonHoldsRequests = (data.requests || []).filter((req: AssistanceRequest) => 
-          req.taskType !== 'HOLDS' && 
-          (req.taskType === 'TEXT_CLUB' || 
-           req.taskType === 'WOD_IVCS' || 
-           req.taskType === 'EMAIL_REQUESTS' || 
-           req.taskType === 'YOTPO' ||
-           req.taskType === 'STANDALONE_REFUNDS')
-        );
-        
-        // Count pending requests (status === 'ASSISTANCE_REQUIRED')
-        const pendingRequests = allNonHoldsRequests.filter(
-          (req: AssistanceRequest) => req.status === 'ASSISTANCE_REQUIRED'
-        );
-        const newPendingCount = pendingRequests.length;
-        
-        console.log("🔍 [Assistance] Total requests:", allNonHoldsRequests.length);
-        console.log("🔍 [Assistance] Pending count:", newPendingCount);
-        console.log("🔍 [Assistance] Previous pending count:", previousPendingCountRef.current);
-        
-        // Detect new requests
-        if (!isInitialLoadRef.current) {
-          // Only show notification if there are new pending requests
-          if (newPendingCount > previousPendingCountRef.current) {
-            const newCount = newPendingCount - previousPendingCountRef.current;
-            console.log("🔍 [Assistance] New assistance requests detected:", newCount);
-            setNewAssistanceCount(newCount);
-            setShowNotification(true);
-            
-            // Auto-hide notification after 8 seconds
-            setTimeout(() => {
-              setShowNotification(false);
-            }, 8000);
-          } else if (newPendingCount === 0 && previousPendingCountRef.current > 0) {
-            // All requests resolved - hide notification
+      const rows = (data.requests ?? []) as AssistanceRequest[];
+
+      // Filter out HOLDS tasks - they should only appear in Holds dashboard
+      const allNonHoldsRequests = rows.filter((req: AssistanceRequest) =>
+        req.taskType !== 'HOLDS' &&
+        (req.taskType === 'TEXT_CLUB' ||
+          req.taskType === 'WOD_IVCS' ||
+          req.taskType === 'EMAIL_REQUESTS' ||
+          req.taskType === 'YOTPO' ||
+          req.taskType === 'STANDALONE_REFUNDS'),
+      );
+
+      // Count pending requests (status === 'ASSISTANCE_REQUIRED')
+      const pendingRequests = allNonHoldsRequests.filter(
+        (req: AssistanceRequest) => req.status === 'ASSISTANCE_REQUIRED',
+      );
+      const newPendingCount = pendingRequests.length;
+
+      console.log('🔍 [Assistance] Total requests:', allNonHoldsRequests.length);
+      console.log('🔍 [Assistance] Pending count:', newPendingCount);
+      console.log('🔍 [Assistance] Previous pending count:', previousPendingCountRef.current);
+
+      // Detect new requests
+      if (!isInitialLoadRef.current) {
+        // Only show notification if there are new pending requests
+        if (newPendingCount > previousPendingCountRef.current) {
+          const newCount = newPendingCount - previousPendingCountRef.current;
+          console.log('🔍 [Assistance] New assistance requests detected:', newCount);
+          setNewAssistanceCount(newCount);
+          setShowNotification(true);
+
+          // Auto-hide notification after 8 seconds
+          setTimeout(() => {
             setShowNotification(false);
-            setNewAssistanceCount(0);
-          }
-        } else {
-          // On initial load, show notification if there are any pending requests
-          if (newPendingCount > 0) {
-            console.log("🔍 [Assistance] Initial load: Found pending requests:", newPendingCount);
-            setNewAssistanceCount(newPendingCount);
-            setShowNotification(true);
-            
-            // Auto-hide notification after 8 seconds
-            setTimeout(() => {
-              setShowNotification(false);
-            }, 8000);
-          }
-          isInitialLoadRef.current = false;
+          }, 8000);
+        } else if (newPendingCount === 0 && previousPendingCountRef.current > 0) {
+          // All requests resolved - hide notification
+          setShowNotification(false);
+          setNewAssistanceCount(0);
         }
-        
-        setAssistanceRequests(allNonHoldsRequests);
-        setPendingCount(newPendingCount);
-        previousPendingCountRef.current = newPendingCount;
       } else {
-        console.error("🔍 [Assistance] API returned error:", data.error);
+        // On initial load, show notification if there are any pending requests
+        if (newPendingCount > 0) {
+          console.log('🔍 [Assistance] Initial load: Found pending requests:', newPendingCount);
+          setNewAssistanceCount(newPendingCount);
+          setShowNotification(true);
+
+          // Auto-hide notification after 8 seconds
+          setTimeout(() => {
+            setShowNotification(false);
+          }, 8000);
+        }
+        isInitialLoadRef.current = false;
       }
+
+      setAssistanceRequests(allNonHoldsRequests);
+      setPendingCount(newPendingCount);
+      previousPendingCountRef.current = newPendingCount;
     } catch (error) {
       console.error("🔍 [Assistance] Error fetching assistance requests:", error);
     }
@@ -123,7 +124,7 @@ export function useAssistanceRequests(): UseAssistanceRequestsReturn {
     showNotification,
     newAssistanceCount,
     setShowNotification,
-    refresh: fetchAssistanceRequests,
+    refresh: () => fetchAssistanceRequests({ bypassCache: true }),
   };
 }
 

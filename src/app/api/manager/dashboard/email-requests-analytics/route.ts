@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { logRouteTiming } from "@/lib/route-timing-log";
 
 export async function GET(request: NextRequest) {
+  const route = 'GET /api/manager/dashboard/email-requests-analytics';
+  const startedAt = Date.now();
+  let rowCount = 0;
+  let userEmail: string | null = null;
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
+  userEmail = auth.userEmail;
   try {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');
@@ -75,6 +81,7 @@ export async function GET(request: NextRequest) {
         }
       }
     });
+    rowCount = currentPeriodTasks.length;
 
     // Get comparison period data
     const comparisonPeriodTasks = await prisma.task.findMany({
@@ -331,5 +338,12 @@ export async function GET(request: NextRequest) {
       success: false, 
       error: `Failed to fetch analytics: ${errorMessage}` 
     }, { status: 500 });
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: userEmail,
+    });
   }
 }

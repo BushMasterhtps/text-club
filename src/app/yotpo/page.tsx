@@ -16,6 +16,7 @@ import YotpoAnalytics from '@/app/_components/YotpoAnalytics';
 import { AssistanceRequestsSection } from '@/app/manager/_components/AssistanceRequestsSection';
 import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
 import SubmissionsReport from '@/app/yotpo/_components/SubmissionsReport';
+import { fetchManagerAssistance } from '@/lib/manager-assistance-fetch';
 import SessionTimer from '@/app/_components/SessionTimer';
 
 // Utility functions
@@ -1172,36 +1173,37 @@ function YotpoPageContent() {
   };
 
   // Load assistance requests - get all non-Holds requests for cross-visibility
-  const loadAssistanceRequests = async () => {
+  const loadAssistanceRequests = async (forceRefresh?: boolean) => {
     try {
       console.log("🔍 [Yotpo] Loading assistance requests...");
-      const response = await fetch('/api/manager/assistance', { cache: 'no-store' });
-      console.log("🔍 [Yotpo] Assistance API response status:", response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log("🔍 [Yotpo] Assistance API data:", data);
-        
-        if (data.success) {
-          // Get all non-Holds requests (for cross-task-type visibility)
-          const allNonHoldsRequests = (data.requests || []).filter((req: any) => 
-            req.taskType !== 'HOLDS' && 
-            (req.taskType === 'TEXT_CLUB' || 
-             req.taskType === 'WOD_IVCS' || 
-             req.taskType === 'EMAIL_REQUESTS' || 
-             req.taskType === 'YOTPO' ||
-             req.taskType === 'STANDALONE_REFUNDS')
-          );
-          
-          console.log("🔍 [Yotpo] All non-Holds requests count:", allNonHoldsRequests.length);
-          
-          setAssistanceRequests(allNonHoldsRequests);
-          
-          // Notification is now handled by DashboardLayout via useAssistanceRequests hook
+      const { ok, status, data } = await fetchManagerAssistance({
+        bypassCache: forceRefresh,
+      });
+      console.log("🔍 [Yotpo] Assistance API response status:", status);
+
+      if (!ok || !data || data.success !== true) {
+        if (forceRefresh) {
+          console.warn("[Yotpo] Assistance refresh failed; keeping existing list state");
         }
-      } else {
-        console.error("🔍 [Yotpo] Assistance API error:", response.status, response.statusText);
+        return;
       }
+
+      console.log("🔍 [Yotpo] Assistance API data:", data);
+
+      const rows = (data.requests ?? []) as (typeof assistanceRequests)[number][];
+
+      const allNonHoldsRequests = rows.filter((req) =>
+        req.taskType !== 'HOLDS' &&
+        (req.taskType === 'TEXT_CLUB' ||
+          req.taskType === 'WOD_IVCS' ||
+          req.taskType === 'EMAIL_REQUESTS' ||
+          req.taskType === 'YOTPO' ||
+          req.taskType === 'STANDALONE_REFUNDS'),
+      );
+
+      console.log("🔍 [Yotpo] All non-Holds requests count:", allNonHoldsRequests.length);
+
+      setAssistanceRequests(allNonHoldsRequests);
     } catch (error) {
       console.error("🔍 [Yotpo] Error loading assistance requests:", error);
     }

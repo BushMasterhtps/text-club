@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import { useDashboardNavigationContext } from '@/contexts/DashboardNavigationContext';
+import { fetchManagerAssistance } from '@/lib/manager-assistance-fetch';
 import { 
   DashboardType, 
   NavigationItem, 
@@ -39,80 +40,37 @@ export function useDashboardNavigation() {
   // Update badge counts (e.g., assistance requests)
   // Show all non-Holds pending requests across all dashboards for cross-visibility
   useEffect(() => {
-    if (currentDashboard && currentDashboard !== 'holds') {
-      // Fetch assistance count - show all non-Holds requests for cross-visibility
-      fetch('/api/manager/assistance', { cache: 'no-store' })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            // Count all non-Holds pending requests (for cross-task-type visibility)
-            const count = data.requests?.filter(
-              (r: any) => 
-                r.status === 'ASSISTANCE_REQUIRED' && 
+    const refreshBadge = () => {
+      if (!currentDashboard) return;
+
+      fetchManagerAssistance().then(({ ok, data }) => {
+        if (!ok || !data?.success || !Array.isArray(data.requests)) return;
+
+        if (currentDashboard !== 'holds') {
+          const count =
+            data.requests.filter(
+              (r: any) =>
+                r.status === 'ASSISTANCE_REQUIRED' &&
                 r.taskType !== 'HOLDS' &&
-                (r.taskType === 'TEXT_CLUB' || 
-                 r.taskType === 'WOD_IVCS' || 
-                 r.taskType === 'EMAIL_REQUESTS' || 
-                 r.taskType === 'YOTPO' ||
-                 r.taskType === 'STANDALONE_REFUNDS')
-            ).length || 0;
-            setAssistanceCount(count);
-          }
-        })
-        .catch(console.error);
-    } else {
-      // For Holds dashboard, only show Holds requests
-      if (currentDashboard === 'holds') {
-        fetch('/api/manager/assistance', { cache: 'no-store' })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              const count = data.requests?.filter(
-                (r: any) => r.status === 'ASSISTANCE_REQUIRED' && r.taskType === 'HOLDS'
-              ).length || 0;
-              setAssistanceCount(count);
-            }
-          })
-          .catch(console.error);
-      }
-    }
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(() => {
-      if (currentDashboard && currentDashboard !== 'holds') {
-        fetch('/api/manager/assistance', { cache: 'no-store' })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              const count = data.requests?.filter(
-                (r: any) => 
-                  r.status === 'ASSISTANCE_REQUIRED' && 
-                  r.taskType !== 'HOLDS' &&
-                  (r.taskType === 'TEXT_CLUB' || 
-                   r.taskType === 'WOD_IVCS' || 
-                   r.taskType === 'EMAIL_REQUESTS' || 
-                   r.taskType === 'YOTPO' ||
-                   r.taskType === 'STANDALONE_REFUNDS')
-              ).length || 0;
-              setAssistanceCount(count);
-            }
-          })
-          .catch(console.error);
-      } else if (currentDashboard === 'holds') {
-        fetch('/api/manager/assistance', { cache: 'no-store' })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              const count = data.requests?.filter(
-                (r: any) => r.status === 'ASSISTANCE_REQUIRED' && r.taskType === 'HOLDS'
-              ).length || 0;
-              setAssistanceCount(count);
-            }
-          })
-          .catch(console.error);
-      }
-    }, 30000);
-    
+                (r.taskType === 'TEXT_CLUB' ||
+                  r.taskType === 'WOD_IVCS' ||
+                  r.taskType === 'EMAIL_REQUESTS' ||
+                  r.taskType === 'YOTPO' ||
+                  r.taskType === 'STANDALONE_REFUNDS'),
+            ).length ?? 0;
+          setAssistanceCount(count);
+        } else if (currentDashboard === 'holds') {
+          const count =
+            data.requests.filter(
+              (r: any) => r.status === 'ASSISTANCE_REQUIRED' && r.taskType === 'HOLDS',
+            ).length ?? 0;
+          setAssistanceCount(count);
+        }
+      }).catch(console.error);
+    };
+
+    refreshBadge();
+    const interval = setInterval(refreshBadge, 30000);
     return () => clearInterval(interval);
   }, [currentDashboard]);
 

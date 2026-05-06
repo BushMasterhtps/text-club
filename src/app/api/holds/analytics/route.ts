@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import { logRouteTiming } from '@/lib/route-timing-log';
 
 export async function GET(request: NextRequest) {
+  const route = 'GET /api/holds/analytics';
+  const startedAt = Date.now();
+  let userEmail: string | null = null;
+  let analyticsType: string | null = null;
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
+  userEmail = auth.userEmail;
 
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'overview';
+    analyticsType = type;
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
@@ -62,6 +69,16 @@ export async function GET(request: NextRequest) {
       { success: false, error: 'Failed to fetch analytics' },
       { status: 500 }
     );
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      email: userEmail,
+      extra:
+        analyticsType != null
+          ? { type: analyticsType }
+          : undefined,
+    });
   }
 }
 

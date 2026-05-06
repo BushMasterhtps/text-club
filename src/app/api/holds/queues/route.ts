@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateWorkMetadata } from '@/lib/holds-work-metadata';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import { logRouteTiming } from '@/lib/route-timing-log';
 
 // Assembly line queue statuses for holds
 const HOLDS_QUEUES = [
@@ -15,8 +16,13 @@ const HOLDS_QUEUES = [
 type HoldsQueue = typeof HOLDS_QUEUES[number];
 
 export async function GET(request: NextRequest) {
+  const route = 'GET /api/holds/queues';
+  const startedAt = Date.now();
+  let rowCount = 0;
+  let userEmail: string | null = null;
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
+  userEmail = auth.userEmail;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -182,6 +188,7 @@ export async function GET(request: NextRequest) {
     }
 
     const tasksWithAging = tasksWithMetadata;
+    rowCount = tasksWithAging.length;
 
     // Group by queue status
     const queueStats = HOLDS_QUEUES.reduce((acc, queueName) => {
@@ -222,6 +229,13 @@ export async function GET(request: NextRequest) {
       { success: false, error: 'Failed to fetch holds queues' },
       { status: 500 }
     );
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: userEmail,
+    });
   }
 }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import { logRouteTiming } from '@/lib/route-timing-log';
 import type { Prisma } from '@prisma/client';
 
 const UNABLE_SUBSTR = 'unable to complete';
@@ -53,8 +54,13 @@ function groupByDisposition(
 }
 
 export async function GET(request: NextRequest) {
+  const route = 'GET /api/manager/email-requests/disposition-reviews/operations-summary';
+  const startedAt = Date.now();
+  let rowCount = 0;
+  let userEmail: string | null = null;
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
+  userEmail = auth.userEmail;
 
   const { utcStart, utcEnd } = parseCreatedAtUtcRange(request);
 
@@ -93,6 +99,7 @@ export async function GET(request: NextRequest) {
         },
       }),
     ]);
+    rowCount = periodTasks.length;
 
     const rawTotalCompleted = periodTasks.filter(
       (t) =>
@@ -181,5 +188,12 @@ export async function GET(request: NextRequest) {
       },
       { status: 500 }
     );
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: userEmail,
+    });
   }
 }

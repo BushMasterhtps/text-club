@@ -3,8 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { logRouteTiming } from "@/lib/route-timing-log";
 
 export async function GET(req: NextRequest) {
+  const route = "GET /api/manager/assistance";
+  const startedAt = Date.now();
+  let rowCount: number | undefined;
+
   const auth = await requireManagerApiAuth(req);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
@@ -264,6 +269,7 @@ export async function GET(req: NextRequest) {
 
     console.log("🔍 Assistance API: Returning", requests.length, "requests");
 
+    rowCount = requests.length;
     return NextResponse.json({
       success: true,
       requests
@@ -275,6 +281,7 @@ export async function GET(req: NextRequest) {
       stack: error?.stack,
       name: error?.name
     });
+    rowCount = 0;
     // Graceful degradation: return 200 with empty list so manager portal still loads
     return NextResponse.json({
       success: true,
@@ -282,5 +289,12 @@ export async function GET(req: NextRequest) {
       _degraded: true,
       _message: "Assistance list temporarily unavailable.",
     }, { status: 200 });
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: auth.userEmail,
+    });
   }
 }

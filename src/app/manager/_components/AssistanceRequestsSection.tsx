@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 import { useAssistanceRequestsContext } from "@/contexts/AssistanceRequestsContext";
+import { fetchManagerAssistance } from "@/lib/manager-assistance-fetch";
 
 interface AssistanceRequestsSectionProps {
   taskType?: "TEXT_CLUB" | "WOD_IVCS" | "EMAIL_REQUESTS" | "STANDALONE_REFUNDS" | "YOTPO" | "HOLDS";
@@ -72,17 +73,24 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCou
   // Get refresh function from context (for non-Holds dashboards)
   const assistanceContext = useAssistanceRequestsContext();
 
-  const loadRequests = async () => {
+  const loadRequests = async (options?: { forceRefresh?: boolean }) => {
     setLoading(true);
     try {
-      const response = await fetch("/api/manager/assistance", { cache: "no-store" });
-      const data = await response.json();
-      
-      if (data.success) {
-        // Filter logic:
-        // - Text Club, WOD/IVCS, Email Requests, and Yotpo should show ALL of each other's requests (cross-visible)
-        // - Holds should ONLY show Holds requests (isolated)
-        let filteredRequests = data.requests || [];
+      const { ok, data } = await fetchManagerAssistance({
+        bypassCache: options?.forceRefresh,
+      });
+
+      if (!ok || !data || data.success !== true) {
+        if (options?.forceRefresh) {
+          console.warn("Assistance refresh failed or empty; keeping existing requests in UI");
+        }
+        return;
+      }
+
+      // Filter logic:
+      // - Text Club, WOD/IVCS, Email Requests, and Yotpo should show ALL of each other's requests (cross-visible)
+      // - Holds should ONLY show Holds requests (isolated)
+      let filteredRequests = (data.requests ?? []) as AssistanceRequest[];
         
         if (taskType) {
           if (taskType === "HOLDS") {
@@ -112,11 +120,8 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCou
             previousPendingCountRef.current = pendingCount;
           }
         }
-        
-        setRequests(filteredRequests);
-      } else {
-        console.error("Failed to load assistance requests:", data.error);
-      }
+      
+      setRequests(filteredRequests);
     } catch (error) {
       console.error("Error loading assistance requests:", error);
     } finally {
@@ -161,7 +166,7 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCou
           onResponseSent();
         }
         // Reload requests to get updated list
-        loadRequests();
+        await loadRequests({ forceRefresh: true });
       } else {
         alert(data.error || "Failed to send response");
       }

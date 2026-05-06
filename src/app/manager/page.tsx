@@ -16,6 +16,7 @@ import DashboardLayout from '@/app/_components/DashboardLayout';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import { DashboardNavigationProvider } from '@/contexts/DashboardNavigationContext';
 import { useRangeSelection } from '@/hooks/useRangeSelection';
+import { fetchManagerAssistance } from '@/lib/manager-assistance-fetch';
 import { DeleteConfirmationModal } from '@/app/_components/DeleteConfirmationModal';
 
 /* ========== Shared types ========== */
@@ -3841,6 +3842,7 @@ function ManagerPageContent() {
     createdAt: string;
     updatedAt: string;
     status: string;
+    taskType?: string;
   }>>([]);
 
   // Agents (for Assign block at end)
@@ -3890,16 +3892,21 @@ function ManagerPageContent() {
 
   // Load assistance requests for AssistanceRequestsSection component
   // (Notification is now handled by DashboardLayout via useAssistanceRequests hook)
-  async function loadAssistanceRequests() {
+  async function loadAssistanceRequests(forceRefresh?: boolean) {
     try {
-      const response = await fetch("/api/manager/assistance", { cache: "no-store" });
-      const data = await response.json();
-      
-      if (data.success) {
-        // Filter out HOLDS tasks - they should only appear in Holds dashboard
-        const filteredRequests = (data.requests || []).filter((req: any) => req.taskType !== 'HOLDS');
-        setAssistanceRequests(filteredRequests);
+      const { ok, data } = await fetchManagerAssistance({
+        bypassCache: forceRefresh,
+      });
+      if (!ok || !data || data.success !== true) {
+        if (forceRefresh) {
+          console.warn("Assistance refresh failed or empty; keeping existing summary list state");
+        }
+        return;
       }
+      const filteredRequests = ((data.requests ?? []) as (typeof assistanceRequests)[number][]).filter(
+        (req) => req.taskType !== 'HOLDS'
+      );
+      setAssistanceRequests(filteredRequests);
     } catch (error) {
       console.error("Error loading assistance requests:", error);
     }
@@ -4435,7 +4442,8 @@ function ManagerPageContent() {
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">🆘 Assistance Requests</h2>
             <button
-              onClick={loadAssistanceRequests}
+              type="button"
+              onClick={() => void loadAssistanceRequests(true)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
             >
               🔄 Refresh
@@ -4448,7 +4456,7 @@ function ManagerPageContent() {
             onResponseSent={async () => {
               // Refresh the notification hook when manager responds
               // The hook will automatically update when we reload assistance requests
-              await loadAssistanceRequests();
+              await loadAssistanceRequests(true);
             }}
           />
         </div>

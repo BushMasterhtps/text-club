@@ -18,6 +18,7 @@ import { Badge } from "@/app/_components/Badge";
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import EmailRequestsAnalytics from '@/app/_components/EmailRequestsAnalytics';
 import EmailRequestsDispositionReview from '@/app/_components/EmailRequestsDispositionReview';
+import { fetchManagerAssistance } from '@/lib/manager-assistance-fetch';
 
 // Utility functions
 function clamp(value: number | null | undefined): number {
@@ -855,43 +856,52 @@ function EmailRequestsPageContent() {
   };
 
   // Load assistance requests - get all non-Holds requests for cross-visibility
-  const loadAssistanceRequests = async () => {
+  const loadAssistanceRequests = async (forceRefresh?: boolean) => {
     try {
       console.log("🔍 [Email Requests] Loading assistance requests...");
-      const response = await fetch('/api/manager/assistance', { cache: 'no-store' });
-      console.log("🔍 [Email Requests] Assistance API response status:", response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log("🔍 [Email Requests] Assistance API data:", data);
-        
-        if (data.success) {
-          // Get all non-Holds requests (for cross-task-type visibility)
-          const allNonHoldsRequests = (data.requests || []).filter((req: any) => 
-            req.taskType !== 'HOLDS' && 
-            (req.taskType === 'TEXT_CLUB' || 
-             req.taskType === 'WOD_IVCS' || 
-             req.taskType === 'EMAIL_REQUESTS' || 
-             req.taskType === 'YOTPO' ||
-             req.taskType === 'STANDALONE_REFUNDS')
-          );
-          
-          console.log("🔍 [Email Requests] All non-Holds requests count:", allNonHoldsRequests.length);
-          
-          setAssistanceRequests(allNonHoldsRequests);
-          
-          // Check for pending requests (all non-Holds)
-          const pendingRequests = allNonHoldsRequests.filter((req: any) => req.status === 'ASSISTANCE_REQUIRED');
-          const currentPendingCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
-          const newPendingCount = pendingRequests.length;
-          
-          console.log("🔍 [Email Requests] Current pending count:", currentPendingCount, "New pending count:", newPendingCount);
-          
-          // Notification is now handled by DashboardLayout via useAssistanceRequests hook
+      const { ok, status, data } = await fetchManagerAssistance({
+        bypassCache: forceRefresh,
+      });
+      console.log("🔍 [Email Requests] Assistance API response status:", status);
+
+      if (!ok || !data || data.success !== true) {
+        if (forceRefresh) {
+          console.warn("[Email Requests] Assistance refresh failed; keeping existing list state");
         }
-      } else {
-        console.error("🔍 [Email Requests] Assistance API error:", response.status, response.statusText);
+        return;
       }
+
+      console.log("🔍 [Email Requests] Assistance API data:", data);
+
+      const rows = (data.requests ?? []) as (typeof assistanceRequests)[number][];
+
+      const allNonHoldsRequests = rows.filter((req) =>
+        req.taskType !== 'HOLDS' &&
+        (req.taskType === 'TEXT_CLUB' ||
+          req.taskType === 'WOD_IVCS' ||
+          req.taskType === 'EMAIL_REQUESTS' ||
+          req.taskType === 'YOTPO' ||
+          req.taskType === 'STANDALONE_REFUNDS'),
+      );
+
+      console.log("🔍 [Email Requests] All non-Holds requests count:", allNonHoldsRequests.length);
+
+      setAssistanceRequests(allNonHoldsRequests);
+
+      const pendingRequests = allNonHoldsRequests.filter(
+        (req: any) => req.status === 'ASSISTANCE_REQUIRED',
+      );
+      const currentPendingCount = assistanceRequests.filter(
+        (r: any) => r.status === 'ASSISTANCE_REQUIRED',
+      ).length;
+      const newPendingCount = pendingRequests.length;
+
+      console.log(
+        "🔍 [Email Requests] Current pending count:",
+        currentPendingCount,
+        "New pending count:",
+        newPendingCount,
+      );
     } catch (error) {
       console.error("🔍 [Email Requests] Error loading assistance requests:", error);
     }

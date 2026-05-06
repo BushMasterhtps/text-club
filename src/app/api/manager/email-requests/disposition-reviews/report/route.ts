@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import { logRouteTiming } from '@/lib/route-timing-log';
 import type { Prisma } from '@prisma/client';
 
 type VerdictFilter = 'all' | 'correct' | 'incorrect' | 'needs_follow_up';
@@ -48,8 +49,13 @@ function summarizeCounts(rows: { verdict: 'CORRECT' | 'INCORRECT' | 'NEEDS_FOLLO
 }
 
 export async function GET(request: NextRequest) {
+  const route = 'GET /api/manager/email-requests/disposition-reviews/report';
+  const startedAt = Date.now();
+  let rowCount = 0;
+  let userEmail: string | null = null;
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
+  userEmail = auth.userEmail;
 
   const { searchParams } = new URL(request.url);
   const verdictParam = searchParams.get('verdict');
@@ -89,6 +95,7 @@ export async function GET(request: NextRequest) {
         },
       },
     });
+    rowCount = rows.length;
 
     const items = rows.map((row) => ({
       taskId: row.task.id,
@@ -116,5 +123,12 @@ export async function GET(request: NextRequest) {
       { success: false, error: error instanceof Error ? error.message : 'Failed to load reviewed report' },
       { status: 500 }
     );
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: userEmail,
+    });
   }
 }

@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizeAgentTasksList } from "@/lib/auth";
+import { logRouteTiming } from "@/lib/route-timing-log";
 
 export async function GET(req: NextRequest) {
+  const route = 'GET /api/agent/tasks';
+  const startedAt = Date.now();
+  let rowCount = 0;
+  let userEmail: string | null = null;
   try {
     const listAuth = await authorizeAgentTasksList(req);
     if (!listAuth.ok) return listAuth.response;
 
     const { searchParams } = new URL(req.url);
     const email = listAuth.targetEmail;
+    userEmail = email;
 
     // Find the user by authorized email (JWT-bound for agents; explicit ?email= for managers)
     const user = await prisma.user.findUnique({
@@ -120,6 +126,7 @@ export async function GET(req: NextRequest) {
         { createdAt: order } // Oldest to newest by default
       ]
     });
+    rowCount = tasks.length;
 
     // Transform tasks to include brand/phone/text from rawMessage if not set on task
     const transformedTasks = tasks.map(task => {
@@ -219,5 +226,12 @@ export async function GET(req: NextRequest) {
       success: false, 
       error: err?.message || "Failed to fetch tasks" 
     }, { status: 500 });
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: userEmail,
+    });
   }
 }

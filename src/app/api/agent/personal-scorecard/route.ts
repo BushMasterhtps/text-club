@@ -4,6 +4,7 @@ import { getTaskWeight } from "@/lib/task-weights";
 import { getCurrentSprint } from "@/lib/sprint-utils";
 import { cache } from "@/lib/cache";
 import { authorizeAgentTargetEmail } from "@/lib/auth";
+import { logRouteTiming } from "@/lib/route-timing-log";
 
 // Minimum thresholds
 const MINIMUM_TASKS_FOR_RANKING = 20;
@@ -14,6 +15,11 @@ const MINIMUM_DAYS_FOR_SPRINT = 3;
  * Returns the logged-in agent's personal scorecard with rankings and daily comparison
  */
 export async function GET(req: NextRequest) {
+  const route = "GET /api/agent/personal-scorecard";
+  const startedAt = Date.now();
+  let rowCount: number | undefined = undefined;
+  let userEmail: string | null = null;
+
   try {
     const { searchParams } = new URL(req.url);
     const emailParam = searchParams.get("email");
@@ -23,6 +29,7 @@ export async function GET(req: NextRequest) {
     if (!gate.ok) return gate.response;
 
     const email = gate.targetEmail;
+    userEmail = email;
 
     // Check cache first (5 minute TTL to prevent repeated slow queries)
     // Skip cache if skipCache=true (used when refreshing after task completion)
@@ -584,6 +591,10 @@ export async function GET(req: NextRequest) {
     // Cache the response for 5 minutes to prevent repeated slow queries
     cache.set(cacheKey, response, 300); // 5 minutes
 
+    rowCount =
+      sprintRanked?.competitive?.length ??
+      lifetimeRanked?.competitive?.length;
+
     return NextResponse.json(response);
 
   } catch (error) {
@@ -592,6 +603,13 @@ export async function GET(req: NextRequest) {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to fetch personal scorecard'
     }, { status: 500 });
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: userEmail,
+    });
   }
 }
 

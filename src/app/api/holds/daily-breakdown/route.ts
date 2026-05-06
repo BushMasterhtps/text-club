@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import { logRouteTiming } from '@/lib/route-timing-log';
 
 /**
  * API for Daily Breakdown of Holds Tasks
@@ -57,8 +58,13 @@ function getStartOfDayPST(date: Date): Date {
 }
 
 export async function GET(request: NextRequest) {
+  const route = 'GET /api/holds/daily-breakdown';
+  const startedAt = Date.now();
+  let rowCount = 0;
+  let userEmail: string | null = null;
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
+  userEmail = auth.userEmail;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -136,6 +142,7 @@ export async function GET(request: NextRequest) {
         createdAt: 'desc'
       }
     });
+    rowCount = allTasks.length;
     
     // Generate daily breakdowns
     const dailyBreakdowns: any[] = [];
@@ -460,6 +467,13 @@ export async function GET(request: NextRequest) {
       { success: false, error: 'Failed to fetch daily breakdown' },
       { status: 500 }
     );
+  } finally {
+    logRouteTiming({
+      route,
+      durationMs: Date.now() - startedAt,
+      rowCount,
+      email: userEmail,
+    });
   }
 }
 
