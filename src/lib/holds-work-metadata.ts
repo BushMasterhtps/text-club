@@ -152,10 +152,12 @@ export function calculateWorkMetadata(
         if (agentName && agentName !== 'Agent') {
           // Try to find user by name
           if (allUsers) {
-            const user = allUsers.find(u => 
-              u.name.toLowerCase().includes(agentName.toLowerCase()) ||
-              agentName.toLowerCase().includes(u.name.toLowerCase())
-            );
+            const agentLower = agentName.toLowerCase();
+            const user = allUsers.find((u) => {
+              const n = u.name?.toLowerCase();
+              if (!n) return false;
+              return n.includes(agentLower) || agentLower.includes(n);
+            });
             if (user) {
               lastWorkedBy = user.id;
               lastWorkedByName = user.name;
