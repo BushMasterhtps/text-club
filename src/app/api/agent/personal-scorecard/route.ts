@@ -225,17 +225,28 @@ export async function GET(req: NextRequest) {
     // OPTIMIZED: Fetch Trello data without nested select to avoid slow database joins
     // Select agentId directly instead of nested agent.email relationship
     console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "prisma-query-start:trello", route }));
-    const allTrello = await prisma.trelloCompletion.findMany({
-      where: {
-        date: { gte: threeMonthsAgo }
-      },
-      select: {
-        agentId: true,
-        date: true,
-        cardsCount: true
+    let allTrello: Array<{ agentId: string; date: Date; cardsCount: number }> = [];
+    try {
+      allTrello = await prisma.trelloCompletion.findMany({
+        where: {
+          date: { gte: threeMonthsAgo }
+        },
+        select: {
+          agentId: true,
+          date: true,
+          cardsCount: true
+        }
+      });
+      console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "prisma-success:trello", route, count: allTrello.length }));
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2021") {
+        // Table missing (e.g. TrelloCompletion not present in this DB yet).
+        console.warn("[agent/personal-scorecard]", JSON.stringify({ phase: "trello-missing-table", route, prismaCode: e.code, meta: e.meta }));
+        allTrello = [];
+      } else {
+        throw e;
       }
-    });
-    console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "prisma-success:trello", route, count: allTrello.length }));
+    }
 
     if (allTasks.length === 0 && allTrello.length === 0) {
       const emptyResponse = {
