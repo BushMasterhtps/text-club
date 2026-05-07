@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SignJWT } from 'jose';
 import { gateSensitiveDebugEndpoint } from '@/lib/debug-api-gate';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET is not set');
+function getJwtSecretOrNull(): string | null {
+  const secret = process.env.JWT_SECRET;
+  return secret && secret.trim() ? secret : null;
 }
 
 /**
@@ -25,7 +24,11 @@ export async function POST(request: NextRequest) {
 
   try {
     // Create a test JWT token
-    const secret = new TextEncoder().encode(JWT_SECRET);
+    const raw = getJwtSecretOrNull();
+    if (!raw) {
+      return NextResponse.json({ success: false, error: 'Server misconfigured' }, { status: 500 });
+    }
+    const secret = new TextEncoder().encode(raw);
     
     const token = await new SignJWT({
       userId: 'test-user-id',

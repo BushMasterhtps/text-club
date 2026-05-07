@@ -5,9 +5,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getClientIp, hitRateLimit, rateLimitedResponse } from '@/lib/rate-limit';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error('CRITICAL: JWT_SECRET environment variable is not set');
+function getJwtSecretOrNull(): string | null {
+  const secret = process.env.JWT_SECRET;
+  return secret && secret.trim() ? secret : null;
 }
 
 export async function POST(request: NextRequest) {
@@ -16,6 +16,10 @@ export async function POST(request: NextRequest) {
   if (!rl.ok) return rateLimitedResponse(rl.retryAfterSec);
 
   try {
+    const jwtSecret = getJwtSecretOrNull();
+    if (!jwtSecret) {
+      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+    }
     const { currentPassword, newPassword } = await request.json();
 
     if (!currentPassword || !newPassword) {
@@ -85,7 +89,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         mustChangePassword: false
       },
-      JWT_SECRET,
+      jwtSecret,
       { expiresIn: '24h' }
     );
 

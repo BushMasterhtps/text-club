@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-
-if (!JWT_SECRET) {
-  throw new Error('CRITICAL: JWT_SECRET environment variable is not set! Check Netlify configuration.');
+function getJwtSecretOrNull(): string | null {
+  const secret = process.env.JWT_SECRET;
+  return secret && secret.trim() ? secret : null;
 }
 
 export interface AuthResult {
@@ -282,10 +281,19 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult> {
       return { success: false, error: 'No authentication token found' };
     }
 
+    const secret = getJwtSecretOrNull();
+    if (!secret) {
+      // Fail closed: do NOT allow any auth when server is misconfigured.
+      return {
+        success: false,
+        error: 'Server misconfigured: JWT_SECRET is not set',
+      };
+    }
+
     // Verify JWT token
     const { payload } = await jwtVerify(
       token,
-      new TextEncoder().encode(JWT_SECRET)
+      new TextEncoder().encode(secret)
     );
 
     return {

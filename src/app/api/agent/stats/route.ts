@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizeAgentTargetEmail } from "@/lib/auth";
 import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
+import { Prisma } from "@prisma/client";
+import { NextResponseJsonSafe } from "@/lib/safe-json-response";
 
 export async function GET(req: NextRequest) {
+  const route = "GET /api/agent/stats";
   try {
     const { searchParams } = new URL(req.url);
     const email = searchParams.get("email");
     const dateParam = searchParams.get("date"); // Optional date parameter (YYYY-MM-DD format)
+
+    console.info("[agent/stats]", JSON.stringify({ phase: "route-start", route, email, dateParam }));
 
     const gate = await authorizeAgentTargetEmail(req, email);
     if (!gate.ok) return gate.response;
@@ -21,6 +26,7 @@ export async function GET(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
+    console.info("[agent/stats]", JSON.stringify({ phase: "user-found", route, userId: user.id, isActive: user.isActive, role: user.role }));
     if (!user.isActive) {
       return NextResponse.json(
         { success: false, error: "User account is paused", code: "AGENT_PAUSED" },
@@ -42,30 +48,64 @@ export async function GET(req: NextRequest) {
     }
     
     // Get all tasks for this user (including sent-back tasks and completed tasks that are no longer assigned)
-    const tasks = await prisma.task.findMany({
-      where: { 
-        OR: [
-          { assignedToId: user.id },
-          { sentBackBy: user.id }, // Include tasks sent back by this user
-          { completedBy: user.id } // Include tasks completed by this user but now unassigned (e.g., "Unable to Resolve" for Holds)
-        ]
-      },
-      select: {
-        status: true,
-        startTime: true,
-        endTime: true,
-        durationSec: true,
-        assistanceNotes: true,
-        createdAt: true,
-        sentBackBy: true,
-        sentBackAt: true,
-        completedBy: true,
-        completedAt: true
+    console.info("[agent/stats]", JSON.stringify({ phase: "prisma-query-start", route }));
+    let tasks: Array<{
+      status: string;
+      startTime: Date | null;
+      endTime: Date | null;
+      durationSec: number | null;
+      assistanceNotes: string | null;
+      createdAt: Date;
+      sentBackBy?: string | null;
+      sentBackAt?: Date | null;
+      completedBy?: string | null;
+      completedAt?: Date | null;
+    }> = [];
+    try {
+      tasks = await prisma.task.findMany({
+        where: { 
+          OR: [
+            { assignedToId: user.id },
+            { sentBackBy: user.id }, // Include tasks sent back by this user
+            { completedBy: user.id } // Include tasks completed by this user but now unassigned (e.g., "Unable to Resolve" for Holds)
+          ]
+        },
+        select: {
+          status: true,
+          startTime: true,
+          endTime: true,
+          durationSec: true,
+          assistanceNotes: true,
+          createdAt: true,
+          sentBackBy: true,
+          sentBackAt: true,
+          completedBy: true,
+          completedAt: true
+        }
+      });
+    } catch (e) {
+      // Backward-compatible fallback if sentBack*/completedBy* columns are missing.
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2022") {
+        throw e;
       }
-    });
+      console.warn("[agent/stats]", JSON.stringify({ phase: "prisma-fallback-core", route, prismaCode: e.code, meta: e.meta }));
+      tasks = await prisma.task.findMany({
+        where: { assignedToId: user.id },
+        select: {
+          status: true,
+          startTime: true,
+          endTime: true,
+          durationSec: true,
+          assistanceNotes: true,
+          createdAt: true,
+        }
+      });
+    }
+    console.info("[agent/stats]", JSON.stringify({ phase: "prisma-success", route, rowCount: tasks.length }));
 
     if (tasks.length === 0) {
-      return NextResponse.json({
+      console.info("[agent/stats]", JSON.stringify({ phase: "response-serialize", route, empty: true }));
+      return NextResponseJsonSafe({
         success: true,
         stats: {
           assigned: 0,
@@ -80,6 +120,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Calculate stats
+    console.info("[agent/stats]", JSON.stringify({ phase: "transform-start", route }));
     // Assigned = tasks currently in agent's queue (NOT sent back tasks!)
     const assigned = tasks.filter(t => {
       const isInQueue = ["PENDING", "IN_PROGRESS", "ASSISTANCE_REQUIRED"].includes(t.status);
@@ -140,13 +181,14 @@ export async function GET(req: NextRequest) {
       lastUpdate: dateStart.toLocaleDateString()
     };
 
-    return NextResponse.json({ 
+    console.info("[agent/stats]", JSON.stringify({ phase: "response-serialize", route, empty: false }));
+    return NextResponseJsonSafe({ 
       success: true, 
       stats 
     });
   } catch (err: any) {
-    console.error("Error fetching agent stats:", err);
-    return NextResponse.json({ 
+    console.error("[agent/stats]", JSON.stringify({ phase: "catch", route, message: err?.message || String(err), stack: err?.stack }));
+    return NextResponseJsonSafe({ 
       success: false, 
       error: err?.message || "Failed to fetch stats" 
     }, { status: 500 });

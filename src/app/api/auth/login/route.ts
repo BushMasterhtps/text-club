@@ -4,9 +4,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getClientIp, hitRateLimit, rateLimitedResponse } from '@/lib/rate-limit';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error('CRITICAL: JWT_SECRET environment variable is not set');
+function getJwtSecretOrNull(): string | null {
+  const secret = process.env.JWT_SECRET;
+  return secret && secret.trim() ? secret : null;
 }
 
 /** Verbose login step logs (email, lookup details). Off unless Netlify sets LOGIN_DIAG=1. */
@@ -40,6 +40,11 @@ export async function POST(request: NextRequest) {
   if (!loginRl.ok) return rateLimitedResponse(loginRl.retryAfterSec);
 
   try {
+    const jwtSecret = getJwtSecretOrNull();
+    if (!jwtSecret) {
+      loginError({ step: 'env', ok: false, reason: 'missing_jwt_secret' });
+      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+    }
     let body: { email?: string; password?: string };
     try {
       body = await request.json();
@@ -192,7 +197,7 @@ export async function POST(request: NextRequest) {
           name: user.name,
           mustChangePassword: user.mustChangePassword,
         },
-        JWT_SECRET,
+        jwtSecret,
         { expiresIn: '24h' }
       );
     } catch (jwtErr) {

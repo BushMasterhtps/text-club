@@ -6,6 +6,7 @@ import { cache } from "@/lib/cache";
 import { authorizeAgentTargetEmail } from "@/lib/auth";
 import { logRouteTiming } from "@/lib/route-timing-log";
 import { Prisma } from "@prisma/client";
+import { NextResponseJsonSafe } from "@/lib/safe-json-response";
 
 // Minimum thresholds
 const MINIMUM_TASKS_FOR_RANKING = 20;
@@ -26,6 +27,8 @@ export async function GET(req: NextRequest) {
     const emailParam = searchParams.get("email");
     const skipCache = searchParams.get("skipCache") === "true";
 
+    console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "route-start", route, emailParam, skipCache }));
+
     const gate = await authorizeAgentTargetEmail(req, emailParam);
     if (!gate.ok) return gate.response;
 
@@ -38,7 +41,8 @@ export async function GET(req: NextRequest) {
     if (!skipCache) {
       const cached = cache.get(cacheKey);
       if (cached) {
-        return NextResponse.json(cached);
+        console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "cache-hit", route }));
+        return NextResponseJsonSafe(cached);
       }
     } else {
       // If skipping cache, also clear it to ensure fresh data on next request
@@ -76,6 +80,7 @@ export async function GET(req: NextRequest) {
         }
       | null = null;
     try {
+      console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "prisma-query-start:user", route }));
       const user = await prisma.user.findUnique({
         where: { email },
         select: {
@@ -98,6 +103,7 @@ export async function GET(req: NextRequest) {
       if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2022") {
         throw e;
       }
+      console.warn("[agent/personal-scorecard]", JSON.stringify({ phase: "prisma-fallback:user-no-agentTypes", route, prismaCode: e.code, meta: e.meta }));
       const user = await prisma.user.findUnique({
         where: { email },
         select: {
@@ -119,6 +125,7 @@ export async function GET(req: NextRequest) {
         error: "User not found"
       }, { status: 404 });
     }
+    console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "user-found", route, userId: currentUser.id, isActive: currentUser.isActive, agentTypesCount: currentUser.agentTypes.length }));
     if (!currentUser.isActive) {
       return NextResponse.json(
         { success: false, error: "User account is paused", code: "AGENT_PAUSED" },
@@ -160,6 +167,7 @@ export async function GET(req: NextRequest) {
         email: true
       }
     });
+    console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "prisma-success:users", route, count: allUsers.length }));
 
     // Ensure current user is in the list (in case they have a different role or were missed)
     if (!allUsers.find(u => u.id === currentUser.id)) {
@@ -187,6 +195,7 @@ export async function GET(req: NextRequest) {
     // Include both assigned tasks and unassigned completed tasks (e.g., "Unable to Resolve" for Holds)
     // Using date filter to leverage index on (status, endTime, assignedToId, completedBy)
     // EXPLICITLY set no pagination to prevent Prisma from adding OFFSET
+    console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "prisma-query-start:tasks", route }));
     const allTasks = await prisma.task.findMany({
       where: {
         status: "COMPLETED",
@@ -211,9 +220,11 @@ export async function GET(req: NextRequest) {
       // EXPLICITLY no skip/take to prevent OFFSET from being added
       // The query will use the composite index on (status, endTime, assignedToId, completedBy)
     });
+    console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "prisma-success:tasks", route, count: allTasks.length }));
 
     // OPTIMIZED: Fetch Trello data without nested select to avoid slow database joins
     // Select agentId directly instead of nested agent.email relationship
+    console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "prisma-query-start:trello", route }));
     const allTrello = await prisma.trelloCompletion.findMany({
       where: {
         date: { gte: threeMonthsAgo }
@@ -224,6 +235,7 @@ export async function GET(req: NextRequest) {
         cardsCount: true
       }
     });
+    console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "prisma-success:trello", route, count: allTrello.length }));
 
     if (allTasks.length === 0 && allTrello.length === 0) {
       const emptyResponse = {
@@ -251,7 +263,8 @@ export async function GET(req: NextRequest) {
         }
       };
       cache.set(cacheKey, emptyResponse, 120);
-      return NextResponse.json(emptyResponse);
+      console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "response-serialize", route, empty: true }));
+      return NextResponseJsonSafe(emptyResponse);
     }
 
     // Create a map of agentId to email for O(1) lookups
@@ -456,6 +469,7 @@ export async function GET(req: NextRequest) {
     };
 
     // Build lifetime scorecards
+    console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "transform-start", route }));
     const lifetimeScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name || "Unknown", null, null));
 
     // Build current sprint scorecards
@@ -668,11 +682,12 @@ export async function GET(req: NextRequest) {
       sprintRanked?.competitive?.length ??
       lifetimeRanked?.competitive?.length;
 
-    return NextResponse.json(response);
+    console.info("[agent/personal-scorecard]", JSON.stringify({ phase: "response-serialize", route, empty: false }));
+    return NextResponseJsonSafe(response);
 
   } catch (error) {
-    console.error('Personal Scorecard API Error:', error);
-    return NextResponse.json({
+    console.error("[agent/personal-scorecard]", JSON.stringify({ phase: "catch", route, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }));
+    return NextResponseJsonSafe({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to fetch personal scorecard'
     }, { status: 500 });
