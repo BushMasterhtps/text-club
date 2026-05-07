@@ -11,6 +11,7 @@ const MIGRATION_NAMES = [
   '20260507120000_add_user_agent_types',
   '20260507123000_force_tasktype_enum_parity',
   '20260507124000_force_task_schema_parity',
+  '20260507223000_align_import_session_tasktype_enum',
 ] as const;
 
 /**
@@ -97,6 +98,34 @@ export async function GET(request: NextRequest) {
     const userAgentTypes = await hasColumn('User', 'agentTypes');
     const importSessionTaskType = await hasColumn('ImportSession', 'taskType');
 
+    const [importSessionTaskTypeType] = await prisma.$queryRaw<
+      {
+        data_type: string | null;
+        udt_name: string | null;
+        is_nullable: 'YES' | 'NO' | null;
+      }[]
+    >`
+      SELECT data_type, udt_name, is_nullable
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'ImportSession'
+        AND column_name = 'taskType'
+      LIMIT 1
+    `;
+
+    const recentImportSessionTaskTypes = await prisma.$queryRaw<
+      {
+        id: string;
+        importedAt: Date | null;
+        taskType: string | null;
+      }[]
+    >`
+      SELECT "id", "importedAt", "taskType"::text AS "taskType"
+      FROM "ImportSession"
+      ORDER BY "importedAt" DESC NULLS LAST
+      LIMIT 20
+    `;
+
     const placeholders = MIGRATION_NAMES.map((_, i) => `$${i + 1}`).join(', ');
     const migrationRows = await prisma.$queryRawUnsafe<
       {
@@ -139,6 +168,13 @@ export async function GET(request: NextRequest) {
         },
         ImportSession: {
           taskType: importSessionTaskType,
+          taskTypeColumnType: importSessionTaskTypeType ?? null,
+          prismaExpectedType: 'TaskType? (enum)',
+          recentTaskTypeRows: recentImportSessionTaskTypes.map((r) => ({
+            id: r.id,
+            importedAt: r.importedAt?.toISOString() ?? null,
+            taskType: r.taskType,
+          })),
         },
       },
       prismaMigrations: migrationRows,

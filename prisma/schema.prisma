@@ -507,7 +507,7 @@ model ImportSession {
   fileName   String // Original CSV filename
   importedAt DateTime @default(now())
   importedBy String? // User ID who imported
-  taskType   String? // Task type for filtering (WOD_IVCS, EMAIL_REQUESTS, etc.)
+  taskType   TaskType? // Task type for filtering (aligned with Task.taskType enum)
 
   // Import results
   totalRows  Int @default(0)
