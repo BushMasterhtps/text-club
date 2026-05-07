@@ -156,6 +156,7 @@ export async function POST(req: NextRequest) {
     if (Array.isArray((body as any).rawMessageIds) && typeof (body as any).agentId === "string") {
       const rawMessageIds = (body as any).rawMessageIds as string[];
       const agentId = (body as any).agentId as string;
+      console.info('[manager/tasks/assign]', JSON.stringify({ phase: 'raw-mode:start', count: rawMessageIds.length, agentId }));
 
       if (rawMessageIds.length === 0) {
         return NextResponse.json({ success: false, error: "No raw message ids." }, { status: 400 });
@@ -169,20 +170,52 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: "Agent not found." }, { status: 400 });
       }
 
-      // Promote raw messages to tasks and assign them - use individual operations to avoid transaction issues
-      // Load RAW rows that are still READY
+      // Promote raw messages to tasks and assign them - use individual operations to avoid transaction issues.
+      // Rebuild-safe behavior:
+      // - READY rows should be promoted.
+      // - PROMOTED rows may already have Task rows (assign those by rawMessageId).
+      // - PROMOTED rows without Task rows are repaired by creating missing tasks.
       const raws = await prisma.rawMessage.findMany({
-        where: { id: { in: rawMessageIds }, status: "READY" },
+        where: { id: { in: rawMessageIds }, status: { in: ["READY", "PROMOTED"] } },
         select: { id: true, phone: true, email: true, text: true, brand: true, createdAt: true },
       });
 
       if (raws.length === 0) {
-        return NextResponse.json({ success: false, error: "No raw messages available for promotion" }, { status: 400 });
+        return NextResponse.json(
+          { success: false, error: "No assignable raw messages found. They may already be assigned or no longer READY/PROMOTED." },
+          { status: 400 },
+        );
       }
 
-      // Create Tasks with status PENDING and assign to agent (agent must click Start)
+      const existingTasks = await prisma.task.findMany({
+        where: { rawMessageId: { in: raws.map((r) => r.id) } },
+        select: { id: true, rawMessageId: true },
+      });
+      const existingByRaw = new Map(existingTasks.map((t) => [t.rawMessageId, t.id] as const));
+
+      // 1) Reassign any already-promoted tasks we found by rawMessageId
+      let reassignedCount = 0;
+      if (existingTasks.length > 0) {
+        const reassignResult = await prisma.task.updateMany({
+          where: { id: { in: existingTasks.map((t) => t.id) } },
+          data: {
+            assignedToId: agent.id,
+            status: "PENDING",
+            startTime: null,
+            endTime: null,
+            durationSec: null,
+            disposition: null,
+            assistanceNotes: null,
+            managerResponse: null,
+          },
+        });
+        reassignedCount = reassignResult.count;
+      }
+
+      // 2) Create tasks for raws that don't have one yet (READY or orphaned PROMOTED)
+      const rawsNeedingCreate = raws.filter((r) => !existingByRaw.has(r.id));
       const createdTasks = [];
-      for (const r of raws) {
+      for (const r of rawsNeedingCreate) {
         try {
           const task = await prisma.task.create({
             data: {
@@ -190,31 +223,31 @@ export async function POST(req: NextRequest) {
               email: r.email ?? null,
               text: r.text ?? null,
               brand: r.brand ?? null,
-              rawMessageId: r.id, // ensure linkage so UI queries can find it
-              status: "PENDING", // Tasks are PENDING when assigned (agent must click Start)
+              rawMessageId: r.id,
+              status: "PENDING",
               assignedToId: agent.id,
-              startTime: null, // Don't set startTime until agent clicks Start
+              startTime: null,
               createdAt: r.createdAt,
-              taskType: "TEXT_CLUB", // Set task type for Text Club tasks
+              taskType: "TEXT_CLUB",
             },
           });
           createdTasks.push(task);
-          
-          // Mark raw message as PROMOTED
-          await prisma.rawMessage.update({
-            where: { id: r.id },
-            data: { status: "PROMOTED" },
-          });
         } catch (error) {
           console.error(`Error creating task for raw message ${r.id}:`, error);
-          // Continue with other tasks even if one fails
         }
       }
 
+      // 3) Ensure source rows are marked as promoted
+      await prisma.rawMessage.updateMany({
+        where: { id: { in: raws.map((r) => r.id) } },
+        data: { status: "PROMOTED" },
+      });
+
       return NextResponse.json({ 
         success: true, 
-        assigned: { [agentId]: createdTasks.map(t => t.id) },
-        promoted: createdTasks.length
+        assigned: { [agentId]: [...existingTasks.map((t) => t.id), ...createdTasks.map(t => t.id)] },
+        promoted: createdTasks.length,
+        reassigned: reassignedCount,
       });
     }
 

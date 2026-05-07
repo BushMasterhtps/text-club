@@ -9,17 +9,23 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json();
+    console.info('[agent/start]', JSON.stringify({ phase: 'route-start', taskId: id }));
 
     const session = await verifyAuth(req);
     const actor = authorizeAgentTaskMutationBody(session, body);
     if (!actor.ok) return actor.response;
 
-    const user = await prisma.user.findUnique({
-      where: { id: actor.userId },
-      select: { id: true, isActive: true }
+    // Post-rebuild safety: JWT may carry an old userId while email remains correct.
+    // Resolve by id OR normalized email to avoid false "User not found" for valid staff.
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [{ id: actor.userId }, { email: actor.userEmail }],
+      },
+      select: { id: true, isActive: true, email: true },
     });
 
     if (!user) {
+      console.warn('[agent/start]', JSON.stringify({ phase: 'user-not-found', jwtUserId: actor.userId, jwtEmail: actor.userEmail }));
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
@@ -46,6 +52,7 @@ export async function POST(
     });
 
     if (!task) {
+      console.warn('[agent/start]', JSON.stringify({ phase: 'task-not-found-or-not-available', taskId: id, userId: user.id }));
       return NextResponse.json({ success: false, error: "Task not found or not available" }, { status: 404 });
     }
 
@@ -75,13 +82,14 @@ export async function POST(
         startTime: true
       }
     });
+    console.info('[agent/start]', JSON.stringify({ phase: 'task-started', taskId: id, userId: user.id, status: updatedTask.status }));
 
     return NextResponse.json({ 
       success: true, 
       task: updatedTask 
     });
   } catch (err: any) {
-    console.error("Error starting task:", err);
+    console.error("[agent/start] catch", err);
     return NextResponse.json({ 
       success: false, 
       error: err?.message || "Failed to start task" 

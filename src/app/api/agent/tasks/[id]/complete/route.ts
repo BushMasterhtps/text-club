@@ -31,8 +31,10 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Disposition required" }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: actor.userId },
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [{ id: actor.userId }, { email: actor.userEmail }],
+      },
       select: { id: true, isActive: true, email: true }
     });
 
