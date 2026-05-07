@@ -20,14 +20,14 @@ export async function POST(
 
     const user = await prisma.user.findUnique({
       where: { id: actor.userId },
-      select: { id: true, isLive: true }
+      select: { id: true, isActive: true }
     });
 
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    if (!user.isLive) {
+    if (!user.isActive) {
       return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
     }
 

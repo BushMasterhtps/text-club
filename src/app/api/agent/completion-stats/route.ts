@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    if (!user.isLive) {
+    if (!user.isActive) {
       return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
     }
 

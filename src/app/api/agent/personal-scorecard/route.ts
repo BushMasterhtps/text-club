@@ -5,6 +5,7 @@ import { getCurrentSprint } from "@/lib/sprint-utils";
 import { cache } from "@/lib/cache";
 import { authorizeAgentTargetEmail } from "@/lib/auth";
 import { logRouteTiming } from "@/lib/route-timing-log";
+import { Prisma } from "@prisma/client";
 
 // Minimum thresholds
 const MINIMUM_TASKS_FOR_RANKING = 20;
@@ -64,22 +65,65 @@ export async function GET(req: NextRequest) {
     const currentSprint = getCurrentSprint();
 
     // First, find the current user (agent/manager requesting scorecard) - MUST BE BEFORE LOOP!
-    const currentUser = await prisma.user.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        agentTypes: true
+    let currentUser:
+      | {
+          id: string;
+          name: string | null;
+          email: string;
+          role: string;
+          isActive: boolean;
+          agentTypes: string[];
+        }
+      | null = null;
+    try {
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+          agentTypes: true
+        }
+      });
+      if (user) {
+        currentUser = {
+          ...user,
+          agentTypes: user.agentTypes || []
+        };
       }
-    });
+    } catch (e) {
+      // Fallback for partial DBs where agentTypes may still be missing.
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2022") {
+        throw e;
+      }
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true
+        }
+      });
+      if (user) {
+        currentUser = { ...user, agentTypes: [] };
+      }
+    }
 
     if (!currentUser) {
       return NextResponse.json({
         success: false,
         error: "User not found"
       }, { status: 404 });
+    }
+    if (!currentUser.isActive) {
+      return NextResponse.json(
+        { success: false, error: "User account is paused", code: "AGENT_PAUSED" },
+        { status: 403 }
+      );
     }
 
     // Check if user is a Holds-only agent (only has HOLDS in agentTypes)
@@ -180,6 +224,35 @@ export async function GET(req: NextRequest) {
         cardsCount: true
       }
     });
+
+    if (allTasks.length === 0 && allTrello.length === 0) {
+      const emptyResponse = {
+        success: true,
+        empty: true,
+        message: "No completed tasks or Trello data available yet for this agent.",
+        agent: {
+          name: currentUser.name,
+          email: currentUser.email,
+          isSenior: false
+        },
+        currentSprint: {
+          number: currentSprint.number,
+          period: `${currentSprint.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${currentSprint.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+          daysElapsed: currentSprint.daysElapsed,
+          daysRemaining: currentSprint.daysRemaining
+        },
+        lifetime: { my: null, teamAverages: {}, totalCompetitors: 0, nextRankAgent: null },
+        sprint: { my: null, teamAverages: {}, totalCompetitors: 0, nextRankAgent: null },
+        today: { my: null, teamAverages: {} },
+        weeklyTrend: {
+          thisWeek: { tasksPerDay: 0, ptsPerDay: 0, avgHandleTimeSec: 0, totalTasks: 0, daysWorked: 0 },
+          lastWeek: { tasksPerDay: 0, ptsPerDay: 0, avgHandleTimeSec: 0, totalTasks: 0, daysWorked: 0 },
+          changes: { tasksPerDay: 0, ptsPerDay: 0, avgHandleTimeSec: 0, tasksPercent: 0, ptsPercent: 0, speedPercent: 0 }
+        }
+      };
+      cache.set(cacheKey, emptyResponse, 120);
+      return NextResponse.json(emptyResponse);
+    }
 
     // Create a map of agentId to email for O(1) lookups
     const agentIdToEmail = new Map<string, string>();
@@ -383,17 +456,17 @@ export async function GET(req: NextRequest) {
     };
 
     // Build lifetime scorecards
-    const lifetimeScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, null, null));
+    const lifetimeScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name || "Unknown", null, null));
 
     // Build current sprint scorecards
-    const sprintScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, currentSprint.start, currentSprint.end));
+    const sprintScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name || "Unknown", currentSprint.start, currentSprint.end));
 
     // Build today scorecards
-    const todayScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, todayStart, todayEnd));
+    const todayScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name || "Unknown", todayStart, todayEnd));
 
     // Build weekly scorecards for trend analysis
-    const thisWeekScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, thisWeekStart, thisWeekEnd));
-    const lastWeekScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name, lastWeekStart, lastWeekEnd));
+    const thisWeekScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name || "Unknown", thisWeekStart, thisWeekEnd));
+    const lastWeekScorecards = allUsers.map(u => buildAgentScorecard(u.id, u.email, u.name || "Unknown", lastWeekStart, lastWeekEnd));
 
     // Rank and calculate hybrid scores for each set
     const rankAndNormalize = (scorecards: any[], minTasks: number, minDays: number) => {

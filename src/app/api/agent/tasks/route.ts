@@ -19,14 +19,14 @@ export async function GET(req: NextRequest) {
     // Find the user by authorized email (JWT-bound for agents; explicit ?email= for managers)
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
-      select: { id: true, isLive: true }
+      select: { id: true, isActive: true }
     });
 
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    if (!user.isLive) {
+    if (!user.isActive) {
       return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
     }
 

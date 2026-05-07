@@ -22,14 +22,14 @@ export async function GET(req: NextRequest) {
     // Find the user by email
     const user = await prisma.user.findUnique({
       where: { email: gate.targetEmail },
-      select: { id: true, isLive: true }
+      select: { id: true, isActive: true }
     });
 
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    if (!user.isLive) {
+    if (!user.isActive) {
       return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
     }
 

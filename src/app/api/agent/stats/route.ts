@@ -15,11 +15,17 @@ export async function GET(req: NextRequest) {
     // Find the user by email
     const user = await prisma.user.findUnique({
       where: { email: gate.targetEmail },
-      select: { id: true }
+      select: { id: true, isActive: true, role: true, email: true }
     });
 
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+    }
+    if (!user.isActive) {
+      return NextResponse.json(
+        { success: false, error: "User account is paused", code: "AGENT_PAUSED" },
+        { status: 403 }
+      );
     }
 
     let dateStart: Date;
@@ -57,6 +63,21 @@ export async function GET(req: NextRequest) {
         completedAt: true
       }
     });
+
+    if (tasks.length === 0) {
+      return NextResponse.json({
+        success: true,
+        stats: {
+          assigned: 0,
+          completed: 0,
+          avgDuration: 0,
+          assistanceSent: 0,
+          lastUpdate: dateStart.toLocaleDateString()
+        },
+        empty: true,
+        message: "No tasks found for this agent and date range"
+      });
+    }
 
     // Calculate stats
     // Assigned = tasks currently in agent's queue (NOT sent back tasks!)
