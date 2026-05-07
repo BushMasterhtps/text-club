@@ -65,16 +65,25 @@ interface AssistanceRequest {
 
 export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCountChange, onResponseSent }: AssistanceRequestsSectionProps) {
   const [requests, setRequests] = useState<AssistanceRequest[]>([]);
-  const [loading, setLoading] = useState(false);
+  /** True only until the first fetch for this `taskType` finishes (empty list may still be a valid result). */
+  const [bootstrapping, setBootstrapping] = useState(true);
+  /** True during polls / manual refresh after initial load — must not unmount the list or textareas. */
+  const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [responseText, setResponseText] = useState<Record<string, string>>({});
   const previousPendingCountRef = useRef(0);
-  
+  const hasCompletedInitialFetch = useRef(false);
+
   // Get refresh function from context (for non-Holds dashboards)
   const assistanceContext = useAssistanceRequestsContext();
 
   const loadRequests = async (options?: { forceRefresh?: boolean }) => {
-    setLoading(true);
+    const isInitial = !hasCompletedInitialFetch.current;
+    if (isInitial) {
+      setBootstrapping(true);
+    } else {
+      setRefreshing(true);
+    }
     try {
       const { ok, data } = await fetchManagerAssistance({
         bypassCache: options?.forceRefresh,
@@ -91,48 +100,52 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCou
       // - Text Club, WOD/IVCS, Email Requests, and Yotpo should show ALL of each other's requests (cross-visible)
       // - Holds should ONLY show Holds requests (isolated)
       let filteredRequests = (data.requests ?? []) as AssistanceRequest[];
-        
-        if (taskType) {
-          if (taskType === "HOLDS") {
-            // Holds: Only show Holds requests
-            filteredRequests = filteredRequests.filter((req: AssistanceRequest) => req.taskType === "HOLDS");
-          } else {
-            // Text Club, WOD/IVCS, Email Requests, Yotpo: Show all non-Holds requests
-            filteredRequests = filteredRequests.filter((req: AssistanceRequest) => 
-              req.taskType !== "HOLDS" && 
-              (req.taskType === "TEXT_CLUB" || 
-               req.taskType === "WOD_IVCS" || 
-               req.taskType === "EMAIL_REQUESTS" || 
-               req.taskType === "YOTPO" ||
-               req.taskType === "STANDALONE_REFUNDS")
-            );
-          }
+
+      if (taskType) {
+        if (taskType === "HOLDS") {
+          filteredRequests = filteredRequests.filter((req: AssistanceRequest) => req.taskType === "HOLDS");
+        } else {
+          filteredRequests = filteredRequests.filter(
+            (req: AssistanceRequest) =>
+              req.taskType !== "HOLDS" &&
+              (req.taskType === "TEXT_CLUB" ||
+                req.taskType === "WOD_IVCS" ||
+                req.taskType === "EMAIL_REQUESTS" ||
+                req.taskType === "YOTPO" ||
+                req.taskType === "STANDALONE_REFUNDS"),
+          );
         }
-        
-        // Calculate pending count
-        const pendingCount = filteredRequests.filter((req: AssistanceRequest) => req.status === "ASSISTANCE_REQUIRED").length;
-        
-        // Notify parent if pending count changed (for notification banners)
-        if (onPendingCountChange) {
-          const previousCount = previousPendingCountRef.current;
-          if (pendingCount !== previousCount) {
-            onPendingCountChange(pendingCount);
-            previousPendingCountRef.current = pendingCount;
-          }
+      }
+
+      const pendingCount = filteredRequests.filter((req: AssistanceRequest) => req.status === "ASSISTANCE_REQUIRED").length;
+
+      if (onPendingCountChange) {
+        const previousCount = previousPendingCountRef.current;
+        if (pendingCount !== previousCount) {
+          onPendingCountChange(pendingCount);
+          previousPendingCountRef.current = pendingCount;
         }
-      
+      }
+
       setRequests(filteredRequests);
     } catch (error) {
       console.error("Error loading assistance requests:", error);
     } finally {
-      setLoading(false);
+      if (isInitial) {
+        setBootstrapping(false);
+        hasCompletedInitialFetch.current = true;
+      } else {
+        setRefreshing(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadRequests();
-    // Poll for updates every 30 seconds
-    const interval = setInterval(loadRequests, 30000);
+    hasCompletedInitialFetch.current = false;
+    setBootstrapping(true);
+    setRequests([]);
+    void loadRequests();
+    const interval = setInterval(() => void loadRequests(), 30000);
     return () => clearInterval(interval);
   }, [taskType]);
 
@@ -222,15 +235,23 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCou
             ? " (Holds Only)" 
             : " (All Task Types)"}
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {refreshing ? (
+            <span className="text-xs text-white/50" aria-live="polite">
+              Refreshing…
+            </span>
+          ) : null}
           <span className="text-sm text-white/60">{requests.length} total requests</span>
-          <SmallButton onClick={loadRequests} disabled={loading}>
-            {loading ? "Loading..." : "🔄 Refresh"}
+          <SmallButton
+            onClick={() => void loadRequests({ forceRefresh: true })}
+            disabled={bootstrapping || refreshing}
+          >
+            {refreshing ? "Refreshing…" : "🔄 Refresh"}
           </SmallButton>
         </div>
       </div>
 
-      {loading ? (
+      {bootstrapping && requests.length === 0 ? (
         <div className="text-center py-8 text-white/60">Loading assistance requests...</div>
       ) : requests.length === 0 ? (
         <div className="text-center py-8 text-white/60">
