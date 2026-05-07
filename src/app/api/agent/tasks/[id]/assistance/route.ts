@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizeAgentTaskMutationBody, verifyAuth } from "@/lib/auth";
-
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -32,13 +31,14 @@ export async function POST(
       return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
     }
 
-    // Find the task and verify it's assigned to this user
+    // Find the task and verify it's assigned to this user.
+    // Include RESOLVED so follow-up assistance after manager response works (aligned with POST /start).
     const task = await prisma.task.findFirst({
       where: {
         id,
         assignedToId: user.id,
         status: {
-          in: ["IN_PROGRESS", "ASSISTANCE_REQUIRED"]
+          in: ["IN_PROGRESS", "ASSISTANCE_REQUIRED", "RESOLVED"]
         }
       }
     });
@@ -55,21 +55,54 @@ export async function POST(
       assistancePausedDurationSec = Math.round((now.getTime() - start.getTime()) / 1000);
     }
 
-    // Update task status and assistance request
-    const updatedTask = await prisma.task.update({
-      where: { id },
-      data: {
-        status: "ASSISTANCE_REQUIRED",
-        assistanceNotes: message,
-        assistancePausedDurationSec: assistancePausedDurationSec,
-        assistanceRequestedAt: new Date(),
-        updatedAt: new Date()
-      },
-      select: {
-        id: true,
-        status: true,
-        assistanceNotes: true
-      }
+    const taskStatusAtSend = task.status;
+    const now = new Date();
+
+    const { updatedTask } = await prisma.$transaction(async (tx) => {
+      const ut = await tx.task.update({
+        where: { id },
+        data: {
+          status: "ASSISTANCE_REQUIRED",
+          assistanceNotes: message,
+          // New assistance round: clear prior manager reply on Task so lock semantics match waiting state
+          managerResponse: null,
+          assistancePausedDurationSec: assistancePausedDurationSec,
+          assistanceRequestedAt: now,
+          updatedAt: now
+        },
+        select: {
+          id: true,
+          status: true,
+          assistanceNotes: true
+        }
+      });
+
+      const thread = await tx.assistanceThread.upsert({
+        where: { taskId: id },
+        create: {
+          taskId: id,
+          openedAt: now,
+          lastActivityAt: now,
+        },
+        update: {
+          lastActivityAt: now,
+        },
+      });
+
+      await tx.assistanceMessage.create({
+        data: {
+          threadId: thread.id,
+          taskId: id,
+          authorUserId: actor.userId,
+          authorRole: "AGENT",
+          messageType: "REQUEST",
+          body: message,
+          taskStatusAtSend,
+          taskTypeAtSend: task.taskType,
+        },
+      });
+
+      return { updatedTask: ut };
     });
 
     console.log("🔍 Assistance Request Created:", {

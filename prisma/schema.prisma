@@ -56,6 +56,20 @@ enum TaskType {
   YOTPO
 }
 
+/// Author of an assistance transcript message (Task assistance thread).
+enum AssistanceMessageAuthorRole {
+  AGENT
+  MANAGER
+  SYSTEM
+}
+
+/// Kind of assistance transcript message.
+enum AssistanceMessageType {
+  REQUEST
+  RESPONSE
+  SYSTEM_NOTE
+}
+
 enum WodIvcsSource {
   INVALID_CASH_SALE
   ORDERS_NOT_DOWNLOADING
@@ -137,6 +151,7 @@ model User {
   qaTaskReviewsAsReviewer   QATaskReview[]      @relation("QATaskReviewReviewer")
   qaTaskReviewsAsSubject    QATaskReview[]      @relation("QATaskReviewSubject")
   emailRequestDispositionReviews EmailRequestDispositionReview[] @relation("EmailRequestDispositionReviewer")
+  assistanceAuthoredMessages     AssistanceMessage[]
 
   @@index([isLive, lastSeen])
   @@index([qaIsTracked])
@@ -264,10 +279,50 @@ model Task {
 
   emailRequestDispositionReview EmailRequestDispositionReview?
 
+  assistanceThread         AssistanceThread?
+  assistanceMessagesOnTask AssistanceMessage[] @relation("TaskAssistanceMessages")
+
   @@index([assignedToId])
   @@index([status, createdAt])
   @@index([rawMessageId])
   @@index([status, endTime, assignedToId, completedBy]) // Performance index for personal-scorecard query
+}
+
+/// One durable assistance conversation per Task (dual-written with scalar Task assistance fields until migration completes).
+model AssistanceThread {
+  id             String    @id @default(cuid())
+  taskId         String    @unique
+  openedAt       DateTime  @default(now())
+  lastActivityAt DateTime  @default(now())
+  closedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  task     Task                  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  messages AssistanceMessage[]
+
+  @@index([lastActivityAt])
+}
+
+model AssistanceMessage {
+  id               String                       @id @default(cuid())
+  threadId         String
+  taskId           String
+  authorUserId     String?
+  authorRole       AssistanceMessageAuthorRole
+  messageType      AssistanceMessageType
+  body             String                       @db.Text
+  taskStatusAtSend TaskStatus
+  taskTypeAtSend   TaskType
+  metadata         Json?
+  createdAt        DateTime                     @default(now())
+
+  thread     AssistanceThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  task       Task           @relation("TaskAssistanceMessages", fields: [taskId], references: [id], onDelete: Cascade)
+  authorUser User?          @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([threadId, createdAt])
+  @@index([taskId, createdAt])
 }
 
 model AssistanceRequest {

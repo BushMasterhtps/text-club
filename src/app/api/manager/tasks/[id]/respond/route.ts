@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
-
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -27,7 +26,8 @@ export async function POST(
       select: {
         id: true,
         status: true,
-        assistanceNotes: true
+        assistanceNotes: true,
+        taskType: true,
       }
     });
 
@@ -35,19 +35,50 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Task not found or not in assistance state" }, { status: 404 });
     }
 
-    // Update task with manager response and change status to RESOLVED (stays in Assistance Request column but becomes actionable)
-    const updatedTask = await prisma.task.update({
-      where: { id },
-      data: {
-        status: "RESOLVED",
-        managerResponse: response,
-        updatedAt: new Date()
-      },
-      select: {
-        id: true,
-        status: true,
-        managerResponse: true
-      }
+    const taskStatusAtSend = task.status;
+    const now = new Date();
+
+    const updatedTask = await prisma.$transaction(async (tx) => {
+      const ut = await tx.task.update({
+        where: { id },
+        data: {
+          status: "RESOLVED",
+          managerResponse: response,
+          updatedAt: now
+        },
+        select: {
+          id: true,
+          status: true,
+          managerResponse: true
+        }
+      });
+
+      const thread = await tx.assistanceThread.upsert({
+        where: { taskId: id },
+        create: {
+          taskId: id,
+          openedAt: now,
+          lastActivityAt: now,
+        },
+        update: {
+          lastActivityAt: now,
+        },
+      });
+
+      await tx.assistanceMessage.create({
+        data: {
+          threadId: thread.id,
+          taskId: id,
+          authorUserId: auth.userId,
+          authorRole: "MANAGER",
+          messageType: "RESPONSE",
+          body: response,
+          taskStatusAtSend,
+          taskTypeAtSend: task.taskType,
+        },
+      });
+
+      return ut;
     });
 
     return NextResponse.json({ 
