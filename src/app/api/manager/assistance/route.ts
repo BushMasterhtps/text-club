@@ -1,294 +1,88 @@
-// RAILWAY FRESH DEPLOY: Database wiped, deploying with clean schema - $(date +%s)
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { withSelfHealing } from "@/lib/self-healing/wrapper";
-import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
-import { logRouteTiming } from "@/lib/route-timing-log";
+import { NextRequest } from 'next/server';
+import { withSelfHealing } from '@/lib/self-healing/wrapper';
+import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import { logRouteTiming } from '@/lib/route-timing-log';
+import { NextResponseJsonSafe } from '@/lib/safe-json-response';
+import { findTasksForAssistanceList } from '@/lib/assistance-task-query';
+import type { AssistanceTaskRow } from '@/lib/assistance-task-query';
 
 export async function GET(req: NextRequest) {
-  const route = "GET /api/manager/assistance";
+  const route = 'GET /api/manager/assistance';
   const startedAt = Date.now();
   let rowCount: number | undefined;
 
   const auth = await requireManagerApiAuth(req);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
-  try {
-    console.log("🔍 Assistance API: Fetching assistance requests...");
-    
-    // Use self-healing wrapper for database operations
-    // If database connection fails, will retry automatically
-    const tasks = await withSelfHealing(async () => {
-      // Fetch only tasks that have assistance notes and are pending assistance (not yet responded to)
-      // Exclude unassigned tasks (assignedToId must not be null)
-      // Once a manager responds, the task is removed from this list
-      return await prisma.task.findMany({
-      where: {
-        assistanceNotes: { not: null },
-        assignedToId: { not: null }, // Only show tasks that are assigned to an agent
-        status: "ASSISTANCE_REQUIRED" // Only show pending assistance requests (not responded to)
-      },
-      select: {
-        id: true,
-        brand: true,
-        phone: true,
-        text: true,
-        email: true,
-        taskType: true,
-        assistanceNotes: true,
-        managerResponse: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-        // WOD/IVCS specific fields
-        wodIvcsSource: true,
-        documentNumber: true,
-        customerName: true,
-        amount: true,
-        webOrderDifference: true,
-        purchaseDate: true,
-        // Email Request specific fields
-        emailRequestFor: true,
-        details: true,
-        salesforceCaseNumber: true,
-        customerNameNumber: true,
-        // Standalone Refund specific fields
-        refundAmount: true,
-        paymentMethod: true,
-        refundReason: true,
-        // Yotpo specific fields
-        yotpoDateSubmitted: true,
-        yotpoPrOrYotpo: true,
-        yotpoCustomerName: true,
-        yotpoEmail: true,
-        yotpoOrderDate: true,
-        yotpoProduct: true,
-        yotpoIssueTopic: true,
-        yotpoReviewDate: true,
-        yotpoReview: true,
-        yotpoSfOrderLink: true,
-        // Holds specific fields
-        holdsOrderDate: true,
-        holdsOrderNumber: true,
-        holdsCustomerEmail: true,
-        holdsPriority: true,
-        holdsStatus: true,
-        holdsDaysInSystem: true,
-        holdsOrderAmount: true, // Added missing Decimal field
-        // WOD/IVCS additional Decimal fields that might be needed
-        webOrderSubtotal: true,
-        webOrderTotal: true,
-        nsVsWebDiscrepancy: true,
-        netSuiteTotal: true,
-        webTotal: true,
-        webVsNsDifference: true,
-        // Standalone Refund additional Decimal field
-        amountToBeRefunded: true,
-        // NOTE: orderDate is excluded - it's only for Standalone Refunds
-        assignedTo: {
-          select: {
-            name: true,
-            email: true
-          }
-        },
-        rawMessage: {
-          select: {
-            brand: true,
-            phone: true,
-            text: true
-          }
-        }
-      },
-      orderBy: {
-        updatedAt: "desc"
-      }
-      });
-    }, { service: 'assistance-api' });
 
-    console.log("🔍 Assistance API: Found", tasks.length, "tasks with assistance notes");
-    
-    // Helper function to safely convert dates to ISO strings
-    const safeToISOString = (date: Date | null | undefined): string | null => {
+  console.info('[manager/assistance]', JSON.stringify({ phase: 'route-start', route }));
+
+  try {
+    const tasks = await withSelfHealing(
+      () => findTasksForAssistanceList(),
+      { service: 'assistance-api' },
+    );
+
+    console.info(
+      '[manager/assistance]',
+      JSON.stringify({ phase: 'prisma-success', route, rowCount: tasks.length }),
+    );
+
+    const safeToISO = (date: unknown): string | null => {
       if (!date) return null;
       try {
-        if (date instanceof Date) {
-          return date.toISOString();
-        }
-        // If it's already a string, return it
-        if (typeof date === 'string') {
-          return date;
-        }
-        return null;
-      } catch (error) {
-        console.error('Error converting date to ISO string:', error);
-        return null;
+        if (date instanceof Date) return date.toISOString();
+        if (typeof date === 'string') return date;
+      } catch {
+        /* noop */
       }
+      return null;
     };
 
-    // Transform the data to match the frontend interface
-    const requests = tasks.map(task => {
-      try {
-        // Calculate order age for WOD/IVCS tasks
-        let orderAge = null;
-        if (task.taskType === "WOD_IVCS" && task.purchaseDate) {
-          try {
-            const purchaseDate = task.purchaseDate instanceof Date ? task.purchaseDate : new Date(task.purchaseDate);
-            if (!isNaN(purchaseDate.getTime())) {
-              const now = new Date();
-              const diffTime = Math.abs(now.getTime() - purchaseDate.getTime());
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-              orderAge = `${diffDays} day${diffDays !== 1 ? 's' : ''} old`;
-            }
-          } catch (error) {
-            console.error('Error calculating order age:', error);
-          }
-        }
-
-        // Safely get email - check task.email first, then rawMessage (but rawMessage doesn't have email in select)
-        const email = task.email || null;
-
-        return {
-          id: task.id,
-          brand: task.brand || task.rawMessage?.brand || "Unknown",
-          phone: task.phone || task.rawMessage?.phone || "Unknown",
-          text: task.text || task.rawMessage?.text || "Unknown",
-          email: email,
-          agentName: task.assignedTo?.name || "Unknown",
-          agentEmail: task.assignedTo?.email || "Unknown",
-          assistanceNotes: task.assistanceNotes || "",
-          managerResponse: task.managerResponse || null,
-          createdAt: safeToISOString(task.createdAt),
-          updatedAt: safeToISOString(task.updatedAt),
-          status: task.status,
-          taskType: task.taskType,
-          // WOD/IVCS specific fields
-          wodIvcsSource: task.wodIvcsSource || null,
-          documentNumber: task.documentNumber || null,
-          customerName: task.customerName || null,
-          amount: task.amount ? Number(task.amount) : null,
-          webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
-          purchaseDate: safeToISOString(task.purchaseDate),
-          orderAge: orderAge,
-          // Email Request specific fields
-          emailRequestFor: task.emailRequestFor || null,
-          details: task.details || null,
-          salesforceCaseNumber: task.salesforceCaseNumber || null,
-          customerNameNumber: task.customerNameNumber || null,
-          // Standalone Refund specific fields
-          refundAmount: task.refundAmount ? Number(task.refundAmount) : null,
-          paymentMethod: task.paymentMethod || null,
-          refundReason: task.refundReason || null,
-          // Yotpo specific fields
-          yotpoDateSubmitted: safeToISOString(task.yotpoDateSubmitted),
-          yotpoPrOrYotpo: task.yotpoPrOrYotpo || null,
-          yotpoCustomerName: task.yotpoCustomerName || null,
-          yotpoEmail: task.yotpoEmail || null,
-          yotpoOrderDate: safeToISOString(task.yotpoOrderDate),
-          yotpoProduct: task.yotpoProduct || null,
-          yotpoIssueTopic: task.yotpoIssueTopic || null,
-          yotpoReviewDate: safeToISOString(task.yotpoReviewDate),
-          yotpoReview: task.yotpoReview || null,
-          yotpoSfOrderLink: task.yotpoSfOrderLink || null,
-          // Holds specific fields
-          holdsOrderDate: safeToISOString(task.holdsOrderDate),
-          holdsOrderNumber: task.holdsOrderNumber || null,
-          holdsCustomerEmail: task.holdsCustomerEmail || null,
-          holdsPriority: task.holdsPriority || null,
-          holdsStatus: task.holdsStatus || null,
-          holdsDaysInSystem: task.holdsDaysInSystem || null,
-          holdsOrderAmount: task.holdsOrderAmount ? Number(task.holdsOrderAmount) : null, // Convert Decimal to Number
-          // WOD/IVCS additional Decimal fields
-          webOrderSubtotal: task.webOrderSubtotal ? Number(task.webOrderSubtotal) : null,
-          webOrderTotal: task.webOrderTotal ? Number(task.webOrderTotal) : null,
-          nsVsWebDiscrepancy: task.nsVsWebDiscrepancy ? Number(task.nsVsWebDiscrepancy) : null,
-          netSuiteTotal: task.netSuiteTotal ? Number(task.netSuiteTotal) : null,
-          webTotal: task.webTotal ? Number(task.webTotal) : null,
-          webVsNsDifference: task.webVsNsDifference ? Number(task.webVsNsDifference) : null,
-          // Standalone Refund additional Decimal field
-          amountToBeRefunded: task.amountToBeRefunded ? Number(task.amountToBeRefunded) : null,
-        };
-      } catch (error) {
-        console.error(`Error transforming task ${task.id}:`, error);
-        console.error(`Task data:`, {
-          id: task.id,
-          taskType: task.taskType,
-          hasAmount: !!task.amount,
-          hasHoldsOrderAmount: !!task.holdsOrderAmount,
-          error: error instanceof Error ? error.message : String(error)
-        });
-        // Return a minimal valid object to prevent API failure
-        // Ensure all Decimal fields are converted even in error case
+    const num = (v: unknown): number | null => {
+      if (v === null || v === undefined) return null;
+      if (
+        typeof v === 'object' &&
+        'toNumber' in (v as object) &&
+        typeof (v as { toNumber?: () => number }).toNumber === 'function'
+      ) {
         try {
-          return {
-            id: task.id,
-            brand: task.brand || task.rawMessage?.brand || "Unknown",
-            phone: task.phone || task.rawMessage?.phone || "Unknown",
-            text: task.text || task.rawMessage?.text || "Unknown",
-            email: task.email || null,
-            agentName: task.assignedTo?.name || "Unknown",
-            agentEmail: task.assignedTo?.email || "Unknown",
-            assistanceNotes: task.assistanceNotes || "",
-            managerResponse: task.managerResponse || null,
-            createdAt: safeToISOString(task.createdAt),
-            updatedAt: safeToISOString(task.updatedAt),
-            status: task.status,
-            taskType: task.taskType,
-            // Convert all Decimal fields to prevent serialization errors
-            amount: task.amount ? Number(task.amount) : null,
-            webOrderDifference: task.webOrderDifference ? Number(task.webOrderDifference) : null,
-            refundAmount: task.refundAmount ? Number(task.refundAmount) : null,
-            holdsOrderAmount: task.holdsOrderAmount ? Number(task.holdsOrderAmount) : null,
-            webOrderSubtotal: task.webOrderSubtotal ? Number(task.webOrderSubtotal) : null,
-            webOrderTotal: task.webOrderTotal ? Number(task.webOrderTotal) : null,
-            nsVsWebDiscrepancy: task.nsVsWebDiscrepancy ? Number(task.nsVsWebDiscrepancy) : null,
-            netSuiteTotal: task.netSuiteTotal ? Number(task.netSuiteTotal) : null,
-            webTotal: task.webTotal ? Number(task.webTotal) : null,
-            webVsNsDifference: task.webVsNsDifference ? Number(task.webVsNsDifference) : null,
-            amountToBeRefunded: task.amountToBeRefunded ? Number(task.amountToBeRefunded) : null,
-          };
-        } catch (fallbackError) {
-          console.error(`Critical error in fallback transformation for task ${task.id}:`, fallbackError);
-          // Last resort: return absolute minimum
-          return {
-            id: task.id,
-            brand: "Unknown",
-            phone: "Unknown",
-            text: "Unknown",
-            email: null,
-            agentName: task.assignedTo?.name || "Unknown",
-            agentEmail: task.assignedTo?.email || "Unknown",
-            assistanceNotes: task.assistanceNotes || "",
-            managerResponse: task.managerResponse || null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            status: task.status,
-            taskType: task.taskType || "TEXT_CLUB",
-          };
+          return (v as { toNumber: () => number }).toNumber();
+        } catch {
+          return null;
         }
       }
-    });
+      if (typeof v === 'number' && !Number.isNaN(v)) return v;
+      if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
+      return null;
+    };
 
-    console.log("🔍 Assistance API: Returning", requests.length, "requests");
+    const requests = tasks.map((taskRow) =>
+      transformAssistanceTask(taskRow as AssistanceTaskRow, safeToISO, num),
+    );
 
     rowCount = requests.length;
-    return NextResponse.json({
+
+    console.info('[manager/assistance]', JSON.stringify({ phase: 'response-serialize', route }));
+
+    return NextResponseJsonSafe({
       success: true,
-      requests
+      requests,
     });
-  } catch (error: any) {
-    console.error("Failed to fetch assistance requests:", error);
-    console.error("Error details:", {
-      message: error?.message || 'Unknown error',
-      stack: error?.stack,
-      name: error?.name
-    });
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(
+      '[manager/assistance]',
+      JSON.stringify({ phase: 'GET catch', route, message: errMsg, stack: error }),
+    );
     rowCount = 0;
-    // Graceful degradation: return 200 with empty list so manager portal still loads
-    return NextResponse.json({
-      success: true,
-      requests: [],
-      _degraded: true,
-      _message: "Assistance list temporarily unavailable.",
-    }, { status: 200 });
+    return NextResponseJsonSafe(
+      {
+        success: false,
+        requests: [],
+        error: 'Failed to fetch assistance requests',
+      },
+      { status: 500 },
+    );
   } finally {
     logRouteTiming({
       route,
@@ -297,4 +91,126 @@ export async function GET(req: NextRequest) {
       email: auth.userEmail,
     });
   }
+}
+
+function transformAssistanceTask(
+  task: AssistanceTaskRow,
+  safeToISO: (d: unknown) => string | null,
+  num: (v: unknown) => number | null,
+) {
+  let orderAge: string | null = null;
+  if (task.taskType === 'WOD_IVCS' && task.purchaseDate) {
+    try {
+      const purchaseDate =
+        task.purchaseDate instanceof Date ? task.purchaseDate : new Date(task.purchaseDate as string);
+      if (!isNaN(purchaseDate.getTime())) {
+        const diffDays = Math.ceil(
+          Math.abs(Date.now() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        orderAge = `${diffDays} day${diffDays !== 1 ? 's' : ''} old`;
+      }
+    } catch {
+      /* noop */
+    }
+  }
+
+  const email =
+    typeof task.email === 'string'
+      ? task.email
+      : task.email === null || task.email === undefined
+        ? null
+        : String(task.email);
+  const raw = task.rawMessage as { brand?: string | null; phone?: string | null; text?: string | null } | null;
+
+  const assigned = task.assignedTo as { name?: string | null; email?: string | null } | null;
+
+  return {
+    id: task.id as string,
+    brand: typeof task.brand === 'string' ? task.brand : raw?.brand || 'Unknown',
+    phone:
+      typeof task.phone === 'string' ? task.phone : raw?.phone != null ? String(raw.phone) : 'Unknown',
+    text: typeof task.text === 'string' ? task.text : raw?.text != null ? String(raw.text) : 'Unknown',
+    email,
+    agentName: assigned?.name || 'Unknown',
+    agentEmail: assigned?.email || 'Unknown',
+    assistanceNotes:
+      typeof task.assistanceNotes === 'string' ? task.assistanceNotes : String(task.assistanceNotes ?? ''),
+    managerResponse:
+      task.managerResponse !== undefined && task.managerResponse !== null
+        ? String(task.managerResponse)
+        : null,
+    createdAt: safeToISO(task.createdAt),
+    updatedAt: safeToISO(task.updatedAt),
+    status: task.status ?? 'UNKNOWN',
+    taskType: task.taskType ?? 'TEXT_CLUB',
+    orderAge,
+    // WOD/IVCS
+    wodIvcsSource:
+      typeof task.wodIvcsSource === 'string' ? task.wodIvcsSource : task.wodIvcsSource ?? null,
+    documentNumber: task.documentNumber != null ? String(task.documentNumber) : null,
+    customerName: task.customerName != null ? String(task.customerName) : null,
+    amount: num(task.amount ?? null),
+    webOrderDifference: num(task.webOrderDifference ?? null),
+    purchaseDate: safeToISO(task.purchaseDate),
+    // Email Requests
+    emailRequestFor:
+      typeof task.emailRequestFor === 'string' ? task.emailRequestFor : task.emailRequestFor ?? null,
+    details: typeof task.details === 'string' ? task.details : task.details ?? null,
+    salesforceCaseNumber:
+      typeof task.salesforceCaseNumber === 'string'
+        ? task.salesforceCaseNumber
+        : task.salesforceCaseNumber ?? null,
+    customerNameNumber:
+      typeof task.customerNameNumber === 'string'
+        ? task.customerNameNumber
+        : task.customerNameNumber ?? null,
+    // Refunds
+    refundAmount: num(task.refundAmount ?? null),
+    paymentMethod:
+      typeof task.paymentMethod === 'string' ? task.paymentMethod : task.paymentMethod ?? null,
+    refundReason:
+      typeof task.refundReason === 'string' ? task.refundReason : task.refundReason ?? null,
+    // Yotpo (optional when CORE select)
+    yotpoDateSubmitted: safeToISO(task.yotpoDateSubmitted),
+    yotpoPrOrYotpo: task.yotpoPrOrYotpo != null ? String(task.yotpoPrOrYotpo) : null,
+    yotpoCustomerName:
+      task.yotpoCustomerName != null ? String(task.yotpoCustomerName) : null,
+    yotpoEmail: task.yotpoEmail != null ? String(task.yotpoEmail) : null,
+    yotpoOrderDate: safeToISO(task.yotpoOrderDate),
+    yotpoProduct: task.yotpoProduct != null ? String(task.yotpoProduct) : null,
+    yotpoIssueTopic: task.yotpoIssueTopic != null ? String(task.yotpoIssueTopic) : null,
+    yotpoReviewDate: safeToISO(task.yotpoReviewDate),
+    yotpoReview: task.yotpoReview != null ? String(task.yotpoReview) : null,
+    yotpoSfOrderLink: task.yotpoSfOrderLink != null ? String(task.yotpoSfOrderLink) : null,
+    yotpoImportSource:
+      task.yotpoImportSource != null ? String(task.yotpoImportSource) : null,
+    yotpoSubmittedBy:
+      task.yotpoSubmittedBy != null ? String(task.yotpoSubmittedBy) : null,
+    // Holds
+    holdsOrderDate: safeToISO(task.holdsOrderDate),
+    holdsOrderNumber: task.holdsOrderNumber != null ? String(task.holdsOrderNumber) : null,
+    holdsCustomerEmail:
+      task.holdsCustomerEmail != null ? String(task.holdsCustomerEmail) : null,
+    holdsPriority:
+      typeof task.holdsPriority === 'number'
+        ? task.holdsPriority
+        : task.holdsPriority != null
+          ? Number(task.holdsPriority)
+          : null,
+    holdsStatus: task.holdsStatus != null ? String(task.holdsStatus) : null,
+    holdsDaysInSystem:
+      typeof task.holdsDaysInSystem === 'number'
+        ? task.holdsDaysInSystem
+        : task.holdsDaysInSystem != null
+          ? Number(task.holdsDaysInSystem)
+          : null,
+    holdsOrderAmount: num(task.holdsOrderAmount ?? null),
+    webOrderSubtotal: num(task.webOrderSubtotal ?? null),
+    webOrderTotal: num(task.webOrderTotal ?? null),
+    nsVsWebDiscrepancy: num(task.nsVsWebDiscrepancy ?? null),
+    netSuiteTotal: num(task.netSuiteTotal ?? null),
+    webTotal: num(task.webTotal ?? null),
+    webVsNsDifference: num(task.webVsNsDifference ?? null),
+    amountToBeRefunded: num(task.amountToBeRefunded ?? null),
+  };
 }

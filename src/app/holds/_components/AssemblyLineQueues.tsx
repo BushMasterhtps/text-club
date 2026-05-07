@@ -86,6 +86,11 @@ export default function AssemblyLineQueues() {
       }
       
       const response = await fetch(`/api/holds/queues?${params.toString()}`);
+      if (!response.ok) {
+        console.error('Queue stats HTTP error:', response.status);
+        setQueueStats({});
+        return;
+      }
       const data = await response.json();
       
       console.log('Queue stats API response:', data);

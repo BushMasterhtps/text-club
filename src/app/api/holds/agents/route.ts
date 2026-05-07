@@ -1,25 +1,25 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { TaskType } from '@prisma/client';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import { NextResponseJsonSafe } from '@/lib/safe-json-response';
 
-/**
- * Get Holds-specific agents
- * Returns agents with "HOLDS" in their agentTypes array
- */
+const ROUTE = 'GET /api/holds/agents';
 
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
 
+  console.info('[holds/agents]', JSON.stringify({ phase: 'route-start', route: ROUTE }));
+
   try {
-    // Fetch agents with HOLDS in agentTypes
     const agents = await prisma.user.findMany({
       where: {
         role: { in: ['AGENT', 'MANAGER_AGENT'] },
         isActive: true,
         agentTypes: {
-          has: 'HOLDS'
-        }
+          has: 'HOLDS',
+        },
       },
       select: {
         id: true,
@@ -27,52 +27,63 @@ export async function GET(request: NextRequest) {
         name: true,
         isLive: true,
         lastSeen: true,
-        agentTypes: true
+        agentTypes: true,
       },
       orderBy: {
-        name: 'asc'
-      }
-    });
-
-    // Get task counts for all agents in a single query (fixes N+1 issue)
-    const agentIds = agents.map(agent => agent.id);
-    const taskCounts = await prisma.task.groupBy({
-      by: ['assignedToId'],
-      where: {
-        assignedToId: { in: agentIds },
-        taskType: 'HOLDS',
-        status: { in: ['PENDING', 'IN_PROGRESS', 'ASSISTANCE_REQUIRED'] }
+        name: 'asc',
       },
-      _count: {
-        id: true
-      }
     });
 
-    // Create a map of agentId -> count for quick lookup
+    const agentIds = agents.map((a) => a.id);
+    const taskCounts =
+      agentIds.length === 0
+        ? []
+        : await prisma.task.groupBy({
+            by: ['assignedToId'],
+            where: {
+              assignedToId: { in: agentIds },
+              taskType: TaskType.HOLDS,
+              status: { in: ['PENDING', 'IN_PROGRESS', 'ASSISTANCE_REQUIRED'] },
+            },
+            _count: {
+              id: true,
+            },
+          });
+
     const countMap = new Map<string, number>();
     taskCounts.forEach(({ assignedToId, _count }) => {
-      if (assignedToId) {
-        countMap.set(assignedToId, _count.id);
-      }
+      if (assignedToId) countMap.set(assignedToId, _count.id);
     });
 
-    // Combine agents with their counts
-    const agentsWithCounts = agents.map(agent => ({
+    const agentsWithCounts = agents.map((agent) => ({
       ...agent,
-      holdsCount: countMap.get(agent.id) || 0
+      holdsCount: countMap.get(agent.id) || 0,
     }));
 
-    return NextResponse.json({
-      success: true,
-      agents: agentsWithCounts
-    });
+    console.info('[holds/agents]', JSON.stringify({ phase: 'success', route: ROUTE, count: agentsWithCounts.length }));
 
-  } catch (error) {
-    console.error('Error fetching Holds agents:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to fetch Holds agents'
-    }, { status: 500 });
+    return NextResponseJsonSafe({
+      success: true,
+      agents: agentsWithCounts,
+    });
+  } catch (error: unknown) {
+    console.error(
+      '[holds/agents]',
+      JSON.stringify({
+        phase: 'error',
+        route: ROUTE,
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    /** Empty list keeps dashboard usable if agentTypes migration not yet applied */
+    return NextResponseJsonSafe(
+      {
+        success: true,
+        agents: [],
+        degraded: true,
+        degradedReason: error instanceof Error ? error.message : 'unknown',
+      },
+      { status: 200 },
+    );
   }
 }
-

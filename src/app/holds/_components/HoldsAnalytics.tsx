@@ -40,18 +40,19 @@ export default function HoldsAnalytics() {
     try {
       // Fetch overview analytics
       const overviewResponse = await fetch('/api/holds/analytics?type=overview');
-      const overviewData = await overviewResponse.json();
-      
-      if (overviewData.success) {
-        setAnalytics(overviewData.data);
+      if (overviewResponse.ok) {
+        const overviewData = await overviewResponse.json();
+        if (overviewData.success) {
+          setAnalytics(overviewData.data);
+        }
       }
 
-      // Fetch aging report
       const agingResponse = await fetch('/api/holds/analytics?type=aging');
-      const agingData = await agingResponse.json();
-      
-      if (agingData.success) {
-        setAgingReport(agingData.data);
+      if (agingResponse.ok) {
+        const agingData = await agingResponse.json();
+        if (agingData.success) {
+          setAgingReport(agingData.data);
+        }
       }
     } catch (error) {
       console.error('Error fetching analytics:', error);

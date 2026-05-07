@@ -38,6 +38,18 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
+const ZERO_METRICS: QueueMetrics = {
+  agentResearch: 0,
+  customerContact: 0,
+  escalatedCall: 0,
+  duplicates: 0,
+  completed: 0,
+  aging: 0,
+  approaching: 0,
+  totalTasks: 0,
+  completedAllTime: 0,
+};
+
 export default function HoldsOverview() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [metrics, setMetrics] = useState<QueueMetrics>({
@@ -52,46 +64,75 @@ export default function HoldsOverview() {
     completedAllTime: 0
   });
   const [loading, setLoading] = useState(true);
+  const [bannerMessage, setBannerMessage] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
+    setBannerMessage(null);
+    const notes: string[] = [];
     try {
-      // Load Holds-specific agents
       const agentsRes = await fetch('/api/holds/agents');
-      const agentsData = await agentsRes.json();
-      if (agentsData.success) {
-        setAgents(agentsData.agents || []);
+      let agentsPayload: Agent[] = [];
+      try {
+        const agentsData = await agentsRes.json();
+        if (agentsData.success && Array.isArray(agentsData.agents)) {
+          agentsPayload = agentsData.agents;
+        }
+        if (agentsData.degraded) {
+          notes.push(
+            'Agent roster is running in degraded mode (empty list). Run prisma migrate deploy then GET /api/holds/health',
+          );
+        }
+        if (!agentsRes.ok) {
+          notes.push(`Agents endpoint returned HTTP ${agentsRes.status}.`);
+        }
+      } catch {
+        notes.push('Could not parse agents response.');
+      }
+      setAgents(agentsPayload);
+
+      const metricsRes = await fetch('/api/holds/queues');
+      let metricsParsed: { success?: boolean; data?: { queues?: Record<string, { total?: number }>; summary?: Record<string, number> } } = {};
+      try {
+        metricsParsed = await metricsRes.json();
+      } catch {
+        notes.push('Could not parse queue metrics response.');
       }
 
-      // Load queue metrics
-      const metricsRes = await fetch('/api/holds/queues');
-      const metricsData = await metricsRes.json();
-      if (metricsData.success && metricsData.data) {
-        const queues = metricsData.data.queues;
-        const agentResearch = queues['Agent Research']?.total || 0;
-        const customerContact = queues['Customer Contact']?.total || 0;
-        const escalatedCall = queues['Escalated Call 4+ Day']?.total || 0;
-        const duplicates = queues['Duplicates']?.total || 0;
-        const completed = queues['Completed']?.total || 0;
-        
-        // Calculate total and completion percentage
+      if (!metricsRes.ok || !metricsParsed.success || !metricsParsed.data) {
+        notes.push(`Queue overview unavailable (HTTP ${metricsRes.status}).`);
+        setMetrics({ ...ZERO_METRICS });
+      } else {
+        const queues = metricsParsed.data.queues ?? {};
+        const agentResearch = queues['Agent Research']?.total ?? 0;
+        const customerContact = queues['Customer Contact']?.total ?? 0;
+        const escalatedCall = queues['Escalated Call 4+ Day']?.total ?? 0;
+        const duplicates = queues['Duplicates']?.total ?? 0;
+        const completed = queues['Completed']?.total ?? 0;
         const totalActive = agentResearch + customerContact + escalatedCall + duplicates;
-        const totalAll = totalActive + completed;
-        
+
         setMetrics({
           agentResearch,
           customerContact,
           escalatedCall,
           duplicates,
           completed,
-          aging: metricsData.data.summary?.totalAging || 0,
-          approaching: metricsData.data.summary?.totalApproaching || 0,
+          aging: metricsParsed.data.summary?.totalAging ?? 0,
+          approaching: metricsParsed.data.summary?.totalApproaching ?? 0,
           totalTasks: totalActive,
-          completedAllTime: completed
+          completedAllTime: completed,
         });
       }
+
+      setBannerMessage(notes.length ? notes.join(' ') : null);
     } catch (error) {
       console.error('Error loading Holds overview:', error);
+      setMetrics({ ...ZERO_METRICS });
+      setBannerMessage(
+        error instanceof Error
+          ? `Overview refresh failed: ${error.message}`
+          : 'Overview refresh failed.',
+      );
     } finally {
       setLoading(false);
     }
@@ -146,6 +187,14 @@ export default function HoldsOverview() {
 
   return (
     <div className="space-y-8">
+      {bannerMessage && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+        >
+          {bannerMessage}
+        </div>
+      )}
       {/* Progress Bar */}
       <section>
         <Card className="p-4 space-y-3">

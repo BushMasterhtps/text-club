@@ -4,6 +4,7 @@ import { calculateWorkMetadata } from '@/lib/holds-work-metadata';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 import { logRouteTiming } from '@/lib/route-timing-log';
 import { Prisma, TaskType } from '@prisma/client';
+import { NextResponseJsonSafe } from '@/lib/safe-json-response';
 
 // Assembly line queue statuses for holds
 const HOLDS_QUEUES = [
@@ -73,6 +74,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
+    console.info(
+      '[holds/queues]',
+      JSON.stringify({
+        route,
+        phase: 'route-start',
+        sortBy: searchParams.get('sortBy'),
+        filter: searchParams.get('filter'),
+        queue: searchParams.get('queue'),
+        includeAging: searchParams.get('includeAging'),
+        debug: searchParams.get('debug'),
+      }),
+    );
     const queue = searchParams.get('queue') as HoldsQueue | null;
     const includeAging = searchParams.get('includeAging') === 'true';
     const sortBy = searchParams.get('sortBy') || 'neverWorkedFirst';
@@ -93,7 +106,7 @@ export async function GET(request: NextRequest) {
           select: { id: true, taskType: true, holdsStatus: true },
         });
         console.info('[holds/queues]', JSON.stringify({ route, phase: 'debug-minimal-success', rowCount: minimalTasks.length }));
-        return NextResponse.json({ success: true, debug: true, tasks: minimalTasks });
+        return NextResponseJsonSafe({ success: true, debug: true, tasks: minimalTasks });
       } catch (dbgErr) {
         logHeldQueuesError(route, 'debug-minimal-query', dbgErr);
         throw dbgErr;
@@ -323,15 +336,24 @@ export async function GET(request: NextRequest) {
     };
 
     try {
-      return NextResponse.json(response);
+      console.info('[holds/queues]', JSON.stringify({ route, phase: 'response:serialize:start' }));
+      const res = NextResponseJsonSafe(response);
+      console.info('[holds/queues]', JSON.stringify({ route, phase: 'response:serialize:ok' }));
+      return res;
     } catch (serializationErr) {
-      logHeldQueuesError(route, 'NextResponse.json', serializationErr);
+      logHeldQueuesError(route, 'NextResponseJsonSafe', serializationErr);
       throw serializationErr;
     }
   } catch (error) {
     logHeldQueuesError(route, 'GET catch', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch holds queues' },
+      {
+        success: false,
+        error: 'Failed to fetch holds queues',
+        ...((error instanceof Prisma.PrismaClientKnownRequestError
+          ? { prismaCode: error.code, prismaMeta: error.meta }
+          : {}) as Record<string, unknown>),
+      },
       { status: 500 },
     );
   } finally {
@@ -383,7 +405,7 @@ export async function PUT(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
+    return NextResponseJsonSafe({
       success: true,
       message: 'Task status updated successfully',
       task: updatedTask,

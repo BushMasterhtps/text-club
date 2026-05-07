@@ -14,12 +14,19 @@ export default function CsvImportSection() {
   const loadImportHistory = async () => {
     try {
       const response = await fetch('/api/holds/import-history');
+      if (!response.ok) {
+        setDuplicateHistory([]);
+        return;
+      }
       const data = await response.json();
-      if (data.success && data.sessions) {
+      if (data.success && Array.isArray(data.sessions)) {
         setDuplicateHistory(data.sessions);
+      } else {
+        setDuplicateHistory([]);
       }
     } catch (error) {
       console.error('Error loading import history:', error);
+      setDuplicateHistory([]);
     }
   };
 

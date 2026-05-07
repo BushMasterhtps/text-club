@@ -1,7 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { TaskType } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 import { logRouteTiming } from '@/lib/route-timing-log';
+
+function buildCreatedAtRangeFilter(
+  startDate: string | null,
+  endDate: string | null,
+): Prisma.DateTimeFilter | undefined {
+  const range: Prisma.DateTimeFilter = {};
+  if (startDate) {
+    range.gte = new Date(startDate);
+  }
+  if (endDate) {
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    range.lte = end;
+  }
+  return Object.keys(range).length > 0 ? range : undefined;
+}
 
 export async function GET(request: NextRequest) {
   const route = 'GET /api/holds/analytics';
@@ -19,42 +37,24 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    // Build date filter - use endTime for completed tasks, createdAt for others
-    const dateFilter: any = {};
-    if (startDate) {
-      dateFilter.gte = new Date(startDate);
-    }
-    if (endDate) {
-      // Add end of day time (23:59:59.999) to include the full day
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      dateFilter.lte = end;
-    }
-
-    const whereClause: any = {
-      taskType: 'HOLDS',
+    const createdAtRange = buildCreatedAtRangeFilter(startDate, endDate);
+    const holdsWhere: Prisma.TaskWhereInput = {
+      taskType: TaskType.HOLDS,
+      ...(createdAtRange ? { createdAt: createdAtRange } : {}),
     };
-
-    // Store date filter separately to be used appropriately in each function
-    // For completed tasks, we'll filter by endTime; for others, by createdAt
-    if (Object.keys(dateFilter).length > 0) {
-      whereClause.dateFilter = dateFilter;
-      // For non-completed tasks, still use createdAt
-      whereClause.createdAt = dateFilter;
-    }
 
     switch (type) {
       case 'overview':
-        return await getOverviewAnalytics(whereClause);
+        return await getOverviewAnalytics(holdsWhere);
       
       case 'aging':
-        return await getAgingReport(whereClause);
+        return await getAgingReport(holdsWhere);
       
       case 'agent-performance':
-        return await getAgentPerformance(whereClause);
+        return await getAgentPerformance(createdAtRange);
       
       case 'queue-stats':
-        return await getQueueStats(whereClause);
+        return await getQueueStats(holdsWhere);
       
       default:
         return NextResponse.json(
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function getOverviewAnalytics(whereClause: any) {
+async function getOverviewAnalytics(whereClause: Prisma.TaskWhereInput) {
   const currentDate = new Date();
   
   // Get all holds tasks
@@ -160,13 +160,12 @@ async function getOverviewAnalytics(whereClause: any) {
   });
 }
 
-async function getAgingReport(whereClause: any) {
+async function getAgingReport(whereClause: Prisma.TaskWhereInput) {
   const currentDate = new Date();
   
   const tasks = await prisma.task.findMany({
     where: {
-      ...whereClause,
-      status: 'PENDING', // Only pending tasks for aging report
+      AND: [{ ...whereClause }, { status: 'PENDING' }],
     },
     include: {
       assignedTo: {
@@ -220,30 +219,20 @@ async function getAgingReport(whereClause: any) {
   });
 }
 
-async function getAgentPerformance(whereClause: any) {
-  // Extract date filter if present
-  const dateFilter = whereClause.dateFilter;
-  const baseWhere: any = {
-    taskType: 'HOLDS',
-  };
+async function getAgentPerformance(createdAtRange?: Prisma.DateTimeFilter) {
+  let whereCondition: Prisma.TaskWhereInput = { taskType: TaskType.HOLDS };
 
-  // Build query: For completed tasks, filter by endTime; for others, filter by createdAt
-  let whereCondition: any = baseWhere;
-  
-  if (dateFilter) {
-    // If date filter exists, use OR to handle both completed (endTime) and non-completed (createdAt)
+  if (createdAtRange) {
     whereCondition = {
-      ...baseWhere,
-      OR: [
-        // Completed tasks: filter by endTime (includes completedBy tasks)
+      AND: [
+        { taskType: TaskType.HOLDS },
         {
-          status: 'COMPLETED',
-          endTime: dateFilter,
-        },
-        // Non-completed tasks: filter by createdAt
-        {
-          status: { not: 'COMPLETED' },
-          createdAt: dateFilter,
+          OR: [
+            { status: 'COMPLETED', endTime: createdAtRange },
+            {
+              AND: [{ status: { not: 'COMPLETED' } }, { createdAt: createdAtRange }],
+            },
+          ],
         },
       ],
     };
@@ -328,7 +317,7 @@ async function getAgentPerformance(whereClause: any) {
   });
 }
 
-async function getQueueStats(whereClause: any) {
+async function getQueueStats(whereClause: Prisma.TaskWhereInput) {
   const tasks = await prisma.task.findMany({
     where: whereClause,
     include: {
