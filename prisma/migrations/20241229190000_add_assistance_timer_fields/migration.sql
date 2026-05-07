@@ -1,4 +1,4 @@
--- AlterTable
-ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "assistancePausedDurationSec" INTEGER,
-ADD COLUMN IF NOT EXISTS "assistanceRequestedAt" TIMESTAMP(3);
+-- Intentionally a no-op: same ordering issue — `ALTER TABLE "Task"` ran before init created `Task`.
+-- Columns are added (idempotently) in `20250902005506_add_assistance_timer_fields`.
 
+SELECT 1;
