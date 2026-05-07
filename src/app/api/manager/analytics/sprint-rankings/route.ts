@@ -9,6 +9,8 @@ import {
 import { getTaskWeight, getAllWeights, WEIGHT_SUMMARY } from '@/lib/task-weights';
 import { apiAuthDeniedResponse, requireStaffApiAuth } from "@/lib/auth";
 import { resolveProductivityScorecardSubjects } from '@/lib/productivity-scorecard-subjects';
+import { Prisma } from '@prisma/client';
+import { NextResponseJsonSafe } from '@/lib/safe-json-response';
 
 const SPRINT_DURATION_DAYS = 14;
 
@@ -96,6 +98,7 @@ export async function GET(request: NextRequest) {
   const auth = await requireStaffApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
+    console.info('[sprint-rankings]', JSON.stringify({ phase: 'route-start' }));
     const { searchParams } = new URL(request.url);
     const mode = searchParams.get('mode') || 'current'; // 'current', 'lifetime', 'sprint-{number}', or 'custom'
     const rosterTeam =
@@ -212,18 +215,28 @@ export async function GET(request: NextRequest) {
         ? (yesterday < sprintEnd ? yesterday : sprintEnd)
         : (mode === 'lifetime' ? yesterday : sprintEnd);
 
-      const trelloCompletions = await prisma.trelloCompletion.findMany({
-        where: {
-          agentId: agent.id,
-          date: mode === 'lifetime'
-            ? { lte: trelloEndDate }
-            : { gte: sprintStart, lte: trelloEndDate }
-        },
-        select: {
-          cardsCount: true,
-          date: true
+      let trelloCompletions: Array<{ cardsCount: number; date: Date }> = [];
+      try {
+        trelloCompletions = await prisma.trelloCompletion.findMany({
+          where: {
+            agentId: agent.id,
+            date: mode === 'lifetime'
+              ? { lte: trelloEndDate }
+              : { gte: sprintStart, lte: trelloEndDate }
+          },
+          select: {
+            cardsCount: true,
+            date: true
+          }
+        });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2021') {
+          console.warn('[sprint-rankings]', JSON.stringify({ phase: 'missing-trello-table', prismaCode: e.code, meta: e.meta }));
+          trelloCompletions = [];
+        } else {
+          throw e;
         }
-      });
+      }
 
       const trelloCount = trelloCompletions.reduce((sum, t) => sum + t.cardsCount, 0);
       // Only count days with 15+ Trello requests as "days worked" to filter out misdated imports
@@ -543,7 +556,15 @@ export async function GET(request: NextRequest) {
     // If this is the current sprint AND it just ended, save to database
     if (isCurrentSprint && new Date() > sprintEnd) {
       // Sprint just ended - archive results
-      await saveSprintResults(sprintNumber, [...competitiveAgents, ...seniorAgents]);
+      try {
+        await saveSprintResults(sprintNumber, [...competitiveAgents, ...seniorAgents]);
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2021') {
+          console.warn('[sprint-rankings]', JSON.stringify({ phase: 'missing-sprint-ranking-table-save', prismaCode: e.code, meta: e.meta }));
+        } else {
+          throw e;
+        }
+      }
     }
 
     // For display, return the PST dates that were originally selected (not UTC query boundaries)
@@ -556,7 +577,8 @@ export async function GET(request: NextRequest) {
       displayEnd = customEnd + 'T23:59:59.999Z';
     }
     
-    return NextResponse.json({
+    console.info('[sprint-rankings]', JSON.stringify({ phase: 'response-serialize' }));
+    return NextResponseJsonSafe({
       success: true,
       mode: mode === 'custom' ? 'custom' : mode === 'lifetime' ? 'lifetime' : 'sprint',
       dateRange: {
@@ -587,11 +609,22 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Sprint Rankings API Error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to calculate sprint rankings'
-    }, { status: 500 });
+    console.error('[sprint-rankings]', JSON.stringify({ phase: 'catch', message: error instanceof Error ? error.message : String(error) }));
+    // Fail-soft: keep dashboards usable.
+    return NextResponseJsonSafe({
+      success: true,
+      rankings: { competitive: [], seniors: [], unqualified: [] },
+      teamAverages: {
+        tasksPerDay: 0,
+        ptsPerDay: 0,
+        ptsPerHour: 0,
+        activeHours: 0,
+        avgHandleTimeSec: 0,
+        hybridScore: 0,
+      },
+      degraded: true,
+      message: 'Sprint rankings unavailable (missing SprintRanking table or query error)'
+    }, { status: 200 });
   }
 }
 

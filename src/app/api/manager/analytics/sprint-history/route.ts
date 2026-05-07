@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { formatSprintPeriod, getSprintDates, getCurrentSprint } from '@/lib/sprint-utils';
 import { apiAuthDeniedResponse, requireStaffApiAuth } from "@/lib/auth";
+import { Prisma } from '@prisma/client';
+import { NextResponseJsonSafe } from '@/lib/safe-json-response';
 
 /**
  * Sprint History API
@@ -12,19 +14,32 @@ export async function GET(request: NextRequest) {
   const auth = await requireStaffApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
   try {
+    console.info('[sprint-history]', JSON.stringify({ phase: 'route-start' }));
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '20', 20);
     
     const currentSprintNum = getCurrentSprint().number;
 
     // Get all sprints from database (most recent first)
-    const dbSprints = await prisma.sprintRanking.groupBy({
-      by: ['sprintNumber'],
-      orderBy: {
-        sprintNumber: 'desc'
-      },
-      take: limit
-    });
+    let dbSprints: Array<{ sprintNumber: number }> = [];
+    try {
+      console.info('[sprint-history]', JSON.stringify({ phase: 'prisma-query-start:groupBy' }));
+      dbSprints = await prisma.sprintRanking.groupBy({
+        by: ['sprintNumber'],
+        orderBy: {
+          sprintNumber: 'desc'
+        },
+        take: limit
+      });
+      console.info('[sprint-history]', JSON.stringify({ phase: 'prisma-success:groupBy', count: dbSprints.length }));
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2021') {
+        console.warn('[sprint-history]', JSON.stringify({ phase: 'missing-table', prismaCode: e.code, meta: e.meta }));
+        dbSprints = [];
+      } else {
+        throw e;
+      }
+    }
 
     const dbSprintNumbers = new Set(dbSprints.map(s => s.sprintNumber));
     
@@ -39,16 +54,28 @@ export async function GET(request: NextRequest) {
 
     // FIXED: Batch fetch all sprint rankings in one query instead of N queries
     // Fetch all rankings for all sprints at once
-    const allRankings = await prisma.sprintRanking.findMany({
-      where: {
-        sprintNumber: { in: sprintNumbers },
-        isSenior: false // Exclude seniors from competitive view
-      },
-      orderBy: [
-        { sprintNumber: 'desc' },
-        { rankByPtsPerDay: 'asc' }
-      ]
-    });
+    let allRankings: any[] = [];
+    try {
+      console.info('[sprint-history]', JSON.stringify({ phase: 'prisma-query-start:findMany' }));
+      allRankings = await prisma.sprintRanking.findMany({
+        where: {
+          sprintNumber: { in: sprintNumbers },
+          isSenior: false // Exclude seniors from competitive view
+        },
+        orderBy: [
+          { sprintNumber: 'desc' },
+          { rankByPtsPerDay: 'asc' }
+        ]
+      });
+      console.info('[sprint-history]', JSON.stringify({ phase: 'prisma-success:findMany', count: allRankings.length }));
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2021') {
+        console.warn('[sprint-history]', JSON.stringify({ phase: 'missing-table-findMany', prismaCode: e.code, meta: e.meta }));
+        allRankings = [];
+      } else {
+        throw e;
+      }
+    }
 
     // Group rankings by sprint number
     const rankingsBySprint = new Map<number, typeof allRankings>();
@@ -92,18 +119,23 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({
+    console.info('[sprint-history]', JSON.stringify({ phase: 'response-serialize' }));
+    return NextResponseJsonSafe({
       success: true,
       history: sprintHistory,
       currentSprintNumber: currentSprintNum
     });
 
   } catch (error) {
-    console.error('Sprint History API Error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to load sprint history'
-    }, { status: 500 });
+    console.error('[sprint-history]', JSON.stringify({ phase: 'catch', message: error instanceof Error ? error.message : String(error) }));
+    // Fail-soft: keep dashboards usable.
+    return NextResponseJsonSafe({
+      success: true,
+      history: [],
+      currentSprintNumber: getCurrentSprint().number,
+      degraded: true,
+      message: 'Sprint history unavailable (missing SprintRanking table or query error)'
+    }, { status: 200 });
   }
 }
 
