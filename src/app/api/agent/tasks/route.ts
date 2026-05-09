@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { authorizeAgentTasksList } from "@/lib/auth";
 import { logRouteTiming } from "@/lib/route-timing-log";
 
+const DEBUG_PERFORMANCE = process.env.DEBUG_PERFORMANCE === "true";
+
 export async function GET(req: NextRequest) {
   const route = 'GET /api/agent/tasks';
   const startedAt = Date.now();
@@ -189,31 +191,31 @@ export async function GET(req: NextRequest) {
         : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
-    // Debug: Check if any tasks have manager responses
-    const tasksWithResponses = sortedTasks.filter(t => t.managerResponse);
-    if (tasksWithResponses.length > 0) {
-      console.log("🔍 API Debug: Found tasks with manager responses:", tasksWithResponses.length);
-      tasksWithResponses.forEach((task, index) => {
-        console.log(`🔍 API Debug: Task ${index + 1} - ID: ${task.id}, Status: ${task.status}, Response: ${task.managerResponse}`);
-      });
-    } else {
-      console.log("🔍 API Debug: No tasks with manager responses found");
-      console.log("🔍 API Debug: Total tasks returned:", sortedTasks.length);
-      console.log("🔍 API Debug: Sample task:", sortedTasks[0] ? {
-        id: sortedTasks[0].id,
-        status: sortedTasks[0].status,
-        hasManagerResponse: !!sortedTasks[0].managerResponse
-      } : "No tasks");
-    }
+    if (DEBUG_PERFORMANCE) {
+      const tasksWithResponses = sortedTasks.filter(t => t.managerResponse);
+      if (tasksWithResponses.length > 0) {
+        console.log("🔍 API Debug: Found tasks with manager responses:", tasksWithResponses.length);
+        tasksWithResponses.forEach((task, index) => {
+          console.log(`🔍 API Debug: Task ${index + 1} - ID: ${task.id}, Status: ${task.status}, Response: ${task.managerResponse}`);
+        });
+      } else {
+        console.log("🔍 API Debug: No tasks with manager responses found");
+        console.log("🔍 API Debug: Total tasks returned:", sortedTasks.length);
+        console.log("🔍 API Debug: Sample task:", sortedTasks[0] ? {
+          id: sortedTasks[0].id,
+          status: sortedTasks[0].status,
+          hasManagerResponse: !!sortedTasks[0].managerResponse
+        } : "No tasks");
+      }
 
-    // Additional debugging: Check raw data before transformation
-    console.log("🔍 API Debug: Raw tasks from database:", tasks.length);
-    const rawTasksWithResponses = tasks.filter(t => t.managerResponse);
-    console.log("🔍 API Debug: Raw tasks with responses:", rawTasksWithResponses.length);
-    if (rawTasksWithResponses.length > 0) {
-      rawTasksWithResponses.forEach((task, index) => {
-        console.log(`🔍 API Debug: Raw Task ${index + 1} - ID: ${task.id}, Status: ${task.status}, Has Response: ${!!task.managerResponse}`);
-      });
+      console.log("🔍 API Debug: Raw tasks from database:", tasks.length);
+      const rawTasksWithResponses = tasks.filter(t => t.managerResponse);
+      console.log("🔍 API Debug: Raw tasks with responses:", rawTasksWithResponses.length);
+      if (rawTasksWithResponses.length > 0) {
+        rawTasksWithResponses.forEach((task, index) => {
+          console.log(`🔍 API Debug: Raw Task ${index + 1} - ID: ${task.id}, Status: ${task.status}, Has Response: ${!!task.managerResponse}`);
+        });
+      }
     }
 
     return NextResponse.json({ 

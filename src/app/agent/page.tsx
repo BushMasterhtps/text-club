@@ -11,6 +11,9 @@ import KanbanBoard from '@/app/agent/_components/KanbanBoard';
 import { generateTestTasks } from '@/lib/test-data-generator';
 import { parseFetchJsonSafely } from '@/lib/safe-fetch-json';
 
+/** Verbose agent task poll logs (default off). Set NEXT_PUBLIC_DEBUG_PERFORMANCE=true to enable. */
+const DEBUG_PERFORMANCE = process.env.NEXT_PUBLIC_DEBUG_PERFORMANCE === "true";
+
 /* ========== Tiny UI atoms (iOS-ish) ========== */
 function Card({
   children,
@@ -195,6 +198,9 @@ export default function AgentPage() {
   const pollingInFlightRef = useRef(false);
   const scorecardInFlightRef = useRef(false);
   const lastPollErrorToastAtRef = useRef<number>(0);
+  /** Set by startPolling: explicit sort order for poll URL; null → use sortOrderRef */
+  const taskPollOrderOverrideRef = useRef<"asc" | "desc" | null>(null);
+  const performAgentTasksPollRef = useRef<() => Promise<void>>(async () => {});
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -458,128 +464,130 @@ export default function AgentPage() {
     }
   }
 
-  const startPolling = (orderOverride?: 'asc' | 'desc') => {
-    if (pollingInterval) clearInterval(pollingInterval);
-    console.log("🔄 Starting SIMPLE polling system...");
+  const showThrottledPollWarningToast = (debug: Record<string, unknown>) => {
+    console.warn("[agent/tasks/poll] task sync issue (throttled user toast)", debug);
+    const now = Date.now();
+    if (now - lastPollErrorToastAtRef.current > 60000) {
+      setToastMessage("Task sync had a brief connection issue. Retrying…");
+      setToastType("warning");
+      lastPollErrorToastAtRef.current = now;
+    }
+  };
 
-    const interval = setInterval(async () => {
-      if (pollingInFlightRef.current) {
-        console.log("⏭️ SIMPLE Poll skipped: previous request still in flight");
+  performAgentTasksPollRef.current = async () => {
+    if (pollingInFlightRef.current) {
+      if (DEBUG_PERFORMANCE) {
+        console.log("⏭️ Agent task poll skipped: previous request still in flight");
+      }
+      return;
+    }
+
+    pollingInFlightRef.current = true;
+
+    try {
+      console.log("🔄 Agent task poll…");
+      const currentEmail = localStorage.getItem("agentEmail");
+      if (!currentEmail) {
+        console.log("🔄 Agent task poll: no email in localStorage");
         return;
       }
 
-      pollingInFlightRef.current = true;
+      const effectiveOrder = taskPollOrderOverrideRef.current ?? sortOrderRef.current;
+      const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${effectiveOrder}`;
+      console.log("🔄 Fetching:", url);
 
-      try {
-        console.log("🔄 SIMPLE Polling for updates...");
-        const currentEmail = localStorage.getItem('agentEmail');
-        console.log("🔄 SIMPLE Current email:", currentEmail);
+      const res = await fetch(url);
+      console.log("🔄 Response status:", res.status);
 
-        if (!currentEmail) {
-          console.log("🔄 SIMPLE No email available");
-          return;
-        }
+      const parsed = await parseFetchJsonSafely(res);
 
-        console.log("🔄 SIMPLE About to fetch tasks...");
-        const effectiveOrder = orderOverride ?? sortOrderRef.current;
-        const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${effectiveOrder}`;
-        console.log("🔄 SIMPLE Fetching from:", url);
-
-        const res = await fetch(url);
-        console.log("🔄 SIMPLE Response status:", res.status);
-
-        const parsed = await parseFetchJsonSafely(res);
-
-        if (
-          !res.ok ||
-          parsed.data === null ||
-          typeof parsed.data !== "object"
-        ) {
-          console.warn(
-            "🔄 SIMPLE Polling failed or empty/invalid JSON body:",
-            res.status,
-          );
-          const now = Date.now();
-          if (now - lastPollErrorToastAtRef.current > 60000) {
-            setToastMessage("⚠️ Live task sync delayed. Retrying...");
-            setToastType("warning");
-            lastPollErrorToastAtRef.current = now;
-          }
-          return;
-        }
-
-        const data = parsed.data as { success?: boolean; tasks?: any[] };
-
-        if (!(data.success && Array.isArray(data.tasks))) {
-          console.warn("🔄 SIMPLE Polling got invalid response shape:", data);
-          const now = Date.now();
-          if (now - lastPollErrorToastAtRef.current > 60000) {
-            setToastMessage("⚠️ Live task sync delayed. Retrying...");
-            setToastType("warning");
-            lastPollErrorToastAtRef.current = now;
-          }
-          return;
-        }
-
-        const newTasks = data.tasks;
-        console.log("🔄 SIMPLE Loaded tasks:", newTasks.length);
-
-        // CRITICAL: Only update if we have tasks - NEVER clear during polling
-        if (newTasks.length > 0) {
-          const storeState = useTaskStore.getState();
-          const currentStoreTasks = Array.from(storeState.tasks.values());
-
-          const previousResponses = new Map(
-            currentStoreTasks.map((t: any) => [t.id, t.managerResponse]),
-          );
-          const newResponses = newTasks.filter((t: any) => {
-            const hadResponse = previousResponses.get(t.id);
-            return t.managerResponse && !hadResponse;
-          });
-
-          if (newResponses.length > 0) {
-            console.log(
-              "🔄 SIMPLE Found new manager responses:",
-              newResponses.length,
-            );
-            const taskTypeInfo =
-              newResponses[0].taskType === "TEXT_CLUB"
-                ? "Text Club"
-                : newResponses[0].taskType === "WOD_IVCS"
-                  ? "WOD/IVCS"
-                  : newResponses[0].taskType === "EMAIL_REQUESTS"
-                    ? "Email Request"
-                    : newResponses[0].taskType === "YOTPO"
-                      ? "Yotpo"
-                      : newResponses[0].taskType === "HOLDS"
-                        ? "Holds"
-                        : "Task";
-            setToastMessage(
-              `💬 Manager responded to your ${taskTypeInfo} assistance request!`,
-            );
-            setToastType("info");
-          }
-
-          const currentViewMode = viewModeRef.current;
-          if (currentViewMode === "kanban") {
-            mergeTasks(newTasks);
-          } else {
-            setTasks(newTasks);
-            setStoreTasks(newTasks);
-          }
-          setLastUpdate(new Date());
-        }
-      } catch (error) {
-        console.error("🔄 SIMPLE Polling error:", error);
-        const now = Date.now();
-        if (now - lastPollErrorToastAtRef.current > 60000) {
-          setToastMessage("⚠️ Live task sync delayed. Retrying...");
-          setToastType("warning");
-          lastPollErrorToastAtRef.current = now;
-        }
-      } finally {
-        pollingInFlightRef.current = false;
+      if (!res.ok || parsed.data === null || typeof parsed.data !== "object") {
+        showThrottledPollWarningToast({
+          reason: "non_ok_or_invalid_json",
+          httpStatus: res.status,
+          hasParsedObject: parsed.data !== null && typeof parsed.data === "object",
+        });
+        return;
       }
+
+      const data = parsed.data as { success?: boolean; tasks?: any[] };
+
+      if (!(data.success && Array.isArray(data.tasks))) {
+        showThrottledPollWarningToast({
+          reason: "invalid_response_shape",
+          httpStatus: res.status,
+          success: data.success,
+          tasksIsArray: Array.isArray(data.tasks),
+        });
+        return;
+      }
+
+      const newTasks = data.tasks;
+      console.log("🔄 Loaded tasks:", newTasks.length);
+
+      // CRITICAL: Only update if we have tasks - NEVER clear during polling
+      if (newTasks.length > 0) {
+        const storeState = useTaskStore.getState();
+        const currentStoreTasks = Array.from(storeState.tasks.values());
+
+        const previousResponses = new Map(
+          currentStoreTasks.map((t: any) => [t.id, t.managerResponse]),
+        );
+        const newResponses = newTasks.filter((t: any) => {
+          const hadResponse = previousResponses.get(t.id);
+          return t.managerResponse && !hadResponse;
+        });
+
+        if (newResponses.length > 0) {
+          console.log("🔄 Found new manager responses:", newResponses.length);
+          const taskTypeInfo =
+            newResponses[0].taskType === "TEXT_CLUB"
+              ? "Text Club"
+              : newResponses[0].taskType === "WOD_IVCS"
+                ? "WOD/IVCS"
+                : newResponses[0].taskType === "EMAIL_REQUESTS"
+                  ? "Email Request"
+                  : newResponses[0].taskType === "YOTPO"
+                    ? "Yotpo"
+                    : newResponses[0].taskType === "HOLDS"
+                      ? "Holds"
+                      : "Task";
+          setToastMessage(
+            `💬 Manager responded to your ${taskTypeInfo} assistance request!`,
+          );
+          setToastType("info");
+        }
+
+        const currentViewMode = viewModeRef.current;
+        if (currentViewMode === "kanban") {
+          mergeTasks(newTasks);
+        } else {
+          setTasks(newTasks);
+          setStoreTasks(newTasks);
+        }
+        setLastUpdate(new Date());
+      }
+    } catch (error) {
+      console.error("🔄 Agent task poll error:", error);
+      showThrottledPollWarningToast({
+        reason: "fetch_threw",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      pollingInFlightRef.current = false;
+    }
+  };
+
+  const startPolling = (orderOverride?: "asc" | "desc") => {
+    taskPollOrderOverrideRef.current = orderOverride ?? null;
+    if (pollingInterval) clearInterval(pollingInterval);
+    console.log("🔄 Starting task polling (5s, visibility-aware)…");
+
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+      void performAgentTasksPollRef.current();
     }, 5000);
 
     setPollingInterval(interval);
@@ -597,6 +605,17 @@ export default function AgentPage() {
     return () => {
       stopPolling();
     };
+  }, []);
+
+  /** When returning to a visible tab, one catch-up poll (respects pollingInFlightRef inside). */
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      void performAgentTasksPollRef.current();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, []);
 
   const loadTasks = async (emailToUse?: string, orderOverride?: 'asc' | 'desc', useTestMode?: boolean) => {
