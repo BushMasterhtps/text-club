@@ -135,18 +135,29 @@ export default function KnowledgeSection() {
     }
   };
 
-  // Email facets when Email tab active
+  // Email facets: brands always global; case types scoped to selected brand cluster when set.
   useEffect(() => {
     if (!isOpen || activeTab !== "email") return;
     let cancelled = false;
     (async () => {
       setEmailFacetsLoading(true);
       try {
-        const res = await fetch("/api/knowledge/facets?type=email-macros");
+        let url = "/api/knowledge/facets?type=email-macros";
+        if (emailBrandValues && emailBrandValues.length > 0) {
+          url += `&brandValues=${encodeURIComponent(JSON.stringify(emailBrandValues))}`;
+        }
+        const res = await fetch(url);
         const data = await res.json();
         if (!cancelled && data.success) {
-          setEmailBrandOptions(data.data.brandOptions ?? []);
-          setEmailCaseTypeOptions(data.data.caseTypeOptions ?? []);
+          const brandOpts = data.data.brandOptions ?? [];
+          const caseOpts = data.data.caseTypeOptions ?? [];
+          setEmailBrandOptions(brandOpts);
+          setEmailCaseTypeOptions(caseOpts);
+          setEmailCaseValues((prev) => {
+            if (prev === null) return null;
+            const valid = new Set(caseOpts.map((o: FacetOption) => stableFacetValue(o.values)));
+            return valid.has(stableFacetValue(prev)) ? prev : null;
+          });
         }
       } catch (e) {
         console.error(e);
@@ -157,7 +168,7 @@ export default function KnowledgeSection() {
     return () => {
       cancelled = true;
     };
-  }, [isOpen, activeTab]);
+  }, [isOpen, activeTab, emailBrandValues]);
 
   // QA brand facets + products when brand cluster changes
   useEffect(() => {

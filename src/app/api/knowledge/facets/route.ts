@@ -47,6 +47,7 @@ function parseBrandValuesParam(param: string | null): string[] {
 
 /**
  * GET /api/knowledge/facets?type=email-macros|product-inquiry-qa
+ * GET /api/knowledge/facets?type=email-macros&brandValues=... → caseTypeOptions scoped to rows with brand IN list (raw variants)
  * GET /api/knowledge/facets?type=product-inquiry-qa&brand=...  (single raw brand — legacy)
  * GET /api/knowledge/facets?type=product-inquiry-qa&brandValues=encodeURIComponent(JSON.stringify([...]))
  *
@@ -63,6 +64,9 @@ export async function GET(request: NextRequest) {
     const brandValuesFromParam = parseBrandValuesParam(searchParams.get("brandValues"));
 
     if (type === EMAIL_TYPE) {
+      const emailBrandFilter =
+        brandValuesFromParam.length > 0 ? { brand: { in: brandValuesFromParam } } : {};
+
       const [brandGroups, caseGroups] = await Promise.all([
         prisma.emailMacro.groupBy({
           by: ["brand"],
@@ -73,7 +77,11 @@ export async function GET(request: NextRequest) {
         prisma.emailMacro.groupBy({
           by: ["caseType"],
           where: {
-            AND: [{ caseType: { not: null } }, { NOT: { caseType: "" } }],
+            AND: [
+              { caseType: { not: null } },
+              { NOT: { caseType: "" } },
+              ...(Object.keys(emailBrandFilter).length > 0 ? [emailBrandFilter] : []),
+            ],
           },
         }),
       ]);
