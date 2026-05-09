@@ -234,16 +234,15 @@ export default function AgentPage() {
   const sortOrderRef = useRef<'asc' | 'desc'>(sortOrder);
   useEffect(() => { sortOrderRef.current = sortOrder; }, [sortOrder]);
 
-  // Personal Scorecard state
+  // Personal Scorecard state (loaded on demand — no auto-fetch while panel closed)
+  const [scorecardPanelOpen, setScorecardPanelOpen] = useState(false);
   const [scorecardData, setScorecardData] = useState<any>(null);
   const [loadingScorecard, setLoadingScorecard] = useState(false);
-  const [showScorecard, setShowScorecard] = useState(true); // Expanded by default
+  const [scorecardLastUpdated, setScorecardLastUpdated] = useState<Date | null>(null);
+  const [scorecardFetchError, setScorecardFetchError] = useState<string | null>(null);
+  const [showScorecard, setShowScorecard] = useState(true); // Expanded by default (full details inside open panel)
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [selectedSprint, setSelectedSprint] = useState<'current' | number>('current');
-  
-  // Track selected sprint in a ref so polling can access current value
-  const selectedSprintRef = useRef<'current' | number>(selectedSprint);
-  useEffect(() => { selectedSprintRef.current = selectedSprint; }, [selectedSprint]);
   const [sprintHistory, setSprintHistory] = useState<any[]>([]);
   const [loadingSprintHistory, setLoadingSprintHistory] = useState(false);
 
@@ -312,7 +311,6 @@ export default function AgentPage() {
       console.log("🚀 Starting initial load and polling...");
       loadTasks(email);
       loadStats(email);
-      loadScorecard(email);
       startPolling();
     }, 100);
   }, [email]);
@@ -785,6 +783,7 @@ export default function AgentPage() {
               nextRankAgent: nextRankAgent
             }
           }));
+          setScorecardLastUpdated(new Date());
         } else {
           console.warn(`Agent ${email} not found in sprint ${sprintNumber} rankings`);
         }
@@ -825,6 +824,16 @@ export default function AgentPage() {
         parsed.data === null ||
         typeof parsed.data !== "object"
       ) {
+        const d = parsed.data as Record<string, unknown> | null;
+        let msg = "Could not load scorecard. Try Refresh Scorecard.";
+        if (d && typeof d === "object") {
+          if (d.isHoldsOnlyAgent) {
+            msg = "Performance Scorecard is not available for Holds-only agents.";
+          } else if (typeof d.error === "string" && d.error) {
+            msg = d.error;
+          }
+        }
+        setScorecardFetchError(msg);
         console.warn(
           "📊 Scorecard fetch failed or empty/invalid JSON; preserving displayed scorecard",
           response.status,
@@ -838,38 +847,49 @@ export default function AgentPage() {
 
       if (data.success) {
         console.log("✅ Scorecard loaded successfully:", (data as any).agent?.name);
+        setScorecardFetchError(null);
         setScorecardData(data as any);
+        setScorecardLastUpdated(new Date());
         loadSprintHistory();
       } else {
         if (data.isHoldsOnlyAgent) {
           console.log("ℹ️ Holds-only agent - Performance Scorecard not available");
           setScorecardData(null);
+          setScorecardFetchError("Performance Scorecard is not available for Holds-only agents.");
         } else {
           console.error('❌ Failed to load scorecard:', data.error);
+          setScorecardFetchError(
+            typeof data.error === "string" ? data.error : "Failed to load scorecard.",
+          );
         }
       }
     } catch (error) {
       console.error('❌ Error loading scorecard:', error);
+      setScorecardFetchError("Could not load scorecard. Try again.");
     } finally {
       setLoadingScorecard(false);
       scorecardInFlightRef.current = false;
     }
   };
 
-  /** Decoupled from 5s task poll: current sprint scorecard refresh every 30s without blocking tasks. */
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (selectedSprintRef.current !== "current") return;
-      const stored =
-        typeof window !== "undefined"
-          ? localStorage.getItem("agentEmail")
-          : null;
-      if (!stored) return;
-      void loadScorecard(stored, true);
-    }, 30000);
+  /** Open scorecard panel and load current snapshot (then historical sprint rankings if selected). */
+  const openScorecardPanelAndLoad = async () => {
+    setScorecardPanelOpen(true);
+    setScorecardFetchError(null);
+    await loadScorecard(undefined, false);
+    if (selectedSprint !== "current" && typeof selectedSprint === "number") {
+      await loadHistoricalSprintData(selectedSprint);
+    }
+  };
 
-    return () => clearInterval(interval);
-  }, []);
+  /** Manual refresh: bypass server cache, then re-apply historical sprint view if selected. */
+  const refreshScorecard = async () => {
+    setScorecardFetchError(null);
+    await loadScorecard(undefined, true);
+    if (selectedSprint !== "current" && typeof selectedSprint === "number") {
+      await loadHistoricalSprintData(selectedSprint);
+    }
+  };
 
   const loadStats = async (emailToUse?: string, dateToUse?: string) => {
     const currentEmail = emailToUse || email;
@@ -1024,10 +1044,8 @@ export default function AgentPage() {
             console.warn('⚠️ Task not found in store when completing:', taskId);
           }
         }
-        // Update stats AND scorecard to reflect the completion
-        // Skip cache to get fresh data immediately after task completion
+        // Live completion counts via stats / completion-stats (scorecard is on-demand only)
         await loadStats();
-        await loadScorecard(undefined, true); // Skip cache to get fresh data
       }
     } catch (error) {
       console.error("Failed to complete task:", error);
@@ -1456,12 +1474,52 @@ export default function AgentPage() {
         </div>
       </Card>
 
-      {/* Personal Scorecard */}
-      {scorecardData && scorecardData.agent && (
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-4">
+      {/* Personal Scorecard — on-demand load (no auto-refresh; completion stats stay live above) */}
+      <Card className="p-5">
+        {!scorecardPanelOpen ? (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <H2>📊 Your Performance Scorecard</H2>
-            <div className="flex items-center gap-2">
+            <PrimaryButton
+              type="button"
+              onClick={() => void openScorecardPanelAndLoad()}
+              disabled={!email || loadingScorecard}
+            >
+              View My Performance Scorecard
+            </PrimaryButton>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <H2>📊 Your Performance Scorecard</H2>
+              <div className="flex flex-wrap items-center gap-2">
+                <SmallButton type="button" onClick={() => setScorecardPanelOpen(false)}>
+                  Hide scorecard
+                </SmallButton>
+                <SmallButton
+                  type="button"
+                  onClick={() => void refreshScorecard()}
+                  disabled={loadingScorecard}
+                >
+                  Refresh Scorecard
+                </SmallButton>
+                {scorecardLastUpdated && (
+                  <span className="text-xs text-white/50">
+                    Last updated: {scorecardLastUpdated.toLocaleString()}
+                  </span>
+                )}
+              </div>
+            </div>
+            {loadingScorecard && !scorecardData?.agent && (
+              <div className="text-center py-8 text-white/60">Loading scorecard…</div>
+            )}
+            {scorecardFetchError && (
+              <div className="mb-4 text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+                {scorecardFetchError}
+              </div>
+            )}
+            {scorecardData && scorecardData.agent && (
+              <>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
               <SmallButton 
                 onClick={() => setShowOneOnOneNotes(!showOneOnOneNotes)}
                 className="bg-purple-500/20 hover:bg-purple-500/30 ring-purple-500/40"
@@ -1477,7 +1535,6 @@ export default function AgentPage() {
               <SmallButton onClick={() => setShowScorecard(!showScorecard)}>
                 {showScorecard ? '▲ Hide Details' : '▼ Show Full Details'}
               </SmallButton>
-            </div>
           </div>
 
           {/* ALWAYS SHOW: Quick Summary */}
@@ -2153,8 +2210,11 @@ export default function AgentPage() {
               )}
             </div>
           )}
-        </Card>
-      )}
+              </>
+            )}
+          </>
+        )}
+      </Card>
 
       {/* Tasks List */}
       <Card className="p-5">
@@ -2216,7 +2276,6 @@ export default function AgentPage() {
               isTestMode={useTestData}
               onStatsUpdate={async () => {
                 await loadStats();
-                await loadScorecard(undefined, true);
               }}
             />
         ) : (
