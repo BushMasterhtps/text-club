@@ -28,6 +28,8 @@ export default function TaskDetailDrawer({
 }: TaskDetailDrawerProps) {
   const { updateTask } = useTaskStore();
   const [isProcessing, setIsProcessing] = useState(false);
+  /** True while POST /start is in flight — blocks assistance/complete until server confirms (avoids optimistic-start race). */
+  const [isStartInFlight, setIsStartInFlight] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [assistanceMessage, setAssistanceMessage] = useState('');
   const [showAssistanceInput, setShowAssistanceInput] = useState(false);
@@ -51,6 +53,7 @@ export default function TaskDetailDrawer({
       setAssistanceMessage('');
       setShowAssistanceInput(false);
       setToast(null);
+      setIsStartInFlight(false);
       prevTaskIdRef.current = task.id;
     }
   }, [task.id, task.disposition]);
@@ -60,6 +63,7 @@ export default function TaskDetailDrawer({
   const isResolved = task.status === 'RESOLVED';
   const isCompleted = task.status === 'COMPLETED';
   const isLocked = isAssistanceRequired && !isResolved;
+  const showPostStartActions = isStarted && !isStartInFlight && !isCompleted;
 
   // Get task type info
   const getTaskTypeInfo = (taskType?: string) => {
@@ -78,6 +82,7 @@ export default function TaskDetailDrawer({
 
   const handleStartTask = async () => {
     setIsProcessing(true);
+    setIsStartInFlight(true);
     try {
       // Optimistic update
       updateTask(task.id, {
@@ -89,6 +94,7 @@ export default function TaskDetailDrawer({
       if (isTestMode) {
         setToast({ message: 'Task started (test mode)', type: 'success' });
         onTaskAction?.('start', task.id);
+        setIsStartInFlight(false);
         setIsProcessing(false);
         // Don't close drawer on start - keep it open
         return;
@@ -122,6 +128,7 @@ export default function TaskDetailDrawer({
       });
       setToast({ message: 'Failed to start task. Please try again.', type: 'error' });
     } finally {
+      setIsStartInFlight(false);
       setIsProcessing(false);
     }
   };
@@ -131,6 +138,8 @@ export default function TaskDetailDrawer({
       setToast({ message: 'Please enter a message', type: 'error' });
       return;
     }
+
+    const statusBeforeAssist = task.status;
 
     setIsProcessing(true);
     try {
@@ -161,16 +170,19 @@ export default function TaskDetailDrawer({
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}) as { success?: boolean; error?: string });
 
-      if (!data.success) {
-        // Rollback
+      if (!response.ok || !data.success) {
+        const msg =
+          typeof data.error === 'string' && data.error.trim()
+            ? data.error
+            : 'Failed to request assistance';
         updateTask(task.id, {
-          status: 'IN_PROGRESS',
+          status: statusBeforeAssist,
           assistanceNotes: undefined,
           assistanceRequestedAt: undefined,
         });
-        setToast({ message: data.error || 'Failed to request assistance', type: 'error' });
+        setToast({ message: msg, type: 'error' });
       } else {
         setToast({ message: 'Assistance requested', type: 'success' });
         setAssistanceMessage('');
@@ -179,9 +191,8 @@ export default function TaskDetailDrawer({
         // Keep drawer open to show locked state
       }
     } catch (error) {
-      // Rollback
       updateTask(task.id, {
-        status: 'IN_PROGRESS',
+        status: statusBeforeAssist,
         assistanceNotes: undefined,
         assistanceRequestedAt: undefined,
       });
@@ -738,14 +749,14 @@ export default function TaskDetailDrawer({
             {!isStarted && !isCompleted && (
               <button
                 onClick={handleStartTask}
-                disabled={isProcessing}
+                disabled={isProcessing || isStartInFlight}
                 className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50"
               >
-                {isProcessing ? 'Starting...' : 'Start Task'}
+                {isProcessing || isStartInFlight ? 'Starting...' : 'Start Task'}
               </button>
             )}
 
-            {isStarted && !isLocked && !isCompleted && (
+            {showPostStartActions && !isLocked && (
               <>
                 {!showAssistanceInput ? (
                   <button
@@ -786,7 +797,7 @@ export default function TaskDetailDrawer({
               </>
             )}
 
-            {isStarted && !isLocked && !isCompleted && (
+            {showPostStartActions && !isLocked && (
               <div className="space-y-4">
                 {/* Order Amount field for Holds tasks - MANDATORY */}
                 {task.taskType === "HOLDS" && (

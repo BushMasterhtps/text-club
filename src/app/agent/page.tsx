@@ -1167,7 +1167,9 @@ export default function AgentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, message }),
       });
-      if (res.ok) {
+      const data = await res.json().catch(() => ({}) as { success?: boolean; error?: string });
+
+      if (res.ok && data.success) {
         // Remove from started tasks since it's now in assistance state
         setStartedTasks(prev => {
           const newSet = new Set(prev);
@@ -1193,9 +1195,16 @@ export default function AgentPage() {
         }
         // Update stats to reflect the assistance request
         await loadStats();
+      } else {
+        const msg =
+          typeof data.error === "string" && data.error.trim()
+            ? data.error
+            : "Failed to request assistance.";
+        alert(msg);
       }
     } catch (error) {
       console.error("Failed to request assistance:", error);
+      alert("Failed to request assistance. Please try again.");
     }
   };
 
