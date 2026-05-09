@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 import { useAssistanceRequestsContext } from "@/contexts/AssistanceRequestsContext";
@@ -63,26 +63,67 @@ interface AssistanceRequest {
   holdsDaysInSystem?: number;
 }
 
+function filterRowsForTaskType(
+  rows: AssistanceRequest[],
+  taskType: AssistanceRequestsSectionProps["taskType"],
+): AssistanceRequest[] {
+  if (!taskType) return rows;
+  if (taskType === "HOLDS") {
+    return rows.filter((req) => req.taskType === "HOLDS");
+  }
+  return rows.filter(
+    (req) =>
+      req.taskType !== "HOLDS" &&
+      (req.taskType === "TEXT_CLUB" ||
+        req.taskType === "WOD_IVCS" ||
+        req.taskType === "EMAIL_REQUESTS" ||
+        req.taskType === "YOTPO" ||
+        req.taskType === "STANDALONE_REFUNDS"),
+  );
+}
+
 export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCountChange, onResponseSent }: AssistanceRequestsSectionProps) {
   const [requests, setRequests] = useState<AssistanceRequest[]>([]);
   /** True only until the first fetch for this `taskType` finishes (empty list may still be a valid result). */
   const [bootstrapping, setBootstrapping] = useState(true);
-  /** True during polls / manual refresh after initial load — must not unmount the list or textareas. */
-  const [refreshing, setRefreshing] = useState(false);
+  /** True during standalone polls / manual refresh (no shared context). */
+  const [localRefreshing, setLocalRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [responseText, setResponseText] = useState<Record<string, string>>({});
   const previousPendingCountRef = useRef(0);
   const hasCompletedInitialFetch = useRef(false);
 
-  // Get refresh function from context (for non-Holds dashboards)
   const assistanceContext = useAssistanceRequestsContext();
+  const useSharedList = assistanceContext != null;
+
+  const filteredFromShared = useMemo(() => {
+    if (!assistanceContext?.requests) return null;
+    return filterRowsForTaskType(assistanceContext.requests as AssistanceRequest[], taskType);
+  }, [assistanceContext?.requests, assistanceContext?.lastUpdated, taskType]);
+
+  useEffect(() => {
+    if (!useSharedList || filteredFromShared === null) return;
+    setRequests(filteredFromShared);
+    setBootstrapping(
+      assistanceContext!.loading &&
+        assistanceContext!.lastUpdated === null &&
+        assistanceContext!.requests.length === 0,
+    );
+    hasCompletedInitialFetch.current = true;
+  }, [
+    useSharedList,
+    filteredFromShared,
+    assistanceContext?.loading,
+    assistanceContext?.lastUpdated,
+    assistanceContext?.requests.length,
+  ]);
 
   const loadRequests = async (options?: { forceRefresh?: boolean }) => {
     const isInitial = !hasCompletedInitialFetch.current;
     if (isInitial) {
       setBootstrapping(true);
     } else {
-      setRefreshing(true);
+      setLocalRefreshing(true);
     }
     try {
       const { ok, data } = await fetchManagerAssistance({
@@ -96,26 +137,7 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCou
         return;
       }
 
-      // Filter logic:
-      // - Text Club, WOD/IVCS, Email Requests, and Yotpo should show ALL of each other's requests (cross-visible)
-      // - Holds should ONLY show Holds requests (isolated)
-      let filteredRequests = (data.requests ?? []) as AssistanceRequest[];
-
-      if (taskType) {
-        if (taskType === "HOLDS") {
-          filteredRequests = filteredRequests.filter((req: AssistanceRequest) => req.taskType === "HOLDS");
-        } else {
-          filteredRequests = filteredRequests.filter(
-            (req: AssistanceRequest) =>
-              req.taskType !== "HOLDS" &&
-              (req.taskType === "TEXT_CLUB" ||
-                req.taskType === "WOD_IVCS" ||
-                req.taskType === "EMAIL_REQUESTS" ||
-                req.taskType === "YOTPO" ||
-                req.taskType === "STANDALONE_REFUNDS"),
-          );
-        }
-      }
+      let filteredRequests = filterRowsForTaskType((data.requests ?? []) as AssistanceRequest[], taskType);
 
       const pendingCount = filteredRequests.filter((req: AssistanceRequest) => req.status === "ASSISTANCE_REQUIRED").length;
 
@@ -135,19 +157,31 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCou
         setBootstrapping(false);
         hasCompletedInitialFetch.current = true;
       } else {
-        setRefreshing(false);
+        setLocalRefreshing(false);
       }
     }
   };
 
   useEffect(() => {
+    if (useSharedList) return;
     hasCompletedInitialFetch.current = false;
     setBootstrapping(true);
     setRequests([]);
     void loadRequests();
     const interval = setInterval(() => void loadRequests(), 30000);
     return () => clearInterval(interval);
-  }, [taskType]);
+  }, [taskType, useSharedList]);
+
+  useEffect(() => {
+    if (!onPendingCountChange || !useSharedList || filteredFromShared === null) return;
+    const pendingCount = filteredFromShared.filter((req) => req.status === "ASSISTANCE_REQUIRED").length;
+    if (pendingCount !== previousPendingCountRef.current) {
+      onPendingCountChange(pendingCount);
+      previousPendingCountRef.current = pendingCount;
+    }
+  }, [useSharedList, filteredFromShared, onPendingCountChange]);
+
+  const refreshing = useSharedList ? !!assistanceContext?.refreshing : localRefreshing;
 
   const handleResponse = async (requestId: string) => {
     const response = responseText[requestId]?.trim();
@@ -166,20 +200,16 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCou
       
       const data = await res.json();
       if (data.success) {
-        // Remove the request from the list (since it's been responded to, it won't appear in API anymore)
-        setRequests(prev => prev.filter(req => req.id !== requestId));
-        // Clear the response text
-        setResponseText(prev => ({ ...prev, [requestId]: "" }));
-        // Refresh the notification hook to update counts immediately
+        setRequests((prev) => prev.filter((req) => req.id !== requestId));
+        setResponseText((prev) => ({ ...prev, [requestId]: "" }));
         if (assistanceContext) {
-          // For non-Holds dashboards, use context refresh
-          await assistanceContext.refresh();
+          await assistanceContext.refresh({ bypassCache: true });
         } else if (onResponseSent) {
-          // For Holds dashboard, use callback
-          onResponseSent();
+          await Promise.resolve(onResponseSent());
         }
-        // Reload requests to get updated list
-        await loadRequests({ forceRefresh: true });
+        if (!assistanceContext) {
+          await loadRequests({ forceRefresh: true });
+        }
       } else {
         alert(data.error || "Failed to send response");
       }
@@ -243,7 +273,11 @@ export function AssistanceRequestsSection({ taskType = "TEXT_CLUB", onPendingCou
           ) : null}
           <span className="text-sm text-white/60">{requests.length} total requests</span>
           <SmallButton
-            onClick={() => void loadRequests({ forceRefresh: true })}
+            onClick={() =>
+              void (useSharedList
+                ? assistanceContext!.refresh({ bypassCache: true })
+                : loadRequests({ forceRefresh: true }))
+            }
             disabled={bootstrapping || refreshing}
           >
             {refreshing ? "Refreshing…" : "🔄 Refresh"}

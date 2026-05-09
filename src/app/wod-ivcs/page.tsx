@@ -16,7 +16,6 @@ import { AnalyticsSection } from "./_components/AnalyticsSection";
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import SessionTimer from '@/app/_components/SessionTimer';
 import ThemeToggle from '@/app/_components/ThemeToggle';
-import { fetchManagerAssistance } from '@/lib/manager-assistance-fetch';
 
 // Utility functions
 function clamp(value: number | null | undefined): number {
@@ -550,37 +549,6 @@ function WodIvcsDashboardContent() {
   const [orderAgeFilter, setOrderAgeFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
 
-  // Assistance Requests state
-  const [assistanceRequests, setAssistanceRequests] = useState<Array<{
-    id: string;
-    brand: string;
-    phone: string;
-    text: string;
-    agentName: string;
-    agentEmail: string;
-    assistanceNotes: string;
-    managerResponse?: string;
-    createdAt: string;
-    updatedAt: string;
-    status: string;
-    taskType?: string;
-    // WOD/IVCS specific fields
-    wodIvcsSource?: string;
-    documentNumber?: string;
-    customerName?: string;
-    amount?: number;
-    webOrderDifference?: number;
-    purchaseDate?: string;
-    orderAge?: string;
-    // Email Request specific fields
-    emailRequestFor?: string;
-    details?: string;
-    // Standalone Refund specific fields
-    refundAmount?: number;
-    paymentMethod?: string;
-    refundReason?: string;
-  }>>([]);
-
   const [importAnalytics, setImportAnalytics] = useState<{
     dateRange: {
       start: string;
@@ -642,22 +610,7 @@ function WodIvcsDashboardContent() {
       loadAgents();
       loadAgentWorkloads();
     }
-    if (activeSection === "assistance") {
-      loadAssistanceRequests();
-    }
   }, [activeSection]);
-
-  // Load assistance requests on initial load and set up auto-refresh
-  useEffect(() => {
-    loadAssistanceRequests();
-    
-    // Auto-refresh assistance requests every 30 seconds
-    const interval = setInterval(() => {
-      loadAssistanceRequests();
-    }, 30000);
-    
-    return () => clearInterval(interval);
-  }, []);
 
   // Assignment functions (copied from Text Club)
   async function loadAgents() {
@@ -691,52 +644,6 @@ function WodIvcsDashboardContent() {
       console.error('Error loading agent workloads:', error);
     }
   };
-
-  async function loadAssistanceRequests(forceRefresh?: boolean) {
-    try {
-      console.log("🔍 Loading assistance requests...");
-      const { ok, data } = await fetchManagerAssistance({
-        bypassCache: forceRefresh,
-      });
-      if (!ok || !data || data.success !== true) {
-        if (forceRefresh) {
-          console.warn("WOD assistance refresh failed or empty; keeping existing list state");
-        }
-        return;
-      }
-      const rows = (data.requests ?? []) as (typeof assistanceRequests)[number][];
-
-      const allNonHoldsRequests = rows.filter((req) =>
-        req.taskType !== 'HOLDS' &&
-        (req.taskType === 'TEXT_CLUB' ||
-          req.taskType === 'WOD_IVCS' ||
-          req.taskType === 'EMAIL_REQUESTS' ||
-          req.taskType === 'YOTPO' ||
-          req.taskType === 'STANDALONE_REFUNDS'),
-      );
-
-      console.log("🔍 All non-Holds requests count:", allNonHoldsRequests.length);
-
-      const pendingRequests = allNonHoldsRequests.filter(
-        (req: any) => req.status === 'ASSISTANCE_REQUIRED',
-      );
-      const currentPendingCount = assistanceRequests.filter(
-        (r: any) => r.status === 'ASSISTANCE_REQUIRED',
-      ).length;
-      const newPendingCount = pendingRequests.length;
-
-      console.log(
-        "🔍 Current pending count:",
-        currentPendingCount,
-        "New pending count:",
-        newPendingCount,
-      );
-
-      setAssistanceRequests(allNonHoldsRequests);
-    } catch (error) {
-      console.error("Error loading assistance requests:", error);
-    }
-  }
 
   const toggleSelectAll = () => setSelectedAgents(allSelected ? [] : agents.map((a) => a.email));
   const allSelected = agents.length > 0 && selectedAgents.length === agents.length;
@@ -1276,19 +1183,7 @@ function WodIvcsDashboardContent() {
         {/* Assistance Requests Section */}
         {activeSection === "assistance" && (
           <div className="space-y-8">
-            <AssistanceRequestsSection 
-              taskType="WOD_IVCS" 
-              onPendingCountChange={(count) => {
-                const previousCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
-                // Update badge count
-                setAssistanceRequests((prev: any[]) => {
-                  // Create a dummy array with the right count for badge calculation
-                  const newArray = Array(count).fill({ status: 'ASSISTANCE_REQUIRED' });
-                  return newArray as any[];
-                });
-                // Notification is now handled by DashboardLayout
-              }}
-            />
+            <AssistanceRequestsSection taskType="WOD_IVCS" />
           </div>
         )}
 

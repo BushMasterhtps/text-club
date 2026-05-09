@@ -16,7 +16,6 @@ import YotpoAnalytics from '@/app/_components/YotpoAnalytics';
 import { AssistanceRequestsSection } from '@/app/manager/_components/AssistanceRequestsSection';
 import SortableHeader, { SortDirection } from '@/app/_components/SortableHeader';
 import SubmissionsReport from '@/app/yotpo/_components/SubmissionsReport';
-import { fetchManagerAssistance } from '@/lib/manager-assistance-fetch';
 import SessionTimer from '@/app/_components/SessionTimer';
 
 // Utility functions
@@ -1133,17 +1132,6 @@ function YotpoPageContent() {
     lastImport: null as { date: string; imported: number; duplicates: number; errors: number } | null
   });
   const [overviewLoading, setOverviewLoading] = useState(false);
-  const [assistanceRequests, setAssistanceRequests] = useState<Array<{
-    id: string;
-    taskType: string;
-    agentName: string;
-    agentEmail: string;
-    assistanceNotes: string;
-    managerResponse?: string;
-    createdAt: string;
-    updatedAt: string;
-    status: string;
-  }>>([]);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // Auto logout hook
@@ -1173,49 +1161,6 @@ function YotpoPageContent() {
       setOverviewLoading(false);
     }
   };
-
-  // Load assistance requests - get all non-Holds requests for cross-visibility
-  const loadAssistanceRequests = async (forceRefresh?: boolean) => {
-    try {
-      console.log("🔍 [Yotpo] Loading assistance requests...");
-      const { ok, status, data } = await fetchManagerAssistance({
-        bypassCache: forceRefresh,
-      });
-      console.log("🔍 [Yotpo] Assistance API response status:", status);
-
-      if (!ok || !data || data.success !== true) {
-        if (forceRefresh) {
-          console.warn("[Yotpo] Assistance refresh failed; keeping existing list state");
-        }
-        return;
-      }
-
-      console.log("🔍 [Yotpo] Assistance API data:", data);
-
-      const rows = (data.requests ?? []) as (typeof assistanceRequests)[number][];
-
-      const allNonHoldsRequests = rows.filter((req) =>
-        req.taskType !== 'HOLDS' &&
-        (req.taskType === 'TEXT_CLUB' ||
-          req.taskType === 'WOD_IVCS' ||
-          req.taskType === 'EMAIL_REQUESTS' ||
-          req.taskType === 'YOTPO' ||
-          req.taskType === 'STANDALONE_REFUNDS'),
-      );
-
-      console.log("🔍 [Yotpo] All non-Holds requests count:", allNonHoldsRequests.length);
-
-      setAssistanceRequests(allNonHoldsRequests);
-    } catch (error) {
-      console.error("🔍 [Yotpo] Error loading assistance requests:", error);
-    }
-  };
-
-  useEffect(() => {
-    loadAssistanceRequests();
-    const interval = setInterval(loadAssistanceRequests, 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Load overview data when overview section is active
   useEffect(() => {
@@ -1345,22 +1290,7 @@ function YotpoPageContent() {
         {/* Assistance Requests Section */}
         {activeSection === "assistance" && (
           <div className="space-y-8">
-            <AssistanceRequestsSection 
-              taskType="YOTPO" 
-              onPendingCountChange={(count) => {
-                const previousCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
-                // Update badge count
-                setAssistanceRequests((prev: any[]) => {
-                  // Create a dummy array with the right count for badge calculation
-                  const newArray = Array(count).fill({ status: 'ASSISTANCE_REQUIRED' });
-                  return newArray as any[];
-                });
-                // Show notification if count increased
-                if (count > 0 && (previousCount === 0 || count > previousCount)) {
-                  // Notification is now handled by DashboardLayout
-                }
-              }}
-            />
+            <AssistanceRequestsSection taskType="YOTPO" />
           </div>
         )}
 

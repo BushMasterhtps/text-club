@@ -18,7 +18,6 @@ import { Badge } from "@/app/_components/Badge";
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import EmailRequestsAnalytics from '@/app/_components/EmailRequestsAnalytics';
 import EmailRequestsDispositionReview from '@/app/_components/EmailRequestsDispositionReview';
-import { fetchManagerAssistance } from '@/lib/manager-assistance-fetch';
 
 // Utility functions
 function clamp(value: number | null | undefined): number {
@@ -788,17 +787,6 @@ function EmailRequestsPageContent() {
     lastImport: null as { date: string; imported: number; duplicates: number } | null
   });
   const [overviewLoading, setOverviewLoading] = useState(false);
-  const [assistanceRequests, setAssistanceRequests] = useState<Array<{
-    id: string;
-    taskType: string;
-    agentName: string;
-    agentEmail: string;
-    assistanceNotes: string;
-    managerResponse?: string;
-    createdAt: string;
-    updatedAt: string;
-    status: string;
-  }>>([]);
 
   // Auto logout hook
   const { timeLeft, extendSession } = useAutoLogout({ timeoutMinutes: 50 });
@@ -854,64 +842,6 @@ function EmailRequestsPageContent() {
       setOverviewLoading(false);
     }
   };
-
-  // Load assistance requests - get all non-Holds requests for cross-visibility
-  const loadAssistanceRequests = async (forceRefresh?: boolean) => {
-    try {
-      console.log("🔍 [Email Requests] Loading assistance requests...");
-      const { ok, status, data } = await fetchManagerAssistance({
-        bypassCache: forceRefresh,
-      });
-      console.log("🔍 [Email Requests] Assistance API response status:", status);
-
-      if (!ok || !data || data.success !== true) {
-        if (forceRefresh) {
-          console.warn("[Email Requests] Assistance refresh failed; keeping existing list state");
-        }
-        return;
-      }
-
-      console.log("🔍 [Email Requests] Assistance API data:", data);
-
-      const rows = (data.requests ?? []) as (typeof assistanceRequests)[number][];
-
-      const allNonHoldsRequests = rows.filter((req) =>
-        req.taskType !== 'HOLDS' &&
-        (req.taskType === 'TEXT_CLUB' ||
-          req.taskType === 'WOD_IVCS' ||
-          req.taskType === 'EMAIL_REQUESTS' ||
-          req.taskType === 'YOTPO' ||
-          req.taskType === 'STANDALONE_REFUNDS'),
-      );
-
-      console.log("🔍 [Email Requests] All non-Holds requests count:", allNonHoldsRequests.length);
-
-      setAssistanceRequests(allNonHoldsRequests);
-
-      const pendingRequests = allNonHoldsRequests.filter(
-        (req: any) => req.status === 'ASSISTANCE_REQUIRED',
-      );
-      const currentPendingCount = assistanceRequests.filter(
-        (r: any) => r.status === 'ASSISTANCE_REQUIRED',
-      ).length;
-      const newPendingCount = pendingRequests.length;
-
-      console.log(
-        "🔍 [Email Requests] Current pending count:",
-        currentPendingCount,
-        "New pending count:",
-        newPendingCount,
-      );
-    } catch (error) {
-      console.error("🔍 [Email Requests] Error loading assistance requests:", error);
-    }
-  };
-
-  useEffect(() => {
-    loadAssistanceRequests();
-    const interval = setInterval(loadAssistanceRequests, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
-  }, []);
 
   // Load overview data when overview section is active
   useEffect(() => {
@@ -1042,22 +972,7 @@ function EmailRequestsPageContent() {
         {/* Assistance Requests Section */}
         {activeSection === "assistance" && (
           <div className="space-y-8">
-            <AssistanceRequestsSection 
-              taskType="EMAIL_REQUESTS" 
-              onPendingCountChange={(count) => {
-                const previousCount = assistanceRequests.filter((r: any) => r.status === 'ASSISTANCE_REQUIRED').length;
-                // Update badge count
-                setAssistanceRequests((prev: any[]) => {
-                  // Create a dummy array with the right count for badge calculation
-                  const newArray = Array(count).fill({ status: 'ASSISTANCE_REQUIRED' });
-                  return newArray as any[];
-                });
-                // Show notification if count increased
-                if (count > 0 && (previousCount === 0 || count > previousCount)) {
-                  // Notification is now handled by DashboardLayout
-                }
-              }}
-            />
+            <AssistanceRequestsSection taskType="EMAIL_REQUESTS" />
           </div>
         )}
 

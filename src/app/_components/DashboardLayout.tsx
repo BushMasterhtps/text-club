@@ -5,62 +5,60 @@ import UnifiedNavigation from './UnifiedNavigation';
 import { useDashboardNavigation } from '@/hooks/useDashboardNavigation';
 import UnifiedSettings from './UnifiedSettings';
 import AssistanceRequestNotification from './AssistanceRequestNotification';
-import { useAssistanceRequests } from '@/hooks/useAssistanceRequests';
-import { AssistanceRequestsProvider } from '@/contexts/AssistanceRequestsContext';
+import {
+  AssistanceRequestsProvider,
+  useAssistanceRequestsContext,
+} from '@/contexts/AssistanceRequestsContext';
 
 interface DashboardLayoutProps {
   children: ReactNode;
   headerActions?: ReactNode;
 }
 
-function DashboardLayoutContent({ 
-  children, 
-  headerActions 
+function DashboardLayoutContent({
+  children,
+  headerActions,
 }: DashboardLayoutProps) {
   const { currentDashboard, dashboardConfigs, sidebarCollapsed } = useDashboardNavigation();
-  const currentConfig = dashboardConfigs.find(d => d.id === currentDashboard);
+  const currentConfig = dashboardConfigs.find((d) => d.id === currentDashboard);
   const [showSettings, setShowSettings] = useState(false);
-  
-  // Unified assistance request management (only for non-Holds dashboards)
-  // Holds has its own notification system
+
   const isHoldsDashboard = currentDashboard === 'holds';
-  const {
-    pendingCount,
-    showNotification,
-    newAssistanceCount,
-    setShowNotification,
-    refresh: refreshAssistanceRequests,
-  } = useAssistanceRequests();
+  const assistanceCtx = useAssistanceRequestsContext();
+
+  const showNotification = assistanceCtx?.showNotification ?? false;
+  const newAssistanceCount = assistanceCtx?.newAssistanceCount ?? 0;
+  const setShowNotification = assistanceCtx?.setShowNotification ?? (() => {});
 
   return (
-    <AssistanceRequestsProvider refresh={refreshAssistanceRequests}>
-      <div className="flex min-h-screen bg-neutral-900">
-        {/* Sidebar Navigation */}
-        <UnifiedNavigation />
+    <div className="flex min-h-screen bg-neutral-900">
+      {/* Sidebar Navigation */}
+      <UnifiedNavigation />
 
       {/* Main Content Area */}
-      <main className={`
+      <main
+        className={`
         flex-1 min-w-0 transition-all duration-300 ease-in-out
         bg-neutral-900
         ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64 lg:pr-64'}
-      `}>
+      `}
+      >
         {/* Content Wrapper - Centers content with balanced spacing */}
-        <div className={`
+        <div
+          className={`
           transition-all duration-300 w-full
           bg-neutral-900
-          ${sidebarCollapsed 
-            ? '' 
-            : 'max-w-[1400px] mx-auto'
-          }
-        `}>
+          ${sidebarCollapsed ? '' : 'max-w-[1400px] mx-auto'}
+        `}
+        >
           {/* Header */}
           <header className="sticky top-0 z-20 bg-gradient-to-b from-neutral-900 via-neutral-900/95 to-neutral-900/80 backdrop-blur-sm border-b border-white/10 shadow-lg">
             <div className="px-6 py-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4 min-w-0">
-                  <img 
-                    src="/golden-companies-logo.jpeg" 
-                    alt="Golden Companies" 
+                  <img
+                    src="/golden-companies-logo.jpeg"
+                    alt="Golden Companies"
                     className="h-14 w-auto flex-shrink-0"
                   />
                   <div className="min-w-0">
@@ -72,17 +70,19 @@ function DashboardLayoutContent({
                     </p>
                   </div>
                 </div>
-                
+
                 {/* Header Actions */}
                 <div className="flex items-center gap-3 flex-shrink-0">
                   <button
-                    onClick={() => window.location.href = '/analytics'}
+                    type="button"
+                    onClick={() => (window.location.href = '/analytics')}
                     className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
                     title="Team-wide performance and task insights"
                   >
                     📊 Team Analytics
                   </button>
                   <button
+                    type="button"
                     onClick={() => setShowSettings(true)}
                     className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
                     title="System Settings & Administration"
@@ -96,9 +96,7 @@ function DashboardLayoutContent({
           </header>
 
           {/* Page Content */}
-          <div className="p-6">
-            {children}
-          </div>
+          <div className="p-6">{children}</div>
         </div>
       </main>
 
@@ -113,18 +111,15 @@ function DashboardLayoutContent({
       )}
 
       {/* Unified Settings Modal */}
-      {showSettings && (
-        <UnifiedSettings 
-          onClose={() => setShowSettings(false)} 
-          asModal={true}
-        />
-      )}
-      </div>
-    </AssistanceRequestsProvider>
+      {showSettings && <UnifiedSettings onClose={() => setShowSettings(false)} asModal={true} />}
+    </div>
   );
 }
 
 export default function DashboardLayout(props: DashboardLayoutProps) {
-  return <DashboardLayoutContent {...props} />;
+  return (
+    <AssistanceRequestsProvider>
+      <DashboardLayoutContent {...props} />
+    </AssistanceRequestsProvider>
+  );
 }
-
