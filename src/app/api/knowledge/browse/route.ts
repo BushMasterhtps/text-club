@@ -27,6 +27,19 @@ function clampLimit(raw: string | null): number {
   return Math.min(100, Math.floor(n));
 }
 
+/** URL param: encodeURIComponent(JSON.stringify(string[])) */
+function parseJsonStringArray(param: string | null): string[] | null {
+  if (!param?.trim()) return null;
+  try {
+    const parsed = JSON.parse(param.trim()) as unknown;
+    if (!Array.isArray(parsed) || !parsed.every((x) => typeof x === "string")) return null;
+    const out = parsed.filter((s: string) => s.length > 0);
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * GET /api/knowledge/browse?type=email-macros|text-club-macros|product-inquiry-qa
  * &limit=40&cursor=...
@@ -45,13 +58,17 @@ export async function GET(request: NextRequest) {
     const cursor = decodeKnowledgeCursor(searchParams.get("cursor"));
 
     if (type === EMAIL) {
-      const brand = searchParams.get("brand")?.trim() || "";
-      const caseType = searchParams.get("caseType")?.trim() || "";
+      const brandIn = parseJsonStringArray(searchParams.get("brandIn"));
+      const brandSingle = searchParams.get("brand")?.trim() || "";
+      const caseTypeIn = parseJsonStringArray(searchParams.get("caseTypeIn"));
+      const caseTypeSingle = searchParams.get("caseType")?.trim() || "";
       const q = searchParams.get("q")?.trim() || "";
 
       const parts: Prisma.EmailMacroWhereInput[] = [];
-      if (brand) parts.push({ brand });
-      if (caseType) parts.push({ caseType });
+      if (brandIn) parts.push({ brand: { in: brandIn } });
+      else if (brandSingle) parts.push({ brand: brandSingle });
+      if (caseTypeIn) parts.push({ caseType: { in: caseTypeIn } });
+      else if (caseTypeSingle) parts.push({ caseType: caseTypeSingle });
       if (q) {
         parts.push({
           OR: [
@@ -146,13 +163,17 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === QA) {
-      const brand = searchParams.get("brand")?.trim() || "";
-      const product = searchParams.get("product")?.trim() || "";
+      const brandIn = parseJsonStringArray(searchParams.get("brandIn"));
+      const brandSingle = searchParams.get("brand")?.trim() || "";
+      const productIn = parseJsonStringArray(searchParams.get("productIn"));
+      const productSingle = searchParams.get("product")?.trim() || "";
       const q = searchParams.get("q")?.trim() || "";
 
       const parts: Prisma.ProductInquiryQAWhereInput[] = [];
-      if (brand) parts.push({ brand });
-      if (product) parts.push({ product });
+      if (brandIn) parts.push({ brand: { in: brandIn } });
+      else if (brandSingle) parts.push({ brand: brandSingle });
+      if (productIn) parts.push({ product: { in: productIn } });
+      else if (productSingle) parts.push({ product: productSingle });
       if (q) {
         parts.push({
           OR: [

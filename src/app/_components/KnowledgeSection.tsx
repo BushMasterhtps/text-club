@@ -34,22 +34,29 @@ type QaBrowseItem = SearchResult["productInquiryQAs"][number];
 
 const BROWSE_LIMIT = 40;
 
+type FacetOption = { label: string; values: string[] };
+
+function stableFacetValue(values: string[]): string {
+  return JSON.stringify([...values].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })));
+}
+
 export default function KnowledgeSection() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<KnowledgeTab>("search");
+  const wasOpenRef = useRef(false);
 
   // ——— Search All tab
   const [searchQuery, setSearchQuery] = useState("");
   const [results, setResults] = useState<SearchResult | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [lastSearch, setLastSearch] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ——— Email browse
-  const [emailBrands, setEmailBrands] = useState<string[]>([]);
-  const [emailCaseTypes, setEmailCaseTypes] = useState<string[]>([]);
-  const [emailBrand, setEmailBrand] = useState("");
-  const [emailCaseType, setEmailCaseType] = useState("");
+  const [emailBrandOptions, setEmailBrandOptions] = useState<FacetOption[]>([]);
+  const [emailCaseTypeOptions, setEmailCaseTypeOptions] = useState<FacetOption[]>([]);
+  /** null = any brand; else OR-match these exact DB strings (case/whitespace variants). */
+  const [emailBrandValues, setEmailBrandValues] = useState<string[] | null>(null);
+  const [emailCaseValues, setEmailCaseValues] = useState<string[] | null>(null);
   const [emailKeyword, setEmailKeyword] = useState("");
   const [emailItems, setEmailItems] = useState<EmailBrowseItem[]>([]);
   const [emailNextCursor, setEmailNextCursor] = useState<string | null>(null);
@@ -65,10 +72,10 @@ export default function KnowledgeSection() {
   const [textLoading, setTextLoading] = useState(false);
 
   // ——— Product QA browse
-  const [qaBrands, setQaBrands] = useState<string[]>([]);
-  const [qaProducts, setQaProducts] = useState<string[]>([]);
-  const [qaBrand, setQaBrand] = useState("");
-  const [qaProduct, setQaProduct] = useState("");
+  const [qaBrandOptions, setQaBrandOptions] = useState<FacetOption[]>([]);
+  const [qaProductOptions, setQaProductOptions] = useState<FacetOption[]>([]);
+  const [qaBrandValues, setQaBrandValues] = useState<string[] | null>(null);
+  const [qaProductValues, setQaProductValues] = useState<string[] | null>(null);
   const [qaKeyword, setQaKeyword] = useState("");
   const [qaItems, setQaItems] = useState<QaBrowseItem[]>([]);
   const [qaNextCursor, setQaNextCursor] = useState<string | null>(null);
@@ -78,25 +85,21 @@ export default function KnowledgeSection() {
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Load last search when opening (Search All tab)
+  // Restore last search only when the modal transitions from closed → open (not on tab switches).
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpenRef.current) {
       const saved = localStorage.getItem("knowledgeLastSearch");
-      if (saved) {
-        setSearchQuery(saved);
-        setLastSearch(saved);
-      }
-      if (activeTab === "search") {
-        setTimeout(() => searchInputRef.current?.focus(), 100);
-      }
+      if (saved) setSearchQuery(saved);
     }
-  }, [isOpen, activeTab]);
+    wasOpenRef.current = isOpen;
+  }, [isOpen]);
 
   useEffect(() => {
-    if (isOpen && activeTab === "search" && lastSearch && !searchQuery) {
-      setSearchQuery(lastSearch);
+    if (isOpen && activeTab === "search") {
+      const t = setTimeout(() => searchInputRef.current?.focus(), 100);
+      return () => clearTimeout(t);
     }
-  }, [isOpen, activeTab, lastSearch, searchQuery]);
+  }, [isOpen, activeTab]);
 
   // Global search debounce (Search All tab only)
   useEffect(() => {
@@ -108,6 +111,7 @@ export default function KnowledgeSection() {
         localStorage.setItem("knowledgeLastSearch", searchQuery);
       } else {
         setResults(null);
+        localStorage.removeItem("knowledgeLastSearch");
       }
     }, 300);
 
@@ -141,8 +145,8 @@ export default function KnowledgeSection() {
         const res = await fetch("/api/knowledge/facets?type=email-macros");
         const data = await res.json();
         if (!cancelled && data.success) {
-          setEmailBrands(data.data.brands ?? []);
-          setEmailCaseTypes(data.data.caseTypes ?? []);
+          setEmailBrandOptions(data.data.brandOptions ?? []);
+          setEmailCaseTypeOptions(data.data.caseTypeOptions ?? []);
         }
       } catch (e) {
         console.error(e);
@@ -155,7 +159,7 @@ export default function KnowledgeSection() {
     };
   }, [isOpen, activeTab]);
 
-  // QA brand facets + products when brand changes
+  // QA brand facets + products when brand cluster changes
   useEffect(() => {
     if (!isOpen || activeTab !== "qa") return;
     let cancelled = false;
@@ -165,18 +169,22 @@ export default function KnowledgeSection() {
         const brandRes = await fetch("/api/knowledge/facets?type=product-inquiry-qa");
         const brandData = await brandRes.json();
         if (!cancelled && brandData.success) {
-          setQaBrands(brandData.data.brands ?? []);
+          setQaBrandOptions(brandData.data.brandOptions ?? []);
+        } else if (!cancelled && !brandRes.ok) {
+          console.error("Product Q&A facets (brands) failed:", brandRes.status, brandData);
         }
-        if (qaBrand) {
-          const pRes = await fetch(
-            `/api/knowledge/facets?type=product-inquiry-qa&brand=${encodeURIComponent(qaBrand)}`
-          );
+
+        if (qaBrandValues && qaBrandValues.length > 0) {
+          const bv = encodeURIComponent(JSON.stringify(qaBrandValues));
+          const pRes = await fetch(`/api/knowledge/facets?type=product-inquiry-qa&brandValues=${bv}`);
           const pData = await pRes.json();
           if (!cancelled && pData.success) {
-            setQaProducts(pData.data.products ?? []);
+            setQaProductOptions(pData.data.productOptions ?? []);
+          } else if (!cancelled && !pRes.ok) {
+            console.error("Product Q&A facets (products) failed:", pRes.status, pData);
           }
-        } else {
-          if (!cancelled) setQaProducts([]);
+        } else if (!cancelled) {
+          setQaProductOptions([]);
         }
       } catch (e) {
         console.error(e);
@@ -187,7 +195,7 @@ export default function KnowledgeSection() {
     return () => {
       cancelled = true;
     };
-  }, [isOpen, activeTab, qaBrand]);
+  }, [isOpen, activeTab, qaBrandValues]);
 
   const buildBrowseUrl = useCallback(
     (type: string, params: Record<string, string>, cursor: string | null) => {
@@ -208,11 +216,15 @@ export default function KnowledgeSection() {
       void (async () => {
         setEmailLoading(true);
         try {
-          const url = buildBrowseUrl("email-macros", {
-            brand: emailBrand,
-            caseType: emailCaseType,
-            q: emailKeyword,
-          }, null);
+          const browseParams: Record<string, string> = {};
+          if (emailKeyword.trim()) browseParams.q = emailKeyword.trim();
+          if (emailBrandValues?.length) {
+            browseParams.brandIn = JSON.stringify(emailBrandValues);
+          }
+          if (emailCaseValues?.length) {
+            browseParams.caseTypeIn = JSON.stringify(emailCaseValues);
+          }
+          const url = buildBrowseUrl("email-macros", browseParams, null);
           const res = await fetch(url);
           const data = await res.json();
           if (data.success) {
@@ -228,7 +240,7 @@ export default function KnowledgeSection() {
       })();
     }, 400);
     return () => clearTimeout(t);
-  }, [isOpen, activeTab, emailBrand, emailCaseType, emailKeyword, buildBrowseUrl]);
+  }, [isOpen, activeTab, emailBrandValues, emailCaseValues, emailKeyword, buildBrowseUrl]);
 
   // Debounced text browse
   useEffect(() => {
@@ -262,11 +274,15 @@ export default function KnowledgeSection() {
       void (async () => {
         setQaLoading(true);
         try {
-          const url = buildBrowseUrl(
-            "product-inquiry-qa",
-            { brand: qaBrand, product: qaProduct, q: qaKeyword },
-            null
-          );
+          const browseParams: Record<string, string> = {};
+          if (qaKeyword.trim()) browseParams.q = qaKeyword.trim();
+          if (qaBrandValues?.length) {
+            browseParams.brandIn = JSON.stringify(qaBrandValues);
+          }
+          if (qaProductValues?.length) {
+            browseParams.productIn = JSON.stringify(qaProductValues);
+          }
+          const url = buildBrowseUrl("product-inquiry-qa", browseParams, null);
           const res = await fetch(url);
           const data = await res.json();
           if (data.success) {
@@ -282,17 +298,21 @@ export default function KnowledgeSection() {
       })();
     }, 400);
     return () => clearTimeout(t);
-  }, [isOpen, activeTab, qaBrand, qaProduct, qaKeyword, buildBrowseUrl]);
+  }, [isOpen, activeTab, qaBrandValues, qaProductValues, qaKeyword, buildBrowseUrl]);
 
   const loadMoreEmail = async () => {
     if (!emailNextCursor || emailLoading) return;
     setEmailLoading(true);
     try {
-      const url = buildBrowseUrl(
-        "email-macros",
-        { brand: emailBrand, caseType: emailCaseType, q: emailKeyword },
-        emailNextCursor
-      );
+      const browseParams: Record<string, string> = {};
+      if (emailKeyword.trim()) browseParams.q = emailKeyword.trim();
+      if (emailBrandValues?.length) {
+        browseParams.brandIn = JSON.stringify(emailBrandValues);
+      }
+      if (emailCaseValues?.length) {
+        browseParams.caseTypeIn = JSON.stringify(emailCaseValues);
+      }
+      const url = buildBrowseUrl("email-macros", browseParams, emailNextCursor);
       const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
@@ -352,11 +372,15 @@ export default function KnowledgeSection() {
     if (!qaNextCursor || qaLoading) return;
     setQaLoading(true);
     try {
-      const url = buildBrowseUrl(
-        "product-inquiry-qa",
-        { brand: qaBrand, product: qaProduct, q: qaKeyword },
-        qaNextCursor
-      );
+      const browseParams: Record<string, string> = {};
+      if (qaKeyword.trim()) browseParams.q = qaKeyword.trim();
+      if (qaBrandValues?.length) {
+        browseParams.brandIn = JSON.stringify(qaBrandValues);
+      }
+      if (qaProductValues?.length) {
+        browseParams.productIn = JSON.stringify(qaProductValues);
+      }
+      const url = buildBrowseUrl("product-inquiry-qa", browseParams, qaNextCursor);
       const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
@@ -563,15 +587,31 @@ export default function KnowledgeSection() {
                     <div>
                       <label className="block text-xs text-white/50 mb-1">Brand</label>
                       <select
-                        value={emailBrand}
-                        onChange={(e) => setEmailBrand(e.target.value)}
+                        value={emailBrandValues === null ? "" : stableFacetValue(emailBrandValues)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!v) setEmailBrandValues(null);
+                          else {
+                            try {
+                              const parsed = JSON.parse(v) as unknown;
+                              setEmailBrandValues(
+                                Array.isArray(parsed) && parsed.every((x) => typeof x === "string")
+                                  ? (parsed as string[])
+                                  : null
+                              );
+                            } catch {
+                              setEmailBrandValues(null);
+                            }
+                          }
+                        }}
                         className="w-full px-3 py-2 bg-white/10 rounded-md text-white border border-white/10"
                         disabled={emailFacetsLoading}
                       >
                         <option value="">Any brand</option>
-                        {emailBrands.map((b) => (
-                          <option key={b} value={b}>
-                            {b}
+                        {emailBrandOptions.map((opt, i) => (
+                          <option key={i} value={stableFacetValue(opt.values)}>
+                            {opt.label}
+                            {opt.values.length > 1 ? ` (${opt.values.length} variants)` : ""}
                           </option>
                         ))}
                       </select>
@@ -579,15 +619,31 @@ export default function KnowledgeSection() {
                     <div>
                       <label className="block text-xs text-white/50 mb-1">Case type / subcategory</label>
                       <select
-                        value={emailCaseType}
-                        onChange={(e) => setEmailCaseType(e.target.value)}
+                        value={emailCaseValues === null ? "" : stableFacetValue(emailCaseValues)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!v) setEmailCaseValues(null);
+                          else {
+                            try {
+                              const parsed = JSON.parse(v) as unknown;
+                              setEmailCaseValues(
+                                Array.isArray(parsed) && parsed.every((x) => typeof x === "string")
+                                  ? (parsed as string[])
+                                  : null
+                              );
+                            } catch {
+                              setEmailCaseValues(null);
+                            }
+                          }
+                        }}
                         className="w-full px-3 py-2 bg-white/10 rounded-md text-white border border-white/10"
                         disabled={emailFacetsLoading}
                       >
                         <option value="">Any case type</option>
-                        {emailCaseTypes.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
+                        {emailCaseTypeOptions.map((opt, i) => (
+                          <option key={i} value={stableFacetValue(opt.values)}>
+                            {opt.label}
+                            {opt.values.length > 1 ? ` (${opt.values.length} variants)` : ""}
                           </option>
                         ))}
                       </select>
@@ -699,18 +755,32 @@ export default function KnowledgeSection() {
                     <div>
                       <label className="block text-xs text-white/50 mb-1">Brand</label>
                       <select
-                        value={qaBrand}
+                        value={qaBrandValues === null ? "" : stableFacetValue(qaBrandValues)}
                         onChange={(e) => {
-                          setQaBrand(e.target.value);
-                          setQaProduct("");
+                          const v = e.target.value;
+                          setQaProductValues(null);
+                          if (!v) setQaBrandValues(null);
+                          else {
+                            try {
+                              const parsed = JSON.parse(v) as unknown;
+                              setQaBrandValues(
+                                Array.isArray(parsed) && parsed.every((x) => typeof x === "string")
+                                  ? (parsed as string[])
+                                  : null
+                              );
+                            } catch {
+                              setQaBrandValues(null);
+                            }
+                          }
                         }}
                         className="w-full px-3 py-2 bg-white/10 rounded-md text-white border border-white/10"
                         disabled={qaFacetsLoading}
                       >
                         <option value="">Any brand</option>
-                        {qaBrands.map((b) => (
-                          <option key={b} value={b}>
-                            {b}
+                        {qaBrandOptions.map((opt, i) => (
+                          <option key={`${stableFacetValue(opt.values)}-${i}`} value={stableFacetValue(opt.values)}>
+                            {opt.label}
+                            {opt.values.length > 1 ? ` (${opt.values.length} variants)` : ""}
                           </option>
                         ))}
                       </select>
@@ -718,15 +788,33 @@ export default function KnowledgeSection() {
                     <div>
                       <label className="block text-xs text-white/50 mb-1">Product</label>
                       <select
-                        value={qaProduct}
-                        onChange={(e) => setQaProduct(e.target.value)}
+                        value={qaProductValues === null ? "" : stableFacetValue(qaProductValues)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!v) setQaProductValues(null);
+                          else {
+                            try {
+                              const parsed = JSON.parse(v) as unknown;
+                              setQaProductValues(
+                                Array.isArray(parsed) && parsed.every((x) => typeof x === "string")
+                                  ? (parsed as string[])
+                                  : null
+                              );
+                            } catch {
+                              setQaProductValues(null);
+                            }
+                          }
+                        }}
                         className="w-full px-3 py-2 bg-white/10 rounded-md text-white border border-white/10"
-                        disabled={qaFacetsLoading || !qaBrand}
+                        disabled={qaFacetsLoading || !qaBrandValues?.length}
                       >
-                        <option value="">{qaBrand ? "Any product (this brand)" : "Select a brand first"}</option>
-                        {qaProducts.map((p) => (
-                          <option key={p} value={p}>
-                            {p}
+                        <option value="">
+                          {qaBrandValues?.length ? "Any product (this brand)" : "Select a brand first"}
+                        </option>
+                        {qaProductOptions.map((opt, i) => (
+                          <option key={`${stableFacetValue(opt.values)}-${i}`} value={stableFacetValue(opt.values)}>
+                            {opt.label}
+                            {opt.values.length > 1 ? ` (${opt.values.length} variants)` : ""}
                           </option>
                         ))}
                       </select>
