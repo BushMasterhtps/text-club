@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
         if (q) {
           const p = `%${q}%`;
           conditions.push(
-            Prisma.sql`(e."macroName" ILIKE ${p} OR e.macro ILIKE ${p} OR e.description ILIKE ${p})`
+            Prisma.sql`(e."macroName" ILIKE ${p} OR e.macro ILIKE ${p} OR e.description ILIKE ${p} OR e."caseType" ILIKE ${p} OR e.brand ILIKE ${p})`
           );
         }
         if (cursor) {
@@ -119,6 +119,8 @@ export async function GET(request: NextRequest) {
               { macroName: { contains: q, mode: "insensitive" } },
               { macro: { contains: q, mode: "insensitive" } },
               { description: { contains: q, mode: "insensitive" } },
+              { caseType: { contains: q, mode: "insensitive" } },
+              { brand: { contains: q, mode: "insensitive" } },
             ],
           });
         }
