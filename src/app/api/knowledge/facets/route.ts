@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireStaffApiAuth } from "@/lib/auth";
+import {
+  alphanumericFacetKey,
+  clusterByFacetKey,
+  clusterEmailBrandTokensFromRawCells,
+} from "@/lib/knowledge-facet-normalize";
+import { emailMacroBrandMatchesTokensOrLegacySql } from "@/lib/knowledge-email-brand-sql";
 
 const EMAIL_TYPE = "email-macros";
 const QA_TYPE = "product-inquiry-qa";
@@ -10,7 +16,8 @@ type KnowledgeFacetOption = { label: string; values: string[] };
 
 /**
  * Merge facet strings that only differ by surrounding whitespace or ASCII case.
- * Preserves each distinct raw DB value in `values` for OR filtering (comma-separated brands stay one value).
+ * Preserves each distinct raw DB value in `values` for OR filtering.
+ * (Used where we intentionally do not apply alphanumeric folding — e.g. QA brand, case type.)
  */
 function clusterStringFacetValues(rawValues: (string | null)[]): KnowledgeFacetOption[] {
   const byKey = new Map<string, Set<string>>();
@@ -47,10 +54,11 @@ function parseBrandValuesParam(param: string | null): string[] {
 
 /**
  * GET /api/knowledge/facets?type=email-macros|product-inquiry-qa
- * GET /api/knowledge/facets?type=email-macros&brandValues=... → caseTypeOptions scoped to rows with brand IN list (raw variants)
+ * GET /api/knowledge/facets?type=email-macros&brandValues=[...] → case types scoped to rows matching those brand tokens (comma-split) or legacy full-cell match
  * GET /api/knowledge/facets?type=product-inquiry-qa&brand=...  (single raw brand — legacy)
  * GET /api/knowledge/facets?type=product-inquiry-qa&brandValues=encodeURIComponent(JSON.stringify([...]))
  *
+ * Display-only normalization: DB rows are not updated. Email brand facets use atomic tokens from comma-split cells.
  * Non-empty facet values only; options sorted alphabetically by label.
  */
 export async function GET(request: NextRequest) {
@@ -64,33 +72,38 @@ export async function GET(request: NextRequest) {
     const brandValuesFromParam = parseBrandValuesParam(searchParams.get("brandValues"));
 
     if (type === EMAIL_TYPE) {
-      const emailBrandFilter =
-        brandValuesFromParam.length > 0 ? { brand: { in: brandValuesFromParam } } : {};
+      const brandGroups = await prisma.emailMacro.groupBy({
+        by: ["brand"],
+        where: {
+          AND: [{ brand: { not: null } }, { NOT: { brand: "" } }],
+        },
+      });
+      const rawBrandCells = brandGroups.map((g) => g.brand).filter((b): b is string => b != null && b !== "");
+      const brandOptions = clusterEmailBrandTokensFromRawCells(rawBrandCells);
 
-      const [brandGroups, caseGroups] = await Promise.all([
-        prisma.emailMacro.groupBy({
-          by: ["brand"],
-          where: {
-            AND: [{ brand: { not: null } }, { NOT: { brand: "" } }],
-          },
-        }),
-        prisma.emailMacro.groupBy({
+      let caseTypeOptions: KnowledgeFacetOption[];
+      if (brandValuesFromParam.length > 0) {
+        const caseTypeRows = await prisma.$queryRaw<Array<{ caseType: string }>>`
+          SELECT DISTINCT e."caseType" AS "caseType"
+          FROM "EmailMacro" e
+          WHERE e."caseType" IS NOT NULL
+            AND trim(e."caseType") <> ''
+            AND ${emailMacroBrandMatchesTokensOrLegacySql("e", brandValuesFromParam)}
+        `;
+        caseTypeOptions = clusterStringFacetValues(
+          caseTypeRows.map((r) => r.caseType).filter((c) => c != null && c.trim() !== "")
+        );
+      } else {
+        const caseGroups = await prisma.emailMacro.groupBy({
           by: ["caseType"],
           where: {
-            AND: [
-              { caseType: { not: null } },
-              { NOT: { caseType: "" } },
-              ...(Object.keys(emailBrandFilter).length > 0 ? [emailBrandFilter] : []),
-            ],
+            AND: [{ caseType: { not: null } }, { NOT: { caseType: "" } }],
           },
-        }),
-      ]);
-      const brandOptions = clusterStringFacetValues(
-        brandGroups.map((g) => g.brand).filter((b): b is string => b != null && b !== "")
-      );
-      const caseTypeOptions = clusterStringFacetValues(
-        caseGroups.map((g) => g.caseType).filter((c): c is string => c != null && c !== "")
-      );
+        });
+        caseTypeOptions = clusterStringFacetValues(
+          caseGroups.map((g) => g.caseType).filter((c): c is string => c != null && c !== "")
+        );
+      }
 
       return NextResponse.json({
         success: true,
@@ -125,9 +138,9 @@ export async function GET(request: NextRequest) {
             NOT: { product: "" },
           },
         });
-        productOptions = clusterStringFacetValues(
-          productGroups.map((g) => g.product).filter((p) => p != null && p !== "")
-        );
+        const rawProducts = productGroups.map((g) => g.product).filter((p) => p != null && p !== "");
+        // Phase 1: conservative alphanumeric fold for clustering; values[] stays raw for productIn browse.
+        productOptions = clusterByFacetKey(rawProducts, alphanumericFacetKey);
       }
 
       return NextResponse.json({

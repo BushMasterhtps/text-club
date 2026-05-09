@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireStaffApiAuth } from "@/lib/auth";
 import { decodeKnowledgeCursor, encodeKnowledgeCursor } from "@/lib/knowledge-cursor";
+import { emailMacroBrandMatchesTokensOrLegacySql } from "@/lib/knowledge-email-brand-sql";
 
 const ORDER_EMAIL: Prisma.EmailMacroOrderByWithRelationInput[] = [
   { createdAt: "desc" },
@@ -64,44 +65,88 @@ export async function GET(request: NextRequest) {
       const caseTypeSingle = searchParams.get("caseType")?.trim() || "";
       const q = searchParams.get("q")?.trim() || "";
 
-      const parts: Prisma.EmailMacroWhereInput[] = [];
-      if (brandIn) parts.push({ brand: { in: brandIn } });
-      else if (brandSingle) parts.push({ brand: brandSingle });
-      if (caseTypeIn) parts.push({ caseType: { in: caseTypeIn } });
-      else if (caseTypeSingle) parts.push({ caseType: caseTypeSingle });
-      if (q) {
-        parts.push({
-          OR: [
-            { macroName: { contains: q, mode: "insensitive" } },
-            { macro: { contains: q, mode: "insensitive" } },
-            { description: { contains: q, mode: "insensitive" } },
-          ],
-        });
-      }
-      if (cursor) {
-        parts.push({
-          OR: [
-            { createdAt: { lt: cursor.createdAt } },
-            { AND: [{ createdAt: cursor.createdAt }, { id: { lt: cursor.id } }] },
-          ],
-        });
-      }
-      const where: Prisma.EmailMacroWhereInput = parts.length ? { AND: parts } : {};
+      type EmailBrowseRow = {
+        id: string;
+        macroName: string;
+        macro: string;
+        caseType: string | null;
+        brand: string | null;
+        description: string | null;
+        createdAt: Date;
+      };
 
-      const rows = await prisma.emailMacro.findMany({
-        where,
-        orderBy: ORDER_EMAIL,
-        take: limit + 1,
-        select: {
-          id: true,
-          macroName: true,
-          macro: true,
-          caseType: true,
-          brand: true,
-          description: true,
-          createdAt: true,
-        },
-      });
+      /** brandIn: atomic tokens (comma-split match) or legacy full raw cell; see knowledge-email-brand-sql.ts */
+      const useBrandTokenSql = brandIn && brandIn.length > 0;
+
+      let rows: EmailBrowseRow[];
+
+      if (useBrandTokenSql) {
+        const conditions: Prisma.Sql[] = [emailMacroBrandMatchesTokensOrLegacySql("e", brandIn)];
+        if (caseTypeIn?.length) {
+          conditions.push(
+            Prisma.sql`e."caseType" IN (${Prisma.join(caseTypeIn.map((c) => Prisma.sql`${c}`))})`
+          );
+        } else if (caseTypeSingle) {
+          conditions.push(Prisma.sql`e."caseType" = ${caseTypeSingle}`);
+        }
+        if (q) {
+          const p = `%${q}%`;
+          conditions.push(
+            Prisma.sql`(e."macroName" ILIKE ${p} OR e.macro ILIKE ${p} OR e.description ILIKE ${p})`
+          );
+        }
+        if (cursor) {
+          conditions.push(
+            Prisma.sql`(e."createdAt" < ${cursor.createdAt} OR (e."createdAt" = ${cursor.createdAt} AND e.id < ${cursor.id}))`
+          );
+        }
+        const whereClause = Prisma.join(conditions, " AND ");
+        rows = await prisma.$queryRaw<EmailBrowseRow[]>`
+          SELECT e.id, e."macroName", e.macro, e."caseType", e.brand, e.description, e."createdAt"
+          FROM "EmailMacro" e
+          WHERE ${whereClause}
+          ORDER BY e."createdAt" DESC, e.id DESC
+          LIMIT ${limit + 1}
+        `;
+      } else {
+        const parts: Prisma.EmailMacroWhereInput[] = [];
+        if (brandSingle) parts.push({ brand: brandSingle });
+        if (caseTypeIn) parts.push({ caseType: { in: caseTypeIn } });
+        else if (caseTypeSingle) parts.push({ caseType: caseTypeSingle });
+        if (q) {
+          parts.push({
+            OR: [
+              { macroName: { contains: q, mode: "insensitive" } },
+              { macro: { contains: q, mode: "insensitive" } },
+              { description: { contains: q, mode: "insensitive" } },
+            ],
+          });
+        }
+        if (cursor) {
+          parts.push({
+            OR: [
+              { createdAt: { lt: cursor.createdAt } },
+              { AND: [{ createdAt: cursor.createdAt }, { id: { lt: cursor.id } }] },
+            ],
+          });
+        }
+        const where: Prisma.EmailMacroWhereInput = parts.length ? { AND: parts } : {};
+
+        rows = await prisma.emailMacro.findMany({
+          where,
+          orderBy: ORDER_EMAIL,
+          take: limit + 1,
+          select: {
+            id: true,
+            macroName: true,
+            macro: true,
+            caseType: true,
+            brand: true,
+            description: true,
+            createdAt: true,
+          },
+        });
+      }
 
       const hasMore = rows.length > limit;
       const page = hasMore ? rows.slice(0, limit) : rows;
