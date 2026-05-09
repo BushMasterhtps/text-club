@@ -5,6 +5,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useTaskStore } from '@/stores/useTaskStore';
 import { Toast } from '@/app/_components/Toast';
 
+const DEBUG_PERFORMANCE = process.env.NEXT_PUBLIC_DEBUG_PERFORMANCE === "true";
+
 interface TaskDetailDrawerProps {
   task: Task;
   isOpen: boolean;
@@ -340,12 +342,14 @@ export default function TaskDetailDrawer({
           disposition: finalDisposition,
         });
         
-        console.log('✅ Task completed:', {
-          taskId: task.id,
-          endTime: serverEndTime,
-          selectedDate: new Date().toISOString().split('T')[0],
-          endDateStr: new Date(serverEndTime).toISOString().split('T')[0]
-        });
+        if (DEBUG_PERFORMANCE) {
+          console.log('✅ Task completed:', {
+            taskId: task.id,
+            endTime: serverEndTime,
+            selectedDate: new Date().toISOString().split('T')[0],
+            endDateStr: new Date(serverEndTime).toISOString().split('T')[0]
+          });
+        }
         
         setToast({ message: 'Task completed successfully', type: 'success' });
         onTaskAction?.('complete', task.id);

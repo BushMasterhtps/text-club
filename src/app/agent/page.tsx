@@ -286,7 +286,9 @@ export default function AgentPage() {
             const userEmail = data.user.email;
             localStorage.setItem('agentEmail', userEmail);
             setEmail(userEmail);
-            console.log("🔐 Agent authenticated via API:", userEmail);
+            if (DEBUG_PERFORMANCE) {
+              console.log("🔐 Agent authenticated via API:", userEmail);
+            }
             return;
           }
         }
@@ -297,7 +299,9 @@ export default function AgentPage() {
       // Fallback to localStorage check
       const savedEmail = localStorage.getItem('agentEmail');
       if (savedEmail) {
-        console.log("🔐 Agent authenticated via localStorage:", savedEmail);
+        if (DEBUG_PERFORMANCE) {
+          console.log("🔐 Agent authenticated via localStorage:", savedEmail);
+        }
         setEmail(savedEmail);
       }
     };
@@ -314,7 +318,9 @@ export default function AgentPage() {
       
     // Wait a bit for state to update, then start polling
     setTimeout(() => {
-      console.log("🚀 Starting initial load and polling...");
+      if (DEBUG_PERFORMANCE) {
+        console.log("🚀 Starting initial load and polling...");
+      }
       loadTasks(email);
       loadStats(email);
       startPolling();
@@ -485,19 +491,27 @@ export default function AgentPage() {
     pollingInFlightRef.current = true;
 
     try {
-      console.log("🔄 Agent task poll…");
+      if (DEBUG_PERFORMANCE) {
+        console.log("🔄 Agent task poll…");
+      }
       const currentEmail = localStorage.getItem("agentEmail");
       if (!currentEmail) {
-        console.log("🔄 Agent task poll: no email in localStorage");
+        if (DEBUG_PERFORMANCE) {
+          console.log("🔄 Agent task poll: no email in localStorage");
+        }
         return;
       }
 
       const effectiveOrder = taskPollOrderOverrideRef.current ?? sortOrderRef.current;
       const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${effectiveOrder}`;
-      console.log("🔄 Fetching:", url);
+      if (DEBUG_PERFORMANCE) {
+        console.log("🔄 Fetching:", url);
+      }
 
       const res = await fetch(url);
-      console.log("🔄 Response status:", res.status);
+      if (DEBUG_PERFORMANCE) {
+        console.log("🔄 Response status:", res.status);
+      }
 
       const parsed = await parseFetchJsonSafely(res);
 
@@ -523,7 +537,9 @@ export default function AgentPage() {
       }
 
       const newTasks = data.tasks;
-      console.log("🔄 Loaded tasks:", newTasks.length);
+      if (DEBUG_PERFORMANCE) {
+        console.log("🔄 Loaded tasks:", newTasks.length);
+      }
 
       // CRITICAL: Only update if we have tasks - NEVER clear during polling
       if (newTasks.length > 0) {
@@ -539,7 +555,9 @@ export default function AgentPage() {
         });
 
         if (newResponses.length > 0) {
-          console.log("🔄 Found new manager responses:", newResponses.length);
+          if (DEBUG_PERFORMANCE) {
+            console.log("🔄 Found new manager responses:", newResponses.length);
+          }
           const taskTypeInfo =
             newResponses[0].taskType === "TEXT_CLUB"
               ? "Text Club"
@@ -581,7 +599,9 @@ export default function AgentPage() {
   const startPolling = (orderOverride?: "asc" | "desc") => {
     taskPollOrderOverrideRef.current = orderOverride ?? null;
     if (pollingInterval) clearInterval(pollingInterval);
-    console.log("🔄 Starting task polling (5s, visibility-aware)…");
+    if (DEBUG_PERFORMANCE) {
+      console.log("🔄 Starting task polling (5s, visibility-aware)…");
+    }
 
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") {
@@ -619,13 +639,19 @@ export default function AgentPage() {
   }, []);
 
   const loadTasks = async (emailToUse?: string, orderOverride?: 'asc' | 'desc', useTestMode?: boolean) => {
-    console.log("📥 loadTasks called with emailToUse:", emailToUse);
+    if (DEBUG_PERFORMANCE) {
+      console.log("📥 loadTasks called with emailToUse:", emailToUse);
+    }
     const currentEmail = emailToUse || email;
-    console.log("📥 currentEmail resolved to:", currentEmail);
+    if (DEBUG_PERFORMANCE) {
+      console.log("📥 currentEmail resolved to:", currentEmail);
+    }
     
     // Test data mode
     if (useTestMode || useTestData) {
-      console.log("🧪 Using test data mode");
+      if (DEBUG_PERFORMANCE) {
+        console.log("🧪 Using test data mode");
+      }
       setLoading(true);
       try {
         const testTasks = generateTestTasks(80);
@@ -642,18 +668,26 @@ export default function AgentPage() {
     }
     
     if (!currentEmail) {
-      console.log("❌ No email, skipping loadTasks");
+      if (DEBUG_PERFORMANCE) {
+        console.log("❌ No email, skipping loadTasks");
+      }
       return;
     }
-    console.log("📥 Loading tasks for:", currentEmail);
+    if (DEBUG_PERFORMANCE) {
+      console.log("📥 Loading tasks for:", currentEmail);
+    }
     setLoading(true);
     try {
       const effectiveOrder = orderOverride ?? sortOrderRef.current;
       setStoreSortOrder(effectiveOrder);
       const url = `/api/agent/tasks?email=${encodeURIComponent(currentEmail)}&order=${effectiveOrder}`;
-      console.log("🌐 Fetching from:", url);
+      if (DEBUG_PERFORMANCE) {
+        console.log("🌐 Fetching from:", url);
+      }
       const res = await fetch(url);
-      console.log("📡 Response status:", res.status, res.statusText);
+      if (DEBUG_PERFORMANCE) {
+        console.log("📡 Response status:", res.status, res.statusText);
+      }
 
       const parsed = await parseFetchJsonSafely(res);
 
@@ -667,24 +701,30 @@ export default function AgentPage() {
       }
 
       const data = parsed.data as { success?: boolean; tasks?: Task[] };
-      console.log("📦 Response data:", data);
+      if (DEBUG_PERFORMANCE) {
+        console.log("📦 Response data:", data);
+      }
       if (data.success && Array.isArray(data.tasks)) {
         const newTasks = data.tasks;
-        console.log("📥 Loaded tasks:", newTasks.length, "tasks");
+        if (DEBUG_PERFORMANCE) {
+          console.log("📥 Loaded tasks:", newTasks.length, "tasks");
+        }
         
         // Check for manager responses
         const tasksWithResponses = newTasks.filter((t: any) => t.managerResponse);
-        if (tasksWithResponses.length > 0) {
-          console.log("💬 Found tasks with manager responses:", tasksWithResponses.length);
-          tasksWithResponses.forEach((task: Task, index: number) => {
-            console.log(`💬 Response ${index + 1}:`, {
-              id: task.id,
-              status: task.status,
-              response: task.managerResponse
+        if (DEBUG_PERFORMANCE) {
+          if (tasksWithResponses.length > 0) {
+            console.log("💬 Found tasks with manager responses:", tasksWithResponses.length);
+            tasksWithResponses.forEach((task: Task, index: number) => {
+              console.log(`💬 Response ${index + 1}:`, {
+                id: task.id,
+                status: task.status,
+                response: task.managerResponse
+              });
             });
-          });
-        } else {
-          console.log("❌ No tasks with manager responses found");
+          } else {
+            console.log("❌ No tasks with manager responses found");
+          }
         }
         
         // Always update tasks to ensure UI reflects latest data
@@ -714,7 +754,9 @@ export default function AgentPage() {
         
         // Manager responses are now handled by React rendering only (no DOM manipulation)
         
-        console.log("✅ Tasks updated, last update set to:", new Date().toLocaleTimeString());
+        if (DEBUG_PERFORMANCE) {
+          console.log("✅ Tasks updated, last update set to:", new Date().toLocaleTimeString());
+        }
       } else {
         console.warn("❌ loadTasks invalid payload; preserving current tasks:", data);
       }
@@ -817,18 +859,24 @@ export default function AgentPage() {
   const loadScorecard = async (emailToUse?: string, skipCache: boolean = false) => {
     const currentEmail = emailToUse || email;
     if (!currentEmail) {
-      console.log("⚠️ No email provided to loadScorecard");
+      if (DEBUG_PERFORMANCE) {
+        console.log("⚠️ No email provided to loadScorecard");
+      }
       return;
     }
 
     if (scorecardInFlightRef.current) {
-      console.log("⏭️ Scorecard load skipped: previous request in flight");
+      if (DEBUG_PERFORMANCE) {
+        console.log("⏭️ Scorecard load skipped: previous request in flight");
+      }
       return;
     }
 
     scorecardInFlightRef.current = true;
 
-    console.log("📊 Loading scorecard for:", currentEmail, skipCache ? "(skipping cache)" : "");
+    if (DEBUG_PERFORMANCE) {
+      console.log("📊 Loading scorecard for:", currentEmail, skipCache ? "(skipping cache)" : "");
+    }
     setLoadingScorecard(true);
     try {
       const cacheParam = skipCache ? "&skipCache=true" : "";
@@ -862,17 +910,23 @@ export default function AgentPage() {
 
       const data = parsed.data as Record<string, unknown>;
 
-      console.log("📊 Scorecard API response:", data);
+      if (DEBUG_PERFORMANCE) {
+        console.log("📊 Scorecard API response:", data);
+      }
 
       if (data.success) {
-        console.log("✅ Scorecard loaded successfully:", (data as any).agent?.name);
+        if (DEBUG_PERFORMANCE) {
+          console.log("✅ Scorecard loaded successfully:", (data as any).agent?.name);
+        }
         setScorecardFetchError(null);
         setScorecardData(data as any);
         setScorecardLastUpdated(new Date());
         loadSprintHistory();
       } else {
         if (data.isHoldsOnlyAgent) {
-          console.log("ℹ️ Holds-only agent - Performance Scorecard not available");
+          if (DEBUG_PERFORMANCE) {
+            console.log("ℹ️ Holds-only agent - Performance Scorecard not available");
+          }
           setScorecardData(null);
           setScorecardFetchError("Performance Scorecard is not available for Holds-only agents.");
         } else {
@@ -984,12 +1038,14 @@ export default function AgentPage() {
             status: 'IN_PROGRESS',
             startTime: serverStartTime,
           });
-          console.log('✅ Updated store with started task:', {
-            taskId,
-            startTime: serverStartTime,
-            status: 'IN_PROGRESS',
-            inStore: store.getTask(taskId)?.status
-          });
+          if (DEBUG_PERFORMANCE) {
+            console.log('✅ Updated store with started task:', {
+              taskId,
+              startTime: serverStartTime,
+              status: 'IN_PROGRESS',
+              inStore: store.getTask(taskId)?.status
+            });
+          }
         } else {
           console.warn('⚠️ Task not found in store when starting:', taskId);
         }
@@ -1053,12 +1109,14 @@ export default function AgentPage() {
             
             // Verify it's in the store
             const updatedTask = store.getTask(taskId);
-            console.log('✅ Updated store with completed task:', {
-              taskId,
-              endTime: serverEndTime,
-              status: updatedTask?.status,
-              inStore: !!updatedTask
-            });
+            if (DEBUG_PERFORMANCE) {
+              console.log('✅ Updated store with completed task:', {
+                taskId,
+                endTime: serverEndTime,
+                status: updatedTask?.status,
+                inStore: !!updatedTask
+              });
+            }
           } else {
             console.warn('⚠️ Task not found in store when completing:', taskId);
           }
@@ -2247,9 +2305,13 @@ export default function AgentPage() {
               <div className={`w-2 h-2 rounded-full ${pollingInterval ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} title={pollingInterval ? 'Polling Active' : 'Polling Stopped'}></div>
               <SmallButton 
                 onClick={() => { 
-                  console.log("🔄 Force Update clicked");
+                  if (DEBUG_PERFORMANCE) {
+                    console.log("🔄 Force Update clicked");
+                  }
                   const currentEmail = localStorage.getItem('agentEmail');
-                  console.log("🔄 Force Update email:", currentEmail);
+                  if (DEBUG_PERFORMANCE) {
+                    console.log("🔄 Force Update email:", currentEmail);
+                  }
                   loadTasks(currentEmail || undefined); 
                   loadStats(currentEmail || undefined); 
                 }} 

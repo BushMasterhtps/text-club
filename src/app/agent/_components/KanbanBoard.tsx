@@ -6,6 +6,8 @@ import KanbanColumn from './KanbanColumn';
 import TaskDetailDrawer from './TaskDetailDrawer';
 import { useState } from 'react';
 
+const DEBUG_PERFORMANCE = process.env.NEXT_PUBLIC_DEBUG_PERFORMANCE === "true";
+
 interface KanbanBoardProps {
   selectedTaskType: string;
   selectedDate: string; // For filtering completed tasks
@@ -98,7 +100,9 @@ export default function KanbanBoard({
         const task = getStoreState().getTask(selectedTaskIdRef.current);
         // If task still exists in store, restore modal state
         if (task) {
-          console.log('🔄 Restoring modal state after polling update');
+          if (DEBUG_PERFORMANCE) {
+            console.log('🔄 Restoring modal state after polling update');
+          }
           setIsDrawerOpen(true);
           setSelectedTaskId(selectedTaskIdRef.current);
         } else {
@@ -107,7 +111,9 @@ export default function KanbanBoard({
           const taskExists = allTasks.some(t => t.id === selectedTaskIdRef.current);
           if (!taskExists) {
             // Task truly doesn't exist, close modal
-            console.log('⚠️ Selected task no longer exists, closing modal');
+            if (DEBUG_PERFORMANCE) {
+              console.log('⚠️ Selected task no longer exists, closing modal');
+            }
             setIsDrawerOpen(false);
             setSelectedTaskId(null);
             isDrawerOpenRef.current = false;
@@ -177,13 +183,15 @@ export default function KanbanBoard({
             const storeAfter = getStoreState().tasks;
             const completedInStore = Array.from(storeAfter.values()).filter(t => t.status === 'COMPLETED');
             
-            console.log('✅ Loaded completed tasks:', {
-              fetched: completedTasks.length,
-              inStore: completedInStore.length,
-              date: selectedDate,
-              taskIds: completedTasks.map(t => t.id),
-              storeIds: completedInStore.map(t => t.id)
-            });
+            if (DEBUG_PERFORMANCE) {
+              console.log('✅ Loaded completed tasks:', {
+                fetched: completedTasks.length,
+                inStore: completedInStore.length,
+                date: selectedDate,
+                taskIds: completedTasks.map(t => t.id),
+                storeIds: completedInStore.map(t => t.id)
+              });
+            }
             
             if (completedTasks.length > completedInStore.length) {
               console.error('🚨 WARNING: Not all completed tasks made it into store!', {
@@ -268,7 +276,9 @@ export default function KanbanBoard({
 
     let tasks = allCompleted.filter(task => {
       if (!task.endTime) {
-        console.log('⚠️ Completed task missing endTime:', task.id, task.status);
+        if (DEBUG_PERFORMANCE) {
+          console.log('⚠️ Completed task missing endTime:', task.id, task.status);
+        }
         return false;
       }
       
@@ -281,7 +291,7 @@ export default function KanbanBoard({
       
       const matches = endDateStr === targetDateStr;
       
-      if (!matches) {
+      if (!matches && DEBUG_PERFORMANCE) {
         console.log('📅 Date filter:', {
           taskId: task.id,
           endTime: task.endTime,
@@ -298,12 +308,14 @@ export default function KanbanBoard({
       tasks = tasks.filter(t => t.taskType === selectedTaskType);
     }
     
-    console.log('✅ Completed tasks:', {
-      allCompleted: allCompleted.length,
-      filtered: tasks.length,
-      selectedDate: targetDateStr,
-      taskIds: tasks.map(t => ({ id: t.id, endTime: t.endTime }))
-    });
+    if (DEBUG_PERFORMANCE) {
+      console.log('✅ Completed tasks:', {
+        allCompleted: allCompleted.length,
+        filtered: tasks.length,
+        selectedDate: targetDateStr,
+        taskIds: tasks.map(t => ({ id: t.id, endTime: t.endTime }))
+      });
+    }
     
     return tasks;
     // `tasks` (store map) must be a dependency so Completed hydrates after mergeCompletedTasks
