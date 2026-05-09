@@ -310,7 +310,7 @@ function PendingTasksSection() {
 
   const loadAgents = async () => {
     try {
-      const res = await fetch('/api/manager/agents');
+      const res = await fetch('/api/manager/agents?filter=YOTPO');
       const data = await res.json();
       if (data.success && data.agents) {
         setAgents(data.agents);
@@ -927,7 +927,7 @@ function AssignTasksSection() {
   const loadAgents = async () => {
     setAgentsLoading(true);
     try {
-      const res = await fetch('/api/manager/agents', { cache: 'no-store' });
+      const res = await fetch('/api/manager/agents?filter=YOTPO', { cache: 'no-store' });
       const data = await res.json();
       if (data.success && data.agents) {
         setAgents(data.agents);

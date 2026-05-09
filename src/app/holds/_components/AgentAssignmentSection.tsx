@@ -44,7 +44,7 @@ export default function AgentAssignmentSection() {
     try {
       // Fetch agents - use the same API as the existing system
       console.log('Fetching agents...');
-      const agentsResponse = await fetch('/api/manager/agents');
+      const agentsResponse = await fetch('/api/manager/agents?filter=HOLDS');
       const agentsData = await agentsResponse.json();
       
       console.log('Agents API response:', agentsData);

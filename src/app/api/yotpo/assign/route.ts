@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import {
+  assignmentNotEligibleMessage,
+  inactiveAgentAssignmentMessage,
+  invalidAssigneeRoleMessage,
+  isUserEligibleForTaskType,
+} from '@/lib/agent-specialization';
 
 /**
  * Yotpo Task Assignment API
@@ -28,16 +34,34 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Verify all agents exist
+    const tasksForAssign = await prisma.task.findMany({
+      where: { id: { in: taskIds } },
+      select: { id: true, taskType: true },
+    });
+    if (tasksForAssign.length !== taskIds.length) {
+      return NextResponse.json(
+        { success: false, error: 'One or more tasks not found' },
+        { status: 404 }
+      );
+    }
+    const nonYotpo = tasksForAssign.filter((t) => t.taskType !== 'YOTPO');
+    if (nonYotpo.length > 0) {
+      return NextResponse.json(
+        { success: false, error: 'One or more tasks are not Yotpo tasks.' },
+        { status: 400 }
+      );
+    }
+
     const agents = await prisma.user.findMany({
-      where: {
-        id: { in: agentIds }
-      },
+      where: { id: { in: agentIds } },
       select: {
         id: true,
         name: true,
-        email: true
-      }
+        email: true,
+        agentTypes: true,
+        isActive: true,
+        role: true,
+      },
     });
 
     if (agents.length !== agentIds.length) {
@@ -45,6 +69,27 @@ export async function POST(request: NextRequest) {
         success: false,
         error: 'One or more agents not found'
       }, { status: 404 });
+    }
+
+    for (const a of agents) {
+      if (!a.isActive) {
+        return NextResponse.json(
+          { success: false, error: inactiveAgentAssignmentMessage() },
+          { status: 400 }
+        );
+      }
+      if (a.role !== 'AGENT' && a.role !== 'MANAGER_AGENT') {
+        return NextResponse.json(
+          { success: false, error: invalidAssigneeRoleMessage() },
+          { status: 400 }
+        );
+      }
+      if (!isUserEligibleForTaskType(a, 'YOTPO')) {
+        return NextResponse.json(
+          { success: false, error: assignmentNotEligibleMessage('YOTPO') },
+          { status: 400 }
+        );
+      }
     }
 
     // Distribute tasks among agents

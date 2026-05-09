@@ -2,8 +2,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { $Enums } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import {
+  eligibleAgentsWhereForTaskType,
+  parseAgentsFilterParam,
+} from "@/lib/agent-specialization";
 
 // Which statuses count as "open"
 const OPEN_STATUSES: $Enums.TaskStatus[] = [
@@ -19,25 +24,13 @@ export async function GET(request: NextRequest) {
     try {
     // Get filter parameter (e.g., ?filter=TEXT_CLUB or ?filter=HOLDS)
     const url = new URL(request.url);
-    const filter = url.searchParams.get('filter');
-    
-    // Build where clause
-    const where: any = {
-      role: { in: ["AGENT", "MANAGER_AGENT"] }
-    };
-    
-    // Filter by agent type if specified
-    if (filter === 'TEXT_CLUB') {
-      // TEXT_CLUB: agents who have TEXT_CLUB in agentTypes OR have empty agentTypes (legacy agents)
-      where.OR = [
-        { agentTypes: { has: 'TEXT_CLUB' } },
-        { agentTypes: { isEmpty: true } } // Legacy agents default to TEXT_CLUB
-      ];
-    } else if (filter === 'HOLDS') {
-      // HOLDS: only agents with HOLDS in agentTypes
-      where.agentTypes = { has: 'HOLDS' };
-    }
-    // No filter = return all agents (used by some dashboards)
+    const specializationFilter = parseAgentsFilterParam(url.searchParams.get("filter"));
+
+    // No filter = all agents (active + inactive), e.g. settings / reporting
+    // With filter = active specialists only for that task type
+    const where: Prisma.UserWhereInput = specializationFilter
+      ? eligibleAgentsWhereForTaskType(specializationFilter)
+      : { role: { in: ["AGENT", "MANAGER_AGENT"] } };
     
     // Fetch agents and their task counts in parallel using optimized queries
     const [agents, taskCountsByAgent] = await Promise.all([

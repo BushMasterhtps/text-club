@@ -3,6 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { TaskStatus } from "@prisma/client";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import {
+  assignmentNotEligibleMessage,
+  inactiveAgentAssignmentMessage,
+  invalidAssigneeRoleMessage,
+  isUserEligibleForTaskType,
+} from "@/lib/agent-specialization";
 
 type PostBody = {
   agents?: string[];     // array of agent emails selected in the UI (legacy)
@@ -50,11 +56,33 @@ export async function POST(req: NextRequest) {
     // Resolve agents by ID (id + name/email for label)
     const agents = await prisma.user.findMany({
       where: { id: { in: agentIds } },
-      select: { id: true, email: true, name: true },
+      select: { id: true, email: true, name: true, agentTypes: true, isActive: true, role: true },
     });
 
     if (agents.length === 0) {
       return NextResponse.json({ success: true, assigned: {} as Record<string, string[]> });
+    }
+
+    for (const a of agents) {
+      if (!a.isActive) {
+        return NextResponse.json(
+          { success: false, error: inactiveAgentAssignmentMessage() },
+          { status: 400 }
+        );
+      }
+      if (a.role !== "AGENT" && a.role !== "MANAGER_AGENT") {
+        return NextResponse.json(
+          { success: false, error: invalidAssigneeRoleMessage() },
+          { status: 400 }
+        );
+      }
+      const taskTypeConstraint = body?.taskType;
+      if (taskTypeConstraint && !isUserEligibleForTaskType(a, taskTypeConstraint)) {
+        return NextResponse.json(
+          { success: false, error: assignmentNotEligibleMessage(taskTypeConstraint) },
+          { status: 400 }
+        );
+      }
     }
 
     // Build a stable round-robin order
@@ -63,6 +91,7 @@ export async function POST(req: NextRequest) {
       email: a.email,
       name: a.name ?? null,
     }));
+    const agentById = new Map(agents.map((a) => [a.id, a] as const));
 
     // Pull candidate tasks: only PENDING, unassigned, oldest first
     const totalNeed = agentOrder.length * perAgent;
@@ -80,7 +109,7 @@ export async function POST(req: NextRequest) {
       where: whereClause,
       orderBy: [{ createdAt: "asc" }],
       take: totalNeed,
-      select: { id: true },
+      select: { id: true, taskType: true },
     });
 
     if (candidates.length === 0) {
@@ -114,6 +143,25 @@ export async function POST(req: NextRequest) {
 
     if (plan.length === 0) {
       return NextResponse.json({ success: true, assigned: {} as Record<string, string[]> });
+    }
+
+    if (!body?.taskType) {
+      const taskRows = await prisma.task.findMany({
+        where: { id: { in: plan.map((p) => p.taskId) } },
+        select: { id: true, taskType: true },
+      });
+      const taskTypeById = new Map(taskRows.map((t) => [t.id, t.taskType] as const));
+      for (const p of plan) {
+        const u = agentById.get(p.agentId);
+        const tt = taskTypeById.get(p.taskId);
+        if (!u || !tt) continue;
+        if (!isUserEligibleForTaskType(u, tt)) {
+          return NextResponse.json(
+            { success: false, error: assignmentNotEligibleMessage(tt) },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     // Persist: set assignedToId + set to IN_PROGRESS when assigned

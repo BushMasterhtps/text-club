@@ -132,7 +132,7 @@ export function WodIvcsTasksSection({ taskType, onTaskAssignmentChange }: WodIvc
 
   const loadAgents = async () => {
     try {
-      const response = await fetch('/api/manager/agents');
+      const response = await fetch('/api/manager/agents?filter=WOD_IVCS');
       if (response.ok) {
         const data = await response.json();
         if (data.success) {

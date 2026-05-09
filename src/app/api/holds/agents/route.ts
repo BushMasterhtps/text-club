@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { TaskType } from '@prisma/client';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 import { NextResponseJsonSafe } from '@/lib/safe-json-response';
+import { eligibleAgentsWhereForTaskType } from '@/lib/agent-specialization';
 
 const ROUTE = 'GET /api/holds/agents';
 
@@ -14,13 +15,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const agents = await prisma.user.findMany({
-      where: {
-        role: { in: ['AGENT', 'MANAGER_AGENT'] },
-        isActive: true,
-        agentTypes: {
-          has: 'HOLDS',
-        },
-      },
+      where: eligibleAgentsWhereForTaskType('HOLDS'),
       select: {
         id: true,
         email: true,

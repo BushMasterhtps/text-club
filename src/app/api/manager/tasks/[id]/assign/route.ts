@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { TaskStatus } from '@prisma/client';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import {
+  assignmentNotEligibleMessage,
+  inactiveAgentAssignmentMessage,
+  invalidAssigneeRoleMessage,
+  isUserEligibleForTaskType,
+} from '@/lib/agent-specialization';
 
 export async function POST(
   request: NextRequest,
@@ -40,10 +46,10 @@ export async function POST(
       }, { status: 404 });
     }
 
-    // Verify the agent exists
+    // Verify the agent exists and may receive this task type
     const agent = await prisma.user.findUnique({
       where: { id: agentId },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, agentTypes: true, isActive: true, role: true },
     });
 
     if (!agent) {
@@ -51,6 +57,24 @@ export async function POST(
         success: false,
         error: 'Agent not found',
       }, { status: 404 });
+    }
+    if (!agent.isActive) {
+      return NextResponse.json(
+        { success: false, error: inactiveAgentAssignmentMessage() },
+        { status: 400 }
+      );
+    }
+    if (agent.role !== 'AGENT' && agent.role !== 'MANAGER_AGENT') {
+      return NextResponse.json(
+        { success: false, error: invalidAssigneeRoleMessage() },
+        { status: 400 }
+      );
+    }
+    if (!isUserEligibleForTaskType(agent, task.taskType)) {
+      return NextResponse.json(
+        { success: false, error: assignmentNotEligibleMessage(task.taskType) },
+        { status: 400 }
+      );
     }
 
     // Update the task assignment (this will automatically unassign from previous agent)

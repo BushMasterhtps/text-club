@@ -139,7 +139,7 @@ export default function AssemblyLineQueues() {
 
   const fetchAgents = async () => {
     try {
-      const response = await fetch('/api/manager/agents');
+      const response = await fetch('/api/manager/agents?filter=HOLDS');
       const data = await response.json();
       if (data.success && data.agents) {
         setAgents(data.agents.filter((agent: any) => agent.isLive));

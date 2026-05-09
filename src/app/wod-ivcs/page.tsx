@@ -663,7 +663,7 @@ function WodIvcsDashboardContent() {
   async function loadAgents() {
     try {
       setAgentsLoading(true);
-      const res = await fetch("/api/manager/agents", { cache: "no-store" });
+      const res = await fetch("/api/manager/agents?filter=WOD_IVCS", { cache: "no-store" });
       const data = await res.json();
       if (data?.success && Array.isArray(data.agents)) {
         setAgents(data.agents);

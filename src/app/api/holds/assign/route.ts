@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateWorkMetadata } from '@/lib/holds-work-metadata';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
+import {
+  assignmentNotEligibleMessage,
+  inactiveAgentAssignmentMessage,
+  invalidAssigneeRoleMessage,
+  isUserEligibleForTaskType,
+} from '@/lib/agent-specialization';
 
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
@@ -168,19 +174,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify agent exists and has appropriate role
-    const agent = await prisma.user.findFirst({
-      where: {
-        id: agentId,
-        role: {
-          in: ['AGENT', 'MANAGER_AGENT'],
-        },
-      },
+    const agent = await prisma.user.findUnique({
+      where: { id: agentId },
+      select: { id: true, name: true, agentTypes: true, isActive: true, role: true },
     });
 
     if (!agent) {
       return NextResponse.json(
-        { success: false, error: 'Agent not found or invalid role' },
+        { success: false, error: 'Agent not found' },
+        { status: 404 }
+      );
+    }
+    if (!agent.isActive) {
+      return NextResponse.json(
+        { success: false, error: inactiveAgentAssignmentMessage() },
+        { status: 400 }
+      );
+    }
+    if (agent.role !== 'AGENT' && agent.role !== 'MANAGER_AGENT') {
+      return NextResponse.json(
+        { success: false, error: invalidAssigneeRoleMessage() },
+        { status: 400 }
+      );
+    }
+    if (!isUserEligibleForTaskType(agent, 'HOLDS')) {
+      return NextResponse.json(
+        { success: false, error: assignmentNotEligibleMessage('HOLDS') },
         { status: 400 }
       );
     }

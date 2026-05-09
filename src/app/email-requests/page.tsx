@@ -1113,7 +1113,7 @@ function AssignEmailRequestTasksSection() {
   const loadAgents = async () => {
     setAgentsLoading(true);
     try {
-      const res = await fetch('/api/manager/agents', { cache: 'no-store' });
+      const res = await fetch('/api/manager/agents?filter=EMAIL_REQUESTS', { cache: 'no-store' });
       const data = await res.json();
       if (res.ok && data.success) {
         setAgents(data.agents);
@@ -1342,7 +1342,7 @@ function PendingEmailRequestTasksSection() {
 
   const loadAgents = async () => {
     try {
-      const res = await fetch('/api/manager/agents', { cache: 'no-store' });
+      const res = await fetch('/api/manager/agents?filter=EMAIL_REQUESTS', { cache: 'no-store' });
       const data = await res.json();
       if (res.ok && data.success) {
         setAgents(data.agents);

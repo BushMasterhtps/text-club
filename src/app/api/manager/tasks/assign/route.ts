@@ -2,6 +2,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import {
+  assignmentNotEligibleMessage,
+  inactiveAgentAssignmentMessage,
+  invalidAssigneeRoleMessage,
+  isUserEligibleForTaskType,
+} from "@/lib/agent-specialization";
 
 // ---- request body shapes ----------------------------------------------------
 
@@ -10,8 +16,15 @@ type AssignRawMessages = { rawMessageIds: string[]; agentId: string };
 type RoundRobin = { roundRobin: true; agents: string[]; perAgent?: number };
 type Body = AssignByIds | AssignRawMessages | RoundRobin | Record<string, unknown>;
 
-// What we select for agents in this endpoint
-type AgentRow = { id: string; email: string; maxOpen: number | null };
+// What we select for agents in this endpoint (round-robin mode)
+type AgentRow = {
+  id: string;
+  email: string;
+  maxOpen: number | null;
+  agentTypes: string[];
+  isActive: boolean;
+  role: string;
+};
 
 // ---- handler ----------------------------------------------------------------
 
@@ -35,10 +48,22 @@ export async function POST(req: NextRequest) {
 
       const agent = await prisma.user.findUnique({
         where: { id: agentId },
-        select: { id: true },
+        select: { id: true, agentTypes: true, isActive: true, role: true },
       });
       if (!agent) {
         return NextResponse.json({ success: false, error: "Agent not found." }, { status: 400 });
+      }
+      if (!agent.isActive) {
+        return NextResponse.json(
+          { success: false, error: inactiveAgentAssignmentMessage() },
+          { status: 400 }
+        );
+      }
+      if (agent.role !== "AGENT" && agent.role !== "MANAGER_AGENT") {
+        return NextResponse.json(
+          { success: false, error: invalidAssigneeRoleMessage() },
+          { status: 400 }
+        );
       }
 
       // First, check if these are Task IDs or RawMessage IDs
@@ -67,6 +92,14 @@ export async function POST(req: NextRequest) {
       let updateResult = { count: 0 };
 
       if (existingTasks.length > 0) {
+        for (const t of existingTasks) {
+          if (!isUserEligibleForTaskType(agent, t.taskType)) {
+            return NextResponse.json(
+              { success: false, error: assignmentNotEligibleMessage(t.taskType) },
+              { status: 400 }
+            );
+          }
+        }
         // These are existing Task records - allow reassignment regardless of current status
         updateResult = await prisma.task.updateMany({
           where: { 
@@ -95,6 +128,12 @@ export async function POST(req: NextRequest) {
         });
 
         if (rawMessages.length > 0) {
+          if (!isUserEligibleForTaskType(agent, "TEXT_CLUB")) {
+            return NextResponse.json(
+              { success: false, error: assignmentNotEligibleMessage("TEXT_CLUB") },
+              { status: 400 }
+            );
+          }
           // Promote and assign raw messages - use individual operations to avoid transaction issues
           const createdTasks = [];
           
@@ -164,10 +203,28 @@ export async function POST(req: NextRequest) {
 
       const agent = await prisma.user.findUnique({
         where: { id: agentId },
-        select: { id: true },
+        select: { id: true, agentTypes: true, isActive: true, role: true },
       });
       if (!agent) {
         return NextResponse.json({ success: false, error: "Agent not found." }, { status: 400 });
+      }
+      if (!agent.isActive) {
+        return NextResponse.json(
+          { success: false, error: inactiveAgentAssignmentMessage() },
+          { status: 400 }
+        );
+      }
+      if (agent.role !== "AGENT" && agent.role !== "MANAGER_AGENT") {
+        return NextResponse.json(
+          { success: false, error: invalidAssigneeRoleMessage() },
+          { status: 400 }
+        );
+      }
+      if (!isUserEligibleForTaskType(agent, "TEXT_CLUB")) {
+        return NextResponse.json(
+          { success: false, error: assignmentNotEligibleMessage("TEXT_CLUB") },
+          { status: 400 }
+        );
       }
 
       // Promote raw messages to tasks and assign them - use individual operations to avoid transaction issues.
@@ -267,11 +324,26 @@ export async function POST(req: NextRequest) {
 
       const agents: AgentRow[] = await prisma.user.findMany({
         where: { email: { in: emails } },
-        select: { id: true, email: true, maxOpen: true },
+        select: { id: true, email: true, maxOpen: true, agentTypes: true, isActive: true, role: true },
       });
 
       if (agents.length === 0) {
         return NextResponse.json({ success: false, error: "Agents not found." }, { status: 400 });
+      }
+
+      for (const a of agents) {
+        if (!a.isActive) {
+          return NextResponse.json(
+            { success: false, error: inactiveAgentAssignmentMessage() },
+            { status: 400 }
+          );
+        }
+        if (a.role !== "AGENT" && a.role !== "MANAGER_AGENT") {
+          return NextResponse.json(
+            { success: false, error: invalidAssigneeRoleMessage() },
+            { status: 400 }
+          );
+        }
       }
 
       // how many open items each agent currently has
@@ -304,11 +376,11 @@ export async function POST(req: NextRequest) {
       }
 
       // pull oldest unassigned PENDING tasks
-      const tasks: { id: string }[] = await prisma.task.findMany({
+      const tasks: { id: string; taskType: string }[] = await prisma.task.findMany({
         where: { assignedToId: null, status: "PENDING" },
         orderBy: { createdAt: "asc" },
         take: totalNeed,
-        select: { id: true },
+        select: { id: true, taskType: true },
       });
       if (tasks.length === 0) {
         return NextResponse.json({ success: true, assigned: {} });
@@ -336,6 +408,20 @@ export async function POST(req: NextRequest) {
 
       if (plan.length === 0) {
         return NextResponse.json({ success: true, assigned: {} });
+      }
+
+      const agentById = new Map(agents.map((a) => [a.id, a] as const));
+      const taskTypeById = new Map(tasks.map((t) => [t.id, t.taskType] as const));
+      for (const p of plan) {
+        const u = agentById.get(p.agentId);
+        const tt = taskTypeById.get(p.taskId);
+        if (!u || !tt) continue;
+        if (!isUserEligibleForTaskType(u, tt)) {
+          return NextResponse.json(
+            { success: false, error: assignmentNotEligibleMessage(tt) },
+            { status: 400 }
+          );
+        }
       }
 
       // For round-robin with multiple agents, we need to handle each agent separately
