@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
+import { fetchAssistanceThreadForTaskId } from "@/lib/assistance-thread-query";
 
 /**
  * GET durable assistance transcript for a task (manager).
@@ -19,17 +19,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Task ID required" }, { status: 400 });
     }
 
-    const thread = await prisma.assistanceThread.findUnique({
-      where: { taskId },
-      include: {
-        messages: {
-          orderBy: { createdAt: "asc" },
-          include: {
-            authorUser: { select: { id: true, email: true, name: true } },
-          },
-        },
-      },
-    });
+    const { thread, messages } = await fetchAssistanceThreadForTaskId(taskId);
 
     if (!thread) {
       return NextResponse.json({
@@ -39,11 +29,9 @@ export async function GET(
       });
     }
 
-    const { messages, ...threadRest } = thread;
-
     return NextResponse.json({
       success: true,
-      thread: threadRest,
+      thread,
       messages: messages.map((m) => ({
         id: m.id,
         threadId: m.threadId,
@@ -56,7 +44,7 @@ export async function GET(
         taskTypeAtSend: m.taskTypeAtSend,
         metadata: m.metadata,
         createdAt: m.createdAt,
-        author: m.authorUser,
+        author: m.author,
       })),
     });
   } catch (err: unknown) {

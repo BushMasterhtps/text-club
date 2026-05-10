@@ -1,11 +1,20 @@
 "use client";
 
 import { Task } from '@/stores/useTaskStore';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTaskStore } from '@/stores/useTaskStore';
 import { Toast } from '@/app/_components/Toast';
 
 const DEBUG_PERFORMANCE = process.env.NEXT_PUBLIC_DEBUG_PERFORMANCE === "true";
+
+type AssistanceHistoryRow = {
+  id: string;
+  authorRole: string;
+  messageType: string;
+  body: string;
+  createdAt: string;
+  author: { id: string; email: string; name: string | null } | null;
+};
 
 interface TaskDetailDrawerProps {
   task: Task;
@@ -38,6 +47,12 @@ export default function TaskDetailDrawer({
   const [sfCaseNumber, setSfCaseNumber] = useState('');
   const [orderAmount, setOrderAmount] = useState('');
   const [dispositionNote, setDispositionNote] = useState('');
+  const [assistanceHistoryCache, setAssistanceHistoryCache] = useState<{
+    taskId: string;
+    messages: AssistanceHistoryRow[];
+  } | null>(null);
+  const [assistanceHistoryLoading, setAssistanceHistoryLoading] = useState(false);
+  const [assistanceHistoryError, setAssistanceHistoryError] = useState<string | null>(null);
 
   // Reset form fields when task ID changes (not on every render/polling update)
   // This prevents form fields from resetting when task data updates during polling
@@ -57,6 +72,67 @@ export default function TaskDetailDrawer({
       prevTaskIdRef.current = task.id;
     }
   }, [task.id, task.disposition]);
+
+  const assistanceHistoryMessages = useMemo(() => {
+    if (!isOpen || !task.id || !agentEmail?.trim() || isTestMode) return [];
+    if (assistanceHistoryCache?.taskId !== task.id) return [];
+    return assistanceHistoryCache.messages;
+  }, [isOpen, task.id, agentEmail, isTestMode, assistanceHistoryCache]);
+
+  useEffect(() => {
+    if (!isOpen || !task.id || !agentEmail?.trim() || isTestMode) {
+      return;
+    }
+
+    let cancelled = false;
+    const fetchTaskId = task.id;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setAssistanceHistoryLoading(true);
+      setAssistanceHistoryError(null);
+    });
+
+    const url = `/api/agent/tasks/${fetchTaskId}/assistance-thread?email=${encodeURIComponent(agentEmail.trim())}`;
+
+    void fetch(url)
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as {
+          success?: boolean;
+          messages?: AssistanceHistoryRow[];
+          error?: string;
+        };
+        if (!res.ok || !data.success) {
+          throw new Error(typeof data.error === 'string' ? data.error : 'Failed to load assistance history');
+        }
+        return data.messages ?? [];
+      })
+      .then((rows) => {
+        if (!cancelled) setAssistanceHistoryCache({ taskId: fetchTaskId, messages: rows });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setAssistanceHistoryCache({ taskId: fetchTaskId, messages: [] });
+          setAssistanceHistoryError(e instanceof Error ? e.message : 'Failed to load assistance history');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAssistanceHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, task.id, agentEmail, isTestMode]);
+
+  const assistanceHistoryDisplay = useMemo(() => {
+    const notes = task.assistanceNotes?.trim() || '';
+    const response = task.managerResponse?.trim() || '';
+    return assistanceHistoryMessages.filter((m) => {
+      if (m.messageType === 'REQUEST' && notes && m.body === task.assistanceNotes) return false;
+      if (m.messageType === 'RESPONSE' && response && m.body === task.managerResponse) return false;
+      return true;
+    });
+  }, [assistanceHistoryMessages, task.assistanceNotes, task.managerResponse]);
 
   // PENDING must stay locked until Start even if stale startTime survived a reassignment bug.
   const isPending = task.status === 'PENDING';
@@ -312,7 +388,7 @@ export default function TaskDetailDrawer({
       }
 
       // Call API with proper parameters based on task type
-      const body: any = {
+      const body: Record<string, unknown> = {
         email: agentEmail,
         disposition: finalDisposition,
       };
@@ -458,7 +534,7 @@ export default function TaskDetailDrawer({
                 {/* Blurred state - show only basic info */}
                 <div className="bg-white/5 border border-white/10 rounded-lg p-4 text-center">
                   <div className="text-white/60 text-sm mb-2">🔒 Task details are hidden until you start the task</div>
-                  <div className="text-white/40 text-xs">Click "Start Task" below to view full details</div>
+                  <div className="text-white/40 text-xs">Click &quot;Start Task&quot; below to view full details</div>
                 </div>
                 
                 {/* Timestamps - safe to show */}
@@ -746,6 +822,57 @@ export default function TaskDetailDrawer({
               <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3">
                 <div className="text-xs text-blue-300 mb-1">Your Assistance Request</div>
                 <div className="text-white/90 text-sm">{task.assistanceNotes}</div>
+              </div>
+            )}
+
+            {assistanceHistoryLoading && (
+              <div className="text-xs text-white/50 py-2">Loading assistance history…</div>
+            )}
+            {assistanceHistoryError && (
+              <div className="text-xs text-amber-300/90 py-1">{assistanceHistoryError}</div>
+            )}
+            {assistanceHistoryDisplay.length > 0 && (
+              <div className="border border-white/10 rounded-lg p-3 bg-white/[0.03] space-y-3">
+                <div className="text-xs font-medium text-white/70 uppercase tracking-wide">
+                  Assistance History
+                </div>
+                <p className="text-[11px] text-white/45">
+                  Earlier request/response rounds (read-only). Current status still follows the task above.
+                </p>
+                <ul className="space-y-3">
+                  {assistanceHistoryDisplay.map((m) => {
+                    const isRequest = m.messageType === 'REQUEST';
+                    const isResponse = m.messageType === 'RESPONSE';
+                    const label = isRequest
+                      ? 'Agent Request'
+                      : isResponse
+                        ? 'Manager Response'
+                        : m.messageType.replace(/_/g, ' ');
+                    const bubbleClass = isRequest
+                      ? 'border-blue-500/25 bg-blue-900/15'
+                      : isResponse
+                        ? 'border-green-500/25 bg-green-900/15'
+                        : 'border-white/10 bg-white/5';
+                    const when = m.createdAt
+                      ? new Date(m.createdAt).toLocaleString()
+                      : '';
+                    const who =
+                      m.author?.name || m.author?.email || (isRequest ? 'Agent' : isResponse ? 'Manager' : '—');
+                    return (
+                      <li
+                        key={m.id}
+                        className={`rounded-lg border px-3 py-2 text-sm ${bubbleClass}`}
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+                          <span className="text-xs font-semibold text-white/85">{label}</span>
+                          <span className="text-[10px] text-white/45">{when}</span>
+                        </div>
+                        <div className="text-[11px] text-white/50 mb-1">{who}</div>
+                        <div className="text-white/90 whitespace-pre-wrap">{m.body}</div>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
           </div>
