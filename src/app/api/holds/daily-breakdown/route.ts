@@ -1,15 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { TaskType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 import { logRouteTiming } from '@/lib/route-timing-log';
+import {
+  aggregateSessionSummary,
+  aggregateSessionsByAgent,
+  aggregateSessionsByDisposition,
+  aggregateSessionsByQueueMovement,
+  filterSessionsForDay,
+  mapSessionDetails,
+  type HoldsActivitySession,
+} from '@/lib/holds-daily-activity';
+
+/** Parsed holdsQueueHistory JSON entries (best-effort). */
+type HoldsQueueHistoryEntry = {
+  enteredAt?: string | Date | null;
+  exitedAt?: string | Date | null;
+  queue?: string | null;
+};
+
+function queueHistoryEntries(raw: unknown): HoldsQueueHistoryEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (e): e is HoldsQueueHistoryEntry =>
+      typeof e === 'object' && e !== null && 'enteredAt' in e
+  ) as HoldsQueueHistoryEntry[];
+}
+
+type TaskEodListRow = {
+  id: string;
+  orderNumber: string | null;
+  customerEmail: string | null;
+  status: string;
+  disposition: string | null;
+  agentName: string;
+  createdAt: Date;
+  endTime: Date | null;
+};
 
 /**
- * API for Daily Breakdown of Holds Tasks
- * Calculates end of day snapshots (5 PM PST) and shows:
- * - Queue counts at end of day
- * - Tasks completed that day
- * - Tasks that rolled over (moved between queues but not completed)
- * - New tasks added that day
+ * API for Holds Daily Activity + legacy daily breakdown.
+ *
+ * Primary productivity metrics: TaskWorkSession (taskType HOLDS, countsTowardProductivity, endedAt in day window).
+ * Response includes sessionSummary / sessionsByAgent / sessionsByQueueMovement / sessionsByDisposition / sessionDetails
+ * (when includeTasks=true) plus range-level aggregates.
+ *
+ * Secondary (legacy): end-of-day queue snapshots (5 PM PST), task created/completed/rollover counts from Task rows.
  */
 
 // Helper to get end of day (5 PM PST) for a given date
@@ -144,8 +181,7 @@ export async function GET(request: NextRequest) {
     });
     rowCount = allTasks.length;
     
-    // Generate daily breakdowns
-    const dailyBreakdowns: any[] = [];
+    const dailyBreakdowns: Record<string, unknown>[] = [];
     
     // Use calendar dates for iteration (not UTC dates)
     let startCalendarDate: Date;
@@ -173,7 +209,45 @@ export async function GET(request: NextRequest) {
       totalTasks: allTasks.length,
       dateRange: `${startDateParam || 'default'} to ${endDateParam || 'default'}`
     });
-    
+
+    const rangeDayStart = getStartOfDayPST(startCalendarDate);
+    const rangeDayEnd = getEndOfDayPST(endCalendarDate, true);
+
+    const holdsSessionsInRange = await prisma.taskWorkSession.findMany({
+      where: {
+        taskType: TaskType.HOLDS,
+        countsTowardProductivity: true,
+        endedAt: {
+          gte: rangeDayStart,
+          lt: rangeDayEnd,
+        },
+      },
+      include: {
+        agent: { select: { id: true, name: true, email: true } },
+        task: { select: { holdsOrderNumber: true, holdsCustomerEmail: true } },
+      },
+    });
+
+    const mappedSessions: HoldsActivitySession[] = holdsSessionsInRange.map((r) => ({
+      id: r.id,
+      taskId: r.taskId,
+      startedAt: r.startedAt,
+      endedAt: r.endedAt,
+      durationSec: r.durationSec,
+      fromQueue: r.fromQueue,
+      toQueue: r.toQueue,
+      disposition: r.disposition,
+      outcomeType: r.outcomeType,
+      isFinalResolution: r.isFinalResolution,
+      agentId: r.agentId,
+      agentName: r.agent?.name ?? null,
+      agentEmail: r.agent?.email ?? null,
+      orderNumber: r.task?.holdsOrderNumber ?? null,
+      customerEmail: r.task?.holdsCustomerEmail ?? null,
+    }));
+
+    rowCount = allTasks.length + holdsSessionsInRange.length;
+
     const currentCalendarDate = new Date(startCalendarDate);
     
     // Get current date in PST for comparison (using 'now' defined at top of function)
@@ -230,7 +304,7 @@ export async function GET(request: NextRequest) {
       // Calculate queue counts at end of day (5 PM PST)
       // For each task, determine its queue status at end of day
       const queueCountsAtEndOfDay: Record<string, number> = {};
-      const tasksInQueueAtEndOfDay: Record<string, any[]> = {};
+      const tasksInQueueAtEndOfDay: Record<string, TaskEodListRow[]> = {};
       
       // Use ALL tasks that existed at end of day
       // A task "existed" if it was created before end of day
@@ -251,25 +325,30 @@ export async function GET(request: NextRequest) {
         const isPastDate = dayEnd < now;
         
         // For past dates, reconstruct queue from history to get accurate EOD snapshot
-        if (isPastDate && task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
-          const activeAtEndOfDay = task.holdsQueueHistory.filter((entry: any) => {
-            if (!entry.enteredAt) return false;
-            const entered = new Date(entry.enteredAt);
-            if (entered > dayEnd) return false; // Entered after EOD
-            
-            if (entry.exitedAt) {
-              const exited = new Date(entry.exitedAt);
-              return exited >= dayEnd; // Still in queue at EOD
-            }
-            
-            return true; // Never exited, still in queue
-          });
-          
-          if (activeAtEndOfDay.length > 0) {
-            const sorted = activeAtEndOfDay.sort((a: any, b: any) => {
-              return new Date(b.enteredAt).getTime() - new Date(a.enteredAt).getTime();
+        if (isPastDate) {
+          const history = queueHistoryEntries(task.holdsQueueHistory);
+          if (history.length > 0) {
+            const activeAtEndOfDay = history.filter((entry) => {
+              if (!entry.enteredAt) return false;
+              const entered = new Date(entry.enteredAt);
+              if (entered > dayEnd) return false;
+
+              if (entry.exitedAt) {
+                const exited = new Date(entry.exitedAt);
+                return exited >= dayEnd;
+              }
+
+              return true;
             });
-            queueAtEndOfDay = sorted[0].queue || task.holdsStatus || 'Unknown';
+
+            if (activeAtEndOfDay.length > 0) {
+              const sorted = activeAtEndOfDay.sort((a, b) => {
+                const ae = a.enteredAt ? new Date(a.enteredAt).getTime() : 0;
+                const be = b.enteredAt ? new Date(b.enteredAt).getTime() : 0;
+                return be - ae;
+              });
+              queueAtEndOfDay = sorted[0].queue || task.holdsStatus || 'Unknown';
+            }
           }
         }
         // For recent dates, use current status (already set above)
@@ -309,28 +388,33 @@ export async function GET(request: NextRequest) {
         
         const isPastDate = dayEnd < now;
         
-        if (isPastDate && task.holdsQueueHistory && Array.isArray(task.holdsQueueHistory) && task.holdsQueueHistory.length > 0) {
-          const activeAtEndOfDay = task.holdsQueueHistory.filter((entry: any) => {
-            if (!entry.enteredAt) return false;
-            const entered = new Date(entry.enteredAt);
-            if (entered > dayEnd) return false;
-            
-            if (entry.exitedAt) {
-              const exited = new Date(entry.exitedAt);
-              return exited >= dayEnd;
-            }
-            
-            return true;
-          });
-          
-          if (activeAtEndOfDay.length > 0) {
-            const sorted = activeAtEndOfDay.sort((a: any, b: any) => {
-              return new Date(b.enteredAt).getTime() - new Date(a.enteredAt).getTime();
+        if (isPastDate) {
+          const hist = queueHistoryEntries(task.holdsQueueHistory);
+          if (hist.length > 0) {
+            const activeAtEndOfDay = hist.filter((entry) => {
+              if (!entry.enteredAt) return false;
+              const entered = new Date(entry.enteredAt);
+              if (entered > dayEnd) return false;
+
+              if (entry.exitedAt) {
+                const exited = new Date(entry.exitedAt);
+                return exited >= dayEnd;
+              }
+
+              return true;
             });
-            queueAtEndOfDay = sorted[0].queue || task.holdsStatus || 'Unknown';
+
+            if (activeAtEndOfDay.length > 0) {
+              const sorted = activeAtEndOfDay.sort((a, b) => {
+                const ae = a.enteredAt ? new Date(a.enteredAt).getTime() : 0;
+                const be = b.enteredAt ? new Date(b.enteredAt).getTime() : 0;
+                return be - ae;
+              });
+              queueAtEndOfDay = sorted[0].queue || task.holdsStatus || 'Unknown';
+            }
           }
         }
-        
+
         return queueAtEndOfDay === 'Agent Research' || 
                queueAtEndOfDay === 'agent research' || 
                queueAtEndOfDay === 'AGENT RESEARCH';
@@ -369,6 +453,13 @@ export async function GET(request: NextRequest) {
         }))
       });
       
+      const daySessions = filterSessionsForDay(mappedSessions, dayStart, dayEnd);
+      const sessionSummary = aggregateSessionSummary(daySessions);
+      const sessionsByAgent = aggregateSessionsByAgent(daySessions);
+      const sessionsByQueueMovement = aggregateSessionsByQueueMovement(daySessions);
+      const sessionsByDisposition = aggregateSessionsByDisposition(daySessions);
+      const sessionDetails = includeTaskDetails ? mapSessionDetails(daySessions) : undefined;
+
       const breakdown = {
         date: currentCalendarDate.toISOString().split('T')[0],
         dayStart: dayStart.toISOString(),
@@ -378,6 +469,11 @@ export async function GET(request: NextRequest) {
         newTasksCount: newTasks.length,
         completedTasksCount: completedTasks.length,
         rolloverTasksCount: rolloverCount,
+        sessionSummary,
+        sessionsByAgent,
+        sessionsByQueueMovement,
+        sessionsByDisposition,
+        ...(sessionDetails !== undefined && { sessionDetails }),
         ...(includeTaskDetails && {
           newTasks: newTasks.map(t => ({
             id: t.id,
@@ -414,10 +510,9 @@ export async function GET(request: NextRequest) {
             queueHistory: t.holdsQueueHistory,
             queueAtEndOfDay: (() => {
               let queue = t.holdsStatus || 'Unknown';
-              if (t.holdsQueueHistory && Array.isArray(t.holdsQueueHistory) && t.holdsQueueHistory.length > 0) {
-                const dayStart = getStartOfDayPST(currentCalendarDate);
-                const dayEnd = getEndOfDayPST(currentCalendarDate, true);
-                const activeAtEndOfDay = t.holdsQueueHistory.filter((entry: any) => {
+              const qh = queueHistoryEntries(t.holdsQueueHistory);
+              if (qh.length > 0) {
+                const activeAtEndOfDay = qh.filter((entry) => {
                   if (!entry.enteredAt) return false;
                   const entered = new Date(entry.enteredAt);
                   if (entered > dayEnd) return false;
@@ -428,8 +523,10 @@ export async function GET(request: NextRequest) {
                   return true;
                 });
                 if (activeAtEndOfDay.length > 0) {
-                  const sorted = activeAtEndOfDay.sort((a: any, b: any) => {
-                    return new Date(b.enteredAt).getTime() - new Date(a.enteredAt).getTime();
+                  const sorted = activeAtEndOfDay.sort((a, b) => {
+                    const ae = a.enteredAt ? new Date(a.enteredAt).getTime() : 0;
+                    const be = b.enteredAt ? new Date(b.enteredAt).getTime() : 0;
+                    return be - ae;
                   });
                   queue = sorted[0].queue || t.holdsStatus || 'Unknown';
                 }
@@ -447,16 +544,27 @@ export async function GET(request: NextRequest) {
       currentCalendarDate.setDate(currentCalendarDate.getDate() + 1);
     }
     
+    const rangeSessionSummary = aggregateSessionSummary(mappedSessions);
+    const rangeSessionsByAgent = aggregateSessionsByAgent(mappedSessions);
+    const rangeSessionsByQueueMovement = aggregateSessionsByQueueMovement(mappedSessions);
+    const rangeSessionsByDisposition = aggregateSessionsByDisposition(mappedSessions);
+
     return NextResponse.json({
       success: true,
       data: {
         breakdowns: dailyBreakdowns,
+        rangeSessionSummary,
+        rangeSessionsByAgent,
+        rangeSessionsByQueueMovement,
+        rangeSessionsByDisposition,
         summary: {
           totalDays: dailyBreakdowns.length,
           dateRange: {
             start: startDate.toISOString(),
             end: endDate.toISOString()
-          }
+          },
+          legacyTaskRowMetricsNote:
+            'newTasksCount, completedTasksCount, rolloverTasksCount, and related task arrays are legacy Task/EOD snapshot fields. Productivity actions use sessionSummary and TaskWorkSession (endedAt in day, HOLDS, countsTowardProductivity).'
         }
       }
     });
