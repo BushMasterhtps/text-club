@@ -10,7 +10,13 @@ interface KanbanCardProps {
 }
 
 const KanbanCard = React.memo(function KanbanCard({ task, onClick, isReadOnly = false }: KanbanCardProps) {
-  const isStarted = !!task.startTime;
+  // PENDING stays not-started for card UI even if startTime is stale after reassignment.
+  const isPending = task.status === 'PENDING';
+  const isStarted =
+    !isPending &&
+    (!!task.startTime ||
+      task.status === 'ASSISTANCE_REQUIRED' ||
+      task.status === 'RESOLVED');
   const isAssistanceRequired = task.status === 'ASSISTANCE_REQUIRED';
   const isResolved = task.status === 'RESOLVED';
   // To Do = PENDING OR IN_PROGRESS without startTime

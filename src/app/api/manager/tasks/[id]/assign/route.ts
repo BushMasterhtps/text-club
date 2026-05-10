@@ -89,6 +89,8 @@ export async function POST(
         endTime: null,
         durationSec: null,
         disposition: null,
+        assistanceRequestedAt: null,
+        assistancePausedDurationSec: null,
         assistanceNotes: null,
         managerResponse: null,
       },

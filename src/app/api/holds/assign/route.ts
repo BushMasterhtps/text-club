@@ -8,6 +8,7 @@ import {
   invalidAssigneeRoleMessage,
   isUserEligibleForTaskType,
 } from '@/lib/agent-specialization';
+import { clearHoldsAssignmentSessionFields } from '@/lib/task-assignment-session-reset';
 
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
@@ -266,6 +267,7 @@ export async function POST(request: NextRequest) {
         assignedToId: agentId,
         status: 'PENDING', // Set to PENDING when assigned (agent must click Start)
         updatedAt: new Date(),
+        ...clearHoldsAssignmentSessionFields,
       },
     });
 
@@ -320,15 +322,18 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Unassign tasks
+    // Unassign active Holds tasks only — do not mutate completed rows (productivity/endTime).
     const updateResult = await prisma.task.updateMany({
       where: {
         id: { in: taskIds },
         taskType: 'HOLDS',
+        status: { not: 'COMPLETED' },
       },
       data: {
         assignedToId: null,
+        status: 'PENDING',
         updatedAt: new Date(),
+        ...clearHoldsAssignmentSessionFields,
       },
     });
 

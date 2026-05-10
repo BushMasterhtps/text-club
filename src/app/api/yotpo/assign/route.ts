@@ -7,6 +7,7 @@ import {
   invalidAssigneeRoleMessage,
   isUserEligibleForTaskType,
 } from '@/lib/agent-specialization';
+import { clearFullPendingWorkSessionFields } from '@/lib/task-assignment-session-reset';
 
 /**
  * Yotpo Task Assignment API
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
           data: {
             assignedToId: agentId,
             status: 'PENDING', // Set to PENDING (agent must click Start)
-            startTime: null // Don't set startTime until agent clicks Start
+            ...clearFullPendingWorkSessionFields,
           },
           include: {
             assignedTo: {

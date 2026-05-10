@@ -58,7 +58,13 @@ export default function TaskDetailDrawer({
     }
   }, [task.id, task.disposition]);
 
-  const isStarted = !!task.startTime;
+  // PENDING must stay locked until Start even if stale startTime survived a reassignment bug.
+  const isPending = task.status === 'PENDING';
+  const isStarted =
+    !isPending &&
+    (!!task.startTime ||
+      task.status === 'ASSISTANCE_REQUIRED' ||
+      task.status === 'RESOLVED');
   const isAssistanceRequired = task.status === 'ASSISTANCE_REQUIRED';
   const isResolved = task.status === 'RESOLVED';
   const isCompleted = task.status === 'COMPLETED';

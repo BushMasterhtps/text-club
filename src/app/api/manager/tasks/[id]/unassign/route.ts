@@ -49,6 +49,8 @@ export async function POST(
         endTime: null, // Clear end time
         durationSec: null, // Clear duration
         disposition: null, // Clear disposition
+        assistanceRequestedAt: null,
+        assistancePausedDurationSec: null,
         assistanceNotes: null, // Clear assistance notes
         managerResponse: null, // Clear manager response
       },

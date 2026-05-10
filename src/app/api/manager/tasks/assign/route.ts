@@ -112,6 +112,8 @@ export async function POST(req: NextRequest) {
             endTime: null, // Clear end time
             durationSec: null, // Clear duration
             disposition: null, // Clear disposition
+            assistanceRequestedAt: null,
+            assistancePausedDurationSec: null,
             assistanceNotes: null, // Clear assistance notes
             managerResponse: null, // Clear manager response
           },
@@ -262,6 +264,8 @@ export async function POST(req: NextRequest) {
             endTime: null,
             durationSec: null,
             disposition: null,
+            assistanceRequestedAt: null,
+            assistancePausedDurationSec: null,
             assistanceNotes: null,
             managerResponse: null,
           },
@@ -442,7 +446,14 @@ export async function POST(req: NextRequest) {
           data: { 
             assignedToId: agent.id,
             status: "PENDING", // Assigned tasks = PENDING (agent must click Start)
-            // Don't set startTime yet - agent will set it when they click Start
+            startTime: null,
+            endTime: null,
+            durationSec: null,
+            assistanceRequestedAt: null,
+            assistancePausedDurationSec: null,
+            assistanceNotes: null,
+            managerResponse: null,
+            disposition: null,
           },
         });
         

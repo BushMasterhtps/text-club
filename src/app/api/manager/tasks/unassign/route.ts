@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
         endTime: null,
         durationSec: null,
         disposition: null,
+        assistanceRequestedAt: null,
+        assistancePausedDurationSec: null,
         assistanceNotes: null,
         managerResponse: null,
       },
