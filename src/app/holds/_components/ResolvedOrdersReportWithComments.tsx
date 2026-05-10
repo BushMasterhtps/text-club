@@ -300,11 +300,21 @@ export default function ResolvedOrdersReportWithComments() {
 
   return (
     <Card>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-white mb-2">📊 Resolved Orders Report with Comments</h2>
+      <div className="mb-6 space-y-3">
+        <h2 className="text-xl font-semibold text-white mb-1">Warehouse Export</h2>
         <p className="text-white/60 text-sm">
-          View resolved orders with comments, dollar amounts saved, and agent performance stats
+          Final resolved Holds orders only (Completed queue). Used for warehouse and operations export reporting.
         </p>
+        <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-100/95 space-y-2">
+          <p>
+            This view is <span className="font-medium text-amber-50">not</span> the same as agent productivity or
+            per-action counts. Those will use <span className="font-medium text-amber-50">work sessions</span>{" "}
+            (TaskWorkSession) in a later phase.
+          </p>
+          <p className="text-amber-100/80 text-xs">
+            CSV export behavior and column names are unchanged — use Export CSV for the daily warehouse sheet.
+          </p>
+        </div>
       </div>
 
       {/* Filters */}
@@ -413,8 +423,11 @@ export default function ResolvedOrdersReportWithComments() {
             ${dispositionStats.reduce((sum, stat) => sum + stat.netAmount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>
-        <div className="p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-          <h3 className="text-sm font-medium text-purple-200 mb-1">Avg Resolution Time</h3>
+        <div
+          className="p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg"
+          title="Average of per-task handle times (Task.durationSec) for the rows in this report."
+        >
+          <h3 className="text-sm font-medium text-purple-200 mb-1">Avg handle time (tasks)</h3>
           <p className="text-2xl font-bold text-white">
             {formatDuration(Math.round(tasks.reduce((sum, t) => {
               const duration = typeof t.duration === 'number' ? t.duration : parseFloat(String(t.duration || 0)) || 0;
@@ -429,7 +442,8 @@ export default function ResolvedOrdersReportWithComments() {
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-white mb-3">💰 Dollar Amount by Disposition</h3>
           <p className="text-sm text-white/60 mb-3">
-            Shows saved/lost amounts based on disposition type. Dispositions that don't complete the task (e.g., "Duplicate", "Unable to Resolve") show $0 saved/lost.
+            Shows saved/lost amounts based on disposition type. Dispositions that do not complete the task (for
+            example, Duplicate or Unable to Resolve) show $0 saved/lost.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -471,9 +485,11 @@ export default function ResolvedOrdersReportWithComments() {
       {/* Agent Stats */}
       {agentStats.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-white mb-3">👥 Agent Performance Stats</h3>
+          <h3 className="text-lg font-semibold text-white mb-3">👥 Agent performance (task completions)</h3>
           <p className="text-sm text-white/60 mb-3">
-            {loadingBreakdown ? 'Loading breakdown...' : 'Includes work from all queues (Agent Research, Customer Contact, Escalated Call, Completed)'}
+            {loadingBreakdown
+              ? "Loading breakdown..."
+              : "Counts completed Holds tasks in the selected window (task rows), not work sessions. Session-based productivity will ship separately."}
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -569,9 +585,7 @@ export default function ResolvedOrdersReportWithComments() {
 
       {/* Results Summary */}
       <div className="mb-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-        <p className="text-sm text-blue-200">
-          Found {total} resolved orders
-        </p>
+        <p className="text-sm text-blue-200">Found {total} final resolved orders</p>
       </div>
 
       {/* Data Table */}
@@ -582,7 +596,18 @@ export default function ResolvedOrdersReportWithComments() {
           No resolved orders found for the selected filters
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto space-y-2">
+          <div className="px-1 text-xs text-white/55 space-y-1 max-w-3xl">
+            <p>
+              <span className="font-medium text-white/75">Handle Time</span> is the recorded agent work duration for
+              this completion (task-level). Open <span className="text-white/75">View Details</span> for lifecycle queue
+              times in the journey.
+            </p>
+            <p>
+              <span className="font-medium text-white/75">Lifecycle Queue Times</span> (in details) are cumulative time
+              per queue from order history — they can differ a lot from handle time.
+            </p>
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-white/5">
               <tr className="text-left text-white/60">
@@ -592,7 +617,7 @@ export default function ResolvedOrdersReportWithComments() {
                 <th className="px-3 py-2">Agent</th>
                 <th className="px-3 py-2">Amount</th>
                 <th className="px-3 py-2">Completed</th>
-                <th className="px-3 py-2">Duration</th>
+                <th className="px-3 py-2">Handle Time</th>
                 <th className="px-3 py-2">Comments</th>
                 <th className="px-3 py-2">Details</th>
               </tr>
@@ -726,7 +751,7 @@ export default function ResolvedOrdersReportWithComments() {
                 </span>
               </div>
               <div>
-                <span className="text-white/60">Duration:</span>
+                <span className="text-white/60">Handle time:</span>
                 <span className="text-white ml-2">{formatDuration(selectedTask.duration || 0)}</span>
               </div>
               
@@ -741,7 +766,7 @@ export default function ResolvedOrdersReportWithComments() {
               
               {selectedTask.queueHistory && selectedTask.queueHistory.length > 0 && (
                 <div>
-                  <span className="text-white/60 block mb-2">Queue Journey:</span>
+                  <span className="text-white/60 block mb-2">Lifecycle queue journey:</span>
                   <div className="space-y-2">
                     {selectedTask.queueHistory.map((entry: any, idx: number) => (
                       <div key={idx} className="p-2 bg-white/5 rounded text-xs">

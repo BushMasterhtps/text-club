@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
-import { SmallButton } from "@/app/_components/SmallButton";
-import ResolvedOrdersReport from "./ResolvedOrdersReport";
 import ResolvedOrdersReportWithComments from "./ResolvedOrdersReportWithComments";
 import DailyBreakdown from "./DailyBreakdown";
 
@@ -30,7 +28,9 @@ export default function HoldsAnalytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [agingReport, setAgingReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'aging' | 'resolved' | 'resolved-comments' | 'daily-breakdown'>('overview');
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "aging" | "resolved-comments" | "daily-breakdown"
+  >("overview");
 
   useEffect(() => {
     fetchAnalytics();
@@ -76,61 +76,62 @@ export default function HoldsAnalytics() {
         <h2 className="text-xl font-semibold mb-4">📈 Holds Analytics</h2>
         
         {/* Tab Navigation */}
-        <div className="flex space-x-4 mb-6">
+        <div className="flex flex-wrap gap-2 mb-6">
           <button
-            onClick={() => setActiveTab('overview')}
+            onClick={() => setActiveTab("overview")}
             className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              activeTab === 'overview'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white/10 text-white/70 hover:bg-white/20'
+              activeTab === "overview"
+                ? "bg-blue-600 text-white"
+                : "bg-white/10 text-white/70 hover:bg-white/20"
             }`}
           >
-            Overview
+            Queue Health
           </button>
           <button
-            onClick={() => setActiveTab('aging')}
+            onClick={() => setActiveTab("aging")}
             className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              activeTab === 'aging'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white/10 text-white/70 hover:bg-white/20'
+              activeTab === "aging"
+                ? "bg-blue-600 text-white"
+                : "bg-white/10 text-white/70 hover:bg-white/20"
             }`}
           >
-            Aging Report
+            Aging / SLA
           </button>
           <button
-            onClick={() => setActiveTab('resolved')}
+            onClick={() => setActiveTab("resolved-comments")}
             className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              activeTab === 'resolved'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white/10 text-white/70 hover:bg-white/20'
+              activeTab === "resolved-comments"
+                ? "bg-blue-600 text-white"
+                : "bg-white/10 text-white/70 hover:bg-white/20"
             }`}
           >
-            📊 Resolved Orders
+            Warehouse Export
           </button>
           <button
-            onClick={() => setActiveTab('resolved-comments')}
+            onClick={() => setActiveTab("daily-breakdown")}
             className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              activeTab === 'resolved-comments'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white/10 text-white/70 hover:bg-white/20'
+              activeTab === "daily-breakdown"
+                ? "bg-blue-600 text-white"
+                : "bg-white/10 text-white/70 hover:bg-white/20"
             }`}
           >
-            📊 Resolved Orders with Comments
-          </button>
-          <button
-            onClick={() => setActiveTab('daily-breakdown')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              activeTab === 'daily-breakdown'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white/10 text-white/70 hover:bg-white/20'
-            }`}
-          >
-            📅 Daily Breakdown
+            Daily Activity
           </button>
         </div>
 
-        {activeTab === 'overview' && analytics && (
+        {activeTab === "overview" && analytics && (
           <div className="space-y-6">
+            <div className="p-3 rounded-lg border border-white/10 bg-white/[0.04] text-sm text-white/70 space-y-2">
+              <p>
+                <span className="font-medium text-white/90">Queue Health</span> summarizes current Holds{" "}
+                <span className="text-white/85">task</span> rows: counts by queue and priority, plus order-age buckets.
+                It reflects inventory and distribution from the database, not work-session productivity.
+              </p>
+              <p className="text-white/55 text-xs">
+                When no date filters are applied to the API, totals include all matching Holds tasks in scope of the
+                overview query.
+              </p>
+            </div>
             {/* Key Metrics */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
@@ -198,8 +199,16 @@ export default function HoldsAnalytics() {
           </div>
         )}
 
-        {activeTab === 'aging' && agingReport && (
+        {activeTab === "aging" && agingReport && (
           <div className="space-y-6">
+            <div className="p-3 rounded-lg border border-white/10 bg-white/[0.04] text-sm text-white/70 space-y-2">
+              <p>
+                <span className="font-medium text-white/90">Aging / SLA</span> lists{" "}
+                <span className="text-white/85">pending</span> Holds tasks ranked by{" "}
+                <span className="text-white/85">order age</span> (time since order date), not strict time-in-queue SLA.
+                Per-queue SLA thresholds are not applied here yet.
+              </p>
+            </div>
             {/* Aging Summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
@@ -265,29 +274,17 @@ export default function HoldsAnalytics() {
           </div>
         )}
         
-        {activeTab === 'resolved' && (
-          <div>
-            {/* Resolved Orders Report is its own component */}
-          </div>
-        )}
       </Card>
-      
-      {/* Resolved Orders Report (separate card below) */}
-      {activeTab === 'resolved' && (
-        <div className="mt-6">
-          <ResolvedOrdersReport />
-        </div>
-      )}
-      
-      {/* Resolved Orders Report with Comments (separate card below) */}
-      {activeTab === 'resolved-comments' && (
+
+      {/* Warehouse Export (separate card below) */}
+      {activeTab === "resolved-comments" && (
         <div className="mt-6">
           <ResolvedOrdersReportWithComments />
         </div>
       )}
-      
-      {/* Daily Breakdown (separate card below) */}
-      {activeTab === 'daily-breakdown' && (
+
+      {/* Daily Activity (separate card below) */}
+      {activeTab === "daily-breakdown" && (
         <div className="mt-6">
           <DailyBreakdown />
         </div>

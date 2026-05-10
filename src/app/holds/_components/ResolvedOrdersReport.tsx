@@ -133,7 +133,8 @@ export default function ResolvedOrdersReport() {
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-white mb-2">📊 Resolved Orders Report</h2>
         <p className="text-white/60 text-sm">
-          View and export completed holds tasks with timeline and disposition details
+          Final-queue Holds completions (same data as Warehouse Export). Use the Holds Analytics{" "}
+          <span className="text-white/80">Warehouse Export</span> tab for the primary warehouse CSV with comments.
         </p>
       </div>
 
@@ -221,9 +222,7 @@ export default function ResolvedOrdersReport() {
 
       {/* Results Summary */}
       <div className="mb-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-        <p className="text-sm text-blue-200">
-          Found {total} resolved orders
-        </p>
+        <p className="text-sm text-blue-200">Found {total} final resolved orders</p>
       </div>
 
       {/* Data Table */}
@@ -234,7 +233,17 @@ export default function ResolvedOrdersReport() {
           No resolved orders found for the selected filters
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto space-y-2">
+          <div className="px-1 text-xs text-white/55 space-y-1 max-w-3xl">
+            <p>
+              <span className="font-medium text-white/75">Handle Time</span> is the recorded agent work duration for
+              this completion (task-level).
+            </p>
+            <p>
+              <span className="font-medium text-white/75">Lifecycle Queue Times</span> show cumulative time spent in
+              each queue from the order journey (from queue history).
+            </p>
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-white/5">
               <tr className="text-left text-white/60">
@@ -243,8 +252,8 @@ export default function ResolvedOrdersReport() {
                 <th className="px-3 py-2">Disposition</th>
                 <th className="px-3 py-2">Agent</th>
                 <th className="px-3 py-2">Completed</th>
-                <th className="px-3 py-2">Duration</th>
-                <th className="px-3 py-2">Queue Times</th>
+                <th className="px-3 py-2">Handle Time</th>
+                <th className="px-3 py-2">Lifecycle Queue Times</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">

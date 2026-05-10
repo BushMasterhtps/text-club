@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { Card } from "@/app/_components/Card";
-import { SmallButton } from "@/app/_components/SmallButton";
 
 interface DailyBreakdown {
   date: string;
@@ -130,10 +129,17 @@ export default function DailyBreakdown() {
 
   return (
     <Card>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-white mb-2">📅 Daily Breakdown</h2>
+      <div className="mb-6 space-y-3">
+        <h2 className="text-xl font-semibold text-white mb-1">Daily Activity</h2>
         <p className="text-white/60 text-sm">
-          View end of day (5 PM PST) snapshots showing queue counts, completed tasks, and rollovers
+          End-of-day (5 PM PST) <span className="text-white/80">queue snapshots</span> plus{" "}
+          <span className="text-white/80">task-level</span> new / completion / rollover counts from the API. “Task
+          completions” means the task&apos;s <span className="text-white/80">end time</span> fell in that day — not
+          the same as every work session or only final warehouse resolutions.
+        </p>
+        <p className="text-xs text-white/50 border border-white/10 rounded-lg px-3 py-2 bg-white/[0.03]">
+          A later phase will add action-level activity from work sessions (TaskWorkSession). This tab does not call
+          new endpoints yet.
         </p>
       </div>
 
@@ -167,10 +173,11 @@ export default function DailyBreakdown() {
             <p className="text-2xl font-bold text-white">{breakdowns.length}</p>
           </div>
           <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
-            <h3 className="text-sm font-medium text-green-200 mb-1">Total Completed</h3>
+            <h3 className="text-sm font-medium text-green-200 mb-1">Task completions (sum)</h3>
             <p className="text-2xl font-bold text-white">
               {breakdowns.reduce((sum, b) => sum + b.completedTasksCount, 0)}
             </p>
+            <p className="text-[10px] text-white/45 mt-1 leading-snug">Tasks with endTime in day (API definition)</p>
           </div>
           <div className="p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
             <h3 className="text-sm font-medium text-yellow-200 mb-1">Total New Tasks</h3>
@@ -189,7 +196,7 @@ export default function DailyBreakdown() {
 
       {/* Daily Breakdown - Show single day view if only one day selected */}
       {loading ? (
-        <div className="text-center py-8 text-white/60">Loading daily breakdown...</div>
+        <div className="text-center py-8 text-white/60">Loading daily activity…</div>
       ) : breakdowns.length === 0 ? (
         <div className="text-center py-8 text-white/60">
           No data found for the selected date range
@@ -208,8 +215,9 @@ export default function DailyBreakdown() {
                     <p className="text-2xl font-bold text-white">{breakdown.newTasksCount}</p>
                   </div>
                   <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
-                    <h3 className="text-sm font-medium text-green-200 mb-1">Completed</h3>
+                    <h3 className="text-sm font-medium text-green-200 mb-1">Task completions</h3>
                     <p className="text-2xl font-bold text-white">{breakdown.completedTasksCount}</p>
+                    <p className="text-[10px] text-white/45 mt-1 leading-snug">endTime in this day</p>
                   </div>
                   <div className="p-4 bg-orange-900/20 border border-orange-500/30 rounded-lg">
                     <h3 className="text-sm font-medium text-orange-200 mb-1">Rollovers</h3>
@@ -260,7 +268,7 @@ export default function DailyBreakdown() {
               <tr className="text-left text-white/60">
                 <th className="px-3 py-2">Date</th>
                 <th className="px-3 py-2">New</th>
-                <th className="px-3 py-2">Completed</th>
+                <th className="px-3 py-2">Task completions</th>
                 <th className="px-3 py-2">Rollovers</th>
                 <th className="px-3 py-2">Pending</th>
                 {allQueues.slice(0, 3).map(queue => (
@@ -315,7 +323,7 @@ export default function DailyBreakdown() {
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-xl font-semibold text-white">
-                  Daily Breakdown - {formatDate(selectedDayDetails.date)}
+                  Daily Activity — {formatDate(selectedDayDetails.date)}
                 </h3>
                 <p className="text-sm text-white/60 mt-1">
                   End of Day: 5 PM PST
@@ -339,8 +347,9 @@ export default function DailyBreakdown() {
                 <div className="text-xl font-bold text-white">{selectedDayDetails.newTasksCount}</div>
               </div>
               <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg">
-                <div className="text-xs text-green-200 mb-1">Completed</div>
+                <div className="text-xs text-green-200 mb-1">Task completions</div>
                 <div className="text-xl font-bold text-white">{selectedDayDetails.completedTasksCount}</div>
+                <div className="text-[10px] text-white/45 mt-1">endTime in this day</div>
               </div>
               <div className="p-3 bg-orange-900/20 border border-orange-500/30 rounded-lg">
                 <div className="text-xs text-orange-200 mb-1">Rollovers</div>
@@ -399,7 +408,12 @@ export default function DailyBreakdown() {
             {/* Completed Tasks */}
             {selectedDayDetails.completedTasks && selectedDayDetails.completedTasks.length > 0 && (
               <div className="mb-6">
-                <h4 className="text-lg font-semibold text-white mb-3">Completed Tasks ({selectedDayDetails.completedTasks.length})</h4>
+                <h4 className="text-lg font-semibold text-white mb-3">
+                  Task completions ({selectedDayDetails.completedTasks.length})
+                </h4>
+                <p className="text-xs text-white/50 mb-2">
+                  Tasks whose completion timestamp falls in this calendar day (task-level, not work sessions).
+                </p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-white/5">
