@@ -5,6 +5,11 @@ import { withSelfHealing } from "@/lib/self-healing/wrapper";
 import { cache } from "@/lib/cache";
 import { authorizeAgentTaskMutationBody, verifyAuth } from "@/lib/auth";
 import { logRouteTiming } from "@/lib/route-timing-log";
+import {
+  buildHoldsTaskWorkSessionIdempotencyKey,
+  createHoldsTaskWorkSessionRecord,
+  deriveHoldsOutcomeType,
+} from "@/lib/task-work-session";
 
 export async function POST(
   req: NextRequest,
@@ -68,6 +73,7 @@ export async function POST(
         taskType: true,
         holdsStatus: true,
         holdsQueueHistory: true,
+        assignedToId: true,
         rawMessage: {
           select: {
             text: true,
@@ -81,17 +87,16 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Task not found or not available" }, { status: 404 });
     }
 
+    const completionEndTime = new Date();
+
     // Calculate duration - use stored paused duration if assistance was requested
     // This excludes assistance time from the total duration
-    let durationSec = null;
+    let durationSec: number | null = null;
     if (task.assistancePausedDurationSec !== null && task.assistancePausedDurationSec !== undefined) {
-      // Use the stored duration from before assistance was requested
       durationSec = task.assistancePausedDurationSec;
     } else if (task.startTime) {
-      // Normal calculation if no assistance was requested
       const start = new Date(task.startTime);
-      const end = new Date();
-      const seconds = Math.round((end.getTime() - start.getTime()) / 1000);
+      const seconds = Math.round((completionEndTime.getTime() - start.getTime()) / 1000);
       durationSec = seconds;
     }
 
@@ -160,14 +165,15 @@ export async function POST(
       // Update queue history timeline
       if (newHoldsQueue !== task.holdsStatus) {
         const history = Array.isArray(newQueueHistory) ? [...newQueueHistory] : [];
+        const endedIso = completionEndTime.toISOString();
         // Close out current queue entry
         if (history.length > 0) {
-          history[history.length - 1].exitedAt = new Date().toISOString();
+          history[history.length - 1].exitedAt = endedIso;
         }
         // Add new queue entry with disposition note if provided
         history.push({
           queue: newHoldsQueue,
-          enteredAt: new Date().toISOString(),
+          enteredAt: endedIso,
           exitedAt: null,
           movedBy: `Agent (${disposition})`,
           disposition: disposition,
@@ -177,53 +183,106 @@ export async function POST(
         newQueueHistory = history;
       }
     }
-    
-    // Update task status, end time, duration, and disposition
-    // Wrap with self-healing for database write operations
+
+    const holdsSessionDurationSec =
+      task.taskType === "HOLDS" ? durationSec : null;
+
+    const taskUpdateSelect = {
+      id: true,
+      status: true,
+      endTime: true,
+      durationSec: true,
+      disposition: true,
+      sentBackBy: true,
+      sentBackAt: true,
+      sentBackDisposition: true
+    } as const;
+
     const updatedTask = await withSelfHealing(
-      () => prisma.task.update({
-      where: { id },
-      data: {
-        status: isSendBack ? "PENDING" : (task.taskType === "HOLDS" ? newStatus : "COMPLETED"),
-        endTime: new Date(),
-        durationSec,
-        disposition,
-        sfCaseNumber: sfCaseNumber || null,
-        assignedToId: isSendBack ? null : (task.taskType === "HOLDS" && shouldUnassign ? null : task.assignedToId),
-        updatedAt: new Date(),
-        // Holds-specific updates
-        ...(task.taskType === "HOLDS" && {
-          holdsStatus: newHoldsQueue,
-          holdsQueueHistory: newQueueHistory,
-          holdsOrderAmount: orderAmount ? parseFloat(orderAmount) : null,
-          holdsNotes: dispositionNote || null, // Store disposition note in holdsNotes for agent visibility
-          // Track who completed the task (for all Holds completions, even if unassigned)
-          completedBy: user.id,
-          completedAt: new Date(),
-          // Reset timer when unassigning (task goes back to queue)
-          ...(shouldUnassign && {
-            durationSec: null,
-            startTime: null // Also reset start time
+      () => {
+        const updatePayload = {
+          status: isSendBack ? "PENDING" : (task.taskType === "HOLDS" ? newStatus : "COMPLETED"),
+          endTime: completionEndTime,
+          durationSec,
+          disposition,
+          sfCaseNumber: sfCaseNumber || null,
+          assignedToId: isSendBack ? null : (task.taskType === "HOLDS" && shouldUnassign ? null : task.assignedToId),
+          updatedAt: completionEndTime,
+          ...(task.taskType === "HOLDS" && {
+            holdsStatus: newHoldsQueue,
+            holdsQueueHistory: newQueueHistory,
+            holdsOrderAmount: orderAmount ? parseFloat(orderAmount) : null,
+            holdsNotes: dispositionNote || null, // Store disposition note in holdsNotes for agent visibility
+            completedBy: user.id,
+            completedAt: completionEndTime,
+            ...(shouldUnassign && {
+              durationSec: null,
+              startTime: null // Also reset start time
+            })
+          }),
+          ...(isSendBack && {
+            sentBackBy: user.id,
+            sentBackAt: completionEndTime,
+            sentBackDisposition: disposition
           })
-        }),
-        // Add send-back tracking fields for WOD/IVCS
-        ...(isSendBack && {
-          sentBackBy: user.id,
-          sentBackAt: new Date(),
-          sentBackDisposition: disposition
-        })
+        };
+
+        if (task.taskType === "HOLDS" && !isSendBack) {
+          const holdsStatusBefore = task.holdsStatus ?? null;
+          const outcomeType = deriveHoldsOutcomeType({
+            disposition,
+            holdsStatusBefore,
+            newHoldsQueue: newHoldsQueue ?? null,
+            shouldUnassign,
+          });
+          const isFinalResolution = newHoldsQueue === "Completed";
+          const idempotencyKey = buildHoldsTaskWorkSessionIdempotencyKey(
+            id,
+            user.id,
+            completionEndTime,
+            disposition
+          );
+
+          return prisma.$transaction(async (tx) => {
+            const updated = await tx.task.update({
+              where: { id },
+              data: updatePayload,
+              select: taskUpdateSelect,
+            });
+
+            await createHoldsTaskWorkSessionRecord(tx, {
+              taskId: id,
+              agentId: user.id,
+              startedAt: task.startTime,
+              endedAt: completionEndTime,
+              durationSec: holdsSessionDurationSec,
+              fromQueue: holdsStatusBefore,
+              toQueue: newHoldsQueue ?? null,
+              disposition,
+              outcomeType,
+              countsTowardProductivity: true,
+              isFinalResolution,
+              idempotencyKey,
+              metadata: {
+                previousStatus: task.status,
+                newStatus: isSendBack ? "PENDING" : newStatus,
+                shouldUnassign,
+                holdsStatusBefore,
+                holdsStatusAfter: newHoldsQueue ?? null,
+                assistancePausedDurationSec: task.assistancePausedDurationSec ?? null,
+              },
+            });
+
+            return updated;
+          });
+        }
+
+        return prisma.task.update({
+          where: { id },
+          data: updatePayload,
+          select: taskUpdateSelect,
+        });
       },
-      select: {
-        id: true,
-        status: true,
-        endTime: true,
-        durationSec: true,
-        disposition: true,
-        sentBackBy: true,
-        sentBackAt: true,
-        sentBackDisposition: true
-      }
-    }),
       { service: 'database', useRetry: true, useCircuitBreaker: true }
     );
     rowCount = 1;
@@ -239,7 +298,7 @@ export async function POST(
         await learnFromSpamDecision(taskText, isSpam, taskBrand, 'agent');
       }
     } catch (error) {
-      console.error('Failed to learn from agent decision:', error);
+      console.error('Failed to learn from spam decision:', error);
       // Don't fail the task completion if learning fails
     }
 
@@ -259,11 +318,11 @@ export async function POST(
       success: true, 
       task: updatedTask 
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error completing task:", err);
     return NextResponse.json({ 
       success: false, 
-      error: err?.message || "Failed to complete task" 
+      error: err instanceof Error ? err.message : "Failed to complete task" 
     }, { status: 500 });
   } finally {
     logRouteTiming({
