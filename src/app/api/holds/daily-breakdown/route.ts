@@ -12,6 +12,14 @@ import {
   mapSessionDetails,
   type HoldsActivitySession,
 } from '@/lib/holds-daily-activity';
+import {
+  addPacificCalendarDays,
+  enumeratePacificYmdRange,
+  formatYmdPacific,
+  getSessionQueryBounds,
+  pacificYmdToUtcDayEndForActivity,
+  pacificYmdToUtcStart,
+} from '@/lib/holds-pacific-calendar';
 
 /** Parsed holdsQueueHistory JSON entries (best-effort). */
 type HoldsQueueHistoryEntry = {
@@ -34,65 +42,71 @@ type TaskEodListRow = {
   customerEmail: string | null;
   status: string;
   disposition: string | null;
+  holdsStatus: string | null;
   agentName: string;
   createdAt: Date;
   endTime: Date | null;
 };
 
+type LegacyActivitySummary = {
+  legacyCompletedTaskCount: number;
+  legacyNewTaskCount: number;
+  legacyRolloverTaskCount: number;
+  legacyPendingAtEodCount: number;
+  hasLegacyActivity: boolean;
+  hasWorkSessionActivity: boolean;
+  dataCoverageNote: string;
+};
+
+function buildLegacyActivitySummary(params: {
+  legacyCompleted: number;
+  legacyNew: number;
+  legacyRollover: number;
+  legacyPendingEod: number;
+  sessionTotal: number;
+}): LegacyActivitySummary {
+  const {
+    legacyCompleted,
+    legacyNew,
+    legacyRollover,
+    legacyPendingEod,
+    sessionTotal,
+  } = params;
+  const hasWorkSessionActivity = sessionTotal > 0;
+  const hasLegacyActivity =
+    legacyNew > 0 || legacyCompleted > 0 || legacyRollover > 0 || legacyPendingEod > 0;
+
+  let dataCoverageNote =
+    'Work-session metrics use TaskWorkSession (HOLDS, productivity-eligible) with endedAt in each America/Los_Angeles business day (midnight–5 PM local, or through now when today is still in progress).';
+  if (!hasWorkSessionActivity && hasLegacyActivity) {
+    dataCoverageNote =
+      'No work-session rows exist for this day or range. Showing legacy task-row activity (imports, endTime in day, EOD snapshot). Work-session metrics begin from the date the TaskWorkSession ledger was introduced.';
+  } else if (hasWorkSessionActivity && hasLegacyActivity) {
+    dataCoverageNote =
+      'Primary actions are TaskWorkSession rows. Legacy task-row counts (new imports, legacy completed task rows, EOD inventory) are also shown for operational context.';
+  } else if (!hasWorkSessionActivity && !hasLegacyActivity) {
+    dataCoverageNote = 'No TaskWorkSession or legacy task activity in this window.';
+  }
+
+  return {
+    legacyCompletedTaskCount: legacyCompleted,
+    legacyNewTaskCount: legacyNew,
+    legacyRolloverTaskCount: legacyRollover,
+    legacyPendingAtEodCount: legacyPendingEod,
+    hasLegacyActivity,
+    hasWorkSessionActivity,
+    dataCoverageNote,
+  };
+}
+
 /**
  * API for Holds Daily Activity + legacy daily breakdown.
  *
  * Primary productivity metrics: TaskWorkSession (taskType HOLDS, countsTowardProductivity, endedAt in day window).
- * Response includes sessionSummary / sessionsByAgent / sessionsByQueueMovement / sessionsByDisposition / sessionDetails
- * (when includeTasks=true) plus range-level aggregates.
+ * Calendar interpretation: YYYY-MM-DD params are America/Los_Angeles civil dates (not server TZ).
  *
- * Secondary (legacy): end-of-day queue snapshots (5 PM PST), task created/completed/rollover counts from Task rows.
+ * Secondary (legacy): end-of-day queue snapshots (5 PM local), task created/completed/rollover counts from Task rows.
  */
-
-// Helper to get end of day (5 PM PST) for a given date
-// If the date is today and it's before 5 PM PST, use current time
-// Otherwise, use 5 PM PST for that date
-// PST is UTC-8, so 5 PM PST = 17:00 PST = 17:00 + 8 = 01:00 UTC next day
-function getEndOfDayPST(date: Date, useCurrentTimeIfToday: boolean = true): Date {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  
-  // Check if this is today
-  const isToday = today.getTime() === targetDate.getTime();
-  
-  if (isToday && useCurrentTimeIfToday) {
-    // For today, check if it's before 5 PM PST
-    // PST is UTC-8, so to get PST time from UTC, we subtract 8 hours
-    // But JavaScript Date is in UTC, so we need to check UTC time
-    // 5 PM PST = 1 AM UTC next day
-    // So if current UTC time is before 1 AM UTC on the next day, it's before 5 PM PST today
-    
-    const tomorrow5PM = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 1, 0, 0, 0));
-    
-    // If current time is before 5 PM PST today, use current time
-    if (now < tomorrow5PM) {
-      return now; // Use current time for "end of day" if it's before 5 PM PST
-    }
-  }
-  
-  // Otherwise, use 5 PM PST for that date
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const day = date.getDate();
-  // 5 PM PST = 1 AM UTC next day
-  const nextDay = new Date(Date.UTC(year, month, day + 1, 1, 0, 0, 0));
-  return nextDay;
-}
-
-// Helper to get start of day PST (midnight PST)
-function getStartOfDayPST(date: Date): Date {
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const day = date.getDate();
-  // Midnight PST = 8 AM UTC (PST is UTC-8)
-  return new Date(Date.UTC(year, month, day, 8, 0, 0, 0));
-}
 
 export async function GET(request: NextRequest) {
   const route = 'GET /api/holds/daily-breakdown';
@@ -105,43 +119,35 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    
-    // Get date range (default to last 30 days if not provided)
+
     const startDateParam = searchParams.get('startDate');
     const endDateParam = searchParams.get('endDate');
-    const specificDate = searchParams.get('date'); // For viewing a specific day
-    
-    let startDate: Date;
-    let endDate: Date;
-    
-    if (specificDate) {
-      // View specific date
-      const date = new Date(specificDate + 'T00:00:00');
-      startDate = getStartOfDayPST(date);
-      endDate = getEndOfDayPST(date);
-    } else if (startDateParam && endDateParam) {
-      // If start and end are the same, only show that one day
-      if (startDateParam === endDateParam) {
-        const date = new Date(startDateParam + 'T00:00:00');
-        startDate = getStartOfDayPST(date);
-        endDate = getEndOfDayPST(date);
-      } else {
-        startDate = getStartOfDayPST(new Date(startDateParam + 'T00:00:00'));
-        endDate = getEndOfDayPST(new Date(endDateParam + 'T00:00:00'));
-      }
-    } else {
-      // Default to last 30 days
-      const today = new Date();
-      endDate = getEndOfDayPST(today);
-      startDate = new Date(today);
-      startDate.setDate(startDate.getDate() - 30);
-      startDate = getStartOfDayPST(startDate);
-    }
-    
-    const includeTaskDetails = searchParams.get('includeTasks') === 'true';
-    
-    // Get current time for historical date detection
+    const specificDate = searchParams.get('date');
+
     const now = new Date();
+    let startYmd: string;
+    let endYmd: string;
+
+    if (specificDate) {
+      startYmd = specificDate;
+      endYmd = specificDate;
+    } else if (startDateParam && endDateParam) {
+      startYmd = startDateParam;
+      endYmd = endDateParam;
+    } else {
+      endYmd = formatYmdPacific(now);
+      startYmd = addPacificCalendarDays(endYmd, -30);
+    }
+
+    const includeTaskDetails = searchParams.get('includeTasks') === 'true';
+
+    const { gte: sessionRangeGte, lt: sessionRangeLt } = getSessionQueryBounds(
+      startYmd,
+      endYmd,
+      now
+    );
+    const rangeStartUtc = pacificYmdToUtcStart(startYmd);
+    const rangeEndUtc = sessionRangeLt;
     
     // Get ALL Holds tasks - we need all tasks to accurately count what's in each queue at end of day
     // Tasks in queues might have been created days/weeks ago, so we can't filter by creation date
@@ -180,46 +186,16 @@ export async function GET(request: NextRequest) {
       }
     });
     rowCount = allTasks.length;
-    
-    const dailyBreakdowns: Record<string, unknown>[] = [];
-    
-    // Use calendar dates for iteration (not UTC dates)
-    let startCalendarDate: Date;
-    let endCalendarDate: Date;
-    
-    if (specificDate) {
-      startCalendarDate = new Date(specificDate + 'T00:00:00');
-      endCalendarDate = new Date(specificDate + 'T00:00:00');
-    } else if (startDateParam && endDateParam) {
-      startCalendarDate = new Date(startDateParam + 'T00:00:00');
-      endCalendarDate = new Date(endDateParam + 'T00:00:00');
-    } else {
-      const today = new Date();
-      endCalendarDate = new Date(today);
-      startCalendarDate = new Date(today);
-      startCalendarDate.setDate(startCalendarDate.getDate() - 30);
-    }
-    
-    // Debug: Log what we're working with
-    console.log('Daily Breakdown API:', {
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-      startCalendarDate: startCalendarDate.toISOString(),
-      endCalendarDate: endCalendarDate.toISOString(),
-      totalTasks: allTasks.length,
-      dateRange: `${startDateParam || 'default'} to ${endDateParam || 'default'}`
-    });
 
-    const rangeDayStart = getStartOfDayPST(startCalendarDate);
-    const rangeDayEnd = getEndOfDayPST(endCalendarDate, true);
+    const dailyBreakdowns: Record<string, unknown>[] = [];
 
     const holdsSessionsInRange = await prisma.taskWorkSession.findMany({
       where: {
         taskType: TaskType.HOLDS,
         countsTowardProductivity: true,
         endedAt: {
-          gte: rangeDayStart,
-          lt: rangeDayEnd,
+          gte: sessionRangeGte,
+          lt: sessionRangeLt,
         },
       },
       include: {
@@ -248,33 +224,13 @@ export async function GET(request: NextRequest) {
 
     rowCount = allTasks.length + holdsSessionsInRange.length;
 
-    const currentCalendarDate = new Date(startCalendarDate);
-    
-    // Get current date in PST for comparison (using 'now' defined at top of function)
-    const todayPST = new Date(now.getTime() - (8 * 60 * 60 * 1000)); // Convert to PST
-    const todayCalendar = new Date(todayPST.getFullYear(), todayPST.getMonth(), todayPST.getDate());
-    
-    while (currentCalendarDate <= endCalendarDate) {
-      // Check if this date is in the future
-      const isFutureDate = currentCalendarDate > todayCalendar;
-      
-      // Skip future dates - don't calculate data for dates that haven't happened yet
-      if (isFutureDate) {
-        currentCalendarDate.setDate(currentCalendarDate.getDate() + 1);
-        continue;
-      }
-      
-      const dayStart = getStartOfDayPST(currentCalendarDate);
-      const dayEnd = getEndOfDayPST(currentCalendarDate, true); // Use current time if today
-      const nextDayStart = new Date(dayStart);
-      nextDayStart.setDate(nextDayStart.getDate() + 1);
-      
-      // Tasks that existed at start of day (created before day start)
-      const tasksAtStart = allTasks.filter(t => {
-        const created = new Date(t.createdAt);
-        return created < dayStart;
-      });
-      
+    const todayYmd = formatYmdPacific(now);
+    const dayYmds = enumeratePacificYmdRange(startYmd, endYmd).filter((ymd) => ymd <= todayYmd);
+
+    for (const ymd of dayYmds) {
+      const dayStart = pacificYmdToUtcStart(ymd);
+      const dayEnd = pacificYmdToUtcDayEndForActivity(ymd, now);
+
       // Tasks created during this day
       const newTasks = allTasks.filter(t => {
         const created = new Date(t.createdAt);
@@ -287,21 +243,8 @@ export async function GET(request: NextRequest) {
         const completed = new Date(t.endTime);
         return completed >= dayStart && completed < dayEnd;
       });
-      
-      // Debug logging for first day
-      if (currentCalendarDate.getTime() === startCalendarDate.getTime()) {
-        console.log('First day calculation:', {
-          date: currentCalendarDate.toISOString().split('T')[0],
-          dayStart: dayStart.toISOString(),
-          dayEnd: dayEnd.toISOString(),
-          totalTasks: allTasks.length,
-          tasksAtStart: tasksAtStart.length,
-          newTasks: newTasks.length,
-          completedTasks: completedTasks.length
-        });
-      }
-      
-      // Calculate queue counts at end of day (5 PM PST)
+
+      // Calculate queue counts at end of day (5 PM local)
       // For each task, determine its queue status at end of day
       const queueCountsAtEndOfDay: Record<string, number> = {};
       const tasksInQueueAtEndOfDay: Record<string, TaskEodListRow[]> = {};
@@ -366,7 +309,7 @@ export async function GET(request: NextRequest) {
             customerEmail: task.holdsCustomerEmail,
             status: task.status,
             disposition: task.disposition,
-            // Use completedBy if available (for unassigned completions like "Unable to Resolve"), otherwise use assignedTo
+            holdsStatus: task.holdsStatus ?? null,
             agentName: task.completedByUser?.name || task.assignedTo?.name || 'Unassigned',
             createdAt: task.createdAt,
             endTime: task.endTime
@@ -429,30 +372,7 @@ export async function GET(request: NextRequest) {
                                  queueCountsAtEndOfDay['escalated call 4+ day'] || 
                                  queueCountsAtEndOfDay['ESCALATED CALL 4+ DAY'] || 0;
       const pendingCount = customerContactCount + escalatedCallCount;
-      
-      // Debug logging - always log for troubleshooting
-      console.log('Daily Breakdown - Queue Counts:', {
-        date: currentCalendarDate.toISOString().split('T')[0],
-        dayEnd: dayEnd.toISOString(),
-        totalTasksForDay: allTasksForDay.length,
-        tasksCompletedBeforeEOD: allTasksForDay.filter(t => {
-          if (!t.endTime) return false;
-          return new Date(t.endTime) < dayEnd;
-        }).length,
-        queueCountsAtEndOfDay,
-        customerContactCount,
-        escalatedCallCount,
-        pendingCount,
-        allQueueKeys: Object.keys(queueCountsAtEndOfDay),
-        sampleTaskStatuses: allTasksForDay.slice(0, 5).map(t => ({
-          id: t.id,
-          holdsStatus: t.holdsStatus,
-          status: t.status,
-          endTime: t.endTime,
-          hasQueueHistory: !!t.holdsQueueHistory
-        }))
-      });
-      
+
       const daySessions = filterSessionsForDay(mappedSessions, dayStart, dayEnd);
       const sessionSummary = aggregateSessionSummary(daySessions);
       const sessionsByAgent = aggregateSessionsByAgent(daySessions);
@@ -460,8 +380,16 @@ export async function GET(request: NextRequest) {
       const sessionsByDisposition = aggregateSessionsByDisposition(daySessions);
       const sessionDetails = includeTaskDetails ? mapSessionDetails(daySessions) : undefined;
 
+      const legacyActivitySummary = buildLegacyActivitySummary({
+        legacyCompleted: completedTasks.length,
+        legacyNew: newTasks.length,
+        legacyRollover: rolloverCount,
+        legacyPendingEod: pendingCount,
+        sessionTotal: sessionSummary.totalSessions,
+      });
+
       const breakdown = {
-        date: currentCalendarDate.toISOString().split('T')[0],
+        date: ymd,
         dayStart: dayStart.toISOString(),
         dayEnd: dayEnd.toISOString(),
         queueCountsAtEndOfDay,
@@ -473,6 +401,7 @@ export async function GET(request: NextRequest) {
         sessionsByAgent,
         sessionsByQueueMovement,
         sessionsByDisposition,
+        legacyActivitySummary,
         ...(sessionDetails !== undefined && { sessionDetails }),
         ...(includeTaskDetails && {
           newTasks: newTasks.map(t => ({
@@ -481,7 +410,7 @@ export async function GET(request: NextRequest) {
             customerEmail: t.holdsCustomerEmail,
             status: t.status,
             disposition: t.disposition,
-            // Use completedBy if available (for unassigned completions like "Unable to Resolve"), otherwise use assignedTo
+            holdsStatus: t.holdsStatus ?? null,
             agentName: t.completedByUser?.name || t.assignedTo?.name || 'Unassigned',
             createdAt: t.createdAt,
             endTime: t.endTime
@@ -492,7 +421,7 @@ export async function GET(request: NextRequest) {
             customerEmail: t.holdsCustomerEmail,
             status: t.status,
             disposition: t.disposition,
-            // Use completedBy if available (for unassigned completions like "Unable to Resolve"), otherwise use assignedTo
+            holdsStatus: t.holdsStatus ?? null,
             agentName: t.completedByUser?.name || t.assignedTo?.name || 'Unassigned',
             createdAt: t.createdAt,
             endTime: t.endTime
@@ -503,7 +432,7 @@ export async function GET(request: NextRequest) {
             customerEmail: t.holdsCustomerEmail,
             status: t.status,
             disposition: t.disposition,
-            // Use completedBy if available (for unassigned completions like "Unable to Resolve"), otherwise use assignedTo
+            holdsStatus: t.holdsStatus ?? null,
             agentName: t.completedByUser?.name || t.assignedTo?.name || 'Unassigned',
             createdAt: t.createdAt,
             endTime: t.endTime,
@@ -539,15 +468,35 @@ export async function GET(request: NextRequest) {
       };
       
       dailyBreakdowns.push(breakdown);
-      
-      // Move to next calendar day
-      currentCalendarDate.setDate(currentCalendarDate.getDate() + 1);
     }
-    
+
     const rangeSessionSummary = aggregateSessionSummary(mappedSessions);
     const rangeSessionsByAgent = aggregateSessionsByAgent(mappedSessions);
     const rangeSessionsByQueueMovement = aggregateSessionsByQueueMovement(mappedSessions);
     const rangeSessionsByDisposition = aggregateSessionsByDisposition(mappedSessions);
+
+    let sumLegacyCompleted = 0;
+    let sumLegacyNew = 0;
+    let sumLegacyRollover = 0;
+    for (const b of dailyBreakdowns) {
+      const la = b.legacyActivitySummary as LegacyActivitySummary | undefined;
+      if (la) {
+        sumLegacyCompleted += la.legacyCompletedTaskCount;
+        sumLegacyNew += la.legacyNewTaskCount;
+        sumLegacyRollover += la.legacyRolloverTaskCount;
+      }
+    }
+    const rangeLegacyActivitySummary = buildLegacyActivitySummary({
+      legacyCompleted: sumLegacyCompleted,
+      legacyNew: sumLegacyNew,
+      legacyRollover: sumLegacyRollover,
+      legacyPendingEod: 0,
+      sessionTotal: rangeSessionSummary.totalSessions,
+    });
+    const rangeNote =
+      rangeLegacyActivitySummary.hasWorkSessionActivity || rangeLegacyActivitySummary.hasLegacyActivity
+        ? `${rangeLegacyActivitySummary.dataCoverageNote} End-of-day pending (Customer Contact + Escalated) is per calendar day in the By Day table, not summed across the range.`
+        : rangeLegacyActivitySummary.dataCoverageNote;
 
     return NextResponse.json({
       success: true,
@@ -557,14 +506,19 @@ export async function GET(request: NextRequest) {
         rangeSessionsByAgent,
         rangeSessionsByQueueMovement,
         rangeSessionsByDisposition,
+        rangeLegacyActivitySummary: {
+          ...rangeLegacyActivitySummary,
+          dataCoverageNote: rangeNote,
+        },
         summary: {
           totalDays: dailyBreakdowns.length,
           dateRange: {
-            start: startDate.toISOString(),
-            end: endDate.toISOString()
+            start: rangeStartUtc.toISOString(),
+            end: rangeEndUtc.toISOString()
           },
+          pacificDateRange: { start: startYmd, end: endYmd },
           legacyTaskRowMetricsNote:
-            'newTasksCount, completedTasksCount, rolloverTasksCount, and related task arrays are legacy Task/EOD snapshot fields. Productivity actions use sessionSummary and TaskWorkSession (endedAt in day, HOLDS, countsTowardProductivity).'
+            'newTasksCount, completedTasksCount, rolloverTasksCount, and related task arrays are legacy Task/EOD snapshot fields. Productivity actions use sessionSummary and TaskWorkSession (endedAt in America/Los_Angeles day window, HOLDS, countsTowardProductivity).'
         }
       }
     });

@@ -1,7 +1,42 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Card } from "@/app/_components/Card";
+
+const PAGE_SIZE = 50;
+const PACIFIC_TZ = "America/Los_Angeles";
+
+function formatYmdPacificFromDate(d: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PACIFIC_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const y = parts.find((x) => x.type === "year")?.value;
+  const m = parts.find((x) => x.type === "month")?.value;
+  const day = parts.find((x) => x.type === "day")?.value;
+  return `${y}-${m}-${day}`;
+}
+
+function escapeCsvCell(v: unknown): string {
+  const s = v == null ? "" : String(v);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function downloadCsv(filename: string, headers: string[], rows: Record<string, string | number | boolean | null | undefined>[]) {
+  const lines = [
+    headers.map(escapeCsvCell).join(","),
+    ...rows.map((r) => headers.map((h) => escapeCsvCell(r[h])).join(",")),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 type SessionSummary = {
   totalSessions: number;
@@ -64,6 +99,30 @@ type SessionDetailRow = {
   isFinalResolution: boolean;
 };
 
+type LegacyActivitySummary = {
+  legacyCompletedTaskCount: number;
+  legacyNewTaskCount: number;
+  legacyRolloverTaskCount: number;
+  legacyPendingAtEodCount: number;
+  hasLegacyActivity: boolean;
+  hasWorkSessionActivity: boolean;
+  dataCoverageNote: string;
+};
+
+type TaskRow = {
+  id: string;
+  orderNumber?: string | null;
+  customerEmail?: string | null;
+  agentName?: string;
+  createdAt?: string;
+  endTime?: string | null;
+  status?: string;
+  disposition?: string | null;
+  holdsStatus?: string | null;
+};
+
+type RolloverTaskRow = TaskRow & { queueAtEndOfDay?: string; queueHistory?: unknown };
+
 interface DailyBreakdownRow {
   date: string;
   dayStart: string;
@@ -77,36 +136,12 @@ interface DailyBreakdownRow {
   sessionsByAgent: SessionByAgentRow[];
   sessionsByQueueMovement: SessionByQueueMovementRow[];
   sessionsByDisposition: SessionByDispositionRow[];
+  legacyActivitySummary?: LegacyActivitySummary;
   sessionDetails?: SessionDetailRow[];
-  newTasks?: Array<{
-    id: string;
-    orderNumber?: string | null;
-    customerEmail?: string | null;
-    agentName?: string;
-    createdAt?: string;
-  }>;
-  completedTasks?: Array<{
-    id: string;
-    orderNumber?: string | null;
-    customerEmail?: string | null;
-    disposition?: string | null;
-    agentName?: string;
-    endTime?: string | null;
-  }>;
-  rolloverTasks?: Array<{
-    id: string;
-    orderNumber?: string | null;
-    customerEmail?: string | null;
-    agentName?: string;
-    queueHistory?: unknown;
-  }>;
-  tasksInQueueAtEndOfDay?: Record<string, Array<{
-    id: string;
-    orderNumber?: string | null;
-    customerEmail?: string | null;
-    agentName?: string;
-    status?: string;
-  }>>;
+  newTasks?: TaskRow[];
+  completedTasks?: TaskRow[];
+  rolloverTasks?: RolloverTaskRow[];
+  tasksInQueueAtEndOfDay?: Record<string, TaskRow[]>;
 }
 
 interface DailyBreakdownApiData {
@@ -115,7 +150,11 @@ interface DailyBreakdownApiData {
   rangeSessionsByAgent: SessionByAgentRow[];
   rangeSessionsByQueueMovement: SessionByQueueMovementRow[];
   rangeSessionsByDisposition: SessionByDispositionRow[];
-  summary?: { legacyTaskRowMetricsNote?: string };
+  rangeLegacyActivitySummary?: LegacyActivitySummary;
+  summary?: {
+    legacyTaskRowMetricsNote?: string;
+    pacificDateRange?: { start: string; end: string };
+  };
 }
 
 function formatDurationSec(sec: number): string {
@@ -137,18 +176,77 @@ function queueMixLabel(row: SessionByAgentRow): string {
   return `${row.topFromQueue} (${pct}%)`;
 }
 
+type ModalTab =
+  | "summary"
+  | "sessions"
+  | "newTasks"
+  | "legacyCompleted"
+  | "queueSnapshot"
+  | "rollovers";
+
+function PaginationFooter(props: {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const { page, totalPages, totalItems, onPrev, onNext } = props;
+  const start = totalItems === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const end = Math.min(page * PAGE_SIZE, totalItems);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 mt-3 text-xs text-white/60">
+      <span>
+        Showing {start}-{end} of {totalItems} · Page {page} of {totalPages}
+      </span>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={onPrev}
+          className="px-3 py-1 rounded bg-white/10 disabled:opacity-40 text-white"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={onNext}
+          className="px-3 py-1 rounded bg-white/10 disabled:opacity-40 text-white"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DailyBreakdown() {
   const [payload, setPayload] = useState<DailyBreakdownApiData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedDayDetails, setSelectedDayDetails] = useState<DailyBreakdownRow | null>(null);
   const [showTaskDetails, setShowTaskDetails] = useState(false);
+  const [modalTab, setModalTab] = useState<ModalTab>("summary");
+  const [modalPageByTab, setModalPageByTab] = useState<Record<ModalTab, number>>({
+    summary: 1,
+    sessions: 1,
+    newTasks: 1,
+    legacyCompleted: 1,
+    queueSnapshot: 1,
+    rollovers: 1,
+  });
 
   const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    date.setDate(date.getDate() - 30);
-    return date.toISOString().split("T")[0];
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return formatYmdPacificFromDate(d);
   });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(() => formatYmdPacificFromDate(new Date()));
+
+  const setModalTabResetPage = useCallback((t: ModalTab) => {
+    setModalTab(t);
+    setModalPageByTab((prev) => ({ ...prev, [t]: 1 }));
+  }, []);
 
   const applyBreakdownResponse = useCallback((data: DailyBreakdownApiData) => {
     setPayload(data);
@@ -200,9 +298,9 @@ export default function DailyBreakdown() {
 
       if (json.success && json.data?.breakdowns?.length > 0) {
         const breakdown =
-          (json.data.breakdowns as DailyBreakdownRow[]).find((b) => b.date === date) ??
-          json.data.breakdowns[0];
+          (json.data.breakdowns as DailyBreakdownRow[]).find((b) => b.date === date) ?? json.data.breakdowns[0];
         setSelectedDayDetails(breakdown);
+        setModalTabResetPage("summary");
         setShowTaskDetails(true);
       }
     } catch (error) {
@@ -219,13 +317,14 @@ export default function DailyBreakdown() {
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(`${dateString}T00:00:00`);
-    return date.toLocaleDateString("en-US", {
+    const [y, m, d] = dateString.split("-").map(Number);
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: PACIFIC_TZ,
       weekday: "short",
       year: "numeric",
       month: "short",
       day: "numeric",
-    });
+    }).format(new Date(Date.UTC(y, m - 1, d, 20, 0, 0)));
   };
 
   const breakdowns = payload?.breakdowns ?? [];
@@ -233,6 +332,7 @@ export default function DailyBreakdown() {
   const rangeByAgent = payload?.rangeSessionsByAgent ?? [];
   const rangeByMovement = payload?.rangeSessionsByQueueMovement ?? [];
   const rangeByDisposition = payload?.rangeSessionsByDisposition ?? [];
+  const rangeLegacy = payload?.rangeLegacyActivitySummary;
 
   const allQueues = Array.from(
     new Set(breakdowns.flatMap((b) => Object.keys(b.queueCountsAtEndOfDay ?? {})))
@@ -251,14 +351,14 @@ export default function DailyBreakdown() {
     return (
       <div className={`grid grid-cols-2 gap-3 md:gap-4 ${colClass}`}>
         <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-          <h3 className="text-sm font-medium text-blue-200 mb-1">Total actions</h3>
+          <h3 className="text-sm font-medium text-blue-200 mb-1">Actions / work sessions</h3>
           <p className="text-2xl font-bold text-white">{s.totalSessions}</p>
-          <p className="text-[10px] text-white/45 mt-1 leading-snug">TaskWorkSession rows (HOLDS, productivity)</p>
+          <p className="text-[10px] text-white/45 mt-1 leading-snug">TaskWorkSession (HOLDS, productivity)</p>
         </div>
         <div className="p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-lg">
           <h3 className="text-sm font-medium text-emerald-200 mb-1">Final resolutions</h3>
           <p className="text-2xl font-bold text-white">{s.finalResolutionCount}</p>
-          <p className="text-[10px] text-white/45 mt-1 leading-snug">Completed queue</p>
+          <p className="text-[10px] text-white/45 mt-1 leading-snug">isFinalResolution</p>
         </div>
         <div className="p-4 bg-amber-900/20 border border-amber-500/30 rounded-lg">
           <h3 className="text-sm font-medium text-amber-200 mb-1">Handoffs</h3>
@@ -284,6 +384,59 @@ export default function DailyBreakdown() {
         )}
       </div>
     );
+  };
+
+  const renderLegacySummaryCards = (l: LegacyActivitySummary | undefined) => {
+    if (!l || !l.hasLegacyActivity) return null;
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+        <div className="p-3 bg-white/5 border border-white/15 rounded-lg">
+          <div className="text-xs text-white/55 mb-1">Legacy completed task rows</div>
+          <div className="text-xl font-bold text-white">{l.legacyCompletedTaskCount}</div>
+          <div className="text-[10px] text-white/40 mt-1">Task endTime in this day</div>
+        </div>
+        <div className="p-3 bg-white/5 border border-white/15 rounded-lg">
+          <div className="text-xs text-white/55 mb-1">New tasks created</div>
+          <div className="text-xl font-bold text-white">{l.legacyNewTaskCount}</div>
+        </div>
+        <div className="p-3 bg-white/5 border border-white/15 rounded-lg">
+          <div className="text-xs text-white/55 mb-1">EOD pending (lanes)</div>
+          <div className="text-xl font-bold text-white">{l.legacyPendingAtEodCount}</div>
+        </div>
+        <div className="p-3 bg-white/5 border border-white/15 rounded-lg">
+          <div className="text-xs text-white/55 mb-1">Rollovers (Agent Research @ EOD)</div>
+          <div className="text-xl font-bold text-white">{l.legacyRolloverTaskCount}</div>
+        </div>
+        <p className="col-span-full text-xs text-amber-100/80 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
+          {l.dataCoverageNote}
+        </p>
+      </div>
+    );
+  };
+
+  const renderCoverageBanner = (l: LegacyActivitySummary | undefined, key: string) => {
+    if (!l) return null;
+    if (!l.hasWorkSessionActivity && l.hasLegacyActivity) {
+      return (
+        <div
+          key={key}
+          className="mb-4 p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-sm text-amber-50/95"
+        >
+          No work-session rows exist for this date range. Showing legacy task-row activity below.{" "}
+          <span className="text-amber-100/80">
+            Work-session metrics begin from the date the TaskWorkSession ledger was introduced.
+          </span>
+        </div>
+      );
+    }
+    if (l.hasWorkSessionActivity && l.hasLegacyActivity) {
+      return (
+        <div key={key} className="mb-4 p-3 rounded-lg border border-white/15 bg-white/[0.04] text-xs text-white/65">
+          {l.dataCoverageNote}
+        </div>
+      );
+    }
+    return null;
   };
 
   const renderAgentTable = (rows: SessionByAgentRow[], key: string) => (
@@ -405,19 +558,483 @@ export default function DailyBreakdown() {
     </div>
   );
 
+  const modalTabsAvailable = useMemo(() => {
+    if (!selectedDayDetails) return [] as { id: ModalTab; label: string }[];
+    const d = selectedDayDetails;
+    const tabs: { id: ModalTab; label: string }[] = [{ id: "summary", label: "Summary" }];
+    if ((d.sessionDetails?.length ?? 0) > 0) tabs.push({ id: "sessions", label: "Work sessions" });
+    if ((d.newTasks?.length ?? 0) > 0) tabs.push({ id: "newTasks", label: "New tasks" });
+    if ((d.completedTasks?.length ?? 0) > 0) tabs.push({ id: "legacyCompleted", label: "Legacy completed" });
+    if (
+      Object.keys(d.queueCountsAtEndOfDay ?? {}).length > 0 ||
+      (d.tasksInQueueAtEndOfDay && Object.keys(d.tasksInQueueAtEndOfDay).length > 0)
+    ) {
+      tabs.push({ id: "queueSnapshot", label: "Queue snapshot" });
+    }
+    if ((d.rolloverTasks?.length ?? 0) > 0) tabs.push({ id: "rollovers", label: "Rollovers" });
+    return tabs;
+  }, [selectedDayDetails]);
+
+  const resolvedModalTab = useMemo((): ModalTab => {
+    const allowed = new Set(modalTabsAvailable.map((t) => t.id));
+    return allowed.has(modalTab) ? modalTab : "summary";
+  }, [modalTab, modalTabsAvailable]);
+
+  const dayModalPage = modalPageByTab[resolvedModalTab] ?? 1;
+  const setDayModalPage = (p: number) =>
+    setModalPageByTab((prev) => ({ ...prev, [resolvedModalTab]: p }));
+
+  function renderModalContent() {
+    if (!selectedDayDetails) return null;
+    const d = selectedDayDetails;
+    const leg = d.legacyActivitySummary;
+    const mt = resolvedModalTab;
+
+    if (mt === "summary") {
+      return (
+        <div className="space-y-6">
+          {renderSessionSummaryCards(d.sessionSummary)}
+          {renderLegacySummaryCards(leg)}
+          <div>
+            <h4 className="text-sm font-semibold text-white/90 mb-2">End-of-Day Queue Snapshot</h4>
+            <p className="text-xs text-white/50 mb-2">
+              Inventory at 5 PM {PACIFIC_TZ.replace("_", " ")} (or now if today before cutoff). Not productivity.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {Object.entries(d.queueCountsAtEndOfDay ?? {}).map(([queue, count]) => (
+                <div key={queue} className="p-2 bg-white/5 rounded border border-white/10 text-sm">
+                  <div className="text-white/55 text-xs">{queue}</div>
+                  <div className="text-white font-bold">{count as number}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (mt === "sessions") {
+      const rows = d.sessionDetails ?? [];
+      const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+      const page = Math.min(dayModalPage, totalPages);
+      const slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+      return (
+        <div>
+          <div className="flex flex-wrap justify-between gap-2 mb-3">
+            <p className="text-xs text-white/55">One row per TaskWorkSession. Same task may appear multiple times.</p>
+            <button
+              type="button"
+              className="text-xs px-3 py-1 rounded bg-emerald-600/80 text-white"
+              onClick={() =>
+                downloadCsv(
+                  `holds-work-sessions-${d.date}.csv`,
+                  [
+                    "Work Session ID",
+                    "Task ID",
+                    "Order Number",
+                    "Customer Email",
+                    "Agent Name",
+                    "Agent Email",
+                    "Started At",
+                    "Ended At",
+                    "Duration Sec",
+                    "From Queue",
+                    "To Queue",
+                    "Disposition",
+                    "Outcome Type",
+                    "Final Resolution",
+                  ],
+                  rows.map((sess) => ({
+                    "Work Session ID": sess.workSessionId,
+                    "Task ID": sess.taskId,
+                    "Order Number": sess.orderNumber ?? "",
+                    "Customer Email": sess.customerEmail ?? "",
+                    "Agent Name": sess.agentName,
+                    "Agent Email": sess.agentEmail,
+                    "Started At": sess.startedAt ?? "",
+                    "Ended At": sess.endedAt,
+                    "Duration Sec": sess.durationSec ?? "",
+                    "From Queue": sess.fromQueue ?? "",
+                    "To Queue": sess.toQueue ?? "",
+                    Disposition: sess.disposition ?? "",
+                    "Outcome Type": sess.outcomeType,
+                    "Final Resolution": sess.isFinalResolution ? "true" : "false",
+                  }))
+                )
+              }
+            >
+              Export CSV
+            </button>
+          </div>
+          {rows.length === 0 ? (
+            <p className="text-white/50 text-sm">No work sessions for this day.</p>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-white/5">
+                    <tr>
+                      <th className="px-2 py-2 text-left text-white/60">Order #</th>
+                      <th className="px-2 py-2 text-left text-white/60">Email</th>
+                      <th className="px-2 py-2 text-left text-white/60">Agent</th>
+                      <th className="px-2 py-2 text-left text-white/60">Queues</th>
+                      <th className="px-2 py-2 text-left text-white/60">Disposition</th>
+                      <th className="px-2 py-2 text-left text-white/60">Outcome</th>
+                      <th className="px-2 py-2 text-left text-white/60">Final</th>
+                      <th className="px-2 py-2 text-left text-white/60">Started</th>
+                      <th className="px-2 py-2 text-left text-white/60">Ended</th>
+                      <th className="px-2 py-2 text-right text-white/60">Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {slice.map((sess) => (
+                      <tr key={sess.workSessionId}>
+                        <td className="px-2 py-1.5 text-white font-mono whitespace-nowrap">{sess.orderNumber ?? "—"}</td>
+                        <td className="px-2 py-1.5 text-white/80 max-w-[120px] truncate" title={sess.customerEmail ?? ""}>
+                          {sess.customerEmail ?? "—"}
+                        </td>
+                        <td className="px-2 py-1.5 text-white/80 whitespace-nowrap text-[11px]">
+                          <div>{sess.agentName}</div>
+                          <div className="text-white/40">{sess.agentEmail}</div>
+                        </td>
+                        <td className="px-2 py-1.5 text-cyan-200/90 whitespace-nowrap text-[11px]">
+                          {(sess.fromQueue ?? "—")} → {sess.toQueue ?? "—"}
+                        </td>
+                        <td className="px-2 py-1.5 text-white/80">{sess.disposition ?? "—"}</td>
+                        <td className="px-2 py-1.5 text-amber-200/90">{sess.outcomeType}</td>
+                        <td className="px-2 py-1.5">{sess.isFinalResolution ? "Yes" : "—"}</td>
+                        <td className="px-2 py-1.5 text-white/60 whitespace-nowrap">
+                          {sess.startedAt ? new Date(sess.startedAt).toLocaleString() : "—"}
+                        </td>
+                        <td className="px-2 py-1.5 text-white/60 whitespace-nowrap">{new Date(sess.endedAt).toLocaleString()}</td>
+                        <td className="px-2 py-1.5 text-right">{formatDurationSec(sess.durationSec ?? 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <PaginationFooter
+                page={page}
+                totalPages={totalPages}
+                totalItems={rows.length}
+                onPrev={() => setDayModalPage(page - 1)}
+                onNext={() => setDayModalPage(page + 1)}
+              />
+            </>
+          )}
+        </div>
+      );
+    }
+
+    if (mt === "newTasks") {
+      const rows = d.newTasks ?? [];
+      const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+      const page = Math.min(dayModalPage, totalPages);
+      const slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+      return (
+        <div>
+          <div className="flex justify-end mb-2">
+            <button
+              type="button"
+              className="text-xs px-3 py-1 rounded bg-emerald-600/80 text-white"
+              onClick={() =>
+                downloadCsv(
+                  `holds-new-tasks-${d.date}.csv`,
+                  ["Order Number", "Customer Email", "Agent", "Created At", "Status", "Holds queue"],
+                  rows.map((t) => ({
+                    "Order Number": t.orderNumber ?? "",
+                    "Customer Email": t.customerEmail ?? "",
+                    Agent: t.agentName ?? "",
+                    "Created At": t.createdAt ?? "",
+                    Status: t.status ?? "",
+                    "Holds queue": t.holdsStatus ?? "",
+                  }))
+                )
+              }
+            >
+              Export CSV
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-white/5">
+                <tr>
+                  <th className="px-2 py-1 text-left text-white/60">Order #</th>
+                  <th className="px-2 py-1 text-left text-white/60">Email</th>
+                  <th className="px-2 py-1 text-left text-white/60">Agent</th>
+                  <th className="px-2 py-1 text-left text-white/60">Queue</th>
+                  <th className="px-2 py-1 text-left text-white/60">Created</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {slice.map((task) => (
+                  <tr key={task.id}>
+                    <td className="px-2 py-1 text-white font-mono">{task.orderNumber ?? "—"}</td>
+                    <td className="px-2 py-1 text-white/80">{task.customerEmail ?? "—"}</td>
+                    <td className="px-2 py-1 text-white/80">{task.agentName}</td>
+                    <td className="px-2 py-1 text-white/70">{task.holdsStatus ?? "—"}</td>
+                    <td className="px-2 py-1 text-white/60">
+                      {task.createdAt ? new Date(task.createdAt).toLocaleString() : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <PaginationFooter
+            page={page}
+            totalPages={totalPages}
+            totalItems={rows.length}
+            onPrev={() => setDayModalPage(page - 1)}
+            onNext={() => setDayModalPage(page + 1)}
+          />
+        </div>
+      );
+    }
+
+    if (mt === "legacyCompleted") {
+      const rows = d.completedTasks ?? [];
+      const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+      const page = Math.min(dayModalPage, totalPages);
+      const slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+      return (
+        <div>
+          <div className="flex justify-end mb-2">
+            <button
+              type="button"
+              className="text-xs px-3 py-1 rounded bg-emerald-600/80 text-white"
+              onClick={() =>
+                downloadCsv(
+                  `holds-legacy-completed-${d.date}.csv`,
+                  ["Order Number", "Customer Email", "Disposition", "Agent", "Completed At", "Status", "Holds queue"],
+                  rows.map((t) => ({
+                    "Order Number": t.orderNumber ?? "",
+                    "Customer Email": t.customerEmail ?? "",
+                    Disposition: t.disposition ?? "",
+                    Agent: t.agentName ?? "",
+                    "Completed At": t.endTime ?? "",
+                    Status: t.status ?? "",
+                    "Holds queue": t.holdsStatus ?? "",
+                  }))
+                )
+              }
+            >
+              Export CSV
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-white/5">
+                <tr>
+                  <th className="px-2 py-1 text-left text-white/60">Order #</th>
+                  <th className="px-2 py-1 text-left text-white/60">Email</th>
+                  <th className="px-2 py-1 text-left text-white/60">Disposition</th>
+                  <th className="px-2 py-1 text-left text-white/60">Agent</th>
+                  <th className="px-2 py-1 text-left text-white/60">Queue</th>
+                  <th className="px-2 py-1 text-left text-white/60">Completed</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {slice.map((task) => (
+                  <tr key={task.id}>
+                    <td className="px-2 py-1 text-white font-mono">{task.orderNumber ?? "—"}</td>
+                    <td className="px-2 py-1 text-white/80">{task.customerEmail ?? "—"}</td>
+                    <td className="px-2 py-1 text-green-300">{task.disposition ?? "—"}</td>
+                    <td className="px-2 py-1 text-white/80">{task.agentName}</td>
+                    <td className="px-2 py-1 text-white/70">{task.holdsStatus ?? "—"}</td>
+                    <td className="px-2 py-1 text-white/60">
+                      {task.endTime ? new Date(task.endTime).toLocaleString() : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <PaginationFooter
+            page={page}
+            totalPages={totalPages}
+            totalItems={rows.length}
+            onPrev={() => setDayModalPage(page - 1)}
+            onNext={() => setDayModalPage(page + 1)}
+          />
+        </div>
+      );
+    }
+
+    if (mt === "queueSnapshot") {
+      const counts = d.queueCountsAtEndOfDay ?? {};
+      const byQueue = d.tasksInQueueAtEndOfDay ?? {};
+      const flatRows: Record<string, string | number | null | undefined>[] = [];
+      for (const [queue, count] of Object.entries(counts)) {
+        flatRows.push({ Queue: queue, Count: count as number, "Order Number": "", "Customer Email": "", Agent: "", Status: "" });
+      }
+      for (const [queue, tasks] of Object.entries(byQueue)) {
+        for (const t of tasks) {
+          flatRows.push({
+            Queue: queue,
+            Count: "",
+            "Order Number": t.orderNumber ?? "",
+            "Customer Email": t.customerEmail ?? "",
+            Agent: t.agentName ?? "",
+            Status: t.status ?? "",
+          });
+        }
+      }
+      const queueKeys = Object.keys(byQueue);
+      const flatList = queueKeys.flatMap((q) => byQueue[q].map((t) => ({ queue: q, task: t })));
+      const totalPages = Math.max(1, Math.ceil(flatList.length / PAGE_SIZE));
+      const page = Math.min(dayModalPage, totalPages);
+      const slice = flatList.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+      return (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="text-xs px-3 py-1 rounded bg-emerald-600/80 text-white"
+              onClick={() =>
+                downloadCsv(`holds-queue-snapshot-${d.date}.csv`, ["Queue", "Count", "Order Number", "Customer Email", "Agent", "Status"], flatRows)
+              }
+            >
+              Export CSV
+            </button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {Object.entries(counts).map(([queue, count]) => (
+              <div key={queue} className="p-2 bg-white/5 rounded border border-white/10">
+                <div className="text-xs text-white/55">{queue}</div>
+                <div className="text-lg font-bold text-white">{count as number}</div>
+              </div>
+            ))}
+          </div>
+          <h5 className="text-sm font-medium text-white/80">Tasks by queue at EOD</h5>
+          {flatList.length === 0 ? (
+            <p className="text-white/50 text-sm">No per-queue task rows.</p>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-white/5">
+                    <tr>
+                      <th className="px-2 py-1 text-left text-white/60">Queue</th>
+                      <th className="px-2 py-1 text-left text-white/60">Order #</th>
+                      <th className="px-2 py-1 text-left text-white/60">Email</th>
+                      <th className="px-2 py-1 text-left text-white/60">Agent</th>
+                      <th className="px-2 py-1 text-left text-white/60">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {slice.map(({ queue, task }) => (
+                      <tr key={`${queue}-${task.id}`}>
+                        <td className="px-2 py-1 text-cyan-200/90">{queue}</td>
+                        <td className="px-2 py-1 text-white font-mono">{task.orderNumber ?? "—"}</td>
+                        <td className="px-2 py-1 text-white/80">{task.customerEmail ?? "—"}</td>
+                        <td className="px-2 py-1 text-white/80">{task.agentName}</td>
+                        <td className="px-2 py-1 text-white/80">{task.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <PaginationFooter
+                page={page}
+                totalPages={totalPages}
+                totalItems={flatList.length}
+                onPrev={() => setDayModalPage(page - 1)}
+                onNext={() => setDayModalPage(page + 1)}
+              />
+            </>
+          )}
+        </div>
+      );
+    }
+
+    if (mt === "rollovers") {
+      const rows = d.rolloverTasks ?? [];
+      const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+      const page = Math.min(dayModalPage, totalPages);
+      const slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+      return (
+        <div>
+          <div className="flex justify-end mb-2">
+            <button
+              type="button"
+              className="text-xs px-3 py-1 rounded bg-emerald-600/80 text-white"
+              onClick={() =>
+                downloadCsv(
+                  `holds-rollovers-${d.date}.csv`,
+                  ["Order Number", "Customer Email", "Agent", "Status", "Queue", "Created At", "End Time"],
+                  rows.map((t) => ({
+                    "Order Number": t.orderNumber ?? "",
+                    "Customer Email": t.customerEmail ?? "",
+                    Agent: t.agentName ?? "",
+                    Status: t.status ?? "",
+                    Queue: t.queueAtEndOfDay ?? t.holdsStatus ?? "",
+                    "Created At": t.createdAt ?? "",
+                    "End Time": t.endTime ?? "",
+                  }))
+                )
+              }
+            >
+              Export CSV
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-white/5">
+                <tr>
+                  <th className="px-2 py-1 text-left text-white/60">Order #</th>
+                  <th className="px-2 py-1 text-left text-white/60">Email</th>
+                  <th className="px-2 py-1 text-left text-white/60">Agent</th>
+                  <th className="px-2 py-1 text-left text-white/60">Status</th>
+                  <th className="px-2 py-1 text-left text-white/60">Queue @ EOD</th>
+                  <th className="px-2 py-1 text-left text-white/60">Created</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {slice.map((task) => (
+                  <tr key={task.id}>
+                    <td className="px-2 py-1 text-white font-mono">{task.orderNumber ?? "—"}</td>
+                    <td className="px-2 py-1 text-white/80">{task.customerEmail ?? "—"}</td>
+                    <td className="px-2 py-1 text-white/80">{task.agentName}</td>
+                    <td className="px-2 py-1 text-white/80">{task.status}</td>
+                    <td className="px-2 py-1 text-amber-200/90">{task.queueAtEndOfDay ?? task.holdsStatus ?? "—"}</td>
+                    <td className="px-2 py-1 text-white/60">
+                      {task.createdAt ? new Date(task.createdAt).toLocaleString() : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <PaginationFooter
+            page={page}
+            totalPages={totalPages}
+            totalItems={rows.length}
+            onPrev={() => setDayModalPage(page - 1)}
+            onNext={() => setDayModalPage(page + 1)}
+          />
+        </div>
+      );
+    }
+
+    return null;
+  }
+
   return (
     <Card>
       <div className="mb-6 space-y-3">
         <h2 className="text-xl font-semibold text-white mb-1">Daily Activity</h2>
         <p className="text-white/60 text-sm">
-          Primary metrics come from <span className="text-white/80">TaskWorkSession</span> (Holds actions where{" "}
-          <span className="text-white/80">endedAt</span> falls in the selected day or range,{" "}
-          <span className="text-white/80">countsTowardProductivity</span>). Each completion can produce one session;
-          multiple sessions per order are listed separately.
+          Dates are interpreted in <span className="text-white/80">America/Los_Angeles</span>.{" "}
+          <span className="text-white/80">Actions / work sessions</span> are TaskWorkSession rows (HOLDS,{" "}
+          <span className="text-white/80">countsTowardProductivity</span>) with <span className="text-white/80">endedAt</span>{" "}
+          in each business day window (midnight–5 PM local, or through now when today is in progress).
         </p>
         <p className="text-xs text-white/50 border border-white/10 rounded-lg px-3 py-2 bg-white/[0.03]">
-          End-of-day inventory below is a <span className="text-white/70">queue snapshot at 5 PM PST</span> from task
-          rows — not the same as action counts.
+          <span className="text-white/70">End-of-Day Queue Snapshot</span> is inventory at 5 PM local from task rows — not
+          the same as session actions. Work-session metrics begin from the date the TaskWorkSession ledger was introduced;
+          older dates may show legacy task-row activity instead.
         </p>
       </div>
 
@@ -448,23 +1065,31 @@ export default function DailyBreakdown() {
         <div className="text-center py-8 text-white/60">No data found for the selected date range</div>
       ) : (
         <>
-          {breakdowns.length > 1 && rangeSummary && (
-            <div className="space-y-8 mb-8">
-              <div>
-                <h3 className="text-md font-semibold text-white/90 mb-3">Range summary (all days)</h3>
-                {renderSessionSummaryCards(rangeSummary)}
-              </div>
-              {renderAgentTable(rangeByAgent, "range-agent")}
-              {renderQueueMovementTable(rangeByMovement, "range-mv")}
-              {renderDispositionTable(rangeByDisposition, "range-disp")}
-            </div>
+          {breakdowns.length > 1 && (
+            <>
+              {renderCoverageBanner(rangeLegacy, "range")}
+              {rangeSummary && (
+                <div className="space-y-8 mb-8">
+                  <div>
+                    <h3 className="text-md font-semibold text-white/90 mb-3">Range summary (all days)</h3>
+                    {renderSessionSummaryCards(rangeSummary)}
+                    {renderLegacySummaryCards(rangeLegacy)}
+                  </div>
+                  {renderAgentTable(rangeByAgent, "range-agent")}
+                  {renderQueueMovementTable(rangeByMovement, "range-mv")}
+                  {renderDispositionTable(rangeByDisposition, "range-disp")}
+                </div>
+              )}
+            </>
           )}
 
           {breakdowns.length === 1 && breakdowns[0].sessionSummary && (
             <div className="space-y-8 mb-8">
+              {renderCoverageBanner(breakdowns[0].legacyActivitySummary, "one")}
               <div>
                 <h3 className="text-md font-semibold text-white/90 mb-3">Work sessions</h3>
                 {renderSessionSummaryCards(breakdowns[0].sessionSummary)}
+                {renderLegacySummaryCards(breakdowns[0].legacyActivitySummary)}
               </div>
               {renderAgentTable(breakdowns[0].sessionsByAgent ?? [], "day-agent")}
               {renderQueueMovementTable(breakdowns[0].sessionsByQueueMovement ?? [], "day-mv")}
@@ -477,8 +1102,7 @@ export default function DailyBreakdown() {
               <div>
                 <h3 className="text-lg font-semibold text-white mb-2">End-of-Day Queue Snapshot</h3>
                 <p className="text-xs text-white/50 mb-4">
-                  Inventory by queue at 5 PM PST (or current time if today before cutoff). Derived from task rows and
-                  queue history — not productivity actions.
+                  Inventory by queue at 5 PM local (or current time if today before cutoff). Not productivity actions.
                 </p>
                 {Object.keys(breakdowns[0].queueCountsAtEndOfDay ?? {}).length > 0 ? (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -493,13 +1117,6 @@ export default function DailyBreakdown() {
                   <p className="text-white/45 text-sm">No EOD queue counts for this day.</p>
                 )}
               </div>
-              <div className="flex flex-wrap gap-3 text-xs text-white/45">
-                <span>
-                  Legacy task-row counts (same API fields): new {breakdowns[0].newTasksCount}, task endTime in day{" "}
-                  {breakdowns[0].completedTasksCount}, Agent Research at EOD {breakdowns[0].rolloverTasksCount}, pending
-                  lanes {breakdowns[0].totalPendingAtEndOfDay}.
-                </span>
-              </div>
               {(breakdowns[0].sessionSummary?.totalSessions ?? 0) > 0 ||
               (breakdowns[0].newTasksCount ?? 0) > 0 ||
               (breakdowns[0].completedTasksCount ?? 0) > 0 ||
@@ -508,11 +1125,12 @@ export default function DailyBreakdown() {
                   type="button"
                   onClick={() => {
                     setSelectedDayDetails(breakdowns[0]);
+                    setModalTabResetPage("summary");
                     setShowTaskDetails(true);
                   }}
                   className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
                 >
-                  View session rows &amp; legacy task lists
+                  View details (tabs)
                 </button>
               ) : null}
             </div>
@@ -526,7 +1144,9 @@ export default function DailyBreakdown() {
                     <th className="px-3 py-2 text-right">Actions</th>
                     <th className="px-3 py-2 text-right">Final</th>
                     <th className="px-3 py-2 text-right">Handoffs</th>
-                    <th className="px-3 py-2 text-right">Pending (EOD)</th>
+                    <th className="px-3 py-2 text-right">Legacy completed</th>
+                    <th className="px-3 py-2 text-right">New tasks</th>
+                    <th className="px-3 py-2 text-right">Pending EOD</th>
                     {allQueues.slice(0, 3).map((queue) => (
                       <th key={queue} className="px-3 py-2 text-xs max-w-[100px] truncate" title={queue}>
                         {queue.substring(0, 14)}
@@ -538,18 +1158,27 @@ export default function DailyBreakdown() {
                 <tbody className="divide-y divide-white/5">
                   {breakdowns.map((breakdown) => {
                     const ss = breakdown.sessionSummary;
+                    const actions = ss?.totalSessions ?? 0;
+                    const legComp = breakdown.completedTasksCount ?? 0;
+                    const highlightLegacy = actions === 0 && legComp > 0;
                     return (
                       <tr key={breakdown.date} className="hover:bg-white/5">
                         <td className="px-3 py-2 text-white font-medium text-xs whitespace-nowrap">
                           {formatDate(breakdown.date)}
                         </td>
-                        <td className="px-3 py-2 text-right text-blue-300 font-semibold">
-                          {ss?.totalSessions ?? 0}
+                        <td
+                          className={`px-3 py-2 text-right font-semibold ${highlightLegacy ? "text-amber-300/90" : "text-blue-300"}`}
+                          title={highlightLegacy ? "No sessions; legacy task rows exist" : undefined}
+                        >
+                          {actions}
+                          {highlightLegacy ? " *" : ""}
                         </td>
                         <td className="px-3 py-2 text-right text-emerald-300 font-semibold">
                           {ss?.finalResolutionCount ?? 0}
                         </td>
                         <td className="px-3 py-2 text-right text-amber-300 font-semibold">{ss?.handoffCount ?? 0}</td>
+                        <td className="px-3 py-2 text-right text-white/85 font-semibold">{legComp}</td>
+                        <td className="px-3 py-2 text-right text-white/80 font-semibold">{breakdown.newTasksCount ?? 0}</td>
                         <td className="px-3 py-2 text-right text-white/80 font-semibold">
                           {breakdown.totalPendingAtEndOfDay ?? "—"}
                         </td>
@@ -572,6 +1201,9 @@ export default function DailyBreakdown() {
                   })}
                 </tbody>
               </table>
+              <p className="text-[10px] text-white/40 mt-2">
+                * No work sessions that day but legacy completed task rows &gt; 0.
+              </p>
             </div>
           )}
         </>
@@ -580,12 +1212,12 @@ export default function DailyBreakdown() {
       {showTaskDetails && selectedDayDetails && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 rounded-lg p-6 max-w-6xl w-full max-h-[90vh] overflow-y-auto border border-white/20">
-            <div className="flex justify-between items-start mb-4">
+            <div className="flex justify-between items-start mb-4 gap-4">
               <div>
-                <h3 className="text-xl font-semibold text-white">
-                  Daily Activity — {formatDate(selectedDayDetails.date)}
-                </h3>
-                <p className="text-sm text-white/60 mt-1">Sessions use endedAt in this local calendar day (5 PM PST window).</p>
+                <h3 className="text-xl font-semibold text-white">Daily Activity — {formatDate(selectedDayDetails.date)}</h3>
+                <p className="text-sm text-white/60 mt-1">
+                  Pacific business-day window for sessions and legacy rows. Tabs reset pagination when changed.
+                </p>
               </div>
               <button
                 type="button"
@@ -593,218 +1225,29 @@ export default function DailyBreakdown() {
                   setShowTaskDetails(false);
                   setSelectedDayDetails(null);
                 }}
-                className="text-white/60 hover:text-white text-2xl leading-none"
+                className="text-white/60 hover:text-white text-2xl leading-none shrink-0"
                 aria-label="Close"
               >
                 ×
               </button>
             </div>
 
-            {renderSessionSummaryCards(selectedDayDetails.sessionSummary)}
-
-            <div className="mt-8 mb-6">
-              <h4 className="text-lg font-semibold text-white mb-2">Session details</h4>
-              <p className="text-xs text-white/50 mb-3">
-                One row per TaskWorkSession. The same order can appear multiple times if the task had several actions.
-              </p>
-              {selectedDayDetails.sessionDetails && selectedDayDetails.sessionDetails.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-white/5">
-                      <tr>
-                        <th className="px-2 py-2 text-left text-white/60">Order #</th>
-                        <th className="px-2 py-2 text-left text-white/60">Customer email</th>
-                        <th className="px-2 py-2 text-left text-white/60">Agent</th>
-                        <th className="px-2 py-2 text-left text-white/60">Queues</th>
-                        <th className="px-2 py-2 text-left text-white/60">Disposition</th>
-                        <th className="px-2 py-2 text-left text-white/60">Outcome</th>
-                        <th className="px-2 py-2 text-left text-white/60">Final</th>
-                        <th className="px-2 py-2 text-left text-white/60">Started</th>
-                        <th className="px-2 py-2 text-left text-white/60">Ended</th>
-                        <th className="px-2 py-2 text-right text-white/60">Duration</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {selectedDayDetails.sessionDetails.map((sess) => (
-                        <tr key={sess.workSessionId}>
-                          <td className="px-2 py-1.5 text-white font-mono whitespace-nowrap">{sess.orderNumber ?? "—"}</td>
-                          <td className="px-2 py-1.5 text-white/80 max-w-[140px] truncate" title={sess.customerEmail ?? ""}>
-                            {sess.customerEmail ?? "—"}
-                          </td>
-                          <td className="px-2 py-1.5 text-white/80 whitespace-nowrap">
-                            <div>{sess.agentName}</div>
-                            <div className="text-[10px] text-white/40">{sess.agentEmail}</div>
-                          </td>
-                          <td className="px-2 py-1.5 text-cyan-200/90 whitespace-nowrap">
-                            {(sess.fromQueue ?? "—")} → {sess.toQueue ?? "—"}
-                          </td>
-                          <td className="px-2 py-1.5 text-white/80">{sess.disposition ?? "—"}</td>
-                          <td className="px-2 py-1.5 text-amber-200/90">{sess.outcomeType}</td>
-                          <td className="px-2 py-1.5">{sess.isFinalResolution ? "Yes" : "—"}</td>
-                          <td className="px-2 py-1.5 text-white/60 whitespace-nowrap">
-                            {sess.startedAt ? new Date(sess.startedAt).toLocaleString() : "—"}
-                          </td>
-                          <td className="px-2 py-1.5 text-white/60 whitespace-nowrap">
-                            {new Date(sess.endedAt).toLocaleString()}
-                          </td>
-                          <td className="px-2 py-1.5 text-right text-white/90">
-                            {formatDurationSec(sess.durationSec ?? 0)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-white/50 text-sm py-4">No work sessions ended on this day.</p>
-              )}
+            <div className="flex flex-wrap gap-2 mb-4 border-b border-white/10 pb-3">
+              {modalTabsAvailable.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setModalTabResetPage(t.id)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                    resolvedModalTab === t.id ? "bg-blue-600 text-white" : "bg-white/10 text-white/70 hover:bg-white/15"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
 
-            <div className="border-t border-white/10 pt-6 mb-6">
-              <h4 className="text-lg font-semibold text-white mb-2">End-of-Day Queue Snapshot</h4>
-              <p className="text-xs text-white/50 mb-3">
-                Inventory at 5 PM PST from task rows — not the same as action totals above.
-              </p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                {Object.entries(selectedDayDetails.queueCountsAtEndOfDay ?? {}).map(([queue, count]) => (
-                  <div key={queue} className="p-3 bg-white/5 rounded-lg border border-white/10">
-                    <div className="text-xs text-white/60 mb-1">{queue}</div>
-                    <div className="text-xl font-bold text-white">{count as number}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {selectedDayDetails.newTasks && selectedDayDetails.newTasks.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-md font-semibold text-white/80 mb-2">
-                  Legacy — new tasks created ({selectedDayDetails.newTasks.length})
-                </h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-white/5">
-                      <tr>
-                        <th className="px-2 py-1 text-left text-white/60">Order #</th>
-                        <th className="px-2 py-1 text-left text-white/60">Email</th>
-                        <th className="px-2 py-1 text-left text-white/60">Agent</th>
-                        <th className="px-2 py-1 text-left text-white/60">Created</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {selectedDayDetails.newTasks.map((task) => (
-                        <tr key={task.id}>
-                          <td className="px-2 py-1 text-white font-mono">{task.orderNumber ?? "N/A"}</td>
-                          <td className="px-2 py-1 text-white/80">{task.customerEmail ?? "N/A"}</td>
-                          <td className="px-2 py-1 text-white/80">{task.agentName}</td>
-                          <td className="px-2 py-1 text-white/60">
-                            {task.createdAt ? new Date(task.createdAt).toLocaleString() : "N/A"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {selectedDayDetails.completedTasks && selectedDayDetails.completedTasks.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-md font-semibold text-white/80 mb-2">
-                  Legacy — tasks with endTime in this day ({selectedDayDetails.completedTasks.length})
-                </h4>
-                <p className="text-xs text-white/45 mb-2">Task-level completion timestamp, not session-level only.</p>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-white/5">
-                      <tr>
-                        <th className="px-2 py-1 text-left text-white/60">Order #</th>
-                        <th className="px-2 py-1 text-left text-white/60">Email</th>
-                        <th className="px-2 py-1 text-left text-white/60">Disposition</th>
-                        <th className="px-2 py-1 text-left text-white/60">Agent</th>
-                        <th className="px-2 py-1 text-left text-white/60">Completed</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {selectedDayDetails.completedTasks.map((task) => (
-                        <tr key={task.id}>
-                          <td className="px-2 py-1 text-white font-mono">{task.orderNumber ?? "N/A"}</td>
-                          <td className="px-2 py-1 text-white/80">{task.customerEmail ?? "N/A"}</td>
-                          <td className="px-2 py-1 text-green-300">{task.disposition ?? "N/A"}</td>
-                          <td className="px-2 py-1 text-white/80">{task.agentName}</td>
-                          <td className="px-2 py-1 text-white/60">
-                            {task.endTime ? new Date(task.endTime).toLocaleString() : "N/A"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {selectedDayDetails.rolloverTasks && selectedDayDetails.rolloverTasks.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-md font-semibold text-white/80 mb-2">
-                  Legacy — Agent Research at EOD ({selectedDayDetails.rolloverTasks.length})
-                </h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-white/5">
-                      <tr>
-                        <th className="px-2 py-1 text-left text-white/60">Order #</th>
-                        <th className="px-2 py-1 text-left text-white/60">Email</th>
-                        <th className="px-2 py-1 text-left text-white/60">Agent</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {selectedDayDetails.rolloverTasks.map((task) => (
-                        <tr key={task.id}>
-                          <td className="px-2 py-1 text-white font-mono">{task.orderNumber ?? "N/A"}</td>
-                          <td className="px-2 py-1 text-white/80">{task.customerEmail ?? "N/A"}</td>
-                          <td className="px-2 py-1 text-white/80">{task.agentName}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {selectedDayDetails.tasksInQueueAtEndOfDay &&
-              Object.keys(selectedDayDetails.tasksInQueueAtEndOfDay).length > 0 && (
-                <div className="mb-4">
-                  <h4 className="text-md font-semibold text-white/80 mb-2">Tasks in each queue at EOD</h4>
-                  {Object.entries(selectedDayDetails.tasksInQueueAtEndOfDay).map(([queue, tasks]) => (
-                    <div key={queue} className="mb-4">
-                      <h5 className="text-sm font-semibold text-white mb-2">
-                        {queue} ({tasks.length})
-                      </h5>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead className="bg-white/5">
-                            <tr>
-                              <th className="px-2 py-1 text-left text-white/60">Order #</th>
-                              <th className="px-2 py-1 text-left text-white/60">Email</th>
-                              <th className="px-2 py-1 text-left text-white/60">Agent</th>
-                              <th className="px-2 py-1 text-left text-white/60">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                            {tasks.map((task) => (
-                              <tr key={task.id}>
-                                <td className="px-2 py-1 text-white font-mono">{task.orderNumber ?? "N/A"}</td>
-                                <td className="px-2 py-1 text-white/80">{task.customerEmail ?? "N/A"}</td>
-                                <td className="px-2 py-1 text-white/80">{task.agentName}</td>
-                                <td className="px-2 py-1 text-white/80">{task.status}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            {renderModalContent()}
 
             <div className="mt-6 flex justify-end">
               <button
