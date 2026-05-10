@@ -1,5 +1,17 @@
 import { create } from 'zustand';
 
+/** Values allowed on Task beyond declared fields (API merges, type-specific columns, session snapshots). */
+export type TaskExtraValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | string[]
+  | number[]
+  | Record<string, unknown>
+  | unknown[];
+
 // Task interface matching agent page
 export interface Task {
   id: string;
@@ -18,8 +30,76 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   taskType?: string;
-  // All other task type specific fields...
-  [key: string]: any; // Allow additional fields
+  /** Agent portal: completed row from TaskWorkSession (Holds multi-stage). */
+  completionSource?: "TASK" | "TASK_WORK_SESSION";
+  workSessionId?: string;
+  /** Real Task.id when completionSource is TASK_WORK_SESSION (store key is id). */
+  taskId?: string;
+  holdsFromQueue?: string;
+  holdsToQueue?: string;
+  outcomeType?: string;
+  isFinalResolution?: boolean;
+  /** Session / analytics metadata sometimes present on merged rows */
+  countsTowardProductivity?: boolean;
+  workflowType?: string;
+  source?: string;
+  startedAt?: string;
+  endedAt?: string;
+  // --- Type-specific / UI fields (explicit so JSX and logic are not widened to TaskExtraValue) ---
+  customerName?: string;
+  wodIvcsSource?: string;
+  documentNumber?: string;
+  amount?: string | number;
+  webOrderDifference?: string | number;
+  purchaseDate?: string;
+  orderAge?: string;
+  completionTime?: string;
+  salesforceCaseNumber?: string;
+  emailRequestFor?: string;
+  details?: string;
+  yotpoCustomerName?: string;
+  yotpoEmail?: string;
+  yotpoOrderDate?: string;
+  yotpoProduct?: string;
+  yotpoIssueTopic?: string;
+  yotpoReviewDate?: string;
+  yotpoReview?: string;
+  yotpoSfOrderLink?: string;
+  refundAmount?: string | number;
+  paymentMethod?: string;
+  refundReason?: string;
+  productSku?: string;
+  quantity?: string | number;
+  holdsOrderNumber?: string;
+  holdsOrderDate?: string;
+  holdsCustomerEmail?: string;
+  holdsOrderAmount?: string | number;
+  holdsStatus?: string;
+  holdsDaysInSystem?: string | number;
+  holdsNotes?: string;
+  holdsPriority?: number;
+  holdsQueueHistory?: unknown[];
+  // --- Also used by agent list view (`/agent` page) ---
+  warehouseEdgeStatus?: string;
+  webOrder?: string;
+  webOrderSubtotal?: number;
+  webOrderTotal?: number;
+  nsVsWebDiscrepancy?: number;
+  netSuiteTotal?: number;
+  webTotal?: number;
+  webVsNsDifference?: number;
+  shippingCountry?: string;
+  shippingState?: string;
+  orderAgeDays?: number;
+  timestamp?: string;
+  customerNameNumber?: string;
+  salesOrderId?: string;
+  amountToBeRefunded?: number;
+  verifiedRefund?: boolean;
+  yotpoDateSubmitted?: string;
+  yotpoPrOrYotpo?: string;
+  // Forward-compatible: API may attach additional JSON-like fields
+  [key: string]: TaskExtraValue;
 }
 
 interface TaskStore {

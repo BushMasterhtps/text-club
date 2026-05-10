@@ -35,6 +35,10 @@ export default function TaskDetailDrawer({
   isTestMode = false,
   onStatsUpdate,
 }: TaskDetailDrawerProps) {
+  const isWorkSessionSnapshot = task.completionSource === "TASK_WORK_SESSION";
+  const effectiveTaskId =
+    isWorkSessionSnapshot && task.taskId ? task.taskId : task.id;
+
   const { updateTask } = useTaskStore();
   const [isProcessing, setIsProcessing] = useState(false);
   /** True while POST /start is in flight — blocks assistance/complete until server confirms (avoids optimistic-start race). */
@@ -74,18 +78,19 @@ export default function TaskDetailDrawer({
   }, [task.id, task.disposition]);
 
   const assistanceHistoryMessages = useMemo(() => {
-    if (!isOpen || !task.id || !agentEmail?.trim() || isTestMode) return [];
-    if (assistanceHistoryCache?.taskId !== task.id) return [];
+    if (isWorkSessionSnapshot) return [];
+    if (!isOpen || !effectiveTaskId || !agentEmail?.trim() || isTestMode) return [];
+    if (assistanceHistoryCache?.taskId !== effectiveTaskId) return [];
     return assistanceHistoryCache.messages;
-  }, [isOpen, task.id, agentEmail, isTestMode, assistanceHistoryCache]);
+  }, [isWorkSessionSnapshot, isOpen, effectiveTaskId, agentEmail, isTestMode, assistanceHistoryCache]);
 
   useEffect(() => {
-    if (!isOpen || !task.id || !agentEmail?.trim() || isTestMode) {
+    if (!isOpen || !effectiveTaskId || !agentEmail?.trim() || isTestMode || isWorkSessionSnapshot) {
       return;
     }
 
     let cancelled = false;
-    const fetchTaskId = task.id;
+    const fetchTaskId = effectiveTaskId;
     queueMicrotask(() => {
       if (cancelled) return;
       setAssistanceHistoryLoading(true);
@@ -122,7 +127,7 @@ export default function TaskDetailDrawer({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, task.id, agentEmail, isTestMode]);
+  }, [isOpen, effectiveTaskId, agentEmail, isTestMode, isWorkSessionSnapshot]);
 
   const assistanceHistoryDisplay = useMemo(() => {
     const notes = task.assistanceNotes?.trim() || '';
@@ -163,6 +168,7 @@ export default function TaskDetailDrawer({
   const taskTypeInfo = getTaskTypeInfo(task.taskType);
 
   const handleStartTask = async () => {
+    if (isWorkSessionSnapshot) return;
     setIsProcessing(true);
     setIsStartInFlight(true);
     try {
@@ -183,7 +189,7 @@ export default function TaskDetailDrawer({
       }
 
       // Call API
-      const response = await fetch(`/api/agent/tasks/${task.id}/start`, {
+      const response = await fetch(`/api/agent/tasks/${effectiveTaskId}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: agentEmail }),
@@ -216,6 +222,7 @@ export default function TaskDetailDrawer({
   };
 
   const handleRequestAssistance = async () => {
+    if (isWorkSessionSnapshot) return;
     if (!assistanceMessage.trim()) {
       setToast({ message: 'Please enter a message', type: 'error' });
       return;
@@ -243,7 +250,7 @@ export default function TaskDetailDrawer({
       }
 
       // Call API
-      const response = await fetch(`/api/agent/tasks/${task.id}/assistance`, {
+      const response = await fetch(`/api/agent/tasks/${effectiveTaskId}/assistance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -285,6 +292,7 @@ export default function TaskDetailDrawer({
   };
 
   const handleCompleteTask = async () => {
+    if (isWorkSessionSnapshot) return;
     if (!disposition.trim()) {
       setToast({ message: 'Please select a disposition', type: 'error' });
       return;
@@ -292,9 +300,9 @@ export default function TaskDetailDrawer({
 
     // Validation logic matching List view
     let finalDisposition = disposition;
-    let finalSfCaseNumber = sfCaseNumber;
+    let finalSfCaseNumber: string | undefined = sfCaseNumber;
     let finalOrderAmount = orderAmount;
-    let finalDispositionNote = dispositionNote;
+    let finalDispositionNote: string | undefined = dispositionNote;
 
     // For WOD/IVCS tasks, require sub-disposition for both main dispositions
     if (task.taskType === "WOD_IVCS" && (disposition === "Completed" || disposition === "Unable to Complete")) {
@@ -409,7 +417,7 @@ export default function TaskDetailDrawer({
         body.dispositionNote = finalDispositionNote;
       }
 
-      const response = await fetch(`/api/agent/tasks/${task.id}/complete`, {
+      const response = await fetch(`/api/agent/tasks/${effectiveTaskId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -437,7 +445,7 @@ export default function TaskDetailDrawer({
         
         if (DEBUG_PERFORMANCE) {
           console.log('✅ Task completed:', {
-            taskId: task.id,
+            taskId: effectiveTaskId,
             endTime: serverEndTime,
             selectedDate: new Date().toISOString().split('T')[0],
             endDateStr: new Date(serverEndTime).toISOString().split('T')[0]
@@ -497,7 +505,12 @@ export default function TaskDetailDrawer({
                 <span className="text-white/40">•</span>
                 <span className="text-white font-medium">{task.brand}</span>
               </div>
-              <div className="text-xs text-white/50">Task ID: {task.id}</div>
+              <div className="text-xs text-white/50 space-y-0.5">
+                <div>Task ID: {effectiveTaskId}</div>
+                {isWorkSessionSnapshot && task.workSessionId && (
+                  <div className="text-white/40">Work session: {task.workSessionId}</div>
+                )}
+              </div>
             </div>
             <button
               onClick={onClose}
@@ -524,6 +537,12 @@ export default function TaskDetailDrawer({
               <div className="text-green-200/80 text-xs mt-1">
                 You can now continue working on this task
               </div>
+            </div>
+          )}
+
+          {isWorkSessionSnapshot && (
+            <div className="bg-white/[0.06] border border-white/15 rounded-lg p-3 text-sm text-white/70">
+              Read-only: completed Holds work session. Start, assistance, and complete actions are disabled.
             </div>
           )}
 
@@ -879,7 +898,7 @@ export default function TaskDetailDrawer({
 
           {/* Actions */}
           <div className="space-y-3 pt-4 border-t border-white/10 sticky bottom-0 bg-neutral-900 pb-2">
-            {!isStarted && !isCompleted && (
+            {!isWorkSessionSnapshot && !isStarted && !isCompleted && (
               <button
                 onClick={handleStartTask}
                 disabled={isProcessing || isStartInFlight}
@@ -889,7 +908,7 @@ export default function TaskDetailDrawer({
               </button>
             )}
 
-            {showPostStartActions && !isLocked && (
+            {!isWorkSessionSnapshot && showPostStartActions && !isLocked && (
               <>
                 {!showAssistanceInput ? (
                   <button
@@ -930,7 +949,7 @@ export default function TaskDetailDrawer({
               </>
             )}
 
-            {showPostStartActions && !isLocked && (
+            {!isWorkSessionSnapshot && showPostStartActions && !isLocked && (
               <div className="space-y-4">
                 {/* Order Amount field for Holds tasks - MANDATORY */}
                 {task.taskType === "HOLDS" && (
@@ -1287,8 +1306,38 @@ export default function TaskDetailDrawer({
             )}
 
             {isCompleted && (
-              <div className="text-center text-white/60 text-sm">
-                Task completed: {task.disposition}
+              <div className="text-center text-white/60 text-sm space-y-1">
+                <div>Task completed: {task.disposition || "—"}</div>
+                {isWorkSessionSnapshot && (
+                  <>
+                    {task.outcomeType != null && task.outcomeType !== "" && (
+                      <div className="text-xs text-white/45">Outcome: {String(task.outcomeType)}</div>
+                    )}
+                    {task.holdsFromQueue && task.holdsToQueue && (
+                      <div className="text-xs text-white/45">
+                        Queues: {task.holdsFromQueue} → {task.holdsToQueue}
+                      </div>
+                    )}
+                    {typeof task.isFinalResolution === "boolean" && (
+                      <div className="text-xs text-white/45">
+                        Final resolution: {task.isFinalResolution ? "Yes" : "No"}
+                      </div>
+                    )}
+                    {task.startTime && (
+                      <div className="text-xs text-white/45">
+                        Session started: {new Date(task.startTime).toLocaleString()}
+                      </div>
+                    )}
+                    {task.endTime && (
+                      <div className="text-xs text-white/45">
+                        Session ended: {new Date(task.endTime).toLocaleString()}
+                      </div>
+                    )}
+                    {typeof task.durationSec === "number" && (
+                      <div className="text-xs text-white/45">Duration: {task.durationSec}s</div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>

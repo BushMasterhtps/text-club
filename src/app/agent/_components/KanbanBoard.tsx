@@ -148,20 +148,31 @@ export default function KanbanBoard({
           const data = await response.json();
           if (data.success && data.tasks) {
             // Transform tasks to match Task interface and add to store
-            const completedTasks: Task[] = data.tasks.map((task: any) => ({
-              id: task.id,
-              brand: task.brand || 'Unknown',
-              phone: task.phone || '',
-              text: task.text || '',
+            const completedTasks: Task[] = data.tasks.map((task: Record<string, unknown>) => ({
+              id: task.id as string,
+              brand: (task.brand as string) || 'Unknown',
+              phone: (task.phone as string) || '',
+              text: (task.text as string) || '',
               status: 'COMPLETED' as const,
-              assignedToId: task.assignedToId || '',
-              startTime: task.startTime || undefined,
-              endTime: task.endTime || undefined,
-              durationSec: task.durationSec || undefined,
-              disposition: task.disposition || undefined,
-              createdAt: task.createdAt || new Date().toISOString(),
-              updatedAt: task.updatedAt || new Date().toISOString(),
-              taskType: task.taskType || undefined,
+              assignedToId: (task.assignedToId as string) || '',
+              startTime: (task.startTime as string | undefined) || undefined,
+              endTime: (task.endTime as string | undefined) || undefined,
+              durationSec: (task.durationSec as number | undefined) || undefined,
+              disposition: (task.disposition as string | undefined) || undefined,
+              createdAt: (task.createdAt as string) || new Date().toISOString(),
+              updatedAt: (task.updatedAt as string) || new Date().toISOString(),
+              taskType: task.taskType as string | undefined,
+              completionSource: task.completionSource as Task["completionSource"] | undefined,
+              workSessionId: task.workSessionId as string | undefined,
+              taskId: task.taskId as string | undefined,
+              holdsFromQueue: task.holdsFromQueue as string | undefined,
+              holdsToQueue: task.holdsToQueue as string | undefined,
+              outcomeType: task.outcomeType as string | undefined,
+              isFinalResolution: task.isFinalResolution as boolean | undefined,
+              holdsStatus: task.holdsStatus as string | undefined,
+              holdsOrderNumber: task.holdsOrderNumber as string | undefined,
+              holdsCustomerEmail: task.holdsCustomerEmail as string | undefined,
+              customerName: task.customerName as string | undefined,
             }));
             
             // Merge completed tasks silently (won't trigger active task re-renders)

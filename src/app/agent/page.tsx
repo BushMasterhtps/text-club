@@ -6,7 +6,7 @@ import ThemeToggle from '@/app/_components/ThemeToggle';
 import AgentOneOnOneNotes from '@/app/_components/AgentOneOnOneNotes';
 import KnowledgeSection from '@/app/_components/KnowledgeSection';
 import { Toast } from '@/app/_components/Toast';
-import { useTaskStore } from '@/stores/useTaskStore';
+import { useTaskStore, type Task } from '@/stores/useTaskStore';
 import KanbanBoard from '@/app/agent/_components/KanbanBoard';
 import { generateTestTasks } from '@/lib/test-data-generator';
 import { parseFetchJsonSafely } from '@/lib/safe-fetch-json';
@@ -80,80 +80,6 @@ function PrimaryButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
       className={`px-3 py-1.5 rounded-md text-sm font-semibold bg-gradient-to-r from-sky-500/90 to-indigo-500/90 hover:from-sky-500 hover:to-indigo-500 text-white ring-1 ring-sky-400/40 disabled:opacity-50 ${className}`}
     />
   );
-}
-
-interface Task {
-  id: string;
-  brand: string;
-  phone: string;
-  text: string;
-  status: "PENDING" | "IN_PROGRESS" | "ASSISTANCE_REQUIRED" | "RESOLVED" | "COMPLETED";
-  assignedToId: string;
-  startTime?: string;
-  endTime?: string;
-  durationSec?: number;
-  disposition?: string;
-  assistanceNotes?: string;
-  managerResponse?: string;
-  createdAt: string;
-  updatedAt: string;
-  taskType?: string;
-  // WOD/IVCS specific fields
-  wodIvcsSource?: string;
-  documentNumber?: string;
-  warehouseEdgeStatus?: string;
-  amount?: number;
-  webOrderDifference?: number;
-  webOrder?: string;
-  webOrderSubtotal?: number;
-  webOrderTotal?: number;
-  nsVsWebDiscrepancy?: number;
-  customerName?: string;
-  netSuiteTotal?: number;
-  webTotal?: number;
-  webVsNsDifference?: number;
-  shippingCountry?: string;
-  shippingState?: string;
-  purchaseDate?: string;
-  orderAge?: string;
-  orderAgeDays?: number;
-  // Email Request specific fields
-  emailRequestFor?: string;
-  details?: string;
-  timestamp?: string;
-  completionTime?: string;
-  salesforceCaseNumber?: string;
-  customerNameNumber?: string;
-  salesOrderId?: string;
-  // Standalone Refund specific fields
-  amountToBeRefunded?: number;
-  verifiedRefund?: boolean;
-  paymentMethod?: string;
-  refundReason?: string;
-  productSku?: string;
-  quantity?: number;
-  refundAmount?: number;
-  // Yotpo specific fields
-  yotpoDateSubmitted?: string;
-  yotpoPrOrYotpo?: string;
-  yotpoCustomerName?: string;
-  yotpoEmail?: string;
-  yotpoOrderDate?: string;
-  yotpoProduct?: string;
-  yotpoIssueTopic?: string;
-  yotpoReviewDate?: string;
-  yotpoReview?: string;
-  yotpoSfOrderLink?: string;
-  // Holds specific fields
-  holdsOrderDate?: string;
-  holdsOrderNumber?: string;
-  holdsCustomerEmail?: string;
-  holdsPriority?: number;
-  holdsStatus?: string;
-  holdsDaysInSystem?: number;
-  holdsOrderAmount?: number;
-  holdsQueueHistory?: any;
-  holdsNotes?: string;
 }
 
 interface AgentStats {

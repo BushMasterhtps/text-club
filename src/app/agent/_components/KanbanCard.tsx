@@ -129,15 +129,43 @@ const KanbanCard = React.memo(function KanbanCard({ task, onClick, isReadOnly = 
               Completed: {formatTime(task.endTime)}
             </div>
           )}
+
+          {task.status === 'COMPLETED' &&
+            task.taskType === 'HOLDS' &&
+            task.completionSource === 'TASK_WORK_SESSION' &&
+            task.holdsFromQueue &&
+            task.holdsToQueue && (
+              <div className="text-xs text-white/45">
+                Queues: {task.holdsFromQueue} → {task.holdsToQueue}
+              </div>
+            )}
+
+          {task.status === 'COMPLETED' &&
+            task.taskType === 'HOLDS' &&
+            task.completionSource === 'TASK_WORK_SESSION' &&
+            task.outcomeType && (
+              <div className="text-xs text-white/45">Outcome: {task.outcomeType}</div>
+            )}
+
+          {task.status === 'COMPLETED' &&
+            task.completionSource === 'TASK_WORK_SESSION' &&
+            typeof task.durationSec === 'number' && (
+              <div className="text-xs text-white/45">{task.durationSec}s</div>
+            )}
         </div>
       )}
 
       {/* Disposition Badge (if completed) */}
       {task.status === 'COMPLETED' && task.disposition && (
-        <div className="mt-2">
+        <div className="mt-2 flex flex-wrap gap-1 items-center">
           <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded">
             {task.disposition}
           </span>
+          {task.taskType === 'HOLDS' &&
+            task.completionSource === 'TASK_WORK_SESSION' &&
+            task.isFinalResolution === true && (
+              <span className="text-[10px] bg-white/10 text-white/60 px-2 py-0.5 rounded">Final</span>
+            )}
         </div>
       )}
     </div>
@@ -164,7 +192,15 @@ const KanbanCard = React.memo(function KanbanCard({ task, onClick, isReadOnly = 
     prevTask.text !== nextTask.text ||
     prevTask.brand !== nextTask.brand ||
     prevTask.customerName !== nextTask.customerName ||
-    prevTask.phone !== nextTask.phone
+    prevTask.phone !== nextTask.phone ||
+    prevTask.completionSource !== nextTask.completionSource ||
+    prevTask.workSessionId !== nextTask.workSessionId ||
+    prevTask.taskId !== nextTask.taskId ||
+    prevTask.holdsFromQueue !== nextTask.holdsFromQueue ||
+    prevTask.holdsToQueue !== nextTask.holdsToQueue ||
+    prevTask.outcomeType !== nextTask.outcomeType ||
+    prevTask.isFinalResolution !== nextTask.isFinalResolution ||
+    prevTask.durationSec !== nextTask.durationSec
   ) {
     return false; // Props changed, re-render
   }

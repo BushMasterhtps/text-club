@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { withSelfHealing } from "@/lib/self-healing/wrapper";
 import { authorizeAgentTargetEmail } from "@/lib/auth";
 import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
+import { TaskType } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,109 +38,133 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get completion stats by task type for today (including sent-back tasks and unassigned completed tasks)
-    const completionStats = await withSelfHealing(
-      () => prisma.task.groupBy({
-        by: ['taskType'],
-        where: {
+    const nonHoldsTaskWhereToday = {
+      AND: [
+        { taskType: { not: TaskType.HOLDS } },
+        {
           OR: [
             {
               assignedToId: user.id,
-              status: 'COMPLETED',
+              status: "COMPLETED" as const,
               endTime: {
                 gte: startUtc,
                 lt: endExclusiveUtc,
-              }
+              },
             },
             {
               sentBackBy: user.id,
-              status: 'PENDING',
+              status: "PENDING" as const,
               endTime: {
                 gte: startUtc,
                 lt: endExclusiveUtc,
-              }
+              },
             },
-            // NEW: Include tasks completed by this user but now unassigned (e.g., "Unable to Resolve" for Holds)
             {
               completedBy: user.id,
-              status: 'COMPLETED',
+              status: "COMPLETED" as const,
               endTime: {
                 gte: startUtc,
                 lt: endExclusiveUtc,
-              }
-            }
-          ]
-        },
-        _count: {
-          id: true
-        }
-      }),
-      { service: 'database', useRetry: true, useCircuitBreaker: true }
-    );
-
-    // Get total completion stats (lifetime) including sent-back tasks and unassigned completed tasks
-    const totalStats = await withSelfHealing(
-      () => prisma.task.groupBy({
-        by: ['taskType'],
-        where: {
-          OR: [
-            {
-              assignedToId: user.id,
-              status: 'COMPLETED'
+              },
             },
-            {
-              sentBackBy: user.id,
-              status: 'PENDING'
-            },
-            // NEW: Include tasks completed by this user but now unassigned (e.g., "Unable to Resolve" for Holds)
-            {
-              completedBy: user.id,
-              status: 'COMPLETED'
-            }
-          ]
+          ],
         },
-        _count: {
-          id: true
-        }
-      }),
-      { service: 'database', useRetry: true, useCircuitBreaker: true }
-    );
-
-
-    // Format the response
-    const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'YOTPO', 'HOLDS', 'STANDALONE_REFUNDS'];
-    const stats = {
-      today: {} as Record<string, number>,
-      total: {} as Record<string, number>
+      ],
     };
 
-    // Initialize all task types with 0
-    taskTypes.forEach(taskType => {
+    const nonHoldsTaskWhereLifetime = {
+      AND: [
+        { taskType: { not: TaskType.HOLDS } },
+        {
+          OR: [
+            {
+              assignedToId: user.id,
+              status: "COMPLETED" as const,
+            },
+            {
+              sentBackBy: user.id,
+              status: "PENDING" as const,
+            },
+            {
+              completedBy: user.id,
+              status: "COMPLETED" as const,
+            },
+          ],
+        },
+      ],
+    };
+
+    const holdsSessionWhereToday = {
+      taskType: TaskType.HOLDS,
+      agentId: user.id,
+      countsTowardProductivity: true,
+      endedAt: {
+        gte: startUtc,
+        lt: endExclusiveUtc,
+      },
+    };
+
+    const holdsSessionWhereLifetime = {
+      taskType: TaskType.HOLDS,
+      agentId: user.id,
+      countsTowardProductivity: true,
+    };
+
+    const [completionStats, holdsTodayCount, totalStats, holdsLifetimeCount] = await withSelfHealing(
+      () =>
+        Promise.all([
+          prisma.task.groupBy({
+            by: ["taskType"],
+            where: nonHoldsTaskWhereToday,
+            _count: { id: true },
+          }),
+          prisma.taskWorkSession.count({ where: holdsSessionWhereToday }),
+          prisma.task.groupBy({
+            by: ["taskType"],
+            where: nonHoldsTaskWhereLifetime,
+            _count: { id: true },
+          }),
+          prisma.taskWorkSession.count({ where: holdsSessionWhereLifetime }),
+        ]),
+      { service: "database", useRetry: true, useCircuitBreaker: true }
+    );
+
+    // Format the response
+    const taskTypes = ["TEXT_CLUB", "WOD_IVCS", "EMAIL_REQUESTS", "YOTPO", "HOLDS", "STANDALONE_REFUNDS"];
+    const stats = {
+      today: {} as Record<string, number>,
+      total: {} as Record<string, number>,
+    };
+
+    taskTypes.forEach((taskType) => {
       stats.today[taskType] = 0;
       stats.total[taskType] = 0;
     });
 
-    // Fill in actual completion counts for today
-    completionStats.forEach(stat => {
+    completionStats.forEach((stat) => {
       stats.today[stat.taskType] = stat._count.id;
     });
 
-    // Fill in actual completion counts for total
-    totalStats.forEach(stat => {
+    totalStats.forEach((stat) => {
       stats.total[stat.taskType] = stat._count.id;
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      stats,
-      date: date || new Date().toISOString().split('T')[0]
-    });
+    stats.today.HOLDS = holdsTodayCount;
+    stats.total.HOLDS = holdsLifetimeCount;
 
-  } catch (error: any) {
+    return NextResponse.json({
+      success: true,
+      stats,
+      date: date || new Date().toISOString().split("T")[0],
+    });
+  } catch (error: unknown) {
     console.error("Error fetching completion stats:", error);
-    return NextResponse.json({ 
-      success: false, 
-      error: error?.message || "Failed to fetch completion stats" 
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to fetch completion stats",
+      },
+      { status: 500 }
+    );
   }
 }

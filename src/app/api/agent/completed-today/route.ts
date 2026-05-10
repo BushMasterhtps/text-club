@@ -3,6 +3,34 @@ import { prisma } from "@/lib/prisma";
 import { authorizeAgentTargetEmail } from "@/lib/auth";
 import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
 import { logRouteTiming } from "@/lib/route-timing-log";
+import { TaskType } from "@prisma/client";
+
+const taskSelectForCompletedList = {
+  id: true,
+  brand: true,
+  phone: true,
+  text: true,
+  status: true,
+  taskType: true,
+  assignedToId: true,
+  startTime: true,
+  endTime: true,
+  durationSec: true,
+  disposition: true,
+  createdAt: true,
+  updatedAt: true,
+  holdsStatus: true,
+  holdsOrderNumber: true,
+  holdsCustomerEmail: true,
+  customerName: true,
+  rawMessage: {
+    select: {
+      brand: true,
+      phone: true,
+      text: true,
+    },
+  },
+} as const;
 
 export async function GET(req: NextRequest) {
   const route = "GET /api/agent/completed-today";
@@ -19,10 +47,9 @@ export async function GET(req: NextRequest) {
 
     userEmail = gate.targetEmail;
 
-    // Find the user by email
     const user = await prisma.user.findUnique({
       where: { email: gate.targetEmail },
-      select: { id: true, isActive: true }
+      select: { id: true, isActive: true },
     });
 
     if (!user) {
@@ -33,7 +60,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "User account is paused" }, { status: 403 });
     }
 
-    const dateParam = searchParams.get("date"); // YYYY-MM-DD or omit for today (PST fixed UTC−8, same as stats)
+    const dateParam = searchParams.get("date");
     let startUtc: Date;
     let endExclusiveUtc: Date;
     try {
@@ -45,74 +72,111 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get completed tasks for today (including unassigned completed tasks, e.g., "Unable to Resolve" for Holds)
-    const tasks = await prisma.task.findMany({
-      where: {
-        OR: [
-          {
-            assignedToId: user.id,
-            status: "COMPLETED",
-            endTime: {
-              gte: startUtc,
-              lt: endExclusiveUtc,
-            }
+    const [tasks, holdsSessions] = await Promise.all([
+      prisma.task.findMany({
+        where: {
+          AND: [
+            { taskType: { not: TaskType.HOLDS } },
+            {
+              OR: [
+                {
+                  assignedToId: user.id,
+                  status: "COMPLETED",
+                  endTime: {
+                    gte: startUtc,
+                    lt: endExclusiveUtc,
+                  },
+                },
+                {
+                  completedBy: user.id,
+                  status: "COMPLETED",
+                  endTime: {
+                    gte: startUtc,
+                    lt: endExclusiveUtc,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        select: taskSelectForCompletedList,
+        orderBy: { endTime: "desc" },
+      }),
+      prisma.taskWorkSession.findMany({
+        where: {
+          taskType: TaskType.HOLDS,
+          agentId: user.id,
+          countsTowardProductivity: true,
+          endedAt: {
+            gte: startUtc,
+            lt: endExclusiveUtc,
           },
-          {
-            completedBy: user.id,
-            status: "COMPLETED",
-            endTime: {
-              gte: startUtc,
-              lt: endExclusiveUtc,
-            }
-          }
-        ]
-      },
-      select: {
-        id: true,
-        brand: true,
-        phone: true,
-        text: true,
-        status: true,
-        taskType: true,
-        startTime: true,
-        endTime: true,
-        durationSec: true,
-        disposition: true,
-        createdAt: true,
-        updatedAt: true,
-        rawMessage: {
-          select: {
-            brand: true,
-            phone: true,
-            text: true
-          }
-        }
-      },
-      orderBy: {
-        endTime: "desc"
-      }
-    });
+        },
+        include: {
+          task: { select: taskSelectForCompletedList },
+        },
+        orderBy: { endedAt: "desc" },
+      }),
+    ]);
 
-    // Transform tasks to include brand/phone/text from rawMessage if not set on task
-    const transformedTasks = tasks.map(task => ({
+    const transformTaskRow = (task: (typeof tasks)[0]) => ({
       ...task,
       brand: task.brand || task.rawMessage?.brand || "Unknown",
       phone: task.phone || task.rawMessage?.phone || "",
       text: task.text || task.rawMessage?.text || "",
-      rawMessage: undefined // Remove from response
-    }));
+      rawMessage: undefined,
+      completionSource: "TASK" as const,
+    });
+
+    const taskRows = tasks.map(transformTaskRow);
+
+    const sessionRows = holdsSessions.map((session) => {
+      const t = session.task;
+      const brand = t.brand || t.rawMessage?.brand || "Unknown";
+      const phone = t.phone || t.rawMessage?.phone || "";
+      const text = t.text || t.rawMessage?.text || "";
+      return {
+        ...t,
+        brand,
+        phone,
+        text,
+        rawMessage: undefined,
+        id: `session:${session.id}`,
+        taskId: session.taskId,
+        workSessionId: session.id,
+        completionSource: "TASK_WORK_SESSION" as const,
+        startTime:
+          session.startedAt != null ? session.startedAt.toISOString() : undefined,
+        endTime: session.endedAt.toISOString(),
+        durationSec: session.durationSec ?? undefined,
+        disposition: session.disposition ?? undefined,
+        status: "COMPLETED" as const,
+        assignedToId: t.assignedToId || "",
+        holdsFromQueue: session.fromQueue ?? undefined,
+        holdsToQueue: session.toQueue ?? undefined,
+        outcomeType: session.outcomeType,
+        isFinalResolution: session.isFinalResolution,
+        holdsStatus: session.toQueue ?? t.holdsStatus ?? undefined,
+      };
+    });
+
+    const transformedTasks = [...taskRows, ...sessionRows].sort((a, b) => {
+      const aT = a.endTime ? new Date(a.endTime).getTime() : 0;
+      const bT = b.endTime ? new Date(b.endTime).getTime() : 0;
+      return bT - aT;
+    });
 
     rowCount = transformedTasks.length;
 
-    return NextResponse.json({ 
-      success: true, 
-      tasks: transformedTasks 
+    return NextResponse.json({
+      success: true,
+      tasks: transformedTasks,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error fetching completed tasks:", err);
-    return NextResponse.json({ 
-      success: false, 
-      error: err?.message || "Failed to fetch completed tasks" 
+    return NextResponse.json({
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to fetch completed tasks",
     }, { status: 500 });
   } finally {
     logRouteTiming({
