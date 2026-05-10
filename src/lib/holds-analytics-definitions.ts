@@ -88,7 +88,7 @@ export function isOrderAgeAging5Plus(days: number | null): boolean {
   return days !== null && days >= 5;
 }
 
-/** Actionable task, order age 3–4 days (approaching aging). */
+/** Actionable task, order age 3–4 days (combined; e.g. per-queue stats). */
 export function isOrderAgeApproaching3To4(days: number | null): boolean {
   return days !== null && days >= 3 && days <= 4;
 }

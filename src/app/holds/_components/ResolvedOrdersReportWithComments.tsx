@@ -1,9 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 import { calculateFinancialImpact } from "@/lib/holds-disposition-impact";
+
+type QueueHistoryEntry = {
+  queue?: string;
+  enteredAt?: string;
+  exitedAt?: string;
+};
 
 interface ResolvedTask {
   id: string;
@@ -18,7 +24,7 @@ interface ResolvedTask {
   completedDate: string;
   duration: number;
   queueTimes: Record<string, number>;
-  queueHistory: any[];
+  queueHistory: QueueHistoryEntry[];
   orderAmount: number;
   notes: string;
 }
@@ -33,6 +39,29 @@ interface DispositionStats {
   avgAmount: number;
 }
 
+type AgentDispositionRollup = {
+  count: number;
+  amount: number;
+  savedAmount: number;
+  lostAmount: number;
+  netAmount: number;
+};
+
+type AgentWorkBreakdownAgent = {
+  agentName: string;
+  agentEmail: string;
+  totalCount: number;
+  totalAmountSaved?: number;
+  totalAmountLost?: number;
+  netAmount?: number;
+  avgResolutionTime: number;
+  dispositions?: Record<string, AgentDispositionRollup>;
+};
+
+type AgentWorkBreakdownPayload = {
+  agents?: AgentWorkBreakdownAgent[];
+};
+
 interface AgentStats {
   agentName: string;
   agentEmail: string;
@@ -41,13 +70,7 @@ interface AgentStats {
   totalAmountLost: number; // Amount lost (negative dispositions)
   netAmount: number; // Saved - Lost
   avgResolutionTime: number;
-  dispositions: Record<string, { 
-    count: number; 
-    amount: number; // Total order amount
-    savedAmount: number; // Amount saved
-    lostAmount: number; // Amount lost
-    netAmount: number; // Saved - Lost
-  }>;
+  dispositions: Record<string, AgentDispositionRollup>;
   queues?: Array<{
     queue: string;
     count: number;
@@ -65,7 +88,7 @@ export default function ResolvedOrdersReportWithComments() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [selectedTask, setSelectedTask] = useState<ResolvedTask | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [agentWorkBreakdown, setAgentWorkBreakdown] = useState<any>(null);
+  const [agentWorkBreakdown, setAgentWorkBreakdown] = useState<AgentWorkBreakdownPayload | null>(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
   
   // Filters
@@ -82,18 +105,9 @@ export default function ResolvedOrdersReportWithComments() {
   const [searchQuery, setSearchQuery] = useState('');
   
   // Agents list
-  const [agents, setAgents] = useState<any[]>([]);
+  const [agents, setAgents] = useState<{ id: string; name?: string | null }[]>([]);
 
-  useEffect(() => {
-    loadAgents();
-  }, []);
-
-  useEffect(() => {
-    loadData();
-    loadAgentWorkBreakdown();
-  }, [startDate, endDate, selectedAgent, selectedDisposition]);
-
-  const loadAgents = async () => {
+  const loadAgents = useCallback(async () => {
     try {
       const res = await fetch('/api/manager/agents');
       const data = await res.json();
@@ -103,9 +117,9 @@ export default function ResolvedOrdersReportWithComments() {
     } catch (error) {
       console.error('Error loading agents:', error);
     }
-  };
+  }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -127,9 +141,9 @@ export default function ResolvedOrdersReportWithComments() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [startDate, endDate, selectedAgent, selectedDisposition, searchQuery]);
 
-  const loadAgentWorkBreakdown = async () => {
+  const loadAgentWorkBreakdown = useCallback(async () => {
     setLoadingBreakdown(true);
     try {
       const params = new URLSearchParams();
@@ -148,7 +162,20 @@ export default function ResolvedOrdersReportWithComments() {
     } finally {
       setLoadingBreakdown(false);
     }
-  };
+  }, [startDate, endDate, selectedAgent]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void loadAgents();
+    });
+  }, [loadAgents]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void loadData();
+      void loadAgentWorkBreakdown();
+    });
+  }, [loadData, loadAgentWorkBreakdown]);
 
   const handleExport = async () => {
     setExporting(true);
@@ -238,7 +265,7 @@ export default function ResolvedOrdersReportWithComments() {
 
   // Calculate agent stats - use breakdown data if available, otherwise fall back to task-based calculation
   const agentStats: AgentStats[] = agentWorkBreakdown?.agents 
-    ? agentWorkBreakdown.agents.map((agent: any) => ({
+    ? agentWorkBreakdown.agents.map((agent) => ({
         agentName: agent.agentName,
         agentEmail: agent.agentEmail,
         totalResolved: agent.totalCount,
@@ -284,8 +311,17 @@ export default function ResolvedOrdersReportWithComments() {
           acc[agentKey].dispositions[disp].netAmount += financialImpact.netAmount;
           
           return acc;
-        }, {} as Record<string, any>)
-      ).map(([_, data]) => ({
+        }, {} as Record<string, {
+          agentName: string;
+          agentEmail: string;
+          totalResolved: number;
+          totalAmountSaved: number;
+          totalAmountLost: number;
+          netAmount: number;
+          totalDuration: number;
+          dispositions: Record<string, AgentDispositionRollup>;
+        }>)
+      ).map(([, data]) => ({
         agentName: data.agentName,
         agentEmail: data.agentEmail,
         totalResolved: data.totalResolved,
@@ -303,18 +339,11 @@ export default function ResolvedOrdersReportWithComments() {
       <div className="mb-6 space-y-3">
         <h2 className="text-xl font-semibold text-white mb-1">Warehouse Export</h2>
         <p className="text-white/60 text-sm">
-          Final resolved Holds orders only (Completed queue). Used for warehouse and operations export reporting.
+          Final resolved Holds orders used for warehouse and operations reporting.
         </p>
-        <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-100/95 space-y-2">
-          <p>
-            This view is <span className="font-medium text-amber-50">not</span> the same as agent productivity or
-            per-action counts. Those will use <span className="font-medium text-amber-50">work sessions</span>{" "}
-            (TaskWorkSession) in a later phase.
-          </p>
-          <p className="text-amber-100/80 text-xs">
-            CSV export behavior and column names are unchanged — use Export CSV for the daily warehouse sheet.
-          </p>
-        </div>
+        <p className="text-xs text-white/50 border border-white/10 rounded-lg px-3 py-2 bg-white/[0.03]">
+          Export CSV keeps the same format used by the warehouse sheet.
+        </p>
       </div>
 
       {/* Filters */}
@@ -487,9 +516,7 @@ export default function ResolvedOrdersReportWithComments() {
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-white mb-3">👥 Agent performance (task completions)</h3>
           <p className="text-sm text-white/60 mb-3">
-            {loadingBreakdown
-              ? "Loading breakdown..."
-              : "Counts completed Holds tasks in the selected window (task rows), not work sessions. Session-based productivity will ship separately."}
+            {loadingBreakdown ? "Loading breakdown…" : "Counts resolved Holds orders in the selected date range."}
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -539,7 +566,7 @@ export default function ResolvedOrdersReportWithComments() {
                           <div className="text-sm">
                             <div className="text-white font-semibold mb-2">Disposition Breakdown:</div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {Object.entries(stat.dispositions).map(([disp, data]: [string, any]) => (
+                              {Object.entries(stat.dispositions).map(([disp, data]: [string, AgentDispositionRollup]) => (
                                 <div key={disp} className="p-2 bg-blue-900/20 rounded border border-blue-500/30">
                                   <div className="text-white font-semibold text-xs">{disp}</div>
                                   <div className="text-white/80 text-xs mt-1">
@@ -768,7 +795,7 @@ export default function ResolvedOrdersReportWithComments() {
                 <div>
                   <span className="text-white/60 block mb-2">Lifecycle queue journey:</span>
                   <div className="space-y-2">
-                    {selectedTask.queueHistory.map((entry: any, idx: number) => (
+                    {selectedTask.queueHistory.map((entry: QueueHistoryEntry, idx: number) => (
                       <div key={idx} className="p-2 bg-white/5 rounded text-xs">
                         <div className="text-white">{entry.queue || 'Unknown'}</div>
                         {entry.enteredAt && (

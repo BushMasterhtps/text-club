@@ -42,7 +42,6 @@ type AgingTaskRow = {
   orderDate: Date | null;
   daysSinceOrder: number | null;
   isAging5Plus: boolean;
-  isApproaching3To4: boolean;
   holdsStatus: string | null;
   assignedTo: { id: string; name: string } | null;
   createdAt: Date;
@@ -69,17 +68,20 @@ async function loadQueueHealthAnalytics(): Promise<{
     actionableOpenHoldsTasks: number;
     duplicateExceptions: number;
     agingTasks: number;
-    approachingTasks: number;
+    orderAge3Days: number;
+    orderAge4Days: number;
     unassignedTasks: number;
   };
   queueStats: Record<string, number>;
   agingBreakdown: {
     '0-2 days': number;
-    '3-4 days': number;
+    '3 days': number;
+    '4 days': number;
     '5+ days': number;
   };
   agingTaskRows: AgingTaskRow[];
-  approachingTaskRows: AgingTaskRow[];
+  tasksOrderAge3Days: AgingTaskRow[];
+  tasksOrderAge4Days: AgingTaskRow[];
   allActionableRows: AgingTaskRow[];
 }> {
   const currentDate = new Date();
@@ -107,7 +109,6 @@ async function loadQueueHealthAnalytics(): Promise<{
       aging: {
         daysSinceOrder: days,
         isAging5Plus: isOrderAgeAging5Plus(days),
-        isApproaching3To4: isOrderAgeApproaching3To4(days),
         isFresh0To2: isOrderAgeFresh0To2(days),
       },
     };
@@ -121,7 +122,6 @@ async function loadQueueHealthAnalytics(): Promise<{
     orderDate: task.holdsOrderDate,
     daysSinceOrder: task.aging.daysSinceOrder,
     isAging5Plus: task.aging.isAging5Plus,
-    isApproaching3To4: task.aging.isApproaching3To4,
     holdsStatus: task.holdsStatus,
     assignedTo: task.assignedTo,
     createdAt: task.createdAt,
@@ -133,22 +133,28 @@ async function loadQueueHealthAnalytics(): Promise<{
     HOLDS_ACTIONABLE_QUEUES.map((q) => [q, tasksWithAging.filter((t) => t.holdsStatus === q).length]),
   ) as Record<string, number>;
 
+  const orderAge3Days = tasksWithAging.filter((t) => t.aging.daysSinceOrder === 3).length;
+  const orderAge4Days = tasksWithAging.filter((t) => t.aging.daysSinceOrder === 4).length;
+
   return {
     overview: {
       actionableOpenHoldsTasks: tasksWithAging.length,
       duplicateExceptions,
       agingTasks: tasksWithAging.filter((t) => t.aging.isAging5Plus).length,
-      approachingTasks: tasksWithAging.filter((t) => t.aging.isApproaching3To4).length,
+      orderAge3Days,
+      orderAge4Days,
       unassignedTasks: tasksWithAging.filter((t) => !t.assignedTo).length,
     },
     queueStats,
     agingBreakdown: {
       '0-2 days': tasksWithAging.filter((t) => t.aging.isFresh0To2).length,
-      '3-4 days': tasksWithAging.filter((t) => t.aging.isApproaching3To4).length,
+      '3 days': orderAge3Days,
+      '4 days': orderAge4Days,
       '5+ days': tasksWithAging.filter((t) => t.aging.isAging5Plus).length,
     },
     agingTaskRows: rows.filter((r) => r.isAging5Plus),
-    approachingTaskRows: rows.filter((r) => r.isApproaching3To4),
+    tasksOrderAge3Days: rows.filter((r) => r.daysSinceOrder === 3),
+    tasksOrderAge4Days: rows.filter((r) => r.daysSinceOrder === 4),
     allActionableRows: rows,
   };
 }
@@ -220,7 +226,8 @@ async function getOverviewAnalytics() {
       queueStats: payload.queueStats,
       agingBreakdown: payload.agingBreakdown,
       agingTasks: payload.agingTaskRows,
-      approachingTasks: payload.approachingTaskRows,
+      tasksOrderAge3Days: payload.tasksOrderAge3Days,
+      tasksOrderAge4Days: payload.tasksOrderAge4Days,
     },
   });
 }
@@ -232,12 +239,16 @@ async function getAgingReport() {
     success: true,
     data: {
       agingTasks: payload.agingTaskRows,
-      approachingTasks: payload.approachingTaskRows,
+      tasksOrderAge3Days: payload.tasksOrderAge3Days,
+      tasksOrderAge4Days: payload.tasksOrderAge4Days,
+      approachingTasks: [...payload.tasksOrderAge3Days, ...payload.tasksOrderAge4Days],
       allTasks: payload.allActionableRows,
       summary: {
         totalActive: payload.overview.actionableOpenHoldsTasks,
         aging: payload.overview.agingTasks,
-        approaching: payload.overview.approachingTasks,
+        orderAge3Days: payload.overview.orderAge3Days,
+        orderAge4Days: payload.overview.orderAge4Days,
+        approaching: payload.overview.orderAge3Days + payload.overview.orderAge4Days,
         unassigned: payload.overview.unassignedTasks,
       },
     },

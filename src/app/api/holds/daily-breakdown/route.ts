@@ -78,15 +78,15 @@ function buildLegacyActivitySummary(params: {
     legacyNew > 0 || legacyCompleted > 0 || legacyRollover > 0 || legacyPendingEod > 0;
 
   let dataCoverageNote =
-    'Work-session metrics use TaskWorkSession (HOLDS, productivity-eligible) with endedAt in each full America/Los_Angeles calendar day (midnight–midnight local). End-of-Day Queue Snapshot still uses a 5 PM local cutoff for inventory only.';
+    'Completed actions are counted by full Pacific calendar day. The end-of-day queue snapshot still uses a 5 PM local cutoff for inventory.';
   if (!hasWorkSessionActivity && hasLegacyActivity) {
     dataCoverageNote =
-      'No work-session rows exist for this day or range. Showing legacy task-row activity (imports, endTime in day, EOD snapshot). Work-session metrics begin from the date the TaskWorkSession ledger was introduced.';
+      'No detailed completed actions for this day or range. Showing imported and completed-order totals and end-of-day snapshot where available.';
   } else if (hasWorkSessionActivity && hasLegacyActivity) {
     dataCoverageNote =
-      'Primary actions are TaskWorkSession rows. Legacy task-row counts (new imports, legacy completed task rows, EOD inventory) are also shown for operational context.';
+      'Completed actions are shown together with import, completed-order, and end-of-day snapshot figures for context.';
   } else if (!hasWorkSessionActivity && !hasLegacyActivity) {
-    dataCoverageNote = 'No TaskWorkSession or legacy task activity in this window.';
+    dataCoverageNote = 'No activity found for this date range.';
   }
 
   return {
@@ -101,12 +101,7 @@ function buildLegacyActivitySummary(params: {
 }
 
 /**
- * API for Holds Daily Activity + legacy daily breakdown.
- *
- * Primary productivity metrics: TaskWorkSession (taskType HOLDS, countsTowardProductivity, endedAt in day window).
- * Calendar interpretation: YYYY-MM-DD params are America/Los_Angeles civil dates (not server TZ).
- *
- * Secondary (legacy): end-of-day queue snapshots (5 PM local), task created/completed/rollover counts from Task rows.
+ * API for Holds Daily Activity: completed actions by Pacific calendar day, plus end-of-day queue snapshot and import/completed-order totals.
  */
 
 export async function GET(request: NextRequest) {

@@ -6,6 +6,9 @@ import { Card } from "@/app/_components/Card";
 const PAGE_SIZE = 50;
 const PACIFIC_TZ = "America/Los_Angeles";
 
+/** First date when per-action completed Holds tracking is fully available (Pacific). */
+const HOLDS_DETAILED_ACTIONS_SINCE = "2026-05-09";
+
 function formatYmdPacificFromDate(d: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: PACIFIC_TZ,
@@ -351,24 +354,20 @@ export default function DailyBreakdown() {
     return (
       <div className={`grid grid-cols-2 gap-3 md:gap-4 ${colClass}`}>
         <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-          <h3 className="text-sm font-medium text-blue-200 mb-1">Actions / work sessions</h3>
+          <h3 className="text-sm font-medium text-blue-200 mb-1">Completed Actions</h3>
           <p className="text-2xl font-bold text-white">{s.totalSessions}</p>
-          <p className="text-[10px] text-white/45 mt-1 leading-snug">TaskWorkSession (HOLDS, productivity)</p>
         </div>
         <div className="p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-lg">
-          <h3 className="text-sm font-medium text-emerald-200 mb-1">Final resolutions</h3>
+          <h3 className="text-sm font-medium text-emerald-200 mb-1">Final Resolutions</h3>
           <p className="text-2xl font-bold text-white">{s.finalResolutionCount}</p>
-          <p className="text-[10px] text-white/45 mt-1 leading-snug">isFinalResolution</p>
         </div>
         <div className="p-4 bg-amber-900/20 border border-amber-500/30 rounded-lg">
-          <h3 className="text-sm font-medium text-amber-200 mb-1">Handoffs</h3>
+          <h3 className="text-sm font-medium text-amber-200 mb-1">Moved to Another Queue</h3>
           <p className="text-2xl font-bold text-white">{s.handoffCount}</p>
-          <p className="text-[10px] text-white/45 mt-1 leading-snug">QUEUE_HANDOFF</p>
         </div>
         <div className="p-4 bg-violet-900/20 border border-violet-500/30 rounded-lg">
-          <h3 className="text-sm font-medium text-violet-200 mb-1">Avg handle time</h3>
+          <h3 className="text-sm font-medium text-violet-200 mb-1">Avg Handle Time</h3>
           <p className="text-2xl font-bold text-white">{formatDurationSec(s.averageHandleTimeSec)}</p>
-          <p className="text-[10px] text-white/45 mt-1 leading-snug">Mean durationSec</p>
         </div>
         {showDup && (
           <div className="p-4 bg-orange-900/20 border border-orange-500/30 rounded-lg">
@@ -391,52 +390,28 @@ export default function DailyBreakdown() {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
         <div className="p-3 bg-white/5 border border-white/15 rounded-lg">
-          <div className="text-xs text-white/55 mb-1">Legacy completed task rows</div>
+          <div className="text-xs text-white/55 mb-1">Completed Orders (older tracking)</div>
           <div className="text-xl font-bold text-white">{l.legacyCompletedTaskCount}</div>
-          <div className="text-[10px] text-white/40 mt-1">Task endTime in this day</div>
         </div>
         <div className="p-3 bg-white/5 border border-white/15 rounded-lg">
-          <div className="text-xs text-white/55 mb-1">New tasks created</div>
+          <div className="text-xs text-white/55 mb-1">New Holds Imported</div>
           <div className="text-xl font-bold text-white">{l.legacyNewTaskCount}</div>
         </div>
         <div className="p-3 bg-white/5 border border-white/15 rounded-lg">
-          <div className="text-xs text-white/55 mb-1">EOD pending (lanes)</div>
+          <div className="text-xs text-white/55 mb-1">Open at End of Day</div>
           <div className="text-xl font-bold text-white">{l.legacyPendingAtEodCount}</div>
         </div>
         <div className="p-3 bg-white/5 border border-white/15 rounded-lg">
-          <div className="text-xs text-white/55 mb-1">Rollovers (Agent Research @ EOD)</div>
+          <div className="text-xs text-white/55 mb-1">Still in Agent Research at EOD</div>
           <div className="text-xl font-bold text-white">{l.legacyRolloverTaskCount}</div>
         </div>
-        <p className="col-span-full text-xs text-amber-100/80 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
-          {l.dataCoverageNote}
+        <p className="col-span-full text-xs text-white/65 border border-white/10 rounded-lg px-3 py-2 bg-white/[0.03]">
+          {l.dataCoverageNote}{" "}
+          Detailed action tracking started on {HOLDS_DETAILED_ACTIONS_SINCE}. Older dates may show imported and
+          completed-order totals but may not include the same action-level breakdown.
         </p>
       </div>
     );
-  };
-
-  const renderCoverageBanner = (l: LegacyActivitySummary | undefined, key: string) => {
-    if (!l) return null;
-    if (!l.hasWorkSessionActivity && l.hasLegacyActivity) {
-      return (
-        <div
-          key={key}
-          className="mb-4 p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-sm text-amber-50/95"
-        >
-          No work-session rows exist for this date range. Showing legacy task-row activity below.{" "}
-          <span className="text-amber-100/80">
-            Work-session metrics begin from the date the TaskWorkSession ledger was introduced.
-          </span>
-        </div>
-      );
-    }
-    if (l.hasWorkSessionActivity && l.hasLegacyActivity) {
-      return (
-        <div key={key} className="mb-4 p-3 rounded-lg border border-white/15 bg-white/[0.04] text-xs text-white/65">
-          {l.dataCoverageNote}
-        </div>
-      );
-    }
-    return null;
   };
 
   const renderAgentTable = (rows: SessionByAgentRow[], key: string) => (
@@ -446,12 +421,12 @@ export default function DailyBreakdown() {
         <thead className="bg-white/5">
           <tr className="text-left text-white/60">
             <th className="px-3 py-2">Agent</th>
-            <th className="px-3 py-2 text-right">Total actions</th>
-            <th className="px-3 py-2 text-right">Final resolutions</th>
-            <th className="px-3 py-2 text-right">Handoffs</th>
+            <th className="px-3 py-2 text-right">Completed actions</th>
+            <th className="px-3 py-2 text-right">Final Resolutions</th>
+            <th className="px-3 py-2 text-right">Moved to Another Queue</th>
             <th className="px-3 py-2 text-right">Duplicates</th>
             <th className="px-3 py-2 text-right">Escalation stay</th>
-            <th className="px-3 py-2 text-right">Avg handle</th>
+            <th className="px-3 py-2 text-right">Avg Handle Time</th>
             <th className="px-3 py-2">Top queue / mix</th>
           </tr>
         </thead>
@@ -459,7 +434,7 @@ export default function DailyBreakdown() {
           {rows.length === 0 ? (
             <tr>
               <td colSpan={8} className="px-3 py-6 text-center text-white/50">
-                No work sessions in this range.
+                No completed actions in this range.
               </td>
             </tr>
           ) : (
@@ -493,7 +468,7 @@ export default function DailyBreakdown() {
             <th className="px-3 py-2">From queue</th>
             <th className="px-3 py-2">To queue</th>
             <th className="px-3 py-2 text-right">Count</th>
-            <th className="px-3 py-2 text-right">Avg handle</th>
+            <th className="px-3 py-2 text-right">Avg Handle Time</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/5">
@@ -526,11 +501,11 @@ export default function DailyBreakdown() {
           <tr className="text-left text-white/60">
             <th className="px-3 py-2">Disposition</th>
             <th className="px-3 py-2 text-right">Count</th>
-            <th className="px-3 py-2 text-right">Final resolutions</th>
-            <th className="px-3 py-2 text-right">Handoffs</th>
+            <th className="px-3 py-2 text-right">Final Resolutions</th>
+            <th className="px-3 py-2 text-right">Moved to Another Queue</th>
             <th className="px-3 py-2 text-right">Dup routing</th>
             <th className="px-3 py-2 text-right">Esc. stay</th>
-            <th className="px-3 py-2 text-right">Avg handle</th>
+            <th className="px-3 py-2 text-right">Avg Handle Time</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/5">
@@ -562,16 +537,17 @@ export default function DailyBreakdown() {
     if (!selectedDayDetails) return [] as { id: ModalTab; label: string }[];
     const d = selectedDayDetails;
     const tabs: { id: ModalTab; label: string }[] = [{ id: "summary", label: "Summary" }];
-    if ((d.sessionDetails?.length ?? 0) > 0) tabs.push({ id: "sessions", label: "Work sessions" });
-    if ((d.newTasks?.length ?? 0) > 0) tabs.push({ id: "newTasks", label: "New tasks" });
-    if ((d.completedTasks?.length ?? 0) > 0) tabs.push({ id: "legacyCompleted", label: "Legacy completed" });
+    if ((d.sessionDetails?.length ?? 0) > 0) tabs.push({ id: "sessions", label: "Completed Actions" });
+    if ((d.newTasks?.length ?? 0) > 0) tabs.push({ id: "newTasks", label: "New Holds Imported" });
+    if ((d.completedTasks?.length ?? 0) > 0) tabs.push({ id: "legacyCompleted", label: "Completed Orders (older tracking)" });
     if (
       Object.keys(d.queueCountsAtEndOfDay ?? {}).length > 0 ||
       (d.tasksInQueueAtEndOfDay && Object.keys(d.tasksInQueueAtEndOfDay).length > 0)
     ) {
       tabs.push({ id: "queueSnapshot", label: "Queue snapshot" });
     }
-    if ((d.rolloverTasks?.length ?? 0) > 0) tabs.push({ id: "rollovers", label: "Rollovers" });
+    if ((d.rolloverTasks?.length ?? 0) > 0)
+      tabs.push({ id: "rollovers", label: "Still in Agent Research at EOD" });
     return tabs;
   }, [selectedDayDetails]);
 
@@ -598,7 +574,8 @@ export default function DailyBreakdown() {
           <div>
             <h4 className="text-sm font-semibold text-white/90 mb-2">End-of-Day Queue Snapshot</h4>
             <p className="text-xs text-white/50 mb-2">
-              Inventory at 5 PM {PACIFIC_TZ.replace("_", " ")} (or now if today before cutoff). Not productivity.
+              What was still sitting in each queue at 5 PM ({PACIFIC_TZ.replace("_", " ")}), or current time if today is
+              still before that cutoff.
             </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {Object.entries(d.queueCountsAtEndOfDay ?? {}).map(([queue, count]) => (
@@ -621,16 +598,18 @@ export default function DailyBreakdown() {
       return (
         <div>
           <div className="flex flex-wrap justify-between gap-2 mb-3">
-            <p className="text-xs text-white/55">One row per TaskWorkSession. Same task may appear multiple times.</p>
+            <p className="text-xs text-white/55">
+              Each row is one completed action. The same order may appear more than once if it was worked multiple times.
+            </p>
             <button
               type="button"
               className="text-xs px-3 py-1 rounded bg-emerald-600/80 text-white"
               onClick={() =>
                 downloadCsv(
-                  `holds-work-sessions-${d.date}.csv`,
+                  `holds-completed-actions-${d.date}.csv`,
                   [
-                    "Work Session ID",
-                    "Task ID",
+                    "Action ID",
+                    "Order ID",
                     "Order Number",
                     "Customer Email",
                     "Agent Name",
@@ -641,12 +620,12 @@ export default function DailyBreakdown() {
                     "From Queue",
                     "To Queue",
                     "Disposition",
-                    "Outcome Type",
-                    "Final Resolution",
+                    "Action type",
+                    "Final resolution",
                   ],
                   rows.map((sess) => ({
-                    "Work Session ID": sess.workSessionId,
-                    "Task ID": sess.taskId,
+                    "Action ID": sess.workSessionId,
+                    "Order ID": sess.taskId,
                     "Order Number": sess.orderNumber ?? "",
                     "Customer Email": sess.customerEmail ?? "",
                     "Agent Name": sess.agentName,
@@ -657,8 +636,8 @@ export default function DailyBreakdown() {
                     "From Queue": sess.fromQueue ?? "",
                     "To Queue": sess.toQueue ?? "",
                     Disposition: sess.disposition ?? "",
-                    "Outcome Type": sess.outcomeType,
-                    "Final Resolution": sess.isFinalResolution ? "true" : "false",
+                    "Action type": sess.outcomeType,
+                    "Final resolution": sess.isFinalResolution ? "true" : "false",
                   }))
                 )
               }
@@ -667,7 +646,7 @@ export default function DailyBreakdown() {
             </button>
           </div>
           {rows.length === 0 ? (
-            <p className="text-white/50 text-sm">No work sessions for this day.</p>
+            <p className="text-white/50 text-sm">No completed actions for this day.</p>
           ) : (
             <>
               <div className="overflow-x-auto">
@@ -679,7 +658,7 @@ export default function DailyBreakdown() {
                       <th className="px-2 py-2 text-left text-white/60">Agent</th>
                       <th className="px-2 py-2 text-left text-white/60">Queues</th>
                       <th className="px-2 py-2 text-left text-white/60">Disposition</th>
-                      <th className="px-2 py-2 text-left text-white/60">Outcome</th>
+                      <th className="px-2 py-2 text-left text-white/60">Action type</th>
                       <th className="px-2 py-2 text-left text-white/60">Final</th>
                       <th className="px-2 py-2 text-left text-white/60">Started</th>
                       <th className="px-2 py-2 text-left text-white/60">Ended</th>
@@ -907,9 +886,9 @@ export default function DailyBreakdown() {
               </div>
             ))}
           </div>
-          <h5 className="text-sm font-medium text-white/80">Tasks by queue at EOD</h5>
+          <h5 className="text-sm font-medium text-white/80">Orders by queue at end of day</h5>
           {flatList.length === 0 ? (
-            <p className="text-white/50 text-sm">No per-queue task rows.</p>
+            <p className="text-white/50 text-sm">No detail available for this snapshot.</p>
           ) : (
             <>
               <div className="overflow-x-auto">
@@ -987,7 +966,7 @@ export default function DailyBreakdown() {
                   <th className="px-2 py-1 text-left text-white/60">Email</th>
                   <th className="px-2 py-1 text-left text-white/60">Agent</th>
                   <th className="px-2 py-1 text-left text-white/60">Status</th>
-                  <th className="px-2 py-1 text-left text-white/60">Queue @ EOD</th>
+                  <th className="px-2 py-1 text-left text-white/60">Queue (end of day)</th>
                   <th className="px-2 py-1 text-left text-white/60">Created</th>
                 </tr>
               </thead>
@@ -1025,16 +1004,11 @@ export default function DailyBreakdown() {
     <Card>
       <div className="mb-6 space-y-3">
         <h2 className="text-xl font-semibold text-white mb-1">Daily Activity</h2>
-        <p className="text-white/60 text-sm">
-          Dates are interpreted in <span className="text-white/80">America/Los_Angeles</span>.{" "}
-          <span className="text-white/80">Actions / work sessions</span> are TaskWorkSession rows (HOLDS,{" "}
-          <span className="text-white/80">countsTowardProductivity</span>) with <span className="text-white/80">endedAt</span>{" "}
-          in each full Pacific calendar day (midnight–midnight local). The selected end date is inclusive.
-        </p>
-        <p className="text-xs text-white/50 border border-white/10 rounded-lg px-3 py-2 bg-white/[0.03]">
-          <span className="text-white/70">End-of-Day Queue Snapshot</span> is inventory at 5 PM local from task rows — not
-          the same as session actions. Work-session metrics begin from the date the TaskWorkSession ledger was introduced;
-          older dates may show legacy task-row activity instead.
+        <p className="text-white/60 text-sm border border-white/10 rounded-lg px-3 py-2 bg-white/[0.03]">
+          Dates use <span className="text-white/80">Pacific Time</span>. Daily Activity shows each completed Holds action
+          performed by an agent. This includes both final resolutions and queue handoffs.{" "}
+          <span className="text-white/70">End-of-Day Queue Snapshot</span> shows what was still sitting in each queue at 5
+          PM.
         </p>
       </div>
 
@@ -1067,7 +1041,6 @@ export default function DailyBreakdown() {
         <>
           {breakdowns.length > 1 && (
             <>
-              {renderCoverageBanner(rangeLegacy, "range")}
               {rangeSummary && (
                 <div className="space-y-8 mb-8">
                   <div>
@@ -1085,9 +1058,8 @@ export default function DailyBreakdown() {
 
           {breakdowns.length === 1 && breakdowns[0].sessionSummary && (
             <div className="space-y-8 mb-8">
-              {renderCoverageBanner(breakdowns[0].legacyActivitySummary, "one")}
               <div>
-                <h3 className="text-md font-semibold text-white/90 mb-3">Work sessions</h3>
+                <h3 className="text-md font-semibold text-white/90 mb-3">Completed Actions</h3>
                 {renderSessionSummaryCards(breakdowns[0].sessionSummary)}
                 {renderLegacySummaryCards(breakdowns[0].legacyActivitySummary)}
               </div>
@@ -1102,7 +1074,7 @@ export default function DailyBreakdown() {
               <div>
                 <h3 className="text-lg font-semibold text-white mb-2">End-of-Day Queue Snapshot</h3>
                 <p className="text-xs text-white/50 mb-4">
-                  Inventory by queue at 5 PM local (or current time if today before cutoff). Not productivity actions.
+                  What was still sitting in each queue at 5 PM (or current time if today is still before that cutoff).
                 </p>
                 {Object.keys(breakdowns[0].queueCountsAtEndOfDay ?? {}).length > 0 ? (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1141,12 +1113,12 @@ export default function DailyBreakdown() {
                 <thead className="bg-white/5">
                   <tr className="text-left text-white/60">
                     <th className="px-3 py-2">Date</th>
-                    <th className="px-3 py-2 text-right">Actions</th>
+                    <th className="px-3 py-2 text-right">Completed Actions</th>
                     <th className="px-3 py-2 text-right">Final</th>
-                    <th className="px-3 py-2 text-right">Handoffs</th>
-                    <th className="px-3 py-2 text-right">Legacy completed</th>
-                    <th className="px-3 py-2 text-right">New tasks</th>
-                    <th className="px-3 py-2 text-right">Pending EOD</th>
+                    <th className="px-3 py-2 text-right">Moved</th>
+                    <th className="px-3 py-2 text-right">Completed Orders (older)</th>
+                    <th className="px-3 py-2 text-right">New Imported</th>
+                    <th className="px-3 py-2 text-right">Open at EOD</th>
                     {allQueues.slice(0, 3).map((queue) => (
                       <th key={queue} className="px-3 py-2 text-xs max-w-[100px] truncate" title={queue}>
                         {queue.substring(0, 14)}
@@ -1168,7 +1140,7 @@ export default function DailyBreakdown() {
                         </td>
                         <td
                           className={`px-3 py-2 text-right font-semibold ${highlightLegacy ? "text-amber-300/90" : "text-blue-300"}`}
-                          title={highlightLegacy ? "No sessions; legacy task rows exist" : undefined}
+                          title={highlightLegacy ? "No completed actions that day; older completed-order count exists" : undefined}
                         >
                           {actions}
                           {highlightLegacy ? " *" : ""}
@@ -1202,7 +1174,7 @@ export default function DailyBreakdown() {
                 </tbody>
               </table>
               <p className="text-[10px] text-white/40 mt-2">
-                * No work sessions that day but legacy completed task rows &gt; 0.
+                * No completed actions that day, but completed orders (older tracking) are greater than zero.
               </p>
             </div>
           )}
@@ -1216,7 +1188,7 @@ export default function DailyBreakdown() {
               <div>
                 <h3 className="text-xl font-semibold text-white">Daily Activity — {formatDate(selectedDayDetails.date)}</h3>
                 <p className="text-sm text-white/60 mt-1">
-                  Pacific business-day window for sessions and legacy rows. Tabs reset pagination when changed.
+                  Changing tabs resets pagination. Dates follow Pacific Time.
                 </p>
               </div>
               <button
