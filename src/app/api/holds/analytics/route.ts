@@ -4,6 +4,33 @@ import { TaskType } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 import { logRouteTiming } from '@/lib/route-timing-log';
+import {
+  activeHoldsInventoryWhere,
+  HOLDS_ACTIVE_WORKFLOW_QUEUES,
+  holdsOrderAgeDays,
+  isOrderAgeAging5Plus,
+  isOrderAgeApproaching3To4,
+  isOrderAgeFresh0To2,
+} from '@/lib/holds-analytics-definitions';
+
+type AgentPerformanceAccumulator = {
+  agentId: string;
+  agentName: string;
+  total: number;
+  completed: number;
+  pending: number;
+  aging: number;
+  averageCompletionTime: number;
+  completionRate: number;
+};
+
+type QueueStatBucket = {
+  total: number;
+  assigned: number;
+  unassigned: number;
+  aging: number;
+  approaching: number;
+};
 
 function buildCreatedAtRangeFilter(
   startDate: string | null,
@@ -38,23 +65,19 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
 
     const createdAtRange = buildCreatedAtRangeFilter(startDate, endDate);
-    const holdsWhere: Prisma.TaskWhereInput = {
-      taskType: TaskType.HOLDS,
-      ...(createdAtRange ? { createdAt: createdAtRange } : {}),
-    };
 
     switch (type) {
       case 'overview':
-        return await getOverviewAnalytics(holdsWhere);
+        return await getOverviewAnalytics();
       
       case 'aging':
-        return await getAgingReport(holdsWhere);
+        return await getAgingReport();
       
       case 'agent-performance':
         return await getAgentPerformance(createdAtRange);
       
       case 'queue-stats':
-        return await getQueueStats(holdsWhere);
+        return await getQueueStats();
       
       default:
         return NextResponse.json(
@@ -82,12 +105,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function getOverviewAnalytics(whereClause: Prisma.TaskWhereInput) {
+async function getOverviewAnalytics() {
   const currentDate = new Date();
-  
-  // Get all holds tasks
+
   const tasks = await prisma.task.findMany({
-    where: whereClause,
+    where: activeHoldsInventoryWhere(),
     include: {
       assignedTo: {
         select: {
@@ -98,41 +120,33 @@ async function getOverviewAnalytics(whereClause: Prisma.TaskWhereInput) {
     },
   });
 
-  // Calculate aging metrics
-  const tasksWithAging = tasks.map(task => {
-    const orderDate = task.holdsOrderDate;
-    const daysSinceOrder = orderDate ? Math.floor((currentDate.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-    const isAging = daysSinceOrder >= 5;
-    const isApproaching = daysSinceOrder >= 3;
-
+  const tasksWithAging = tasks.map((task) => {
+    const days = holdsOrderAgeDays(task.holdsOrderDate, currentDate);
     return {
       ...task,
       aging: {
-        daysSinceOrder,
-        isAging,
-        isApproaching,
+        daysSinceOrder: days,
+        isAging5Plus: isOrderAgeAging5Plus(days),
+        isApproaching3To4: isOrderAgeApproaching3To4(days),
+        isFresh0To2: isOrderAgeFresh0To2(days),
       },
     };
   });
 
-  // Calculate statistics
-  const totalTasks = tasksWithAging.length;
-  const agingTasks = tasksWithAging.filter(task => task.aging.isAging).length;
-  const approachingTasks = tasksWithAging.filter(task => task.aging.isApproaching).length;
-  const unassignedTasks = tasksWithAging.filter(task => !task.assignedTo).length;
-  const completedTasks = tasksWithAging.filter(task => task.status === 'COMPLETED').length;
-  const pendingTasks = tasksWithAging.filter(task => task.status === 'PENDING').length;
+  const activeHoldsTasks = tasksWithAging.length;
+  const agingTasks = tasksWithAging.filter((t) => t.aging.isAging5Plus).length;
+  const approachingTasks = tasksWithAging.filter((t) => t.aging.isApproaching3To4).length;
+  const unassignedTasks = tasksWithAging.filter((t) => !t.assignedTo).length;
 
-  // Queue distribution
-  const queueStats = tasksWithAging.reduce((acc, task) => {
-    const status = task.holdsStatus || 'Unknown';
-    acc[status] = (acc[status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const queueStats = Object.fromEntries(
+    HOLDS_ACTIVE_WORKFLOW_QUEUES.map((q) => [
+      q,
+      tasksWithAging.filter((t) => t.holdsStatus === q).length,
+    ])
+  ) as Record<string, number>;
 
-  // Priority distribution
   const priorityStats = tasksWithAging.reduce((acc, task) => {
-    const priority = task.holdsPriority || 4;
+    const priority = task.holdsPriority ?? 4;
     acc[priority] = (acc[priority] || 0) + 1;
     return acc;
   }, {} as Record<number, number>);
@@ -141,32 +155,27 @@ async function getOverviewAnalytics(whereClause: Prisma.TaskWhereInput) {
     success: true,
     data: {
       overview: {
-        totalTasks,
+        activeHoldsTasks,
         agingTasks,
         approachingTasks,
         unassignedTasks,
-        completedTasks,
-        pendingTasks,
-        completionRate: totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0,
       },
       queueStats,
       priorityStats,
       agingBreakdown: {
-        '0-2 days': tasksWithAging.filter(task => task.aging.daysSinceOrder <= 2).length,
-        '3-4 days': tasksWithAging.filter(task => task.aging.daysSinceOrder >= 3 && task.aging.daysSinceOrder <= 4).length,
+        '0-2 days': tasksWithAging.filter((t) => t.aging.isFresh0To2).length,
+        '3-4 days': approachingTasks,
         '5+ days': agingTasks,
       },
     },
   });
 }
 
-async function getAgingReport(whereClause: Prisma.TaskWhereInput) {
+async function getAgingReport() {
   const currentDate = new Date();
-  
+
   const tasks = await prisma.task.findMany({
-    where: {
-      AND: [{ ...whereClause }, { status: 'PENDING' }],
-    },
+    where: activeHoldsInventoryWhere(),
     include: {
       assignedTo: {
         select: {
@@ -175,29 +184,22 @@ async function getAgingReport(whereClause: Prisma.TaskWhereInput) {
         },
       },
     },
-    orderBy: [
-      { holdsOrderDate: 'asc' },
-      { holdsPriority: 'desc' },
-    ],
+    orderBy: [{ holdsOrderDate: 'asc' }, { holdsPriority: 'desc' }],
   });
 
-  const agingTasks = tasks.map(task => {
-    const orderDate = task.holdsOrderDate;
-    const daysSinceOrder = orderDate ? Math.floor((currentDate.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-    const isAging = daysSinceOrder >= 5;
-    const isApproaching = daysSinceOrder >= 3;
-
+  const rows = tasks.map((task) => {
+    const days = holdsOrderAgeDays(task.holdsOrderDate, currentDate);
     return {
       id: task.id,
       orderNumber: task.holdsOrderNumber,
       customerName: task.text?.replace('Holds - ', '') || 'Unknown',
       customerEmail: task.holdsCustomerEmail,
-      orderDate,
-      daysSinceOrder,
-      isAging,
-      isApproaching,
+      orderDate: task.holdsOrderDate,
+      daysSinceOrder: days,
+      isAging5Plus: isOrderAgeAging5Plus(days),
+      isApproaching3To4: isOrderAgeApproaching3To4(days),
       priority: task.holdsPriority,
-      status: task.holdsStatus,
+      holdsStatus: task.holdsStatus,
       assignedTo: task.assignedTo,
       createdAt: task.createdAt,
     };
@@ -206,14 +208,14 @@ async function getAgingReport(whereClause: Prisma.TaskWhereInput) {
   return NextResponse.json({
     success: true,
     data: {
-      agingTasks: agingTasks.filter(task => task.isAging),
-      approachingTasks: agingTasks.filter(task => task.isApproaching && !task.isAging),
-      allTasks: agingTasks,
+      agingTasks: rows.filter((t) => t.isAging5Plus),
+      approachingTasks: rows.filter((t) => t.isApproaching3To4),
+      allTasks: rows,
       summary: {
-        total: agingTasks.length,
-        aging: agingTasks.filter(task => task.isAging).length,
-        approaching: agingTasks.filter(task => task.isApproaching && !task.isAging).length,
-        unassigned: agingTasks.filter(task => !task.assignedTo).length,
+        totalActive: rows.length,
+        aging: rows.filter((t) => t.isAging5Plus).length,
+        approaching: rows.filter((t) => t.isApproaching3To4).length,
+        unassigned: rows.filter((t) => !t.assignedTo).length,
       },
     },
   });
@@ -257,7 +259,7 @@ async function getAgentPerformance(createdAtRange?: Prisma.DateTimeFilter) {
   });
 
   // Group by agent (consider both assignedTo and completedBy for completed tasks)
-  const agentStats = tasks.reduce((acc, task) => {
+  const agentStats = tasks.reduce<Record<string, AgentPerformanceAccumulator>>((acc, task) => {
     // For completed tasks, use completedBy if available (for unassigned completions)
     // Otherwise use assignedTo
     const agentId = (task.status === 'COMPLETED' && task.completedBy && task.completedByUser) 
@@ -276,6 +278,7 @@ async function getAgentPerformance(createdAtRange?: Prisma.DateTimeFilter) {
         pending: 0,
         aging: 0,
         averageCompletionTime: 0,
+        completionRate: 0,
       };
     }
     
@@ -296,30 +299,33 @@ async function getAgentPerformance(createdAtRange?: Prisma.DateTimeFilter) {
     }
     
     return acc;
-  }, {} as Record<string, any>);
+  }, {});
 
   // Calculate completion rates
-  Object.values(agentStats).forEach((agent: any) => {
+  const agentList = Object.values(agentStats);
+  for (const agent of agentList) {
     agent.completionRate = agent.total > 0 ? (agent.completed / agent.total) * 100 : 0;
-  });
+  }
 
   return NextResponse.json({
     success: true,
     data: {
-      agents: Object.values(agentStats),
+      agents: agentList,
       summary: {
         totalAgents: Object.keys(agentStats).length,
         totalTasks: tasks.length,
-        averageCompletionRate: tasks.length > 0 ? 
-          Object.values(agentStats).reduce((sum: number, agent: any) => sum + agent.completionRate, 0) / Object.keys(agentStats).length : 0,
+        averageCompletionRate:
+          agentList.length > 0
+            ? agentList.reduce((sum, agent) => sum + agent.completionRate, 0) / agentList.length
+            : 0,
       },
     },
   });
 }
 
-async function getQueueStats(whereClause: Prisma.TaskWhereInput) {
+async function getQueueStats() {
   const tasks = await prisma.task.findMany({
-    where: whereClause,
+    where: activeHoldsInventoryWhere(),
     include: {
       assignedTo: {
         select: {
@@ -333,7 +339,7 @@ async function getQueueStats(whereClause: Prisma.TaskWhereInput) {
   const currentDate = new Date();
   
   // Calculate queue statistics
-  const queueStats = tasks.reduce((acc, task) => {
+  const queueStats = tasks.reduce<Record<string, QueueStatBucket>>((acc, task) => {
     const status = task.holdsStatus || 'Unknown';
     
     if (!acc[status]) {
@@ -354,18 +360,15 @@ async function getQueueStats(whereClause: Prisma.TaskWhereInput) {
       acc[status].unassigned++;
     }
     
-    // Check aging
-    if (task.holdsOrderDate) {
-      const daysSinceOrder = Math.floor((currentDate.getTime() - task.holdsOrderDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysSinceOrder >= 5) {
-        acc[status].aging++;
-      } else if (daysSinceOrder >= 3) {
-        acc[status].approaching++;
-      }
+    const days = holdsOrderAgeDays(task.holdsOrderDate, currentDate);
+    if (isOrderAgeAging5Plus(days)) {
+      acc[status].aging++;
+    } else if (isOrderAgeApproaching3To4(days)) {
+      acc[status].approaching++;
     }
     
     return acc;
-  }, {} as Record<string, any>);
+  }, {});
 
   return NextResponse.json({
     success: true,

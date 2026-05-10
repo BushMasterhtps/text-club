@@ -16,7 +16,8 @@ import {
   addPacificCalendarDays,
   enumeratePacificYmdRange,
   formatYmdPacific,
-  getSessionQueryBounds,
+  getPacificReportingDayRangeUtc,
+  nextPacificYmd,
   pacificYmdToUtcDayEndForActivity,
   pacificYmdToUtcStart,
 } from '@/lib/holds-pacific-calendar';
@@ -77,7 +78,7 @@ function buildLegacyActivitySummary(params: {
     legacyNew > 0 || legacyCompleted > 0 || legacyRollover > 0 || legacyPendingEod > 0;
 
   let dataCoverageNote =
-    'Work-session metrics use TaskWorkSession (HOLDS, productivity-eligible) with endedAt in each America/Los_Angeles business day (midnight–5 PM local, or through now when today is still in progress).';
+    'Work-session metrics use TaskWorkSession (HOLDS, productivity-eligible) with endedAt in each full America/Los_Angeles calendar day (midnight–midnight local). End-of-Day Queue Snapshot still uses a 5 PM local cutoff for inventory only.';
   if (!hasWorkSessionActivity && hasLegacyActivity) {
     dataCoverageNote =
       'No work-session rows exist for this day or range. Showing legacy task-row activity (imports, endTime in day, EOD snapshot). Work-session metrics begin from the date the TaskWorkSession ledger was introduced.';
@@ -141,12 +142,11 @@ export async function GET(request: NextRequest) {
 
     const includeTaskDetails = searchParams.get('includeTasks') === 'true';
 
-    const { gte: sessionRangeGte, lt: sessionRangeLt } = getSessionQueryBounds(
+    const { gte: sessionRangeGte, lt: sessionRangeLt } = getPacificReportingDayRangeUtc(
       startYmd,
-      endYmd,
-      now
+      endYmd
     );
-    const rangeStartUtc = pacificYmdToUtcStart(startYmd);
+    const rangeStartUtc = sessionRangeGte;
     const rangeEndUtc = sessionRangeLt;
     
     // Get ALL Holds tasks - we need all tasks to accurately count what's in each queue at end of day
@@ -228,20 +228,21 @@ export async function GET(request: NextRequest) {
     const dayYmds = enumeratePacificYmdRange(startYmd, endYmd).filter((ymd) => ymd <= todayYmd);
 
     for (const ymd of dayYmds) {
-      const dayStart = pacificYmdToUtcStart(ymd);
-      const dayEnd = pacificYmdToUtcDayEndForActivity(ymd, now);
+      const calendarDayStart = pacificYmdToUtcStart(ymd);
+      const calendarDayEndExclusive = pacificYmdToUtcStart(nextPacificYmd(ymd));
+      const eodInventoryCutoff = pacificYmdToUtcDayEndForActivity(ymd, now);
 
-      // Tasks created during this day
+      // Tasks created during this Pacific calendar day (legacy row counts; full midnight–midnight)
       const newTasks = allTasks.filter(t => {
         const created = new Date(t.createdAt);
-        return created >= dayStart && created < dayEnd;
+        return created >= calendarDayStart && created < calendarDayEndExclusive;
       });
       
-      // Tasks completed during this day
+      // Tasks completed during this Pacific calendar day (legacy; by endTime)
       const completedTasks = allTasks.filter(t => {
         if (!t.endTime) return false;
         const completed = new Date(t.endTime);
-        return completed >= dayStart && completed < dayEnd;
+        return completed >= calendarDayStart && completed < calendarDayEndExclusive;
       });
 
       // Calculate queue counts at end of day (5 PM local)
@@ -254,8 +255,7 @@ export async function GET(request: NextRequest) {
       // We don't filter by completion time - we want to see the CURRENT queue state for all tasks that existed on that day
       const allTasksForDay = allTasks.filter(t => {
         const created = new Date(t.createdAt);
-        // Task must have been created before end of day
-        return created < dayEnd;
+        return created < eodInventoryCutoff;
       });
       
       allTasksForDay.forEach(task => {
@@ -265,7 +265,7 @@ export async function GET(request: NextRequest) {
         let queueAtEndOfDay = task.holdsStatus || 'Unknown';
         
         // Check if this is a past date (EOD has already passed)
-        const isPastDate = dayEnd < now;
+        const isPastDate = eodInventoryCutoff < now;
         
         // For past dates, reconstruct queue from history to get accurate EOD snapshot
         if (isPastDate) {
@@ -274,11 +274,11 @@ export async function GET(request: NextRequest) {
             const activeAtEndOfDay = history.filter((entry) => {
               if (!entry.enteredAt) return false;
               const entered = new Date(entry.enteredAt);
-              if (entered > dayEnd) return false;
+              if (entered > eodInventoryCutoff) return false;
 
               if (entry.exitedAt) {
                 const exited = new Date(entry.exitedAt);
-                return exited >= dayEnd;
+                return exited >= eodInventoryCutoff;
               }
 
               return true;
@@ -329,7 +329,7 @@ export async function GET(request: NextRequest) {
         // Determine queue at end of day (same logic as in main loop)
         let queueAtEndOfDay = task.holdsStatus || 'Unknown';
         
-        const isPastDate = dayEnd < now;
+        const isPastDate = eodInventoryCutoff < now;
         
         if (isPastDate) {
           const hist = queueHistoryEntries(task.holdsQueueHistory);
@@ -337,11 +337,11 @@ export async function GET(request: NextRequest) {
             const activeAtEndOfDay = hist.filter((entry) => {
               if (!entry.enteredAt) return false;
               const entered = new Date(entry.enteredAt);
-              if (entered > dayEnd) return false;
+              if (entered > eodInventoryCutoff) return false;
 
               if (entry.exitedAt) {
                 const exited = new Date(entry.exitedAt);
-                return exited >= dayEnd;
+                return exited >= eodInventoryCutoff;
               }
 
               return true;
@@ -373,7 +373,11 @@ export async function GET(request: NextRequest) {
                                  queueCountsAtEndOfDay['ESCALATED CALL 4+ DAY'] || 0;
       const pendingCount = customerContactCount + escalatedCallCount;
 
-      const daySessions = filterSessionsForDay(mappedSessions, dayStart, dayEnd);
+      const daySessions = filterSessionsForDay(
+        mappedSessions,
+        calendarDayStart,
+        calendarDayEndExclusive
+      );
       const sessionSummary = aggregateSessionSummary(daySessions);
       const sessionsByAgent = aggregateSessionsByAgent(daySessions);
       const sessionsByQueueMovement = aggregateSessionsByQueueMovement(daySessions);
@@ -390,8 +394,8 @@ export async function GET(request: NextRequest) {
 
       const breakdown = {
         date: ymd,
-        dayStart: dayStart.toISOString(),
-        dayEnd: dayEnd.toISOString(),
+        dayStart: calendarDayStart.toISOString(),
+        dayEnd: eodInventoryCutoff.toISOString(),
         queueCountsAtEndOfDay,
         totalPendingAtEndOfDay: pendingCount,
         newTasksCount: newTasks.length,
@@ -444,10 +448,10 @@ export async function GET(request: NextRequest) {
                 const activeAtEndOfDay = qh.filter((entry) => {
                   if (!entry.enteredAt) return false;
                   const entered = new Date(entry.enteredAt);
-                  if (entered > dayEnd) return false;
+                  if (entered > eodInventoryCutoff) return false;
                   if (entry.exitedAt) {
                     const exited = new Date(entry.exitedAt);
-                    return exited >= dayEnd;
+                    return exited >= eodInventoryCutoff;
                   }
                   return true;
                 });

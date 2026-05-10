@@ -1029,7 +1029,7 @@ export default function DailyBreakdown() {
           Dates are interpreted in <span className="text-white/80">America/Los_Angeles</span>.{" "}
           <span className="text-white/80">Actions / work sessions</span> are TaskWorkSession rows (HOLDS,{" "}
           <span className="text-white/80">countsTowardProductivity</span>) with <span className="text-white/80">endedAt</span>{" "}
-          in each business day window (midnight–5 PM local, or through now when today is in progress).
+          in each full Pacific calendar day (midnight–midnight local). The selected end date is inclusive.
         </p>
         <p className="text-xs text-white/50 border border-white/10 rounded-lg px-3 py-2 bg-white/[0.03]">
           <span className="text-white/70">End-of-Day Queue Snapshot</span> is inventory at 5 PM local from task rows — not

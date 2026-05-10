@@ -1,6 +1,7 @@
 /**
- * Holds Daily Activity uses America/Los_Angeles civil dates (YYYY-MM-DD from the UI)
- * for TaskWorkSession endedAt windows and legacy task windows.
+ * Holds reporting uses America/Los_Angeles civil dates (YYYY-MM-DD from the UI).
+ * TaskWorkSession queries use full local calendar days (midnight–midnight) via getPacificReportingDayRangeUtc.
+ * Legacy end-of-day queue snapshot still uses a 5 PM local cutoff (pacificYmdToUtcDayEndForActivity).
  * Server timezone must not affect interpretation of those strings.
  */
 
@@ -139,15 +140,14 @@ function previousPacificYmd(ymd: string): string {
   return formatYmdPacific(new Date(t0 - 36 * 3600 * 1000));
 }
 
-/** Multi-day TaskWorkSession query: endedAt in [gte, lt). */
-export function getSessionQueryBounds(startYmd: string, endYmd: string, now: Date): { gte: Date; lt: Date } {
-  const gte = pacificYmdToUtcStart(startYmd);
-  const todayYmd = formatYmdPacific(now);
-  if (endYmd === todayYmd) {
-    const five = pacificYmdToUtcExclusiveEnd5pm(endYmd);
-    const lt = now < five ? now : five;
-    return { gte, lt };
-  }
-  const lt = pacificYmdToUtcExclusiveEnd5pm(endYmd);
-  return { gte, lt };
+/**
+ * Full Pacific calendar days for TaskWorkSession reporting (inclusive startYmd and endYmd).
+ * endedAt ∈ [gte, lt) where lt is the instant of midnight at the start of the day AFTER endYmd in America/Los_Angeles.
+ * Example: 2026-05-09 .. 2026-05-09 includes sessions with Pacific endedAt on May 9, including those stored as UTC on May 10 morning.
+ */
+export function getPacificReportingDayRangeUtc(startYmd: string, endYmd: string): { gte: Date; lt: Date } {
+  return {
+    gte: pacificYmdToUtcStart(startYmd),
+    lt: pacificYmdToUtcStart(nextPacificYmd(endYmd)),
+  };
 }
