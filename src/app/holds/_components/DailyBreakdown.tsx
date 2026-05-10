@@ -239,11 +239,7 @@ export default function DailyBreakdown() {
     rollovers: 1,
   });
 
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return formatYmdPacificFromDate(d);
-  });
+  const [startDate, setStartDate] = useState(() => formatYmdPacificFromDate(new Date()));
   const [endDate, setEndDate] = useState(() => formatYmdPacificFromDate(new Date()));
 
   const setModalTabResetPage = useCallback((t: ModalTab) => {
