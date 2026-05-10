@@ -152,6 +152,7 @@ model User {
   qaTaskReviewsAsSubject    QATaskReview[]      @relation("QATaskReviewSubject")
   emailRequestDispositionReviews EmailRequestDispositionReview[] @relation("EmailRequestDispositionReviewer")
   assistanceAuthoredMessages     AssistanceMessage[]
+  taskWorkSessions               TaskWorkSession[]
 
   @@index([isLive, lastSeen])
   @@index([qaIsTracked])
@@ -281,6 +282,7 @@ model Task {
 
   assistanceThread         AssistanceThread?
   assistanceMessagesOnTask AssistanceMessage[] @relation("TaskAssistanceMessages")
+  workSessions             TaskWorkSession[]
 
   @@index([assignedToId])
   @@index([status, createdAt])
@@ -361,6 +363,41 @@ model TaskHistory {
 
   @@index([taskId])
   @@index([actorId])
+}
+
+/// Per-agent work session ledger for multi-stage productivity (e.g. Holds). The Task row remains live workflow state.
+model TaskWorkSession {
+  id                       String   @id @default(cuid())
+  taskId                   String
+  taskType                 TaskType
+  agentId                  String
+  startedAt                DateTime?
+  endedAt                  DateTime
+  durationSec              Int?
+  fromQueue                String?
+  toQueue                  String?
+  disposition              String?
+  outcomeType              String
+  countsTowardProductivity Boolean  @default(true)
+  isFinalResolution        Boolean  @default(false)
+  source                   String   @default("AGENT_UI")
+  workflowType             String?
+  metadata                 Json?
+  idempotencyKey           String?  @unique
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  task  Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agent User @relation(fields: [agentId], references: [id], onDelete: Restrict)
+
+  @@index([taskId])
+  @@index([agentId, endedAt])
+  @@index([taskType, endedAt])
+  @@index([countsTowardProductivity, endedAt])
+  @@index([taskType, agentId, endedAt])
+  @@index([fromQueue, endedAt])
+  @@index([toQueue, endedAt])
+  @@index([isFinalResolution, endedAt])
 }
 
 /////////////////////////////////////
