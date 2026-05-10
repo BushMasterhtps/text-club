@@ -5,9 +5,11 @@ import type { Prisma } from '@prisma/client';
 import { apiAuthDeniedResponse, requireManagerApiAuth } from '@/lib/auth';
 import { logRouteTiming } from '@/lib/route-timing-log';
 import {
-  activeHoldsInventoryWhere,
-  HOLDS_ACTIVE_WORKFLOW_QUEUES,
+  HOLDS_ACTIONABLE_QUEUES,
+  HOLDS_DUPLICATE_EXCEPTION_QUEUE,
+  holdsOpenWorkflowQueuesWhere,
   holdsOrderAgeDays,
+  isHoldsActionableQueue,
   isOrderAgeAging5Plus,
   isOrderAgeApproaching3To4,
   isOrderAgeFresh0To2,
@@ -32,6 +34,20 @@ type QueueStatBucket = {
   approaching: number;
 };
 
+type AgingTaskRow = {
+  id: string;
+  orderNumber: string | null;
+  customerName: string;
+  customerEmail: string | null;
+  orderDate: Date | null;
+  daysSinceOrder: number | null;
+  isAging5Plus: boolean;
+  isApproaching3To4: boolean;
+  holdsStatus: string | null;
+  assignedTo: { id: string; name: string } | null;
+  createdAt: Date;
+};
+
 function buildCreatedAtRangeFilter(
   startDate: string | null,
   endDate: string | null,
@@ -46,6 +62,95 @@ function buildCreatedAtRangeFilter(
     range.lte = end;
   }
   return Object.keys(range).length > 0 ? range : undefined;
+}
+
+async function loadQueueHealthAnalytics(): Promise<{
+  overview: {
+    actionableOpenHoldsTasks: number;
+    duplicateExceptions: number;
+    agingTasks: number;
+    approachingTasks: number;
+    unassignedTasks: number;
+  };
+  queueStats: Record<string, number>;
+  agingBreakdown: {
+    '0-2 days': number;
+    '3-4 days': number;
+    '5+ days': number;
+  };
+  agingTaskRows: AgingTaskRow[];
+  approachingTaskRows: AgingTaskRow[];
+  allActionableRows: AgingTaskRow[];
+}> {
+  const currentDate = new Date();
+
+  const tasks = await prisma.task.findMany({
+    where: holdsOpenWorkflowQueuesWhere(),
+    include: {
+      assignedTo: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: [{ holdsOrderDate: 'asc' }, { holdsPriority: 'desc' }],
+  });
+
+  const actionableTasks = tasks.filter((t) => isHoldsActionableQueue(t.holdsStatus));
+  const duplicateExceptions = tasks.filter((t) => t.holdsStatus === HOLDS_DUPLICATE_EXCEPTION_QUEUE).length;
+
+  const tasksWithAging = actionableTasks.map((task) => {
+    const days = holdsOrderAgeDays(task.holdsOrderDate, currentDate);
+    return {
+      ...task,
+      aging: {
+        daysSinceOrder: days,
+        isAging5Plus: isOrderAgeAging5Plus(days),
+        isApproaching3To4: isOrderAgeApproaching3To4(days),
+        isFresh0To2: isOrderAgeFresh0To2(days),
+      },
+    };
+  });
+
+  const toRow = (task: (typeof tasksWithAging)[number]): AgingTaskRow => ({
+    id: task.id,
+    orderNumber: task.holdsOrderNumber,
+    customerName: task.text?.replace('Holds - ', '') || 'Unknown',
+    customerEmail: task.holdsCustomerEmail,
+    orderDate: task.holdsOrderDate,
+    daysSinceOrder: task.aging.daysSinceOrder,
+    isAging5Plus: task.aging.isAging5Plus,
+    isApproaching3To4: task.aging.isApproaching3To4,
+    holdsStatus: task.holdsStatus,
+    assignedTo: task.assignedTo,
+    createdAt: task.createdAt,
+  });
+
+  const rows = tasksWithAging.map(toRow);
+
+  const queueStats = Object.fromEntries(
+    HOLDS_ACTIONABLE_QUEUES.map((q) => [q, tasksWithAging.filter((t) => t.holdsStatus === q).length]),
+  ) as Record<string, number>;
+
+  return {
+    overview: {
+      actionableOpenHoldsTasks: tasksWithAging.length,
+      duplicateExceptions,
+      agingTasks: tasksWithAging.filter((t) => t.aging.isAging5Plus).length,
+      approachingTasks: tasksWithAging.filter((t) => t.aging.isApproaching3To4).length,
+      unassignedTasks: tasksWithAging.filter((t) => !t.assignedTo).length,
+    },
+    queueStats,
+    agingBreakdown: {
+      '0-2 days': tasksWithAging.filter((t) => t.aging.isFresh0To2).length,
+      '3-4 days': tasksWithAging.filter((t) => t.aging.isApproaching3To4).length,
+      '5+ days': tasksWithAging.filter((t) => t.aging.isAging5Plus).length,
+    },
+    agingTaskRows: rows.filter((r) => r.isAging5Plus),
+    approachingTaskRows: rows.filter((r) => r.isApproaching3To4),
+    allActionableRows: rows,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -69,16 +174,16 @@ export async function GET(request: NextRequest) {
     switch (type) {
       case 'overview':
         return await getOverviewAnalytics();
-      
+
       case 'aging':
         return await getAgingReport();
-      
+
       case 'agent-performance':
         return await getAgentPerformance(createdAtRange);
-      
+
       case 'queue-stats':
         return await getQueueStats();
-      
+
       default:
         return NextResponse.json(
           { success: false, error: 'Invalid analytics type' },
@@ -106,116 +211,34 @@ export async function GET(request: NextRequest) {
 }
 
 async function getOverviewAnalytics() {
-  const currentDate = new Date();
-
-  const tasks = await prisma.task.findMany({
-    where: activeHoldsInventoryWhere(),
-    include: {
-      assignedTo: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-  });
-
-  const tasksWithAging = tasks.map((task) => {
-    const days = holdsOrderAgeDays(task.holdsOrderDate, currentDate);
-    return {
-      ...task,
-      aging: {
-        daysSinceOrder: days,
-        isAging5Plus: isOrderAgeAging5Plus(days),
-        isApproaching3To4: isOrderAgeApproaching3To4(days),
-        isFresh0To2: isOrderAgeFresh0To2(days),
-      },
-    };
-  });
-
-  const activeHoldsTasks = tasksWithAging.length;
-  const agingTasks = tasksWithAging.filter((t) => t.aging.isAging5Plus).length;
-  const approachingTasks = tasksWithAging.filter((t) => t.aging.isApproaching3To4).length;
-  const unassignedTasks = tasksWithAging.filter((t) => !t.assignedTo).length;
-
-  const queueStats = Object.fromEntries(
-    HOLDS_ACTIVE_WORKFLOW_QUEUES.map((q) => [
-      q,
-      tasksWithAging.filter((t) => t.holdsStatus === q).length,
-    ])
-  ) as Record<string, number>;
-
-  const priorityStats = tasksWithAging.reduce((acc, task) => {
-    const priority = task.holdsPriority ?? 4;
-    acc[priority] = (acc[priority] || 0) + 1;
-    return acc;
-  }, {} as Record<number, number>);
+  const payload = await loadQueueHealthAnalytics();
 
   return NextResponse.json({
     success: true,
     data: {
-      overview: {
-        activeHoldsTasks,
-        agingTasks,
-        approachingTasks,
-        unassignedTasks,
-      },
-      queueStats,
-      priorityStats,
-      agingBreakdown: {
-        '0-2 days': tasksWithAging.filter((t) => t.aging.isFresh0To2).length,
-        '3-4 days': approachingTasks,
-        '5+ days': agingTasks,
-      },
+      overview: payload.overview,
+      queueStats: payload.queueStats,
+      agingBreakdown: payload.agingBreakdown,
+      agingTasks: payload.agingTaskRows,
+      approachingTasks: payload.approachingTaskRows,
     },
   });
 }
 
 async function getAgingReport() {
-  const currentDate = new Date();
-
-  const tasks = await prisma.task.findMany({
-    where: activeHoldsInventoryWhere(),
-    include: {
-      assignedTo: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: [{ holdsOrderDate: 'asc' }, { holdsPriority: 'desc' }],
-  });
-
-  const rows = tasks.map((task) => {
-    const days = holdsOrderAgeDays(task.holdsOrderDate, currentDate);
-    return {
-      id: task.id,
-      orderNumber: task.holdsOrderNumber,
-      customerName: task.text?.replace('Holds - ', '') || 'Unknown',
-      customerEmail: task.holdsCustomerEmail,
-      orderDate: task.holdsOrderDate,
-      daysSinceOrder: days,
-      isAging5Plus: isOrderAgeAging5Plus(days),
-      isApproaching3To4: isOrderAgeApproaching3To4(days),
-      priority: task.holdsPriority,
-      holdsStatus: task.holdsStatus,
-      assignedTo: task.assignedTo,
-      createdAt: task.createdAt,
-    };
-  });
+  const payload = await loadQueueHealthAnalytics();
 
   return NextResponse.json({
     success: true,
     data: {
-      agingTasks: rows.filter((t) => t.isAging5Plus),
-      approachingTasks: rows.filter((t) => t.isApproaching3To4),
-      allTasks: rows,
+      agingTasks: payload.agingTaskRows,
+      approachingTasks: payload.approachingTaskRows,
+      allTasks: payload.allActionableRows,
       summary: {
-        totalActive: rows.length,
-        aging: rows.filter((t) => t.isAging5Plus).length,
-        approaching: rows.filter((t) => t.isApproaching3To4).length,
-        unassigned: rows.filter((t) => !t.assignedTo).length,
+        totalActive: payload.overview.actionableOpenHoldsTasks,
+        aging: payload.overview.agingTasks,
+        approaching: payload.overview.approachingTasks,
+        unassigned: payload.overview.unassignedTasks,
       },
     },
   });
@@ -325,7 +348,7 @@ async function getAgentPerformance(createdAtRange?: Prisma.DateTimeFilter) {
 
 async function getQueueStats() {
   const tasks = await prisma.task.findMany({
-    where: activeHoldsInventoryWhere(),
+    where: holdsOpenWorkflowQueuesWhere(),
     include: {
       assignedTo: {
         select: {
