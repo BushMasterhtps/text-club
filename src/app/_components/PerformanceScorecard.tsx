@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatYmdStringForDisplay } from '@/lib/format-ymd-label';
 import { formatQaCoverageStatus } from '@/lib/qa-coverage-display';
@@ -13,11 +13,170 @@ import type { CoachingPerformanceContext } from '@/app/_components/OneOnOneNotes
 
 type RankingMode = 'sprint' | 'lifetime-points' | 'hybrid';
 
+/** Rows from team performance-scorecard API; extra QA fields accessed via string keys. */
+export type ScorecardAgentRow = { id: string } & Record<string, unknown>;
+
+export interface PerformanceScorecardApiPayload {
+  agents?: ScorecardAgentRow[];
+}
+
+/** Drill-down payload from performance-scorecard?agentId=… */
+export interface AgentDrillDown {
+  id: string;
+  isSingleDay?: boolean;
+  peakHours?: Array<{ hour: number; count: number }>;
+  topDays?: Array<{ date: string; count: number }>;
+  handleTimeDistribution?: {
+    under2min: number;
+    twoToThree: number;
+    threeToFive: number;
+    overFive: number;
+  };
+  dailyPerformance?: Array<{ date: string; count: number }>;
+}
+
+export interface WeightIndexTaskTypeStats {
+  avgWeight?: number;
+  dispositions?: number;
+  tasksAnalyzed?: number;
+}
+
+export interface WeightIndexDispositionRow {
+  taskType: string;
+  disposition: string;
+  weight: number;
+}
+
+export interface HoldsWeightIndexApiRow {
+  taskType: string;
+  disposition: string;
+  outcomeType: string | null;
+  weight: number;
+  label: string;
+  category?: string;
+  note?: string | null;
+}
+
+export interface SprintWeightIndex {
+  summary?: {
+    totalDispositions?: number;
+    totalTasksAnalyzed?: number;
+    taskTypes?: Record<string, WeightIndexTaskTypeStats>;
+  };
+  dispositions?: WeightIndexDispositionRow[];
+  holdsWeights?: HoldsWeightIndexApiRow[];
+  holdsWeightIndexNote?: string;
+  holdsScoringCutover?: string;
+  historicalDispositionIndexNote?: string;
+}
+
+export interface BreakdownDispositionRow {
+  disposition: string;
+  count: number;
+  points: number;
+  avgTime?: string;
+}
+
+export interface SprintTaskTypeBreakdown {
+  count: number;
+  weightedPoints: number;
+  avgSec: number;
+  totalSec: number;
+  dispositions?: BreakdownDispositionRow[];
+}
+
+export type SprintAgentBreakdown = Record<string, SprintTaskTypeBreakdown>;
+
+export interface HourlyBucket {
+  count: number;
+  points?: number;
+}
+
+export type HourlyBreakdownMap = Record<string, HourlyBucket>;
+
+export interface DailyBucket {
+  count: number;
+  points: number;
+  activeHours: number;
+}
+
+export type DailyBreakdownMap = Record<string, DailyBucket>;
+
+export interface SprintRankingAgent {
+  id: string;
+  name: string;
+  email: string;
+  rosterTeam?: string;
+  rankByPtsPerDay: number;
+  lifetimeRank: number;
+  rankByHybrid: number;
+  weightedDailyAvg: number;
+  hybridScore: number;
+  tasksPerDay: number;
+  percentile?: number;
+  isTopThree?: boolean;
+  tier?: string;
+  isChampion?: boolean;
+  totalCompleted: number;
+  tasksCompleted: number;
+  trelloCompleted: number;
+  weightedPoints?: number;
+  avgHandleTimeSec: number;
+  holdsHasMissingDurations?: boolean;
+  daysWorked: number;
+  totalTasks: number;
+  totalWeightedPoints: number;
+  avgHandleTime?: string;
+  estimatedIdleHours?: number;
+  activeHours: number;
+  breakdown?: SprintAgentBreakdown;
+  hourlyBreakdown?: HourlyBreakdownMap;
+  dailyBreakdown?: DailyBreakdownMap;
+}
+
+export interface SprintRankingsResponse {
+  success: boolean;
+  mode?: string;
+  dateRange?: {
+    start: string;
+    end: string;
+    isLifetime?: boolean;
+    isCustom?: boolean;
+  };
+  sprint?: {
+    number: number;
+    daysElapsed: number;
+    daysRemaining: number;
+    period?: string;
+  } | null;
+  rankings: {
+    competitive: SprintRankingAgent[];
+    seniors: SprintRankingAgent[];
+    unqualified?: SprintRankingAgent[];
+  };
+  teamAverages: {
+    tasksPerDay: number;
+    ptsPerDay: number;
+    ptsPerHour?: number;
+    activeHours?: number;
+    avgHandleTimeSec?: number;
+    hybridScore: number;
+  };
+  weightIndex?: SprintWeightIndex;
+}
+
+export interface SprintHistoryEntry {
+  sprintNumber: number;
+  isCurrent?: boolean;
+  period: string;
+  champion?: { name: string; ptsPerDay: number };
+}
+
 interface Props {
-  scorecardData: any;
+  scorecardData: PerformanceScorecardApiPayload | null;
   loading: boolean;
   onRefresh: () => void;
-  onLoadAgentDetail: (agentId: string) => Promise<any>;
+  onLoadAgentDetail: (agentId: string) => Promise<AgentDrillDown | null>;
   /** Matches Team Analytics filter; passed through to sprint-rankings API. */
   rosterTeamFilter?: string;
   dateRange?: { start: string; end: string }; // Custom date range from parent
@@ -50,57 +209,40 @@ export default function PerformanceScorecard({
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
-  const [agentDetailData, setAgentDetailData] = useState<any>(null);
+  const [agentDetailData, setAgentDetailData] = useState<AgentDrillDown | null>(null);
   const drillDownRequestAgentIdRef = useRef<string | null>(null);
-  
+
   /** Primary view: Hybrid 30/70 (performance scorecard). Task Volume tab removed — drill-down uses same APIs. */
   const [rankingMode, setRankingMode] = useState<RankingMode>('hybrid');
 
-  const scorecardAgentById = useMemo(() => {
-    const m = new Map<string, Record<string, unknown>>();
-    for (const a of (scorecardData?.agents ?? []) as { id: string }[]) {
-      if (a?.id) m.set(a.id, a as Record<string, unknown>);
-    }
-    return m;
-  }, [scorecardData]);
-  const [sprintData, setSprintData] = useState<any>(null);
+  const [sprintData, setSprintData] = useState<SprintRankingsResponse | null>(null);
   const [sprintLoading, setSprintLoading] = useState(false);
-  const [sprintHistory, setSprintHistory] = useState<any[]>([]);
+  const [sprintHistory, setSprintHistory] = useState<SprintHistoryEntry[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | 'current'>('current'); // Track selected sprint
-  
+
+  /** Preserve user's manual sprint selection when switching ranking modes. */
+  const [hasManuallySelectedSprint, setHasManuallySelectedSprint] = useState(false);
+
   // NEW: Productivity charts toggle
   const [showProductivityCharts, setShowProductivityCharts] = useState<string | null>(null); // agentId whose charts are shown
-  
+
   // NEW: Disposition breakdown toggle
   const [showDispositionBreakdown, setShowDispositionBreakdown] = useState<string | null>(null); // agentId whose breakdown is shown
 
-  // Load sprint data when component mounts, mode changes, or date range changes
-  useEffect(() => {
-    if (expanded && (rankingMode === 'sprint' || rankingMode === 'lifetime-points' || rankingMode === 'hybrid')) {
-      loadSprintData();
+  const scorecardAgentById = useMemo(() => {
+    const m = new Map<string, Record<string, unknown>>();
+    for (const a of scorecardData?.agents ?? []) {
+      if (a?.id) m.set(a.id, a);
     }
-    if (expanded) {
-      loadSprintHistory();
-    }
-  }, [expanded, rankingMode, dateRange?.start, dateRange?.end, selectedSprintNumber, rosterTeamFilter]);
-  
-  // Reset to current sprint only when first switching TO sprint mode from another mode
-  // But preserve user's manual selection if they've already selected a sprint
-  const [hasManuallySelectedSprint, setHasManuallySelectedSprint] = useState(false);
-  
-  useEffect(() => {
-    if (rankingMode === 'sprint' && !hasManuallySelectedSprint) {
-      // Only set to 'current' if user hasn't manually selected a sprint yet
-      setSelectedSprintNumber('current');
-    }
-  }, [rankingMode, hasManuallySelectedSprint]);
+    return m;
+  }, [scorecardData]);
 
-  const loadSprintData = async () => {
+  const loadSprintData = useCallback(async () => {
     setSprintLoading(true);
     try {
       let url = '/api/manager/analytics/sprint-rankings';
-      
+
       // Determine mode and add date range if custom
       if (rankingMode === 'lifetime-points') {
         url += '?mode=lifetime';
@@ -122,8 +264,8 @@ export default function PerformanceScorecard({
       url = appendRosterTeamToUrl(url, rosterTeamFilter);
 
       const res = await fetch(url);
-      const data = await res.json();
-      
+      const data = (await res.json()) as SprintRankingsResponse;
+
       if (data.success) {
         setSprintData(data);
       }
@@ -132,20 +274,50 @@ export default function PerformanceScorecard({
     } finally {
       setSprintLoading(false);
     }
-  };
+  }, [rankingMode, selectedSprintNumber, dateRange, rosterTeamFilter]);
 
-  const loadSprintHistory = async () => {
+  const loadSprintHistory = useCallback(async () => {
     try {
       const res = await fetch('/api/manager/analytics/sprint-history?limit=10');
-      const data = await res.json();
-      
-      if (data.success) {
+      const data = (await res.json()) as { success?: boolean; history?: SprintHistoryEntry[] };
+
+      if (data.success && Array.isArray(data.history)) {
         setSprintHistory(data.history);
       }
     } catch (error) {
       console.error('Error loading sprint history:', error);
     }
-  };
+  }, []);
+
+  // Load sprint data when component mounts, mode changes, or date range changes
+  useEffect(() => {
+    if (expanded && (rankingMode === 'sprint' || rankingMode === 'lifetime-points' || rankingMode === 'hybrid')) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Async sprint-rankings fetch on expand/filter change; setState runs after await inside loader.
+      void loadSprintData();
+    }
+    if (expanded) {
+      void loadSprintHistory();
+    }
+  }, [
+    expanded,
+    rankingMode,
+    dateRange?.start,
+    dateRange?.end,
+    selectedSprintNumber,
+    rosterTeamFilter,
+    loadSprintData,
+    loadSprintHistory,
+  ]);
+
+  // Reset to current sprint only when first switching TO sprint mode from another mode
+  // But preserve user's manual selection if they've already selected a sprint
+  useEffect(() => {
+    if (rankingMode === 'sprint' && !hasManuallySelectedSprint) {
+      // Only set to 'current' if user hasn't manually selected a sprint yet
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- UX reset when entering sprint mode before user picks a sprint; avoids clobbering manual selection.
+      setSelectedSprintNumber('current');
+    }
+  }, [rankingMode, hasManuallySelectedSprint]);
 
   const handleAgentClick = async (agentId: string) => {
     if (expandedAgentId === agentId) {
@@ -334,12 +506,23 @@ export default function PerformanceScorecard({
               {sprintData?.weightIndex && (
                 <details className="bg-yellow-500/10 rounded-lg p-4 border border-yellow-500/20">
                   <summary className="cursor-pointer text-sm font-medium text-yellow-300 hover:text-yellow-200">
-                    ⭐ Task Weight Index ({sprintData.weightIndex.summary?.totalDispositions || 0} dispositions from {sprintData.weightIndex.summary?.totalTasksAnalyzed?.toLocaleString() || 0} real tasks)
+                    ⭐ Task Weight Index
                   </summary>
                   <div className="mt-4 space-y-4">
+                    <p className="text-xs text-white/55 leading-relaxed">
+                      <span className="text-white/75 font-medium">Historical task index: </span>
+                      {sprintData.weightIndex.summary?.totalDispositions ?? 0} dispositions from{' '}
+                      {(sprintData.weightIndex.summary?.totalTasksAnalyzed ?? 0).toLocaleString()} historical tasks
+                      (Text Club, WOD/IVCS, Email Requests, Yotpo — not Holds).
+                    </p>
+                    {sprintData.weightIndex.historicalDispositionIndexNote && (
+                      <p className="text-[11px] text-white/45 leading-relaxed">
+                        {sprintData.weightIndex.historicalDispositionIndexNote}
+                      </p>
+                    )}
                     {/* Summary Stats */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {Object.entries(sprintData.weightIndex.summary?.taskTypes || {}).map(([taskType, stats]: [string, any]) => (
+                      {Object.entries(sprintData.weightIndex.summary?.taskTypes || {}).map(([taskType, stats]: [string, WeightIndexTaskTypeStats]) => (
                         <div key={taskType} className="bg-white/5 rounded-lg p-3 border border-white/10">
                           <div className="text-xs font-medium text-white/90 mb-1">
                             {taskType.replace('_', ' ')}
@@ -353,7 +536,10 @@ export default function PerformanceScorecard({
                     {/* Disposition List by Task Type */}
                     <div className="space-y-3">
                       {['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'YOTPO'].map(taskType => {
-                        const dispositions = sprintData.weightIndex.dispositions?.filter((d: any) => d.taskType === taskType) || [];
+                        const dispositions =
+                          sprintData.weightIndex.dispositions?.filter(
+                            (d: WeightIndexDispositionRow) => d.taskType === taskType
+                          ) || [];
                         if (dispositions.length === 0) return null;
 
                         return (
@@ -362,7 +548,7 @@ export default function PerformanceScorecard({
                               {taskType.replace('_', ' ')}
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                              {dispositions.map((d: any, idx: number) => (
+                              {dispositions.map((d: WeightIndexDispositionRow, idx: number) => (
                                 <div key={idx} className="flex items-center justify-between bg-white/5 rounded px-3 py-2 text-xs border border-white/10">
                                   <div className="flex-1 text-white/70 truncate pr-2" title={d.disposition}>
                                     {d.disposition}
@@ -377,10 +563,10 @@ export default function PerformanceScorecard({
                         );
                       })}
                       
-                      {/* Fixed Weights */}
+                      {/* Fixed weights (non-Holds disposition index) */}
                       <div>
                         <div className="text-xs font-semibold text-white/80 mb-2 uppercase tracking-wide">
-                          FIXED WEIGHTS
+                          OTHER FIXED WEIGHTS
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                           <div className="flex items-center justify-between bg-purple-500/10 border border-purple-500/30 rounded px-3 py-2 text-xs">
@@ -388,22 +574,69 @@ export default function PerformanceScorecard({
                             <div className="text-yellow-300 font-semibold">3.00 pts</div>
                           </div>
                           <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded px-3 py-2 text-xs">
-                            <div className="text-white/70">Holds (All)</div>
-                            <div className="text-yellow-300 font-semibold">4.00 pts</div>
-                          </div>
-                          <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded px-3 py-2 text-xs">
                             <div className="text-white/70">Standalone Refunds (All)</div>
                             <div className="text-yellow-300 font-semibold">3.00 pts</div>
                           </div>
                         </div>
                       </div>
+
+                      {/* Holds v1 disposition weights (from API) */}
+                      {Array.isArray(sprintData.weightIndex.holdsWeights) &&
+                        sprintData.weightIndex.holdsWeights.length > 0 && (
+                        <div>
+                          <div className="text-xs font-semibold text-white/80 mb-2 uppercase tracking-wide">
+                            HOLDS (V1 DISPOSITION INDEX)
+                          </div>
+                          {sprintData.weightIndex.holdsWeightIndexNote && (
+                            <p className="text-[11px] text-white/50 leading-relaxed mb-3 border border-orange-500/20 rounded-lg p-2.5 bg-orange-500/5">
+                              {sprintData.weightIndex.holdsWeightIndexNote}
+                            </p>
+                          )}
+                          {sprintData.weightIndex.holdsScoringCutover && (
+                            <p className="text-[10px] text-white/40 mb-2">
+                              Session-based sprint scoring for Holds uses rows with{' '}
+                              <code className="text-white/55">endedAt</code> on or after{' '}
+                              <span className="text-white/60">
+                                {new Date(sprintData.weightIndex.holdsScoringCutover).toLocaleDateString()}
+                              </span>
+                              ; older Holds in the same range use legacy completed-task weights.
+                            </p>
+                          )}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {sprintData.weightIndex.holdsWeights.map((row: HoldsWeightIndexApiRow, idx: number) => (
+                                <div
+                                  key={`${row.disposition}-${row.outcomeType ?? 'x'}-${idx}`}
+                                  className="flex flex-col gap-0.5 bg-orange-500/10 border border-orange-500/25 rounded px-3 py-2 text-xs"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div
+                                      className="flex-1 text-white/75 truncate pr-1"
+                                      title={row.label}
+                                    >
+                                      {row.label}
+                                    </div>
+                                    <div className="text-yellow-300 font-semibold whitespace-nowrap shrink-0">
+                                      {Number(row.weight).toFixed(2)} pts
+                                    </div>
+                                  </div>
+                                  {row.outcomeType && (
+                                    <div className="text-[10px] text-white/40 truncate">
+                                      Outcome: {row.outcomeType}
+                                    </div>
+                                  )}
+                                  {row.note && (
+                                    <div className="text-[10px] text-white/35 leading-snug">{row.note}</div>
+                                  )}
+                                </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Explanation */}
                     <div className="text-xs text-white/50 bg-white/5 rounded p-3 border border-white/10">
-                      💡 <strong>How it works:</strong> Each task's weight is based on its actual average handle time from production data. 
-                      Higher complexity tasks (like "Answered in SF") earn more points than simpler tasks (like "Spam"). 
-                      This ensures agents who tackle harder work get proper credit, making rankings fair across different workload mixes.
+                      💡 <strong>How it works:</strong> For the historical task types above, each disposition weight came from sampled production handle times. Holds uses the separate v1 table (fixed points per disposition/outcome). Higher weights mean more complexity credit in the hybrid score.
                     </div>
                   </div>
                 </details>
@@ -435,9 +668,9 @@ export default function PerformanceScorecard({
                             <div>
                               <strong className="text-white/90">Step 1:</strong> Normalize both metrics to 0-100 scale:
                               <div className="ml-3 mt-1 text-white/70">
-                                • Volume: (Agent's tasks/day ÷ Top performer's tasks/day) × 100
+                                • Volume: (Agent&apos;s tasks/day ÷ Top performer&apos;s tasks/day) × 100
                                 <br/>
-                                • Complexity: (Agent's pts/day ÷ Top performer's pts/day) × 100
+                                • Complexity: (Agent&apos;s pts/day ÷ Top performer&apos;s pts/day) × 100
                               </div>
                             </div>
                             <div>
@@ -481,7 +714,7 @@ export default function PerformanceScorecard({
                                  b.rankByHybrid;
                     return rankA - rankB; // Ascending (1, 2, 3...)
                   })
-                  .map((agent: any) => {
+                  .map((agent: SprintRankingAgent) => {
                   // Determine which rank to display based on mode
                   const displayRank = rankingMode === 'sprint' ? agent.rankByPtsPerDay :
                                     rankingMode === 'lifetime-points' ? agent.lifetimeRank :
@@ -621,7 +854,10 @@ export default function PerformanceScorecard({
                           {rankingMode === 'hybrid' && (
                             <div className="absolute right-0 top-0 w-64 bg-gray-900 border border-purple-500/50 rounded-lg p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                               <div className="text-xs text-white space-y-1">
-                                <div className="font-semibold text-purple-300 mb-2">🎯 {agent.name}'s Hybrid Score</div>
+                                <div className="font-semibold text-purple-300 mb-2">
+                                  🎯 {agent.name}
+                                  &apos;s Hybrid Score
+                                </div>
                                 <div className="text-white/70">
                                   <strong>Volume:</strong> {agent.tasksPerDay.toFixed(1)} tasks/day
                                   <br/>
@@ -891,7 +1127,7 @@ export default function PerformanceScorecard({
                                   )}
                                   {isAboveAverage && !isTopPerformer && (
                                     <div className="mt-1 text-green-400">
-                                      ✨ You're above team average! Keep pushing to reach top 3.
+                                      ✨ You&apos;re above team average! Keep pushing to reach top 3.
                                     </div>
                                   )}
                                 </div>
@@ -900,7 +1136,7 @@ export default function PerformanceScorecard({
 
                             {isTopPerformer && (
                               <div className="text-xs text-green-400">
-                                Keep up the excellent work! You're setting the standard for the team. 🌟
+                                Keep up the excellent work! You&apos;re setting the standard for the team. 🌟
                               </div>
                             )}
                           </div>
@@ -926,7 +1162,7 @@ export default function PerformanceScorecard({
                           <>
                             {agent.breakdown && Object.keys(agent.breakdown).length > 0 && (
                             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {Object.entries(agent.breakdown).map(([taskType, data]: [string, any]) => {
+                              {Object.entries(agent.breakdown).map(([taskType, data]: [string, SprintTaskTypeBreakdown]) => {
                                 const percentage = agent.totalCompleted > 0 
                                   ? Math.round((data.count / agent.totalCompleted) * 100) 
                                   : 0;
@@ -1041,7 +1277,10 @@ export default function PerformanceScorecard({
                                           {Array.from({ length: 24 }, (_, hour) => {
                                             const data = agent.hourlyBreakdown[hour];
                                             const count = data?.count || 0;
-                                            const maxCount = Math.max(...Object.values(agent.hourlyBreakdown).map((d: any) => d.count), 1);
+                                            const maxCount = Math.max(
+                                              ...Object.values(agent.hourlyBreakdown).map((d: HourlyBucket) => d.count),
+                                              1
+                                            );
                                             const heightPercent = count > 0 ? (count / maxCount) * 100 : 0;
                                             
                                             return (
@@ -1075,7 +1314,10 @@ export default function PerformanceScorecard({
                                         {/* Peak Hours Analysis */}
                                         {(() => {
                                           const sortedHours = Object.entries(agent.hourlyBreakdown)
-                                            .map(([hour, data]: [string, any]) => ({ hour: parseInt(hour), ...data }))
+                                            .map(([hour, data]: [string, HourlyBucket]) => ({
+                                              hour: parseInt(hour, 10),
+                                              ...data,
+                                            }))
                                             .sort((a, b) => b.count - a.count)
                                             .slice(0, 3);
                                           
@@ -1102,8 +1344,10 @@ export default function PerformanceScorecard({
                                         <div className="space-y-2">
                                           {Object.entries(agent.dailyBreakdown)
                                             .sort(([a], [b]) => a.localeCompare(b))
-                                            .map(([day, data]: [string, any]) => {
-                                              const maxCount = Math.max(...Object.values(agent.dailyBreakdown).map((d: any) => d.count));
+                                            .map(([day, data]: [string, DailyBucket]) => {
+                                              const maxCount = Math.max(
+                                                ...Object.values(agent.dailyBreakdown).map((d: DailyBucket) => d.count)
+                                              );
                                               const widthPercent = maxCount > 0 ? (data.count / maxCount) * 100 : 0;
                                               const dayOfWeek = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' });
                                               const displayDate = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -1132,21 +1376,29 @@ export default function PerformanceScorecard({
                                         {/* Peak Days Analysis */}
                                         {(() => {
                                           const sortedDays = Object.entries(agent.dailyBreakdown)
-                                            .map(([day, data]: [string, any]) => ({ day, ...data }))
+                                            .map(([day, data]: [string, DailyBucket]) => ({ day, ...data }))
                                             .sort((a, b) => b.count - a.count)
                                             .slice(0, 3);
                                           
-                                          const avgTasksPerDay = Object.values(agent.dailyBreakdown).reduce((sum: number, d: any) => sum + d.count, 0) / Object.keys(agent.dailyBreakdown).length;
-                                          const avgHoursPerDay = Object.values(agent.dailyBreakdown).reduce((sum: number, d: any) => sum + d.activeHours, 0) / Object.keys(agent.dailyBreakdown).length;
+                                          const avgTasksPerDay =
+                                            Object.values(agent.dailyBreakdown).reduce(
+                                              (sum: number, d: DailyBucket) => sum + d.count,
+                                              0
+                                            ) / Object.keys(agent.dailyBreakdown).length;
+                                          const avgHoursPerDay =
+                                            Object.values(agent.dailyBreakdown).reduce(
+                                              (sum: number, d: DailyBucket) => sum + d.activeHours,
+                                              0
+                                            ) / Object.keys(agent.dailyBreakdown).length;
                                           
                                           // Find peak hour across all days
-                                          const allHourlyData: Record<number, number> = {};
+                                          const allHourlyData: Record<string, number> = {};
                                           if (agent.hourlyBreakdown) {
-                                            for (const [hour, data] of Object.entries(agent.hourlyBreakdown) as any) {
-                                              allHourlyData[hour] = (data.count || 0);
+                                            for (const [hour, data] of Object.entries(agent.hourlyBreakdown)) {
+                                              allHourlyData[hour] = data.count || 0;
                                             }
                                           }
-                                          const peakHour = Object.entries(allHourlyData).sort(([, a], [, b]) => (b as number) - (a as number))[0];
+                                          const peakHour = Object.entries(allHourlyData).sort(([, a], [, b]) => b - a)[0];
                                           
                                           return (
                                             <div className="mt-3 bg-purple-500/10 rounded p-3 space-y-2 text-xs">
@@ -1200,7 +1452,7 @@ export default function PerformanceScorecard({
                                     <div className="space-y-4">
                                       {Object.entries(agent.breakdown)
                                         .filter(([taskType]) => taskType !== 'TRELLO') // Show Trello separately
-                                        .map(([taskType, data]: [string, any]) => {
+                                        .map(([taskType, data]: [string, SprintTaskTypeBreakdown]) => {
                                           const taskTypeName = taskType === 'TEXT_CLUB' ? 'Text Club' : 
                                                              taskType === 'WOD_IVCS' ? 'WOD/IVCS' : 
                                                              taskType === 'EMAIL_REQUESTS' ? 'Email Requests' :
@@ -1223,7 +1475,7 @@ export default function PerformanceScorecard({
                                               {/* Disposition rows */}
                                               {data.dispositions && data.dispositions.length > 0 ? (
                                                 <div className="space-y-1 ml-4">
-                                                  {data.dispositions.map((disp: any) => {
+                                                  {data.dispositions.map((disp: BreakdownDispositionRow) => {
                                                     const dispPercent = agent.totalTasks > 0 ? ((disp.count / agent.totalTasks) * 100).toFixed(1) : '0.0';
                                                     
                                                     return (
@@ -1359,7 +1611,7 @@ export default function PerformanceScorecard({
                                       ⏰ Peak Productivity Hours (PST)
                                     </h4>
                                     <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                      {agentDetailData.peakHours.map((peak: any, idx: number) => (
+                                      {agentDetailData.peakHours.map((peak: { hour: number; count: number }, idx: number) => (
                                         <div key={idx} className="bg-white/5 rounded p-2 text-center">
                                           <div className="text-xs text-white/50">
                                             {peak.hour === 0 ? '12 AM' :
@@ -1381,7 +1633,7 @@ export default function PerformanceScorecard({
                                       📅 Top Performing Days
                                     </h4>
                                     <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                      {agentDetailData.topDays.map((day: any, idx: number) => (
+                                      {agentDetailData.topDays.map((day: { date: string; count: number }, idx: number) => (
                                         <div key={idx} className="bg-white/5 rounded p-2 text-center">
                                           <div className="text-xs text-white/50">
                                             {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1470,7 +1722,7 @@ export default function PerformanceScorecard({
                       These agents support the team during high-volume periods. Stats tracked for visibility, not ranked competitively.
                     </div>
                     <div className="space-y-2">
-                      {sprintData.rankings.seniors.map((agent: any) => (
+                      {sprintData.rankings.seniors.map((agent: SprintRankingAgent) => (
                         <div key={agent.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
                           <div>
                             <div className="font-medium text-white">{agent.name}</div>
@@ -1503,7 +1755,7 @@ export default function PerformanceScorecard({
                     
                     {showHistory && (
                       <div className="space-y-2 mt-3">
-                        {sprintHistory.slice(0, 6).map((sprint: any) => (
+                        {sprintHistory.slice(0, 6).map((sprint: SprintHistoryEntry) => (
                           <div key={sprint.sprintNumber} className="flex items-center justify-between bg-white/5 rounded-lg p-3 border border-white/10">
                             <div>
                               <div className="text-sm font-medium text-white">

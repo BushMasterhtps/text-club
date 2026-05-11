@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { 
   getCurrentSprint, 
@@ -7,9 +7,15 @@ import {
   isSeniorAgent 
 } from '@/lib/sprint-utils';
 import { getTaskWeight, getAllWeights, WEIGHT_SUMMARY } from '@/lib/task-weights';
+import {
+  getHoldsWorkSessionWeight,
+  getHoldsWeightIndexRows,
+  HOLDS_SESSION_SCORING_STARTS_AT,
+  normalizeHoldsDisposition,
+} from '@/lib/holds-productivity-scoring';
 import { apiAuthDeniedResponse, requireStaffApiAuth } from "@/lib/auth";
 import { resolveProductivityScorecardSubjects } from '@/lib/productivity-scorecard-subjects';
-import { Prisma } from '@prisma/client';
+import { Prisma, TaskType } from '@prisma/client';
 import { NextResponseJsonSafe } from '@/lib/safe-json-response';
 
 const SPRINT_DURATION_DAYS = 14;
@@ -160,50 +166,79 @@ export async function GET(request: NextRequest) {
           ? { not: null }
           : { gte: sprintStart, lte: sprintEnd };
 
-      // Non-HOLDS: keep current assignedTo attribution and duration requirement.
-      // HOLDS: use completedBy attribution for productivity credit; duration may be null.
-      const [nonHoldsTasks, holdsTasks] = await Promise.all([
-        prisma.task.findMany({
-          where: {
-            assignedToId: agent.id,
-            taskType: { not: 'HOLDS' },
-            status: 'COMPLETED',
-            endTime: endTimeWhere,
-            disposition: { not: null },
-            durationSec: { not: null }
-          },
-          select: {
-            id: true,
-            disposition: true,
-            durationSec: true,
-            endTime: true,
-            taskType: true
-          }
-        }),
-        prisma.task.findMany({
-          where: {
-            completedBy: agent.id,
-            taskType: 'HOLDS',
-            status: 'COMPLETED',
-            endTime: endTimeWhere,
-            disposition: { not: null }
-          },
-          select: {
-            id: true,
-            disposition: true,
-            durationSec: true,
-            endTime: true,
-            taskType: true
-          }
-        })
+      const cutover = HOLDS_SESSION_SCORING_STARTS_AT;
+      /** Pre-cutover portion of the selected window overlaps legacy Task-based Holds. */
+      const rangeIntersectsPreCutover = sprintStart < cutover;
+      /** Post-cutover portion overlaps TaskWorkSession-based Holds. */
+      const rangeIntersectsPostCutover = sprintEnd >= cutover;
+
+      const holdsLegacyEndTimeWhere: Prisma.DateTimeFilter =
+        mode === 'lifetime'
+          ? { gte: sprintStart, lt: cutover, lte: sprintEnd }
+          : { gte: sprintStart, lte: sprintEnd, lt: cutover };
+
+      // Non-HOLDS: unchanged Task-based productivity (assignedToId, duration required).
+      const nonHoldsTasks = await prisma.task.findMany({
+        where: {
+          assignedToId: agent.id,
+          taskType: { not: TaskType.HOLDS },
+          status: 'COMPLETED',
+          endTime: endTimeWhere,
+          disposition: { not: null },
+          durationSec: { not: null },
+        },
+        select: {
+          id: true,
+          disposition: true,
+          durationSec: true,
+          endTime: true,
+          taskType: true,
+        },
+      });
+
+      const [holdsLegacyTasks, holdsSessions] = await Promise.all([
+        rangeIntersectsPreCutover
+          ? prisma.task.findMany({
+              where: {
+                completedBy: agent.id,
+                taskType: TaskType.HOLDS,
+                status: 'COMPLETED',
+                disposition: { not: null },
+                endTime: holdsLegacyEndTimeWhere,
+              },
+              select: {
+                id: true,
+                disposition: true,
+                durationSec: true,
+                endTime: true,
+                taskType: true,
+              },
+            })
+          : Promise.resolve([]),
+        rangeIntersectsPostCutover
+          ? prisma.taskWorkSession.findMany({
+              where: {
+                agentId: agent.id,
+                taskType: TaskType.HOLDS,
+                countsTowardProductivity: true,
+                endedAt: {
+                  gte: sprintStart.getTime() >= cutover.getTime() ? sprintStart : cutover,
+                  lte: sprintEnd,
+                },
+              },
+              select: {
+                id: true,
+                disposition: true,
+                outcomeType: true,
+                durationSec: true,
+                endedAt: true,
+                isFinalResolution: true,
+              },
+            })
+          : Promise.resolve([]),
       ]);
 
-      // Dedupe by task id for mixed attribution edge-cases.
-      const portalTasks = Array.from(
-        new Map(
-          [...nonHoldsTasks, ...holdsTasks].map((task) => [task.id, task])
-        ).values()
-      );
+      const portalTasks = nonHoldsTasks;
 
       // Get Trello completions in sprint (or lifetime)
       // Handle 1-day lag: Only count Trello up to yesterday
@@ -274,11 +309,17 @@ export async function GET(request: NextRequest) {
       const hourlyBreakdown: Record<number, { count: number; points: number }> = {};
       const dailyBreakdown: Record<string, { count: number; points: number; activeHours: number }> = {};
 
-      for (const task of portalTasks) {
-        const weight = getTaskWeight(task.taskType, task.disposition);
+      const applyPortalTaskMetrics = (params: {
+        taskType: string;
+        disposition: string | null;
+        durationSec: number | null;
+        endTime: Date;
+        weight: number;
+      }) => {
+        const { taskType, disposition, durationSec, endTime, weight } = params;
         totalWeightedPoints += weight;
-        const taskDurationSec = task.durationSec ?? null;
-        if (task.taskType === 'HOLDS' && taskDurationSec === null) {
+        const taskDurationSec = durationSec ?? null;
+        if (taskType === TaskType.HOLDS && taskDurationSec === null) {
           holdsHasMissingDurations = true;
         }
         if (taskDurationSec !== null) {
@@ -286,63 +327,99 @@ export async function GET(request: NextRequest) {
           timedPortalTaskCount++;
         }
 
-        // Track breakdown by task type
-        if (!breakdown[task.taskType]) {
-          breakdown[task.taskType] = { count: 0,  weightedPoints: 0, avgSec: 0, totalSec: 0 };
+        if (!breakdown[taskType]) {
+          breakdown[taskType] = { count: 0, weightedPoints: 0, avgSec: 0, totalSec: 0 };
         }
-        breakdown[task.taskType].count++;
-        breakdown[task.taskType].weightedPoints += weight;
+        breakdown[taskType].count++;
+        breakdown[taskType].weightedPoints += weight;
         if (taskDurationSec !== null) {
-          breakdown[task.taskType].totalSec += taskDurationSec;
-          timedBreakdownCounts[task.taskType] =
-            (timedBreakdownCounts[task.taskType] || 0) + 1;
+          breakdown[taskType].totalSec += taskDurationSec;
+          timedBreakdownCounts[taskType] = (timedBreakdownCounts[taskType] || 0) + 1;
         }
-        
-        // Track disposition within task type
-        if (task.disposition) {
-          if (!dispositionTracker[task.taskType]) {
-            dispositionTracker[task.taskType] = {};
+
+        const dispKey =
+          taskType === TaskType.HOLDS
+            ? normalizeHoldsDisposition(disposition) ?? "(null)"
+            : disposition ?? "";
+
+        if (dispKey && dispKey !== "(null)") {
+          if (!dispositionTracker[taskType]) {
+            dispositionTracker[taskType] = {};
           }
-          if (!dispositionTracker[task.taskType][task.disposition]) {
-            dispositionTracker[task.taskType][task.disposition] = {
+          if (!dispositionTracker[taskType][dispKey]) {
+            dispositionTracker[taskType][dispKey] = {
               count: 0,
               points: 0,
               totalSec: 0,
-              timedCount: 0
+              timedCount: 0,
             };
           }
-          dispositionTracker[task.taskType][task.disposition].count++;
-          dispositionTracker[task.taskType][task.disposition].points += weight;
+          dispositionTracker[taskType][dispKey].count++;
+          dispositionTracker[taskType][dispKey].points += weight;
           if (taskDurationSec !== null) {
-            dispositionTracker[task.taskType][task.disposition].totalSec += taskDurationSec;
-            dispositionTracker[task.taskType][task.disposition].timedCount++;
+            dispositionTracker[taskType][dispKey].totalSec += taskDurationSec;
+            dispositionTracker[taskType][dispKey].timedCount++;
           }
         }
-        
-        // NEW: Track hourly and daily productivity (PST timezone)
-        if (task.endTime) {
-          const pstOffset = -8 * 60 * 60 * 1000; // PST = UTC - 8
-          const endTimePST = new Date(task.endTime.getTime() + pstOffset);
-          const hour = endTimePST.getUTCHours(); // 0-23
-          const dayKey = endTimePST.toISOString().split('T')[0]; // YYYY-MM-DD
-          
-          // Hourly breakdown
-          if (!hourlyBreakdown[hour]) {
-            hourlyBreakdown[hour] = { count: 0, points: 0 };
-          }
-          hourlyBreakdown[hour].count++;
-          hourlyBreakdown[hour].points += weight;
-          
-          // Daily breakdown
-          if (!dailyBreakdown[dayKey]) {
-            dailyBreakdown[dayKey] = { count: 0, points: 0, activeHours: 0 };
-          }
-          dailyBreakdown[dayKey].count++;
-          dailyBreakdown[dayKey].points += weight;
-          if (taskDurationSec !== null) {
-            dailyBreakdown[dayKey].activeHours += taskDurationSec / 3600;
-          }
+
+        const pstOffset = -8 * 60 * 60 * 1000;
+        const endTimePST = new Date(endTime.getTime() + pstOffset);
+        const hour = endTimePST.getUTCHours();
+        const dayKey = endTimePST.toISOString().split("T")[0];
+
+        if (!hourlyBreakdown[hour]) {
+          hourlyBreakdown[hour] = { count: 0, points: 0 };
         }
+        hourlyBreakdown[hour].count++;
+        hourlyBreakdown[hour].points += weight;
+
+        if (!dailyBreakdown[dayKey]) {
+          dailyBreakdown[dayKey] = { count: 0, points: 0, activeHours: 0 };
+        }
+        dailyBreakdown[dayKey].count++;
+        dailyBreakdown[dayKey].points += weight;
+        if (taskDurationSec !== null) {
+          dailyBreakdown[dayKey].activeHours += taskDurationSec / 3600;
+        }
+      };
+
+      for (const task of portalTasks) {
+        const weight = getTaskWeight(task.taskType, task.disposition);
+        if (!task.endTime) continue;
+        applyPortalTaskMetrics({
+          taskType: task.taskType,
+          disposition: task.disposition,
+          durationSec: task.durationSec,
+          endTime: task.endTime,
+          weight,
+        });
+      }
+
+      for (const task of holdsLegacyTasks) {
+        if (!task.endTime) continue;
+        const weight = getTaskWeight(TaskType.HOLDS, task.disposition);
+        applyPortalTaskMetrics({
+          taskType: TaskType.HOLDS,
+          disposition: task.disposition,
+          durationSec: task.durationSec,
+          endTime: task.endTime,
+          weight,
+        });
+      }
+
+      for (const session of holdsSessions) {
+        const weight = getHoldsWorkSessionWeight({
+          disposition: session.disposition,
+          outcomeType: session.outcomeType,
+          isFinalResolution: session.isFinalResolution,
+        });
+        applyPortalTaskMetrics({
+          taskType: TaskType.HOLDS,
+          disposition: session.disposition,
+          durationSec: session.durationSec,
+          endTime: session.endedAt,
+          weight,
+        });
       }
 
       // Calculate averages for each task type
@@ -393,17 +470,24 @@ export async function GET(request: NextRequest) {
       }
 
       // Calculate days worked
-      const portalWorkDates = new Set(
-        portalTasks
-          .filter(t => t.endTime)
-          .map(t => t.endTime!.toISOString().split('T')[0])
-      );
+      const portalWorkDates = new Set<string>([
+        ...portalTasks
+          .filter((t) => t.endTime)
+          .map((t) => t.endTime!.toISOString().split("T")[0]),
+        ...holdsLegacyTasks
+          .filter((t) => t.endTime)
+          .map((t) => t.endTime!.toISOString().split("T")[0]),
+        ...holdsSessions.map((s) => s.endedAt.toISOString().split("T")[0]),
+      ]);
 
       const allWorkDates = new Set([...portalWorkDates, ...trelloWorkDates]);
       const daysWorked = allWorkDates.size;
 
+      const portalWorkCount =
+        portalTasks.length + holdsLegacyTasks.length + holdsSessions.length;
+
       // Calculate metrics
-      const totalCompleted = portalTasks.length + trelloCount;
+      const totalCompleted = portalWorkCount + trelloCount;
       const avgHandleTimeSec = timedPortalTaskCount > 0
         ? Math.round(totalHandleTimeSec / timedPortalTaskCount)
         : 0;
@@ -422,7 +506,7 @@ export async function GET(request: NextRequest) {
         name: agent.name || agent.email,
         email: agent.email,
         rosterTeam: agent.rosterTeam,
-        tasksCompleted: portalTasks.length,
+        tasksCompleted: portalWorkCount,
         trelloCompleted: trelloCount,
         totalCompleted,
         totalTasks: totalCompleted, // Alias for frontend compatibility
@@ -604,8 +688,22 @@ export async function GET(request: NextRequest) {
       teamAverages,
       weightIndex: {
         summary: WEIGHT_SUMMARY,
-        dispositions: getAllWeights()
-      }
+        dispositions: getAllWeights(),
+        holdsWeights: getHoldsWeightIndexRows().map((r) => ({
+          taskType: r.taskType,
+          disposition: r.disposition,
+          outcomeType: r.outcomeType ?? null,
+          weight: r.weight,
+          label: r.label,
+          category: r.category,
+          note: r.note ?? null,
+        })),
+        holdsWeightIndexNote:
+          "Holds uses a v1 disposition-based weight index. Final-resolution weights are based on historical completed Holds data where available. Queue handoff weights are starter values until more live Holds session data is collected. A future calibration tool will allow these weights to be reviewed and updated by sprint.",
+        holdsScoringCutover: HOLDS_SESSION_SCORING_STARTS_AT.toISOString(),
+        historicalDispositionIndexNote:
+          "The counts above (dispositions / historical tasks) refer to the Text Club, WOD/IVCS, Email Requests, and Yotpo index from legacy production sampling. Holds v1 weights are listed separately and are not part of that 22,676-task sample.",
+      },
     });
 
   } catch (error) {
