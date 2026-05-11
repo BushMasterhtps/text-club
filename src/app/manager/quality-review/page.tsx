@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/app/_components/DashboardLayout";
 import { DashboardNavigationProvider } from "@/contexts/DashboardNavigationContext";
@@ -20,16 +20,10 @@ import {
   NO_DISPOSITION_LABEL,
 } from "@/app/manager/quality-review/_components/qa-review-formatters";
 import { QaSprintSummary } from "@/app/manager/quality-review/_components/QaSprintSummary";
+import { QA_BATCH_TASK_TYPES } from "@/lib/quality-review-task-types";
 import type { QAReviewLineResponse, TaskType, WodIvcsSource } from "@prisma/client";
 
 type AgentRow = { id: string; email: string; name: string | null };
-
-const TASK_TYPES: TaskType[] = [
-  "TEXT_CLUB",
-  "EMAIL_REQUESTS",
-  "YOTPO",
-  "WOD_IVCS",
-];
 
 const WOD_SOURCES: WodIvcsSource[] = [
   "INVALID_CASH_SALE",
@@ -138,6 +132,32 @@ function QualityReviewContent() {
   /** Mobile / small screens: expanded live score drawer */
   const [mobileLiveScoreOpen, setMobileLiveScoreOpen] = useState(false);
 
+  const filtersReady = Boolean(subjectAgentId && startDate && endDate);
+  const eligibilityForUi = filtersReady ? eligibility : null;
+
+  const sanitizedDispositionChoice = useMemo(() => {
+    if (!eligibilityForUi) return dispositionChoice;
+    const allowed = new Set([
+      DISPOSITION_ALL,
+      ...eligibilityForUi.countsByDisposition.map((o) => o.value),
+    ]);
+    return allowed.has(dispositionChoice) ? dispositionChoice : DISPOSITION_ALL;
+  }, [eligibilityForUi, dispositionChoice]);
+
+  const goToStep = useCallback((next: "setup" | "review" | "summary") => {
+    if (next !== "review") setMobileLiveScoreOpen(false);
+    setStep(next);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersReady) {
+      // Dropping cached eligibility when the scope is incomplete avoids showing stale counts after
+      // dates or agent are cleared and re-selected (same as the pre-refactor batch page).
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional sync clear tied to filter completeness
+      setEligibility(null);
+    }
+  }, [filtersReady]);
+
   useEffect(() => {
     (async () => {
       const res = await fetch("/api/manager/agents", { cache: "no-store", credentials: "include" });
@@ -177,18 +197,17 @@ function QualityReviewContent() {
   }, [taskType]);
 
   useEffect(() => {
-    if (!subjectAgentId || !startDate || !endDate) {
-      setEligibility(null);
+    if (!filtersReady) {
       return;
     }
+    const agent = subjectAgentId;
+    const start = startDate;
+    const end = endDate;
+    const tt = taskType;
+    const ws = wodSource;
+    const disp = sanitizedDispositionChoice;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const agent = subjectAgentId;
-      const start = startDate;
-      const end = endDate;
-      const tt = taskType;
-      const ws = wodSource;
-      const disp = dispositionChoice;
       void (async () => {
         setLoadingEligibility(true);
         setError(null);
@@ -209,6 +228,7 @@ function QualityReviewContent() {
           });
           const json = await res.json();
           if (!json.success) throw new Error(json.error || "Eligibility failed");
+          setPreviewSnippetExpanded({});
           setEligibility({
             totalEligible: json.data.totalEligible,
             countsByTaskType: json.data.countsByTaskType ?? {},
@@ -217,6 +237,7 @@ function QualityReviewContent() {
           });
         } catch (e: unknown) {
           setError(e instanceof Error ? e.message : "Eligibility failed");
+          setPreviewSnippetExpanded({});
           setEligibility(null);
         } finally {
           setLoadingEligibility(false);
@@ -226,10 +247,18 @@ function QualityReviewContent() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [subjectAgentId, startDate, endDate, taskType, wodSource, dispositionChoice]);
+  }, [
+    filtersReady,
+    subjectAgentId,
+    startDate,
+    endDate,
+    taskType,
+    wodSource,
+    sanitizedDispositionChoice,
+  ]);
 
   const dispositionOptionsForSelect = useMemo(() => {
-    const opts = (eligibility?.countsByDisposition ?? []).map((o) => ({
+    const opts = (eligibilityForUi?.countsByDisposition ?? []).map((o) => ({
       ...o,
       label:
         o.value === DISPOSITION_NONE
@@ -237,39 +266,22 @@ function QualityReviewContent() {
           : `${o.value} (${o.count})`,
     }));
     return [{ value: DISPOSITION_ALL, count: 0, label: "All dispositions" }, ...opts];
-  }, [eligibility]);
+  }, [eligibilityForUi]);
 
   const previewTasksSorted = useMemo(() => {
-    const list = eligibility?.previewTasks ?? [];
+    const list = eligibilityForUi?.previewTasks ?? [];
     return [...list].sort((a, b) => {
       const ta = a.endTime ? new Date(a.endTime).getTime() : 0;
       const tb = b.endTime ? new Date(b.endTime).getTime() : 0;
       return tb - ta;
     });
-  }, [eligibility]);
+  }, [eligibilityForUi]);
 
   const liveScoreResult = useMemo(
     () =>
       taskPayload ? computeLiveScorePreviewResult(taskPayload.lines, responses) : null,
     [taskPayload, responses]
   );
-
-  useEffect(() => {
-    if (step !== "review") setMobileLiveScoreOpen(false);
-  }, [step]);
-
-  useEffect(() => {
-    setPreviewSnippetExpanded({});
-  }, [eligibility]);
-
-  useEffect(() => {
-    if (!eligibility) return;
-    const allowed = new Set([
-      DISPOSITION_ALL,
-      ...eligibility.countsByDisposition.map((o) => o.value),
-    ]);
-    if (!allowed.has(dispositionChoice)) setDispositionChoice(DISPOSITION_ALL);
-  }, [eligibility, dispositionChoice]);
 
   const createBatch = async () => {
     if (!subjectAgentId || !startDate || !endDate) {
@@ -291,11 +303,11 @@ function QualityReviewContent() {
     setError(null);
     try {
       const dispositionBody =
-        dispositionChoice === DISPOSITION_ALL
+        sanitizedDispositionChoice === DISPOSITION_ALL
           ? undefined
-          : dispositionChoice === DISPOSITION_NONE
+          : sanitizedDispositionChoice === DISPOSITION_NONE
             ? DISPOSITION_NONE
-            : dispositionChoice;
+            : sanitizedDispositionChoice;
 
       const res = await fetch("/api/manager/quality-review/batches", {
         method: "POST",
@@ -316,7 +328,7 @@ function QualityReviewContent() {
       setBatchId(json.data.batchId);
       const first = json.data.taskIds?.[0] as string | undefined;
       setCurrentTaskId(first ?? null);
-      setStep("review");
+      goToStep("review");
       if (first) await loadTask(json.data.batchId, first);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Batch creation failed";
@@ -402,7 +414,7 @@ function QualityReviewContent() {
             }))
           );
         }
-        setStep("summary");
+        goToStep("summary");
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Submit failed");
@@ -433,7 +445,7 @@ function QualityReviewContent() {
 
   const resetFlow = () => {
     setBatchId(null);
-    setStep("setup");
+    goToStep("setup");
     setCurrentTaskId(null);
     setTaskPayload(null);
     setEligibility(null);
@@ -490,8 +502,6 @@ function QualityReviewContent() {
       return oa - ob;
     });
   }, [taskPayload]);
-
-  const filtersReady = Boolean(subjectAgentId && startDate && endDate);
 
   return (
     <DashboardLayout headerActions={headerActions}>
@@ -575,7 +585,7 @@ function QualityReviewContent() {
                     onChange={(e) => setTaskType(e.target.value as TaskType)}
                     className="mt-1.5 w-full rounded-lg bg-neutral-950/80 px-3 py-2.5 text-white border border-white/15 focus:border-violet-400/60 focus:outline-none"
                   >
-                    {TASK_TYPES.map((t) => (
+                    {QA_BATCH_TASK_TYPES.map((t) => (
                       <option key={t} value={t}>
                         {t}
                       </option>
@@ -602,7 +612,7 @@ function QualityReviewContent() {
                 <label className="block text-sm">
                   <span className="text-white/55">Disposition</span>
                   <select
-                    value={dispositionChoice}
+                    value={sanitizedDispositionChoice}
                     onChange={(e) => setDispositionChoice(e.target.value)}
                     disabled={!filtersReady || loadingEligibility}
                     className="mt-1.5 w-full rounded-lg bg-neutral-950/80 px-3 py-2.5 text-white border border-white/15 focus:border-violet-400/60 focus:outline-none disabled:opacity-50"
@@ -674,12 +684,15 @@ function QualityReviewContent() {
                         endDate,
                         taskType,
                       });
-                      if (dispositionChoice && dispositionChoice !== DISPOSITION_ALL) {
+                      if (
+                        sanitizedDispositionChoice &&
+                        sanitizedDispositionChoice !== DISPOSITION_ALL
+                      ) {
                         params.set(
                           "disposition",
-                          dispositionChoice === DISPOSITION_NONE
+                          sanitizedDispositionChoice === DISPOSITION_NONE
                             ? DISPOSITION_NONE
-                            : dispositionChoice
+                            : sanitizedDispositionChoice
                         );
                       }
                       if (taskType === "WOD_IVCS" && wodSource) params.set("wodIvcsSource", wodSource);
@@ -689,6 +702,7 @@ function QualityReviewContent() {
                         .then((r) => r.json())
                         .then((json) => {
                           if (!json.success) throw new Error(json.error || "Eligibility failed");
+                          setPreviewSnippetExpanded({});
                           setEligibility({
                             totalEligible: json.data.totalEligible,
                             countsByTaskType: json.data.countsByTaskType ?? {},
@@ -698,6 +712,7 @@ function QualityReviewContent() {
                         })
                         .catch((e: unknown) => {
                           setError(e instanceof Error ? e.message : "Eligibility failed");
+                          setPreviewSnippetExpanded({});
                           setEligibility(null);
                         })
                         .finally(() => setLoadingEligibility(false));
@@ -712,8 +727,8 @@ function QualityReviewContent() {
                     onClick={() => void createBatch()}
                     disabled={
                       busy ||
-                      !eligibility ||
-                      eligibility.totalEligible < sampleSize ||
+                      !eligibilityForUi ||
+                      eligibilityForUi.totalEligible < sampleSize ||
                       !activeTemplate ||
                       !filtersReady
                     }
@@ -722,10 +737,10 @@ function QualityReviewContent() {
                     Create batch & start
                   </button>
                 </div>
-                {eligibility && eligibility.totalEligible < sampleSize && (
+                {eligibilityForUi && eligibilityForUi.totalEligible < sampleSize && (
                   <p className="text-sm text-amber-200/90">
                     Sample size ({sampleSize}) is larger than eligible tasks (
-                    {eligibility.totalEligible}).
+                    {eligibilityForUi.totalEligible}).
                   </p>
                 )}
               </div>
@@ -751,15 +766,15 @@ function QualityReviewContent() {
                 </p>
               )}
 
-              {filtersReady && !eligibility && !loadingEligibility && (
+              {filtersReady && !eligibilityForUi && !loadingEligibility && (
                 <p className="text-sm text-white/45">No data yet.</p>
               )}
 
-              {eligibility && (
+              {eligibilityForUi && (
                 <div className="space-y-5 flex-1 overflow-y-auto max-h-[520px] pr-1">
                   <div>
                     <div className="text-4xl font-bold text-white tracking-tight">
-                      {eligibility.totalEligible}
+                      {eligibilityForUi.totalEligible}
                     </div>
                     <div className="text-xs text-white/50 uppercase tracking-wide mt-1">
                       eligible tasks (matches filters, not reserved)
@@ -770,7 +785,7 @@ function QualityReviewContent() {
                       By task type
                     </h3>
                     <ul className="text-sm space-y-1 text-white/80">
-                      {Object.entries(eligibility.countsByTaskType).map(([k, v]) => (
+                      {Object.entries(eligibilityForUi.countsByTaskType).map(([k, v]) => (
                         <li key={k} className="flex justify-between gap-4 border-b border-white/5 py-1">
                           <span className="font-mono text-xs">{k}</span>
                           <span className="text-emerald-200/90 font-medium">{v}</span>
@@ -783,7 +798,7 @@ function QualityReviewContent() {
                       By disposition
                     </h3>
                     <ul className="text-sm space-y-1 text-white/75 max-h-40 overflow-y-auto">
-                      {eligibility.countsByDisposition.map((d) => (
+                      {eligibilityForUi.countsByDisposition.map((d) => (
                         <li key={d.value} className="flex justify-between gap-2 py-0.5">
                           <span
                             className="truncate text-xs text-white/85"

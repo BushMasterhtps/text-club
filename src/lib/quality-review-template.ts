@@ -1,15 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import type { TaskType } from "@prisma/client";
+import { QUALITY_REVIEW_TASK_TYPES } from "@/lib/quality-review-task-types";
 
-/** Task types we surface in Quality Review template admin + batch flow. */
-export const QUALITY_REVIEW_TASK_TYPES: TaskType[] = [
-  "TEXT_CLUB",
-  "WOD_IVCS",
-  "EMAIL_REQUESTS",
-  "YOTPO",
-  "HOLDS",
-  "STANDALONE_REFUNDS",
-];
+export { QUALITY_REVIEW_TASK_TYPES };
 
 export type ResolvedActiveTemplate = {
   templateId: string;
