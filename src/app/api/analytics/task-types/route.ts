@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { TaskType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import type { Prisma } from "@prisma/client";
@@ -14,29 +15,43 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
     const rosterTeam =
       searchParams.get("rosterTeam") ?? searchParams.get("team");
 
-    // Parse dates with proper timezone handling
+    // Parse dates (server-local calendar day bounds — unchanged from prior behavior).
     let dateStart: Date;
     let dateEnd: Date;
-    
+
     if (startDate && endDate) {
-      const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
-      const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
-      
+      const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
+      const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+
       dateStart = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
       dateEnd = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
     } else {
-      // Default to today
       const today = new Date();
-      dateStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-      dateEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+      dateStart = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate(),
+        0,
+        0,
+        0,
+        0
+      );
+      dateEnd = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate(),
+        23,
+        59,
+        59,
+        999
+      );
     }
 
-    // Use local dates directly - no UTC conversion needed
     const utcDateStart = dateStart;
     const utcDateEnd = dateEnd;
 
@@ -65,8 +80,8 @@ export async function GET(request: NextRequest) {
       ? { assignedToId: { in: subjectIds } }
       : null;
 
-    const completedForType = (taskType: string): Prisma.TaskWhereInput => ({
-      taskType: taskType as any,
+    const completedForType = (taskType: TaskType): Prisma.TaskWhereInput => ({
+      taskType,
       OR: [
         {
           status: "COMPLETED",
@@ -80,8 +95,8 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    const avgForType = (taskType: string): Prisma.TaskWhereInput => ({
-      taskType: taskType as any,
+    const avgForType = (taskType: TaskType): Prisma.TaskWhereInput => ({
+      taskType,
       OR: [
         {
           status: "COMPLETED",
@@ -97,29 +112,64 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    // Get stats for each task type
-    const taskTypes = ['TEXT_CLUB', 'WOD_IVCS', 'EMAIL_REQUESTS', 'HOLDS', 'YOTPO'];
-    const taskTypeStats: any = {};
+    const holdsSessionWhere: Prisma.TaskWorkSessionWhereInput = {
+      taskType: TaskType.HOLDS,
+      countsTowardProductivity: true,
+      endedAt: { gte: utcDateStart, lte: utcDateEnd },
+      ...(subjectIds ? { agentId: { in: subjectIds } } : {}),
+    };
+
+    const taskTypes: TaskType[] = [
+      TaskType.TEXT_CLUB,
+      TaskType.WOD_IVCS,
+      TaskType.EMAIL_REQUESTS,
+      TaskType.HOLDS,
+      TaskType.YOTPO,
+    ];
+    const taskTypeStats: Record<
+      string,
+      { completed: number; pending: number; avgDuration: number }
+    > = {};
 
     for (const taskType of taskTypes) {
+      if (taskType === TaskType.HOLDS) {
+        const [completed, pending, durAgg] = await Promise.all([
+          prisma.taskWorkSession.count({ where: holdsSessionWhere }),
+          prisma.task.count({
+            where: {
+              taskType: "HOLDS",
+              holdsStatus: { in: [...HOLDS_ACTIVE_WORKFLOW_QUEUES] },
+              ...(assignedToTeam ?? {}),
+            },
+          }),
+          prisma.taskWorkSession.aggregate({
+            where: {
+              ...holdsSessionWhere,
+              durationSec: { not: null },
+            },
+            _avg: { durationSec: true },
+          }),
+        ]);
+
+        taskTypeStats.holds = {
+          completed,
+          pending,
+          avgDuration: Math.round(durAgg._avg.durationSec || 0),
+        };
+        continue;
+      }
+
       const completed = await prisma.task.count({
         where: teamScope
           ? { AND: [completedForType(taskType), teamScope] }
           : completedForType(taskType),
       });
 
-      const pendingWhere: Prisma.TaskWhereInput =
-        taskType === "HOLDS"
-          ? {
-              taskType: "HOLDS",
-              holdsStatus: { in: [...HOLDS_ACTIVE_WORKFLOW_QUEUES] },
-              ...(assignedToTeam ?? {}),
-            }
-          : {
-              taskType: taskType as any,
-              status: "PENDING",
-              ...(assignedToTeam ?? {}),
-            };
+      const pendingWhere: Prisma.TaskWhereInput = {
+        taskType,
+        status: "PENDING",
+        ...(assignedToTeam ?? {}),
+      };
 
       const pending = await prisma.task.count({
         where: pendingWhere,
@@ -134,24 +184,34 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      const key = taskType.toLowerCase().replace(/_/g, '');
+      const key = taskType.toLowerCase().replace(/_/g, "");
       taskTypeStats[key] = {
         completed,
         pending,
-        avgDuration: Math.round(avgDurationResult._avg.durationSec || 0)
+        avgDuration: Math.round(avgDurationResult._avg.durationSec || 0),
       };
     }
 
     return NextResponse.json({
       success: true,
-      data: taskTypeStats
+      data: taskTypeStats,
+      meta: {
+        dateRange: {
+          startLocal: utcDateStart.toISOString(),
+          endLocalInclusive: utcDateEnd.toISOString(),
+          interpretation:
+            "Server-local calendar bounds (unchanged). HOLDS completed/avgDuration use TaskWorkSession; HOLDS pending uses Task workflow queues.",
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Analytics Task Types API Error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to load task type data'
-    }, { status: 500 });
+    console.error("Analytics Task Types API Error:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to load task type data",
+      },
+      { status: 500 }
+    );
   }
 }

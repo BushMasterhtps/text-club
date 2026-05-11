@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { TaskType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import type { Prisma } from "@prisma/client";
@@ -40,35 +41,105 @@ async function fetchSharedUnassignedBacklog() {
   };
 }
 
+/** Task completion in range, excluding HOLDS (Holds productivity uses TaskWorkSession). */
+function completedInRangeNonHoldsWhere(
+  utcDateStart: Date,
+  utcDateEnd: Date
+): Prisma.TaskWhereInput {
+  return {
+    taskType: { not: TaskType.HOLDS },
+    OR: [
+      {
+        status: "COMPLETED",
+        endTime: { gte: utcDateStart, lte: utcDateEnd },
+      },
+      {
+        status: "PENDING",
+        sentBackBy: { not: null },
+        endTime: { gte: utcDateStart, lte: utcDateEnd },
+      },
+    ],
+  };
+}
+
+function holdsSessionsInRangeWhere(
+  utcDateStart: Date,
+  utcDateEnd: Date,
+  subjectIds: string[] | null
+): Prisma.TaskWorkSessionWhereInput {
+  return {
+    taskType: TaskType.HOLDS,
+    countsTowardProductivity: true,
+    endedAt: { gte: utcDateStart, lte: utcDateEnd },
+    ...(subjectIds ? { agentId: { in: subjectIds } } : {}),
+  };
+}
+
+function nonHoldsAvgHandleWhere(
+  utcDateStart: Date,
+  utcDateEnd: Date
+): Prisma.TaskWhereInput {
+  return {
+    taskType: { not: TaskType.HOLDS },
+    OR: [
+      {
+        status: "COMPLETED",
+        endTime: { gte: utcDateStart, lte: utcDateEnd },
+        durationSec: { not: null },
+      },
+      {
+        status: "PENDING",
+        sentBackBy: { not: null },
+        endTime: { gte: utcDateStart, lte: utcDateEnd },
+        durationSec: { not: null },
+      },
+    ],
+  };
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
   if (!auth.allowed) return apiAuthDeniedResponse(auth);
 
   try {
     const { searchParams } = new URL(request.url);
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
     const rosterTeam =
       searchParams.get("rosterTeam") ?? searchParams.get("team");
 
-    // Parse dates with proper timezone handling
+    // Parse dates (server-local calendar day bounds — unchanged from prior behavior).
     let dateStart: Date;
     let dateEnd: Date;
-    
+
     if (startDate && endDate) {
-      const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
-      const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
-      
+      const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
+      const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+
       dateStart = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
       dateEnd = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
     } else {
-      // Default to today
       const today = new Date();
-      dateStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-      dateEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+      dateStart = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate(),
+        0,
+        0,
+        0,
+        0
+      );
+      dateEnd = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate(),
+        23,
+        59,
+        59,
+        999
+      );
     }
 
-    // Use local dates directly - no UTC conversion needed
     const utcDateStart = dateStart;
     const utcDateEnd = dateEnd;
 
@@ -109,28 +180,29 @@ export async function GET(request: NextRequest) {
       ? teamAttributedTaskWhere(subjectIds)
       : null;
 
-    const completedInRangeWhere: Prisma.TaskWhereInput = {
-      OR: [
-        {
-          status: "COMPLETED",
-          endTime: { gte: utcDateStart, lte: utcDateEnd },
-        },
-        {
-          status: "PENDING",
-          sentBackBy: { not: null },
-          endTime: { gte: utcDateStart, lte: utcDateEnd },
-        },
-      ],
+    const completedNonHoldsBase = completedInRangeNonHoldsWhere(
+      utcDateStart,
+      utcDateEnd
+    );
+    const completedNonHoldsFiltered: Prisma.TaskWhereInput = teamScope
+      ? { AND: [completedNonHoldsBase, teamScope] }
+      : completedNonHoldsBase;
+
+    const holdsSessionWhere = holdsSessionsInRangeWhere(
+      utcDateStart,
+      utcDateEnd,
+      subjectIds
+    );
+
+    const nonHoldsAvgBase = nonHoldsAvgHandleWhere(utcDateStart, utcDateEnd);
+    const nonHoldsAvgFiltered: Prisma.TaskWhereInput = teamScope
+      ? { AND: [nonHoldsAvgBase, teamScope] }
+      : nonHoldsAvgBase;
+
+    const holdsSessionAvgWhere: Prisma.TaskWorkSessionWhereInput = {
+      ...holdsSessionWhere,
+      durationSec: { not: null },
     };
-
-    const completedInRangeFiltered: Prisma.TaskWhereInput = teamScope
-      ? { AND: [completedInRangeWhere, teamScope] }
-      : completedInRangeWhere;
-
-    // Get completed tasks for the date range (including sent-back tasks)
-    const completedTasks = await prisma.task.count({
-      where: completedInRangeFiltered,
-    });
 
     const totalCompletedAllTimeWhere: Prisma.TaskWhereInput = {
       OR: [
@@ -143,34 +215,43 @@ export async function GET(request: NextRequest) {
       ],
     };
 
-    const totalCompleted = await prisma.task.count({
-      where: teamScope
-        ? { AND: [totalCompletedAllTimeWhere, teamScope] }
-        : totalCompletedAllTimeWhere,
-    });
+    const [
+      nonHoldsCompletedInRange,
+      holdsSessionsInRange,
+      totalCompleted,
+      nhDurationAgg,
+      hsDurationAgg,
+    ] = await Promise.all([
+      prisma.task.count({ where: completedNonHoldsFiltered }),
+      prisma.taskWorkSession.count({ where: holdsSessionWhere }),
+      prisma.task.count({
+        where: teamScope
+          ? { AND: [totalCompletedAllTimeWhere, teamScope] }
+          : totalCompletedAllTimeWhere,
+      }),
+      prisma.task.aggregate({
+        where: nonHoldsAvgFiltered,
+        _sum: { durationSec: true },
+        _count: { id: true },
+      }),
+      prisma.taskWorkSession.aggregate({
+        where: holdsSessionAvgWhere,
+        _sum: { durationSec: true },
+        _count: { id: true },
+      }),
+    ]);
 
-    const avgHandleWhere: Prisma.TaskWhereInput = {
-      OR: [
-        {
-          status: "COMPLETED",
-          endTime: { gte: utcDateStart, lte: utcDateEnd },
-          durationSec: { not: null },
-        },
-        {
-          status: "PENDING",
-          sentBackBy: { not: null },
-          endTime: { gte: utcDateStart, lte: utcDateEnd },
-          durationSec: { not: null },
-        },
-      ],
-    };
+    const completedTasks = nonHoldsCompletedInRange + holdsSessionsInRange;
 
-    const avgHandleTimeResult = await prisma.task.aggregate({
-      where: teamScope ? { AND: [avgHandleWhere, teamScope] } : avgHandleWhere,
-      _avg: {
-        durationSec: true,
-      },
-    });
+    const nhSum = nhDurationAgg._sum.durationSec ?? 0;
+    const hsSum = hsDurationAgg._sum.durationSec ?? 0;
+    const nhCnt = nhDurationAgg._count.id;
+    const hsCnt = hsDurationAgg._count.id;
+    const durationDenom = nhCnt + hsCnt;
+    const avgHandleTime =
+      durationDenom > 0
+        ? Math.round((nhSum + hsSum) / durationDenom)
+        : 0;
 
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     const activeAgents = await prisma.user.count({
@@ -250,7 +331,7 @@ export async function GET(request: NextRequest) {
     const data = {
       totalCompletedToday: completedTasks,
       totalCompleted,
-      avgHandleTime: Math.round(avgHandleTimeResult._avg.durationSec || 0),
+      avgHandleTime,
       activeAgents,
       tasksInProgress,
       pendingTasks,
@@ -260,7 +341,7 @@ export async function GET(request: NextRequest) {
         wodIvcs: wodIvcsPending,
         emailRequests: emailRequestsPending,
         holds: holdsPending,
-        yotpo: yotpoPending
+        yotpo: yotpoPending,
       },
       ...(sharedUnassignedBacklog != null
         ? { sharedUnassignedBacklog }
@@ -269,14 +350,24 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data
+      data,
+      meta: {
+        dateRange: {
+          startLocal: utcDateStart.toISOString(),
+          endLocalInclusive: utcDateEnd.toISOString(),
+          interpretation:
+            "Server-local calendar bounds for startDate/endDate (unchanged). HOLDS productivity in totalCompletedToday and avgHandleTime uses TaskWorkSession; pending holds uses Task workflow queues.",
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Analytics Overview API Error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to load overview data'
-    }, { status: 500 });
+    console.error("Analytics Overview API Error:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to load overview data",
+      },
+      { status: 500 }
+    );
   }
 }
