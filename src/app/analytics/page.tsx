@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Card } from '@/app/_components/Card';
 import { SmallButton } from '@/app/_components/SmallButton';
 import PerformanceScorecard from '@/app/_components/PerformanceScorecard';
@@ -207,18 +207,18 @@ export default function AnalyticsPage() {
     }
   };
 
-  // Date range helper
-  const getDateRange = (): { start: string; end: string } => {
+  // Date range helper (stable identity across parent re-renders when inputs unchanged)
+  const getDateRange = useCallback((): { start: string; end: string } => {
     const today = new Date();
-    
+
     // If custom range is selected and dates are set, use them
     if (selectedDateRange === 'custom' && customStartDate && customEndDate) {
       return {
         start: customStartDate,
-        end: customEndDate
+        end: customEndDate,
       };
     }
-    
+
     // Otherwise, use today
     const formatDate = (date: Date): string => {
       const year = date.getFullYear();
@@ -229,9 +229,20 @@ export default function AnalyticsPage() {
 
     return {
       start: formatDate(today),
-      end: formatDate(today)
+      end: formatDate(today),
     };
-  };
+  }, [selectedDateRange, customStartDate, customEndDate]);
+
+  /** Stable reference for PerformanceScorecard so child sprint-rankings effect does not re-fire on unrelated parent renders. */
+  const performanceScorecardDateRange = useMemo((): { start: string; end: string } | undefined => {
+    if (selectedDateRange === 'custom' && customStartDate && customEndDate) {
+      return { start: customStartDate, end: customEndDate };
+    }
+    if (selectedDateRange !== 'custom') {
+      return getDateRange();
+    }
+    return undefined;
+  }, [selectedDateRange, customStartDate, customEndDate, getDateRange]);
 
   // Load overview data
   const loadOverviewData = async () => {
@@ -859,11 +870,7 @@ export default function AnalyticsPage() {
                   onRefresh={loadScorecardData}
                   onLoadAgentDetail={loadAgentDetail}
                   rosterTeamFilter={rosterTeamFilter}
-                  dateRange={selectedDateRange === 'custom' && customStartDate && customEndDate 
-                    ? { start: customStartDate, end: customEndDate }
-                    : selectedDateRange !== 'custom'
-                    ? getDateRange()
-                    : undefined}
+                  dateRange={performanceScorecardDateRange}
                   onRequestCoachingNote={(ctx) =>
                     oneOnOneNotesRef.current?.openCoachingNoteFromPerformance(ctx)
                   }
