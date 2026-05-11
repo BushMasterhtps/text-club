@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { TaskType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { resolveTeamAnalyticsSubjectIds } from "@/lib/team-analytics-roster";
+
+/** Exclude HOLDS from Task-based completion counts; Holds actions come from TaskWorkSession. */
+const notHoldsTask = { not: TaskType.HOLDS } as const;
 
 export async function GET(request: NextRequest) {
   const auth = await requireManagerApiAuth(request);
@@ -48,7 +52,8 @@ export async function GET(request: NextRequest) {
     const month = nowPST.getUTCMonth();
     const day = nowPST.getUTCDate();
     
-    // Create UTC dates for PST day boundaries
+    // Create UTC dates for PST day boundaries (unchanged; matches team-performance style).
+    // Note: startDate/endDate query params are not read — "today" is always server-derived PST-style day.
     // 8 AM UTC = 12 AM PST
     const utcStartOfToday = new Date(Date.UTC(year, month, day, 8, 0, 0, 0));
     const utcEndOfToday = new Date(Date.UTC(year, month, day + 1, 7, 59, 59, 999));
@@ -56,40 +61,50 @@ export async function GET(request: NextRequest) {
     // Get agent IDs for batch queries
     const agentIds = agents.map(agent => agent.id);
 
-    // FIX 1: Get all tasks completed today counts in a single query (fixes N+1)
-    // Include completedBy to support unassigned completions (e.g., "Unable to Resolve" for Holds)
-    const [completedByAssigned, completedBySentBack, completedByCompletedBy] = await Promise.all([
-      // Tasks completed by assignedToId
-      prisma.task.groupBy({
-        by: ['assignedToId'],
-        where: {
-          assignedToId: { in: agentIds },
-          status: "COMPLETED",
-          endTime: { gte: utcStartOfToday, lte: utcEndOfToday }
-        },
-        _count: { id: true }
-      }),
-      // Tasks sent back by agent
-      prisma.task.groupBy({
-        by: ['sentBackBy'],
-        where: {
-          sentBackBy: { in: agentIds },
-          status: "PENDING",
-          endTime: { gte: utcStartOfToday, lte: utcEndOfToday }
-        },
-        _count: { id: true }
-      }),
-      // Tasks completed by agent but now unassigned (e.g., "Unable to Resolve" for Holds)
-      prisma.task.groupBy({
-        by: ['completedBy'],
-        where: {
-          completedBy: { in: agentIds },
-          status: "COMPLETED",
-          endTime: { gte: utcStartOfToday, lte: utcEndOfToday }
-        },
-        _count: { id: true }
-      })
-    ]);
+    // FIX 1: Non-Holds Task completion counts only (HOLDS uses TaskWorkSession below).
+    const [completedByAssigned, completedBySentBack, completedByCompletedBy, holdsSessionsByAgent] =
+      await Promise.all([
+        prisma.task.groupBy({
+          by: ["assignedToId"],
+          where: {
+            assignedToId: { in: agentIds },
+            taskType: notHoldsTask,
+            status: "COMPLETED",
+            endTime: { gte: utcStartOfToday, lte: utcEndOfToday },
+          },
+          _count: { id: true },
+        }),
+        prisma.task.groupBy({
+          by: ["sentBackBy"],
+          where: {
+            sentBackBy: { in: agentIds },
+            taskType: notHoldsTask,
+            status: "PENDING",
+            endTime: { gte: utcStartOfToday, lte: utcEndOfToday },
+          },
+          _count: { id: true },
+        }),
+        prisma.task.groupBy({
+          by: ["completedBy"],
+          where: {
+            completedBy: { in: agentIds },
+            taskType: notHoldsTask,
+            status: "COMPLETED",
+            endTime: { gte: utcStartOfToday, lte: utcEndOfToday },
+          },
+          _count: { id: true },
+        }),
+        prisma.taskWorkSession.groupBy({
+          by: ["agentId"],
+          where: {
+            taskType: TaskType.HOLDS,
+            countsTowardProductivity: true,
+            agentId: { in: agentIds },
+            endedAt: { gte: utcStartOfToday, lte: utcEndOfToday },
+          },
+          _count: { id: true },
+        }),
+      ]);
 
     // Create maps for quick lookup
     const completedCountMap = new Map<string, number>();
@@ -106,6 +121,14 @@ export async function GET(request: NextRequest) {
     completedByCompletedBy.forEach(({ completedBy, _count }) => {
       if (completedBy) {
         completedCountMap.set(completedBy, (completedCountMap.get(completedBy) || 0) + _count.id);
+      }
+    });
+    holdsSessionsByAgent.forEach(({ agentId, _count }) => {
+      if (agentId) {
+        completedCountMap.set(
+          agentId,
+          (completedCountMap.get(agentId) || 0) + _count.id
+        );
       }
     });
 
