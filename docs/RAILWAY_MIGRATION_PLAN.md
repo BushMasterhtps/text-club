@@ -28,9 +28,10 @@ This document supports moving the Text Club portal from Netlify (serverless Next
 2. **Railway project:** Create a **new** Railway project (or new environment) for **staging**.
 3. **Postgres:** Provision a **dedicated staging Postgres** (clone/snapshot from prod only if your process allows; default is empty or seed).
 4. **Service:** One **Web** service from this repo: **root directory** default, **Node** runtime.
-5. **Build / start:** Use the commands in [Railway build/start](#railway-build-and-start-commands) below.
-6. **Migrations (staging only):** When the team is ready, run `npx prisma migrate deploy` **against staging `DATABASE_URL`** from CI or a one-off job—not mixed with production.
-7. **Smoke tests:** Login, agent task list, heartbeat, manager dashboard, critical API routes (see [Workflows to test](#workflows-to-test-before-production-cutover)).
+5. **Package manager:** This repo uses **`npm`** and **`package-lock.json`**. Do not commit **`pnpm-lock.yaml`** or a **`pnpm-workspace.yaml`** without a real `packages:` workspace—Railway/Railpack auto-detects pnpm and runs `pnpm install`, which can fail or diverge from npm.
+6. **Build / start:** Use the commands in [Railway build/start](#railway-build-and-start-commands) below.
+7. **Migrations (staging only):** When the team is ready, run `npx prisma migrate deploy` **against staging `DATABASE_URL`** from CI or a one-off job—not mixed with production.
+8. **Smoke tests:** Login, agent task list, heartbeat, manager dashboard, critical API routes (see [Workflows to test](#workflows-to-test-before-production-cutover)).
 
 **Do not** point staging at production DB without explicit approval from the project owner.
 
