@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "rimraf node_modules/.prisma && npx prisma generate && next build --turbopack",
+    "build": "rimraf node_modules/.prisma && npx prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "rimraf node_modules/.prisma && prisma generate && echo 'Prisma client regenerated successfully'",

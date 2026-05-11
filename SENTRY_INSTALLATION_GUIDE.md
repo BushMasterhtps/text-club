@@ -91,7 +91,7 @@ Sentry.init({
 });
 ```
 
-### Step 3: Update `next.config.js`
+### Step 3: Update `next.config.ts`
 
 Add Sentry plugin:
 

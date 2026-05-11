@@ -20,7 +20,7 @@
 **Setup:**
 1. Sign up at sentry.io
 2. Install `@sentry/nextjs` package
-3. Add to `next.config.js`
+3. Add to `next.config.ts`
 4. Configure alerts
 
 **Cost:** Free for small teams, $26/month for more events
