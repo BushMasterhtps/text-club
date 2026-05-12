@@ -39,6 +39,150 @@ This document supports moving the Text Club portal from Netlify (serverless Next
 
 ---
 
+## Confirmed working staging (reference — Text Club)
+
+The following staging setup was **verified working** (login, app shell, Netlify production and production DB **untouched**).
+
+| Item | Value |
+|------|--------|
+| **Railway project** | `angelic-harmony` |
+| **App service** | `text-club` |
+| **Database** | Railway **Postgres** (staging-only) |
+| **Git branch** | `chore/railway-staging-prep` |
+| **Build command** | `npm ci && npm run build` |
+| **Start command** | `npm run start` |
+| **Public URL (example)** | `https://text-club-production-b57b.up.railway.app` (Railway-generated; yours may differ) |
+| **Sentry** | Omitted on staging initially |
+| **Migrations** | `npx prisma migrate deploy` against **staging** `DATABASE_URL` only |
+| **First user** | `scripts/create-staging-user.mjs` (guarded) after migrations |
+
+### Lessons learned (staging)
+
+1. **Next.js version:** Railway security scanning blocked **`next@15.5.7`**. Upgrading to **`next@15.5.9`** (pinned in `package.json` / lockfile on `chore/railway-staging-prep`) cleared the gate.
+2. **Package manager:** Stale **`pnpm-lock.yaml`** + **`pnpm-workspace.yaml`** (without a valid `packages:` workspace) caused Railpack to run **`pnpm install`** and fail. **Removing those files** left **`npm`** + **`package-lock.json`** as the only lockfile signal—use **npm** only going forward.
+3. **Public networking / port:** The app must be reachable on the port Railway’s **public domain** targets. If **`next start`** listens on **`PORT`** (e.g. **8080** on Railway), the **public HTTP service / domain target port** must match (**8080** worked; **3000** produced **502** on `/login`).
+4. **Empty DB:** After deploy, run **`npx prisma migrate deploy`** against **staging** before expecting Prisma-backed APIs to work.
+5. **Login:** A **`User`** row is required. Use **`scripts/create-staging-user.mjs`** for a single staging test account (not `prisma/seed.mjs` for users).
+
+---
+
+## Branch strategy: merge before prod Railway (A) vs deploy prep branch first (B)
+
+| Option | Description |
+|--------|-------------|
+| **A — Merge `chore/railway-staging-prep` → `main` first** | Then create the Railway **production** web service with **`main`** as the deploy branch. |
+| **B — Railway production from `chore/railway-staging-prep` first** | Private validation deploys the **same branch** that passed staging; merge to **`main`** after validation. |
+
+**Recommendation for private validation:** **B first** (deploy Railway production service from **`chore/railway-staging-prep`**), then **merge to `main`** once the team is satisfied and wants production Railway aligned with the default branch.
+
+| | **A (merge first)** | **B (prep branch first)** |
+|--|---------------------|---------------------------|
+| **Pros** | Production Railway tracks **`main`** immediately; one less “wrong branch” risk later; matches typical “prod = default branch”. | No merge approval needed to **start** private prod validation; deploys **exact** bits already proven on staging (Next 15.5.9, npm-only, config). |
+| **Cons** | Requires **merge approval** before any Railway prod deploy; `main` gains prep changes before private Railway sign-off if you merge early. | Railway prod temporarily follows a **non-default** branch—must **switch deploy branch to `main`** after merge or risk drift. |
+| **Risk** | Low if merge is reviewed; prod Railway still a **new** workload on the DB. | **Medium** if someone forgets to move deploy branch to **`main`** after merge. |
+
+---
+
+## Production Railway Private Validation Plan
+
+Goal: run a **second** Railway **web** service against the **real production Railway Postgres** (`DATABASE_URL` = production), **privately** test the Railway URL, while **agents stay on Netlify**. **No DNS change**, **no Netlify disable**, **no agent announcement**. Keep overlap **short** and **controlled**.
+
+### Create the Railway production web service
+
+1. In the Railway dashboard, **add a new service** to the project (or create a **new project** if policy requires isolation—see below).
+2. **Source:** same GitHub repo as staging.
+3. **Service type:** **Web** / Node (same pattern as staging `text-club`).
+4. **Naming:** Use an unambiguous name (e.g. `text-club-production` or `text-club-netlify-parity`) so it is never confused with the **staging** app service `text-club`.
+5. **Branch:** See [Branch strategy](#branch-strategy-merge-before-prod-railway-a-vs-deploy-prep-branch-first-b) — for **B**, deploy from **`chore/railway-staging-prep`** until merge; then switch to **`main`**.
+6. **Build command:** `npm ci && npm run build`
+7. **Start command:** `npm run start`
+8. **Environment variables:** set production values (see below). **Do not** run **`prisma migrate deploy`** against production during this phase unless explicitly approved in a separate change window.
+9. **Public networking:** align **public domain / proxy target port** with the process **`PORT`** (staging success used **8080** — match whatever Railway sets for this service so **`/login`** does not **502**).
+10. **Sentry:** keep **omitted** initially (same as staging) unless you explicitly re-enable; fewer variables and no build-time Sentry plugin unless DSNs are set.
+
+### Same Railway project vs new project
+
+| Approach | When to use |
+|----------|-------------|
+| **New web service in the same project** (e.g. alongside `angelic-harmony` staging) | **Default:** simpler navigation, shared team access; **strictly separate** `DATABASE_URL` and service names so staging never receives prod credentials. |
+| **New Railway project** | Compliance / billing isolation, or hard separation between “Railway staging experiments” and “Railway production.” |
+
+Either is valid; the critical control is **which `DATABASE_URL` each service has**, not which project folder they live in.
+
+### Required production env vars (Railway production web service)
+
+**Minimum to boot and log in (mirror Netlify semantics):**
+
+| Variable | Notes |
+|----------|--------|
+| **`DATABASE_URL`** | Must reference the **real production Railway Postgres** connection string for this validation phase. |
+| **`JWT_SECRET`** | Should **match current Netlify production** if you want the **same signing key** as today (optional for “login again on new host” anyway). |
+| **`NODE_ENV`** | `production` |
+
+**Copy from Netlify production** when you need parity for feature smoke tests (names only; values from your secure store):
+
+- Microsoft / SharePoint (`MICROSOFT_*`, `SHAREPOINT_*`, `EXCEL_FILE_NAME`, `WORKSHEET_NAME`, etc.) if you test those flows.
+- Self-healing toggles (`SELF_HEALING_*`) if non-default.
+- `LOGIN_DIAG`, `DEBUG_PERFORMANCE`, `NEXT_PUBLIC_DEBUG_PERFORMANCE` only if needed.
+
+### What must match Netlify production
+
+| Variable | Match Netlify? | Why |
+|----------|----------------|-----|
+| **`DATABASE_URL`** | **Yes** — same **production** database as Netlify uses today | Private validation is meaningless otherwise. **Doubles** application connection pressure vs Netlify alone—keep overlap **short**. |
+| **`JWT_SECRET`** | **Recommended yes** | Same **HMAC signing** as Netlify; avoids subtle auth differences during comparison. **Cookies are per hostname** — users still **sign in again** on the Railway URL even with the same secret. |
+| **Feature secrets** (Microsoft, etc.) | **Yes**, if testing those features | Otherwise behavior diverges from prod. |
+| **Sentry** | **Omit initially** (optional later) | Matches current staging approach; add when you want observability on Railway prod. |
+
+### Sentry
+
+Leave **`SENTRY_DSN`**, **`NEXT_PUBLIC_SENTRY_DSN`**, **`SENTRY_ORG`**, **`SENTRY_PROJECT`**, **`SENTRY_AUTH_TOKEN`** unset until explicitly re-enabled. `next.config.ts` only wraps `withSentryConfig` when a DSN env is present.
+
+### Build / start / port (confirmed pattern)
+
+- **Build:** `npm ci && npm run build`
+- **Start:** `npm run start`
+- **Public port:** set Railway **public networking** target to the same port **`next start`** binds to (**8080** in the successful staging setup, not **3000**, if that was the mismatch).
+
+### Branch strategy for this phase
+
+- **Recommended:** **B** — deploy Railway **production** validation service from **`chore/railway-staging-prep`** (same commit family as green staging), then **merge** to **`main`** and **switch the Railway production service deploy branch** to **`main`** for long-term hygiene.
+- **Alternative:** **A** — merge **`chore/railway-staging-prep`** to **`main`** first, then attach Railway production to **`main`**.
+
+### Private smoke test checklist (Railway production URL only)
+
+Run as **internal testers**; do **not** broadcast the Railway URL.
+
+- [ ] **`GET /login`** loads (no **502** — port / `PORT` correct).
+- [ ] **Login** with a **known production user** (password unchanged); confirm redirect to `/agent` or `/manager`.
+- [ ] **Agent:** task list, heartbeat, start/complete path on **non-destructive** tasks if possible.
+- [ ] **Manager:** dashboard metrics load.
+- [ ] **`GET /api/health`** returns healthy when DB is reachable.
+- [ ] Confirm **Netlify production** still works for agents **in parallel** (no DNS change).
+- [ ] **No** `prisma migrate deploy`, **`db push`**, or **`migrate reset`** unless in an approved window.
+
+### Rollback / abort plan
+
+- **Stop traffic:** remove or disable the Railway **production** web service’s **public domain** / set service **stopped**, or delete the temporary production web service only (does **not** delete Postgres).
+- **Database:** if no migrations were run from Railway, schema is unchanged; if something went wrong, follow **backup / restore** runbooks—never `migrate reset` on production.
+- **Netlify:** unchanged; agents remain on Netlify.
+- **Secrets:** do not rotate unless incident response requires it.
+
+### Avoiding early agent use of the Railway URL
+
+- **Do not** post the Railway URL in team-wide channels or runbooks used by agents until cutover.
+- **Do not** add the Railway URL to email footers, bookmarks docs, or SSO redirect URIs until cutover.
+- Optional: protect with **Railway TCP / IP allowlist** or **HTTP basic auth** at the edge only if your plan supports it (not required by this doc).
+
+### Risks before connecting the production web app to the real production DB
+
+- **Connection load:** Netlify serverless + Railway Node each open **pools** to the same Postgres—watch **max connections** and Railway/proxy limits during overlap.
+- **Write paths:** any bug that **bulk-writes** or **migrates** could affect production data—treat private validation as **read-mostly** where possible.
+- **Wrong `DATABASE_URL`:** pasting **staging** URL into the production service (or vice versa) is the highest-impact mistake—**verify hostname** in the UI before first deploy.
+- **Migrations:** running **`migrate deploy`** from a laptop or CI against prod by mistake—**do not** during this phase unless explicitly approved.
+
+---
+
 ## Required environment variables (names only—no secret values)
 
 Copy from your secure store (e.g. Netlify UI export / 1Password). **Set the same variable names on Railway staging** with **staging-appropriate values** (especially `DATABASE_URL` and optional `JWT_SECRET` policy).
@@ -93,7 +237,7 @@ Copy from your secure store (e.g. Netlify UI export / 1Password). **Set the same
 |----------|--------|
 | `DEBUG_PERFORMANCE` | Optional; e.g. agent tasks API logging. |
 
-Railway injects **`PORT`**; `next start` listens on it automatically.
+Railway injects **`PORT`** (commonly **`8080`** in deployed services); `next start` listens on **`PORT`**. The **public domain / edge target port** in Railway must match that listen port or routes will **502**.
 
 ---
 
@@ -200,4 +344,4 @@ Run on **staging** with staging credentials:
 
 ## Changelog reference (prep branch)
 
-See PR description for: removal of duplicate `next.config.js`, `serverExternalPackages` alignment, and `next build` without Turbopack for conservative CI/Railway builds.
+See PR description for: removal of duplicate `next.config.js`, `serverExternalPackages` alignment, `next build` without Turbopack, **Next 15.5.9** security bump, **pnpm file removal**, **`engines.node` 20.x**, **`scripts/create-staging-user.mjs`**, and this document’s **staging reference** + **production private validation** sections.
