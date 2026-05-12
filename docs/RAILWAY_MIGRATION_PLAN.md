@@ -35,6 +35,8 @@ This document supports moving the Text Club portal from Netlify (serverless Next
 
 **Do not** point staging at production DB without explicit approval from the project owner.
 
+**Staging test user:** After migrations on staging, create one login user with `scripts/create-staging-user.mjs` (requires `ALLOW_STAGING_USER_BOOTSTRAP=1`, blocks `interchange.proxy.rlwy.net` in `DATABASE_URL`). See the script file header for the exact command—use **only** the staging Postgres public URL.
+
 ---
 
 ## Required environment variables (names only—no secret values)
