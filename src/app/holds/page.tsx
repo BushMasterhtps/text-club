@@ -17,6 +17,11 @@ import HoldsOverview from './_components/HoldsOverview';
 import { SmallButton } from '@/app/_components/SmallButton';
 import AssistanceRequestNotification from '@/app/_components/AssistanceRequestNotification';
 import { useHoldsAssistanceRequests } from '@/hooks/useHoldsAssistanceRequests';
+import {
+  PORTAL_INACTIVITY_TIMEOUT_MINUTES,
+  PORTAL_INACTIVITY_WARNING_MINUTES,
+  performPortalLogout,
+} from '@/lib/portal-session-timeout';
 
 /**
  * Holds tab body — must render inside DashboardLayout so AssistanceRequestsProvider wraps this tree.
@@ -91,11 +96,9 @@ function HoldsPageContent() {
     showWarning: warningOpen,
     extendSession
   } = useAutoLogout({
-    timeoutMinutes: 50,
-    onLogout: () => {
-      localStorage.removeItem('authToken');
-      window.location.href = '/login';
-    }
+    timeoutMinutes: PORTAL_INACTIVITY_TIMEOUT_MINUTES,
+    warningMinutes: PORTAL_INACTIVITY_WARNING_MINUTES,
+    onLogout: performPortalLogout,
   });
 
   useEffect(() => {
@@ -104,7 +107,7 @@ function HoldsPageContent() {
         const res = await fetch('/api/auth/check-password-change');
         const data = await res.json();
 
-        if (!res.ok || data.requiresChange) {
+        if (!res.ok || data.mustChangePassword) {
           setShowPasswordModal(true);
         }
         setPasswordCheckDone(true);
@@ -117,8 +120,7 @@ function HoldsPageContent() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('authToken');
-    window.location.href = '/login';
+    performPortalLogout();
   };
 
   const goToAgent = () => {
@@ -163,10 +165,8 @@ function HoldsPageContent() {
         isOpen={warningOpen}
         timeLeft={timeLeft}
         onExtend={extendSession}
-        onLogout={() => {
-          localStorage.removeItem('authToken');
-          window.location.href = '/login';
-        }}
+        onLogout={performPortalLogout}
+        sessionTimeoutMinutes={PORTAL_INACTIVITY_TIMEOUT_MINUTES}
       />
     </DashboardLayout>
   );

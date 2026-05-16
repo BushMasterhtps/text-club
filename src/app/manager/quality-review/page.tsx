@@ -8,6 +8,11 @@ import ThemeToggle from "@/app/_components/ThemeToggle";
 import SessionTimer from "@/app/_components/SessionTimer";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/app/_components/AutoLogoutWarning";
+import {
+  MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+  MANAGER_INACTIVITY_WARNING_MINUTES,
+  performManagerPortalLogout,
+} from "@/lib/manager-session-timeout";
 import { QaReviewTaskContext } from "@/app/manager/quality-review/_components/QaReviewTaskContext";
 import {
   computeLiveScorePreviewResult,
@@ -91,7 +96,11 @@ function clampSample(n: number) {
 }
 
 function QualityReviewContent() {
-  const { timeLeft, extendSession, showWarning } = useAutoLogout();
+  const { timeLeft, extendSession, showWarning } = useAutoLogout({
+    timeoutMinutes: MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+    warningMinutes: MANAGER_INACTIVITY_WARNING_MINUTES,
+    onLogout: performManagerPortalLogout,
+  });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [agents, setAgents] = useState<AgentRow[]>([]);
@@ -1167,11 +1176,8 @@ function QualityReviewContent() {
           isOpen={showWarning}
           timeLeft={timeLeft}
           onExtend={extendSession}
-          onLogout={() => {
-            localStorage.removeItem("currentRole");
-            void fetch("/api/auth/logout", { method: "POST" });
-            window.location.href = "/login";
-          }}
+          onLogout={performManagerPortalLogout}
+          sessionTimeoutMinutes={MANAGER_INACTIVITY_TIMEOUT_MINUTES}
         />
       </div>
     </DashboardLayout>

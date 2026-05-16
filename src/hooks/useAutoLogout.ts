@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface UseAutoLogoutOptions {
   timeoutMinutes?: number;
@@ -6,122 +6,140 @@ interface UseAutoLogoutOptions {
   onLogout?: () => void;
 }
 
+/** Clamp warning window so it never exceeds total session length. */
+export function resolveAutoLogoutTiming(timeoutMinutes: number, warningMinutes: number) {
+  const totalSeconds = Math.max(1, Math.round(timeoutMinutes * 60));
+  const requestedWarningSeconds = Math.max(0, Math.round(warningMinutes * 60));
+  const warningSeconds = Math.min(requestedWarningSeconds, Math.max(0, totalSeconds - 1));
+  return { totalSeconds, warningSeconds };
+}
+
 export function useAutoLogout({
-  timeoutMinutes = 120, // 2 hours default
-  warningMinutes = 5,   // 5 minutes warning
-  onLogout
+  timeoutMinutes = 120,
+  warningMinutes = 5,
+  onLogout,
 }: UseAutoLogoutOptions = {}) {
-  const [timeLeft, setTimeLeft] = useState<number>(timeoutMinutes * 60); // seconds
+  const { totalSeconds, warningSeconds } = resolveAutoLogoutTiming(
+    timeoutMinutes,
+    warningMinutes,
+  );
+
+  const [timeLeft, setTimeLeft] = useState(totalSeconds);
   const [showWarning, setShowWarning] = useState(false);
   const [isActive, setIsActive] = useState(true);
-  
-  const timeoutRef = useRef<NodeJS.Timeout>();
-  const warningTimeoutRef = useRef<NodeJS.Timeout>();
-  const lastActivityRef = useRef<number>(Date.now());
 
-  // Reset timer on user activity
-  const resetTimer = () => {
-    if (!isActive) return;
-    
-    lastActivityRef.current = Date.now();
-    setTimeLeft(timeoutMinutes * 60);
-    setShowWarning(false);
-    
-    // Clear existing timeouts
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
-    
-    // Set warning timeout
-    warningTimeoutRef.current = setTimeout(() => {
-      setShowWarning(true);
-    }, (timeoutMinutes - warningMinutes) * 60 * 1000);
-    
-    // Set logout timeout
-    timeoutRef.current = setTimeout(() => {
-      handleLogout();
-    }, timeoutMinutes * 60 * 1000);
-  };
+  const logoutAtRef = useRef(0);
+  const showWarningRef = useRef(false);
+  const isActiveRef = useRef(true);
+  const onLogoutRef = useRef(onLogout);
+  const suppressActivityRef = useRef(false);
 
-  // Handle logout
-  const handleLogout = () => {
+  useEffect(() => {
+    onLogoutRef.current = onLogout;
+  }, [onLogout]);
+
+  useEffect(() => {
+    showWarningRef.current = showWarning;
+  }, [showWarning]);
+
+  useEffect(() => {
+    isActiveRef.current = isActive;
+  }, [isActive]);
+
+  const handleLogout = useCallback(() => {
+    if (!isActiveRef.current) return;
+    isActiveRef.current = false;
     setIsActive(false);
     setShowWarning(false);
-    
-    // Clear all timeouts
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
-    
-    // Call custom logout handler or default
-    if (onLogout) {
-      onLogout();
+    showWarningRef.current = false;
+
+    if (onLogoutRef.current) {
+      onLogoutRef.current();
     } else {
-      // Default logout behavior
       localStorage.removeItem('currentRole');
-      fetch('/api/auth/logout', { method: 'POST' });
+      void fetch('/api/auth/logout', { method: 'POST' });
       window.location.href = '/login';
     }
-  };
+  }, []);
 
-  // Extend session (called from parent component)
-  const extendSession = () => {
+  const handleLogoutRef = useRef(handleLogout);
+  handleLogoutRef.current = handleLogout;
+
+  const resetTimer = useCallback(() => {
+    if (!isActiveRef.current) return;
+    logoutAtRef.current = Date.now() + totalSeconds * 1000;
+    setTimeLeft(totalSeconds);
+    setShowWarning(false);
+    showWarningRef.current = false;
+  }, [totalSeconds]);
+
+  const extendSession = useCallback(() => {
+    suppressActivityRef.current = true;
     resetTimer();
-  };
+    window.setTimeout(() => {
+      suppressActivityRef.current = false;
+    }, 100);
+  }, [resetTimer]);
 
-  // Activity detection
+  // DOM activity resets the inactivity deadline (not while warning is open).
   useEffect(() => {
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    
+
     const handleActivity = () => {
+      if (suppressActivityRef.current || showWarningRef.current) return;
       resetTimer();
     };
 
-    events.forEach(event => {
+    resetTimer();
+
+    events.forEach((event) => {
       document.addEventListener(event, handleActivity, { passive: true });
     });
 
-    // Initial timer setup
-    resetTimer();
-
-    // Cleanup
     return () => {
-      events.forEach(event => {
+      events.forEach((event) => {
         document.removeEventListener(event, handleActivity);
       });
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
     };
-  }, [timeoutMinutes, warningMinutes]);
+  }, [resetTimer]);
 
-  // Countdown timer
+  // Single live countdown (runs during warning too).
   useEffect(() => {
-    if (!isActive || showWarning) return;
+    if (!isActive) return;
 
-    const interval = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          handleLogout();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    const tick = () => {
+      const remainingSec = Math.max(
+        0,
+        Math.ceil((logoutAtRef.current - Date.now()) / 1000),
+      );
+      setTimeLeft(remainingSec);
 
-    return () => clearInterval(interval);
-  }, [isActive, showWarning]);
+      const inWarningPhase = remainingSec > 0 && remainingSec <= warningSeconds;
+      setShowWarning(inWarningPhase);
+      showWarningRef.current = inWarningPhase;
 
-  // Format time for display
+      if (remainingSec <= 0) {
+        handleLogoutRef.current();
+      }
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [isActive, warningSeconds]);
+
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    
+
     if (hours > 0) {
       return `${hours}h ${minutes}m ${secs}s`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${secs}s`;
-    } else {
-      return `${secs}s`;
     }
+    if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
+    }
+    return `${secs}s`;
   };
 
   return {
@@ -130,6 +148,9 @@ export function useAutoLogout({
     isActive,
     extendSession,
     formatTime,
-    resetTimer
+    resetTimer,
+    timeoutMinutes,
+    warningSeconds,
+    totalSeconds,
   };
 }

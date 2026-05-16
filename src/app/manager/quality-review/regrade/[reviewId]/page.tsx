@@ -8,6 +8,11 @@ import ThemeToggle from "@/app/_components/ThemeToggle";
 import SessionTimer from "@/app/_components/SessionTimer";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/app/_components/AutoLogoutWarning";
+import {
+  MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+  MANAGER_INACTIVITY_WARNING_MINUTES,
+  performManagerPortalLogout,
+} from "@/lib/manager-session-timeout";
 import { DashboardNavigationProvider } from "@/contexts/DashboardNavigationContext";
 import type { QAReviewLineResponse } from "@prisma/client";
 import { QaReviewTaskContext } from "@/app/manager/quality-review/_components/QaReviewTaskContext";
@@ -89,7 +94,11 @@ function RegradeReviewPageContent() {
     () => (Array.isArray(params.reviewId) ? params.reviewId[0] : params.reviewId) ?? "",
     [params.reviewId]
   );
-  const { timeLeft, extendSession, showWarning } = useAutoLogout();
+  const { timeLeft, extendSession, showWarning } = useAutoLogout({
+    timeoutMinutes: MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+    warningMinutes: MANAGER_INACTIVITY_WARNING_MINUTES,
+    onLogout: performManagerPortalLogout,
+  });
 
   const [lines, setLines] = useState<LineRow[]>([]);
   const [task, setTask] = useState<Record<string, unknown> | null>(null);
@@ -440,11 +449,8 @@ function RegradeReviewPageContent() {
         isOpen={showWarning}
         timeLeft={timeLeft}
         onExtend={extendSession}
-        onLogout={() => {
-          localStorage.removeItem("currentRole");
-          void fetch("/api/auth/logout", { method: "POST" });
-          window.location.href = "/login";
-        }}
+        onLogout={performManagerPortalLogout}
+        sessionTimeoutMinutes={MANAGER_INACTIVITY_TIMEOUT_MINUTES}
       />
       {cancelSuccessTarget ? (
         <div

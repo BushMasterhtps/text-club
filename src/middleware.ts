@@ -4,53 +4,85 @@ import { jwtVerify } from 'jose';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
+const PUBLIC_ROUTES = ['/', '/login', '/api/auth/login'];
+
+function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.includes(pathname);
+}
+
+function isManagerPortalRoute(pathname: string): boolean {
+  return (
+    pathname.startsWith('/manager') ||
+    pathname.startsWith('/holds') ||
+    pathname.startsWith('/email-requests') ||
+    pathname.startsWith('/yotpo') ||
+    pathname.startsWith('/wod-ivcs') ||
+    pathname.startsWith('/analytics')
+  );
+}
+
+function isAgentPortalRoute(pathname: string): boolean {
+  return pathname.startsWith('/agent');
+}
+
+function isProtectedPortalRoute(pathname: string): boolean {
+  return isManagerPortalRoute(pathname) || isAgentPortalRoute(pathname);
+}
+
+function isManagerRole(role: string): boolean {
+  return role === 'MANAGER' || role === 'MANAGER_AGENT';
+}
+
+function isAgentRole(role: string): boolean {
+  return role === 'AGENT' || role === 'MANAGER_AGENT';
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Public routes that don't require authentication
-  const publicRoutes = ['/', '/login', '/api/auth/login'];
-  
-  if (publicRoutes.includes(pathname)) {
+  if (isPublicRoute(pathname)) {
     return NextResponse.next();
   }
 
-  // Check for auth token in cookies
   const token = request.cookies.get('auth-token')?.value;
 
   if (!token) {
-    // Redirect to login if no token
-    if (pathname.startsWith('/manager') || pathname.startsWith('/agent')) {
+    if (isProtectedPortalRoute(pathname)) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
     return NextResponse.next();
   }
 
   try {
-    // Fail closed (redirect) instead of crashing edge runtime if env is missing/misconfigured
     if (!JWT_SECRET) {
       console.error('JWT_SECRET is not set in edge runtime; redirecting to /login');
-      return NextResponse.redirect(new URL('/login', request.url));
+      if (isProtectedPortalRoute(pathname)) {
+        return NextResponse.redirect(new URL('/login', request.url));
+      }
+      return NextResponse.next();
     }
 
-    // Verify JWT token
     const { payload } = await jwtVerify(
       token,
       new TextEncoder().encode(JWT_SECRET)
     );
 
-    // Add user info to headers for API routes
+    const role = payload.role as string;
+
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-user-id', payload.userId as string);
-    requestHeaders.set('x-user-role', payload.role as string);
+    requestHeaders.set('x-user-role', role);
     requestHeaders.set('x-user-email', payload.email as string);
-    requestHeaders.set('x-must-change-password', (payload.mustChangePassword as boolean)?.toString() || 'false');
+    requestHeaders.set(
+      'x-must-change-password',
+      (payload.mustChangePassword as boolean)?.toString() || 'false'
+    );
 
-    // Role-based access control
-    if (pathname.startsWith('/manager') && payload.role !== 'MANAGER' && payload.role !== 'MANAGER_AGENT') {
+    if (isManagerPortalRoute(pathname) && !isManagerRole(role)) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    if (pathname.startsWith('/agent') && payload.role !== 'AGENT' && payload.role !== 'MANAGER_AGENT') {
+    if (isAgentPortalRoute(pathname) && !isAgentRole(role)) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
@@ -59,10 +91,8 @@ export async function middleware(request: NextRequest) {
         headers: requestHeaders,
       },
     });
-
-  } catch (error) {
-    // Invalid token, redirect to login
-    if (pathname.startsWith('/manager') || pathname.startsWith('/agent')) {
+  } catch {
+    if (isProtectedPortalRoute(pathname)) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
     return NextResponse.next();
@@ -73,6 +103,11 @@ export const config = {
   matcher: [
     '/manager/:path*',
     '/agent/:path*',
+    '/holds/:path*',
+    '/email-requests/:path*',
+    '/yotpo/:path*',
+    '/wod-ivcs/:path*',
+    '/analytics/:path*',
     '/api/manager/:path*',
     '/api/agent/:path*',
     '/api/auth/change-password',

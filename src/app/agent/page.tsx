@@ -10,9 +10,31 @@ import { useTaskStore, type Task } from '@/stores/useTaskStore';
 import KanbanBoard from '@/app/agent/_components/KanbanBoard';
 import { generateTestTasks } from '@/lib/test-data-generator';
 import { parseFetchJsonSafely } from '@/lib/safe-fetch-json';
+import { useAutoLogout } from '@/hooks/useAutoLogout';
+import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
+import { postLogoutClearCookie } from '@/lib/client-logout';
+import {
+  PORTAL_INACTIVITY_TIMEOUT_MINUTES,
+  PORTAL_INACTIVITY_WARNING_MINUTES,
+} from '@/lib/portal-session-timeout';
 
 /** Verbose agent task poll logs (default off). Set NEXT_PUBLIC_DEBUG_PERFORMANCE=true to enable. */
 const DEBUG_PERFORMANCE = process.env.NEXT_PUBLIC_DEBUG_PERFORMANCE === "true";
+
+function isAgentTasksPollAuthFailure(
+  status: number,
+  data: Record<string, unknown> | null,
+): boolean {
+  if (status === 401 || status === 403) return true;
+  if (!data || data.success !== false) return false;
+  const err = typeof data.error === "string" ? data.error.toLowerCase() : "";
+  return (
+    err.includes("unauthorized") ||
+    err.includes("forbidden") ||
+    err.includes("invalid session") ||
+    err.includes("authentication")
+  );
+}
 
 /* ========== Tiny UI atoms (iOS-ish) ========== */
 function Card({
@@ -127,6 +149,8 @@ export default function AgentPage() {
   /** Set by startPolling: explicit sort order for poll URL; null → use sortOrderRef */
   const taskPollOrderOverrideRef = useRef<"asc" | "desc" | null>(null);
   const performAgentTasksPollRef = useRef<() => Promise<void>>(async () => {});
+  const performAgentLogoutRef = useRef<() => Promise<void>>(async () => {});
+  const authRedirectInFlightRef = useRef(false);
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -191,6 +215,13 @@ export default function AgentPage() {
 
   const [isClient, setIsClient] = useState(false);
 
+  const { timeLeft, showWarning, extendSession } = useAutoLogout({
+    timeoutMinutes: PORTAL_INACTIVITY_TIMEOUT_MINUTES,
+    warningMinutes: PORTAL_INACTIVITY_WARNING_MINUTES,
+    onLogout: () => {
+      void performAgentLogoutRef.current();
+    },
+  });
 
   // Check if we're on the client side
   useEffect(() => {
@@ -253,14 +284,17 @@ export default function AgentPage() {
     }, 100);
   }, [email]);
 
-  // Send heartbeat every 30 seconds to update lastSeen
+  // Send heartbeat every 30 seconds to update lastSeen (visible tab only)
   useEffect(() => {
     if (!email) return;
-    
+
     const heartbeatInterval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
       sendHeartbeat(email);
     }, 30000);
-    
+
     return () => clearInterval(heartbeatInterval);
   }, [email]);
 
@@ -440,17 +474,26 @@ export default function AgentPage() {
       }
 
       const parsed = await parseFetchJsonSafely(res);
+      const payload =
+        parsed.data !== null && typeof parsed.data === "object"
+          ? (parsed.data as Record<string, unknown>)
+          : null;
 
-      if (!res.ok || parsed.data === null || typeof parsed.data !== "object") {
+      if (isAgentTasksPollAuthFailure(res.status, payload)) {
+        void performAgentLogoutRef.current();
+        return;
+      }
+
+      if (!res.ok || payload === null) {
         showThrottledPollWarningToast({
           reason: "non_ok_or_invalid_json",
           httpStatus: res.status,
-          hasParsedObject: parsed.data !== null && typeof parsed.data === "object",
+          hasParsedObject: payload !== null,
         });
         return;
       }
 
-      const data = parsed.data as { success?: boolean; tasks?: any[] };
+      const data = payload as { success?: boolean; tasks?: any[] };
 
       if (!(data.success && Array.isArray(data.tasks))) {
         showThrottledPollWarningToast({
@@ -547,6 +590,19 @@ export default function AgentPage() {
     pollingInFlightRef.current = false;
   };
 
+  performAgentLogoutRef.current = async () => {
+    if (authRedirectInFlightRef.current) return;
+    authRedirectInFlightRef.current = true;
+    stopPolling();
+    localStorage.removeItem("agentEmail");
+    localStorage.removeItem("currentRole");
+    setEmail("");
+    setTasks([]);
+    setStats(null);
+    await postLogoutClearCookie();
+    window.location.href = "/login";
+  };
+
   useEffect(() => {
     return () => {
       stopPolling();
@@ -616,17 +672,25 @@ export default function AgentPage() {
       }
 
       const parsed = await parseFetchJsonSafely(res);
+      const payload =
+        parsed.data !== null && typeof parsed.data === "object"
+          ? (parsed.data as Record<string, unknown>)
+          : null;
 
-      if (!res.ok || parsed.data === null || typeof parsed.data !== "object") {
-        console.warn(
-          "❌ loadTasks failed or empty/invalid JSON; preserving current tasks",
-          res.status,
-          res.statusText,
-        );
+      if (isAgentTasksPollAuthFailure(res.status, payload)) {
+        void performAgentLogoutRef.current();
         return;
       }
 
-      const data = parsed.data as { success?: boolean; tasks?: Task[] };
+      if (!res.ok || payload === null) {
+        showThrottledPollWarningToast({
+          reason: "load_tasks_non_ok_or_invalid_json",
+          httpStatus: res.status,
+        });
+        return;
+      }
+
+      const data = payload as { success?: boolean; tasks?: Task[] };
       if (DEBUG_PERFORMANCE) {
         console.log("📦 Response data:", data);
       }
@@ -684,10 +748,19 @@ export default function AgentPage() {
           console.log("✅ Tasks updated, last update set to:", new Date().toLocaleTimeString());
         }
       } else {
-        console.warn("❌ loadTasks invalid payload; preserving current tasks:", data);
+        showThrottledPollWarningToast({
+          reason: "load_tasks_invalid_response_shape",
+          httpStatus: res.status,
+          success: data.success,
+          tasksIsArray: Array.isArray(data.tasks),
+        });
       }
     } catch (error) {
       console.error("❌ Failed to load tasks:", error);
+      showThrottledPollWarningToast({
+        reason: "load_tasks_fetch_threw",
+        error: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       setLoading(false);
     }
@@ -1217,16 +1290,9 @@ export default function AgentPage() {
               </SmallButton>
             )}
             
-            <SmallButton 
+            <SmallButton
               onClick={() => {
-                localStorage.removeItem('agentEmail');
-                localStorage.removeItem('currentRole');
-                setEmail("");
-                setTasks([]);
-                setStats(null);
-                stopPolling();
-                // Redirect to login page
-                window.location.href = '/login';
+                void performAgentLogoutRef.current();
               }}
               className="bg-red-600 hover:bg-red-700"
             >
@@ -2701,6 +2767,16 @@ export default function AgentPage() {
           onClose={() => setToastMessage(null)}
         />
       )}
+
+      <AutoLogoutWarning
+        isOpen={showWarning}
+        timeLeft={timeLeft}
+        onExtend={extendSession}
+        onLogout={() => {
+          void performAgentLogoutRef.current();
+        }}
+        sessionTimeoutMinutes={PORTAL_INACTIVITY_TIMEOUT_MINUTES}
+      />
     </main>
   );
 }

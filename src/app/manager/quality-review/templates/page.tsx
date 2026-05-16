@@ -8,6 +8,11 @@ import ThemeToggle from "@/app/_components/ThemeToggle";
 import SessionTimer from "@/app/_components/SessionTimer";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/app/_components/AutoLogoutWarning";
+import {
+  MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+  MANAGER_INACTIVITY_WARNING_MINUTES,
+  performManagerPortalLogout,
+} from "@/lib/manager-session-timeout";
 import type { TaskType } from "@prisma/client";
 
 type OverviewRow = {
@@ -25,7 +30,11 @@ type OverviewRow = {
 };
 
 function TemplatesListContent() {
-  const { timeLeft, extendSession, showWarning } = useAutoLogout();
+  const { timeLeft, extendSession, showWarning } = useAutoLogout({
+    timeoutMinutes: MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+    warningMinutes: MANAGER_INACTIVITY_WARNING_MINUTES,
+    onLogout: performManagerPortalLogout,
+  });
   const [rows, setRows] = useState<OverviewRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -248,11 +257,8 @@ function TemplatesListContent() {
         isOpen={showWarning}
         timeLeft={timeLeft}
         onExtend={extendSession}
-        onLogout={() => {
-          localStorage.removeItem("currentRole");
-          void fetch("/api/auth/logout", { method: "POST" });
-          window.location.href = "/login";
-        }}
+        onLogout={performManagerPortalLogout}
+        sessionTimeoutMinutes={MANAGER_INACTIVITY_TIMEOUT_MINUTES}
       />
     </DashboardLayout>
   );

@@ -5,6 +5,11 @@ import { PieChart, Pie, Cell, Tooltip } from "recharts";
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
+import {
+  MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+  MANAGER_INACTIVITY_WARNING_MINUTES,
+  performManagerPortalLogout,
+} from '@/lib/manager-session-timeout';
 import SessionTimer from '@/app/_components/SessionTimer';
 import BlockedPhonesSection from '@/app/_components/BlockedPhonesSection';
 import ThemeToggle from '@/app/_components/ThemeToggle';
@@ -3467,13 +3472,9 @@ function ManagerPageContent() {
     extendSession,
     formatTime
   } = useAutoLogout({
-    timeoutMinutes: 50, // 50 minutes
-    warningMinutes: 5,   // 5 minutes warning
-    onLogout: () => {
-      localStorage.removeItem('currentRole');
-      fetch('/api/auth/logout', { method: 'Post' });
-      window.location.href = '/login';
-    }
+    timeoutMinutes: MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+    warningMinutes: MANAGER_INACTIVITY_WARNING_MINUTES,
+    onLogout: performManagerPortalLogout,
   });
 
   // Navigation state - now inside provider wrapper
@@ -3820,11 +3821,7 @@ function ManagerPageContent() {
       )}
       {/* Logout Button */}
       <button
-        onClick={() => {
-          localStorage.removeItem('currentRole');
-          fetch('/api/auth/logout', { method: 'POST' });
-          window.location.href = '/login';
-        }}
+        onClick={performManagerPortalLogout}
         className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
       >
         Logout
@@ -4100,11 +4097,8 @@ function ManagerPageContent() {
         isOpen={showWarning}
         timeLeft={timeLeft}
         onExtend={extendSession}
-        onLogout={() => {
-          localStorage.removeItem('currentRole');
-          fetch('/api/auth/logout', { method: 'POST' });
-          window.location.href = '/login';
-        }}
+        onLogout={performManagerPortalLogout}
+        sessionTimeoutMinutes={MANAGER_INACTIVITY_TIMEOUT_MINUTES}
       />
       </DashboardLayout>
   );

@@ -50,9 +50,12 @@ export async function POST(request: NextRequest) {
       where: { id: authResult.userId },
       select: {
         id: true,
+        email: true,
+        name: true,
+        role: true,
         password: true,
-        mustChangePassword: true
-      }
+        mustChangePassword: true,
+      },
     });
 
     if (!user) {
@@ -83,11 +86,14 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Generate new JWT token
+    // Re-issue full JWT (same claims as login) so role/email stay available to middleware and APIs
     const token = jwt.sign(
       {
         userId: user.id,
-        mustChangePassword: false
+        email: user.email,
+        role: user.role,
+        name: user.name,
+        mustChangePassword: false,
       },
       jwtSecret,
       { expiresIn: '24h' }

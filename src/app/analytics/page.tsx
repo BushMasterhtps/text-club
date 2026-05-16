@@ -10,6 +10,13 @@ import {
   PRODUCTIVITY_ROSTER_TEAM_FILTER_ANY,
   PRODUCTIVITY_ROSTER_TEAM_FILTER_UNASSIGNED,
 } from '@/lib/productivity-scorecard-subjects';
+import { useAutoLogout } from '@/hooks/useAutoLogout';
+import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
+import {
+  PORTAL_INACTIVITY_TIMEOUT_MINUTES,
+  PORTAL_INACTIVITY_WARNING_MINUTES,
+  performPortalLogout,
+} from '@/lib/portal-session-timeout';
 
 // Typography components
 function H1({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -177,6 +184,16 @@ export default function AnalyticsPage() {
   
   // Agent view mode (quick vs detailed)
   const [agentViewMode, setAgentViewMode] = useState<'quick' | 'detailed'>('quick');
+
+  const {
+    timeLeft,
+    showWarning: warningOpen,
+    extendSession,
+  } = useAutoLogout({
+    timeoutMinutes: PORTAL_INACTIVITY_TIMEOUT_MINUTES,
+    warningMinutes: PORTAL_INACTIVITY_WARNING_MINUTES,
+    onLogout: performPortalLogout,
+  });
 
   // Peek at agent's in-progress tasks
   const peekAgentTasks = async (agent: AgentStatus) => {
@@ -1195,6 +1212,14 @@ export default function AnalyticsPage() {
 
         </div>
       </div>
+
+      <AutoLogoutWarning
+        isOpen={warningOpen}
+        timeLeft={timeLeft}
+        onExtend={extendSession}
+        onLogout={performPortalLogout}
+        sessionTimeoutMinutes={PORTAL_INACTIVITY_TIMEOUT_MINUTES}
+      />
     </main>
   );
 }

@@ -12,6 +12,11 @@ import { AssistanceRequestsSection } from "@/app/manager/_components/AssistanceR
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
+import {
+  PORTAL_INACTIVITY_TIMEOUT_MINUTES,
+  PORTAL_INACTIVITY_WARNING_MINUTES,
+  performPortalLogout,
+} from '@/lib/portal-session-timeout';
 import SessionTimer from '@/app/_components/SessionTimer';
 import ThemeToggle from '@/app/_components/ThemeToggle';
 import { Badge } from "@/app/_components/Badge";
@@ -789,7 +794,11 @@ function EmailRequestsPageContent() {
   const [overviewLoading, setOverviewLoading] = useState(false);
 
   // Auto logout hook
-  const { timeLeft, extendSession } = useAutoLogout({ timeoutMinutes: 50 });
+  const { timeLeft, extendSession, showWarning } = useAutoLogout({
+    timeoutMinutes: PORTAL_INACTIVITY_TIMEOUT_MINUTES,
+    warningMinutes: PORTAL_INACTIVITY_WARNING_MINUTES,
+    onLogout: performPortalLogout,
+  });
 
   // Load overview data
   const loadOverviewData = async () => {
@@ -861,12 +870,8 @@ function EmailRequestsPageContent() {
       >
         Switch to Agent
       </SmallButton>
-      <SmallButton 
-        onClick={() => {
-          localStorage.removeItem('agentEmail');
-          localStorage.removeItem('currentRole');
-          window.location.href = '/login';
-        }}
+      <SmallButton
+        onClick={performPortalLogout}
         className="bg-red-600 hover:bg-red-700"
       >
         Logout
@@ -877,8 +882,13 @@ function EmailRequestsPageContent() {
   return (
     <DashboardLayout headerActions={headerActions}>
 
-      {/* Auto Logout Warning */}
-      <AutoLogoutWarning />
+      <AutoLogoutWarning
+        isOpen={showWarning}
+        timeLeft={timeLeft}
+        onExtend={extendSession}
+        onLogout={performPortalLogout}
+        sessionTimeoutMinutes={PORTAL_INACTIVITY_TIMEOUT_MINUTES}
+      />
 
 
       {/* Content Sections */}

@@ -7,6 +7,11 @@ import ThemeToggle from "@/app/_components/ThemeToggle";
 import SessionTimer from "@/app/_components/SessionTimer";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/app/_components/AutoLogoutWarning";
+import {
+  MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+  MANAGER_INACTIVITY_WARNING_MINUTES,
+  performManagerPortalLogout,
+} from "@/lib/manager-session-timeout";
 import { DashboardNavigationProvider } from "@/contexts/DashboardNavigationContext";
 
 type TeamRosterUser = {
@@ -83,7 +88,11 @@ type RowFeedback = {
 };
 
 export default function TeamRosterPage() {
-  const { timeLeft, extendSession, showWarning } = useAutoLogout();
+  const { timeLeft, extendSession, showWarning } = useAutoLogout({
+    timeoutMinutes: MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+    warningMinutes: MANAGER_INACTIVITY_WARNING_MINUTES,
+    onLogout: performManagerPortalLogout,
+  });
   const [q, setQ] = useState("");
   const [users, setUsers] = useState<TeamRosterUser[]>([]);
   const [rowDrafts, setRowDrafts] = useState<Record<string, RowDraft>>({});
@@ -255,11 +264,8 @@ export default function TeamRosterPage() {
           isOpen={showWarning}
           timeLeft={timeLeft}
           onExtend={extendSession}
-          onLogout={() => {
-            localStorage.removeItem("currentRole");
-            void fetch("/api/auth/logout", { method: "POST" });
-            window.location.href = "/login";
-          }}
+          onLogout={performManagerPortalLogout}
+          sessionTimeoutMinutes={MANAGER_INACTIVITY_TIMEOUT_MINUTES}
         />
         <div className="max-w-[min(100vw-2rem,90rem)] mx-auto space-y-6 text-white pb-16 px-4">
           <header className="border-b border-white/10 pb-6">

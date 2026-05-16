@@ -1,0 +1,5 @@
+export {
+  PORTAL_INACTIVITY_TIMEOUT_MINUTES as MANAGER_INACTIVITY_TIMEOUT_MINUTES,
+  PORTAL_INACTIVITY_WARNING_MINUTES as MANAGER_INACTIVITY_WARNING_MINUTES,
+  performPortalLogout as performManagerPortalLogout,
+} from '@/lib/portal-session-timeout';

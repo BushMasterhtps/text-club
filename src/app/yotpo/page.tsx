@@ -10,6 +10,12 @@ import { useRangeSelection } from '@/hooks/useRangeSelection';
 import { DeleteConfirmationModal } from '@/app/_components/DeleteConfirmationModal';
 import ChangePasswordModal from '@/app/_components/ChangePasswordModal';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
+import AutoLogoutWarning from '@/app/_components/AutoLogoutWarning';
+import {
+  PORTAL_INACTIVITY_TIMEOUT_MINUTES,
+  PORTAL_INACTIVITY_WARNING_MINUTES,
+  performPortalLogout,
+} from '@/lib/portal-session-timeout';
 import ThemeToggle from '@/app/_components/ThemeToggle';
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
 import YotpoAnalytics from '@/app/_components/YotpoAnalytics';
@@ -1135,7 +1141,11 @@ function YotpoPageContent() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // Auto logout hook
-  const { timeLeft, extendSession } = useAutoLogout({ timeoutMinutes: 50 });
+  const { timeLeft, extendSession, showWarning } = useAutoLogout({
+    timeoutMinutes: PORTAL_INACTIVITY_TIMEOUT_MINUTES,
+    warningMinutes: PORTAL_INACTIVITY_WARNING_MINUTES,
+    onLogout: performPortalLogout,
+  });
 
   // Load overview data
   const loadOverviewData = async () => {
@@ -1196,14 +1206,7 @@ function YotpoPageContent() {
       >
         Switch to Agent
       </SmallButton>
-      <SmallButton 
-        onClick={() => {
-          localStorage.removeItem('agentEmail');
-          localStorage.removeItem('currentRole');
-          window.location.href = '/login';
-        }}
-        className="bg-red-600 hover:bg-red-700"
-      >
+      <SmallButton onClick={performPortalLogout} className="bg-red-600 hover:bg-red-700">
         Logout
       </SmallButton>
     </>
@@ -1212,8 +1215,13 @@ function YotpoPageContent() {
   return (
     <DashboardLayout headerActions={headerActions}>
 
-      {/* Auto Logout Warning - Handled by useAutoLogout hook */}
-
+      <AutoLogoutWarning
+        isOpen={showWarning}
+        timeLeft={timeLeft}
+        onExtend={extendSession}
+        onLogout={performPortalLogout}
+        sessionTimeoutMinutes={PORTAL_INACTIVITY_TIMEOUT_MINUTES}
+      />
 
       {/* Content Sections */}
       <div className="space-y-8 mt-8">
