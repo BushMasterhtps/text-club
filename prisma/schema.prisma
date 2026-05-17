@@ -158,6 +158,10 @@ model User {
   wodIvcsImportRuns              WodIvcsImportRun[]   @relation("WodIvcsImportRunImporter")
   wodIvcsImportRunsReversed      WodIvcsImportRun[]   @relation("WodIvcsImportRunReverser")
   wodIvcsActionEvents            WodIvcsActionEvent[] @relation("WodIvcsActionEventActor")
+  wodIvcsWorkflowDefinitionsCreated WodIvcsWorkflowDefinition[] @relation("WodIvcsWorkflowDefinitionCreatedBy")
+  wodIvcsWorkflowVersionsCreated    WodIvcsWorkflowVersion[]    @relation("WodIvcsWorkflowVersionCreatedBy")
+  wodIvcsWorkflowVersionsPublished  WodIvcsWorkflowVersion[]    @relation("WodIvcsWorkflowVersionPublishedBy")
+  wodIvcsWorkflowConfigAuditLogs    WodIvcsWorkflowConfigAuditLog[] @relation("WodIvcsWorkflowConfigAuditActor")
 
   @@index([isLive, lastSeen])
   @@index([qaIsTracked])
@@ -599,6 +603,59 @@ enum WodIvcsActionType {
   MANAGER_OVERRIDE
 }
 
+enum WodIvcsWorkflowVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum WodIvcsWorkflowCatalogType {
+  ROOT_CAUSE
+  CASH_SALE_EXISTS
+  MERCHANT
+  FIX_TYPE
+}
+
+enum WodIvcsWorkflowStepFieldType {
+  SECTION_HEADER
+  SINGLE_SELECT
+  MULTI_SELECT
+  BOOLEAN
+  TEXT
+  TEXTAREA
+  NUMBER
+  READ_ONLY
+}
+
+enum WodIvcsWorkflowConditionOperator {
+  EQ
+  NEQ
+  IN
+  NOT_IN
+  IS_EMPTY
+  IS_NOT_EMPTY
+}
+
+enum WodIvcsProductivityCreditMode {
+  NONE
+  AWARD_ON_OPERATIONAL_COMPLETE
+  CUSTOM_WEIGHT
+}
+
+enum WodIvcsOperationalCompletionMode {
+  REMAIN_OPEN
+  MARK_OPERATIONALLY_COMPLETE
+  ARCHIVE_ORDER
+}
+
+enum WodIvcsWorkflowConfigAuditAction {
+  CREATED
+  UPDATED
+  PUBLISHED
+  ARCHIVED
+  RESTORED_DRAFT
+}
+
 model WodIvcsOrder {
   id                        String                   @id @default(cuid())
   documentNumber            String
@@ -772,6 +829,150 @@ model WodIvcsActionEvent {
 
   @@index([orderId, createdAt])
   @@index([importRunId])
+  @@index([actorId, createdAt])
+}
+
+model WodIvcsWorkflowDefinition {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  displayName   String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdById   String?
+  createdBy     User?    @relation("WodIvcsWorkflowDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  versions WodIvcsWorkflowVersion[]
+
+  @@index([isActive])
+}
+
+model WodIvcsWorkflowVersion {
+  id            String                     @id @default(cuid())
+  workflowId    String
+  workflow      WodIvcsWorkflowDefinition  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  version       Int
+  status        WodIvcsWorkflowVersionStatus @default(DRAFT)
+  notes         String?                    @db.Text
+  publishedAt   DateTime?
+  publishedById String?
+  publishedBy   User?                      @relation("WodIvcsWorkflowVersionPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+  createdById   String?
+  createdBy     User?                      @relation("WodIvcsWorkflowVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  steps        WodIvcsWorkflowStep[]
+  outcomeRules WodIvcsWorkflowOutcomeRule[]
+
+  @@unique([workflowId, version])
+  @@index([workflowId, status])
+}
+
+model WodIvcsWorkflowCatalog {
+  id          String                   @id @default(cuid())
+  catalogType WodIvcsWorkflowCatalogType
+  slug        String
+  displayName String
+  isActive    Boolean                  @default(true)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  options WodIvcsWorkflowCatalogOption[]
+  steps   WodIvcsWorkflowStep[]
+
+  @@unique([catalogType, slug])
+  @@index([catalogType, isActive])
+}
+
+model WodIvcsWorkflowCatalogOption {
+  id           String               @id @default(cuid())
+  catalogId    String
+  catalog      WodIvcsWorkflowCatalog @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  value        String
+  label        String
+  sortOrder    Int                  @default(100)
+  isActive     Boolean              @default(true)
+  metadataJson Json?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@unique([catalogId, value])
+  @@index([catalogId, isActive, sortOrder])
+}
+
+model WodIvcsWorkflowStep {
+  id                  String                     @id @default(cuid())
+  versionId           String
+  version             WodIvcsWorkflowVersion     @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  slug                String
+  label               String
+  helpText            String?                    @db.Text
+  fieldType           WodIvcsWorkflowStepFieldType
+  catalogId           String?
+  catalog             WodIvcsWorkflowCatalog?    @relation(fields: [catalogId], references: [id], onDelete: SetNull)
+  sortOrder           Int
+  isRequired          Boolean                    @default(false)
+  inlineOptionsJson   Json?
+  validationRulesJson Json?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+
+  conditions WodIvcsWorkflowStepCondition[]
+
+  @@unique([versionId, slug])
+  @@index([versionId, sortOrder])
+}
+
+model WodIvcsWorkflowStepCondition {
+  id                String                         @id @default(cuid())
+  stepId            String
+  step              WodIvcsWorkflowStep            @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  dependsOnStepSlug String
+  operator          WodIvcsWorkflowConditionOperator
+  valueJson         Json
+  createdAt         DateTime                       @default(now())
+
+  @@index([stepId])
+  @@index([dependsOnStepSlug])
+}
+
+model WodIvcsWorkflowOutcomeRule {
+  id                             String                         @id @default(cuid())
+  versionId                      String
+  version                        WodIvcsWorkflowVersion         @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  priority                       Int
+  name                           String
+  matchJson                      Json
+  targetQueue                    WodIvcsOperationalQueue
+  productivityCreditMode         WodIvcsProductivityCreditMode  @default(NONE)
+  operationalCompletionMode      WodIvcsOperationalCompletionMode @default(REMAIN_OPEN)
+  requiresReplacementOrderNumber Boolean                        @default(false)
+  requiresProcessedReship        Boolean                        @default(false)
+  requiresItEscalation           Boolean                        @default(false)
+  requiresRetriggerConfirmation  Boolean                        @default(false)
+  effectsJson                    Json?
+  isActive                       Boolean                        @default(true)
+  createdAt                      DateTime                       @default(now())
+  updatedAt                      DateTime                       @updatedAt
+
+  @@unique([versionId, priority])
+  @@index([versionId, isActive, priority])
+}
+
+model WodIvcsWorkflowConfigAuditLog {
+  id         String                         @id @default(cuid())
+  actorId    String?
+  actor      User?                          @relation("WodIvcsWorkflowConfigAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action     WodIvcsWorkflowConfigAuditAction
+  entityType String
+  entityId   String?
+  beforeJson Json?
+  afterJson  Json?
+  reason     String?                        @db.Text
+  createdAt  DateTime                       @default(now())
+
+  @@index([entityType, createdAt])
   @@index([actorId, createdAt])
 }
 
