@@ -1,0 +1,5 @@
+DocumentNumber,DateRange,Days_old_invalid_CashSale,Subsidiary,Customer,Email,Product,SKU,Quantity,Amount
+GM2002001,5+ days,6,City Beauty LLC,Sample Customer D,sample.d@example.com,Vital Reds,VR-001,1,49.99
+GM2002001,5+ days,6,City Beauty LLC,Sample Customer D,sample.d@example.com,PreBioThrive,PB-002,1,39.99
+GM2002001,5+ days,6,City Beauty LLC,Sample Customer D,sample.d@example.com,VitaminD5000,VD-003,1,29.99
+GM2002002,1-4 days,3,Other Subsidiary LLC,Sample Customer E,sample.e@example.com,Product X,PX-100,2,59.98

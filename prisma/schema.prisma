@@ -154,6 +154,11 @@ model User {
   assistanceAuthoredMessages     AssistanceMessage[]
   taskWorkSessions               TaskWorkSession[]
 
+  wodIvcsOrdersAssigned          WodIvcsOrder[]       @relation("WodIvcsOrderAssignee")
+  wodIvcsImportRuns              WodIvcsImportRun[]   @relation("WodIvcsImportRunImporter")
+  wodIvcsImportRunsReversed      WodIvcsImportRun[]   @relation("WodIvcsImportRunReverser")
+  wodIvcsActionEvents            WodIvcsActionEvent[] @relation("WodIvcsActionEventActor")
+
   @@index([isLive, lastSeen])
   @@index([qaIsTracked])
   @@index([qaTeam])
@@ -532,6 +537,242 @@ model BlockedPhone {
   updatedAt DateTime @updatedAt
 
   @@map("BlockedPhone")
+}
+
+/////////////////////////////////////
+// WOD/IVCS v2 — case reconciliation (Invalid Cash Sale)
+/////////////////////////////////////
+
+enum WodIvcsSourceReportType {
+  NETSUITE_REPORT
+  AGING_REPORT
+}
+
+enum WodIvcsImportRunStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REVERSED
+  PARTIALLY_REVERSED
+}
+
+enum WodIvcsImportRowStatus {
+  PARSED
+  SKIPPED
+  ERROR
+  CREATED_ORDER
+  UPDATED_ORDER
+  CREATED_CASE
+  UPDATED_CASE
+  AGGREGATED_INTO_ORDER
+}
+
+enum WodIvcsPresenceState {
+  UNKNOWN
+  PRESENT
+  DROPPED
+}
+
+enum WodIvcsOperationalQueue {
+  NEEDS_ACTION
+  ASSIGNED
+  IN_PROGRESS
+  AWAITING_DROP_OFF
+  NEEDS_REVIEW
+  IT_REVIEW
+  COMPLETED
+  ARCHIVED
+}
+
+enum WodIvcsOperationalStatus {
+  OPEN
+  OPERATIONALLY_COMPLETE
+  ARCHIVED
+}
+
+enum WodIvcsActionType {
+  IMPORT_RUN_COMPLETED
+  PRESENCE_UPDATED
+  IMPORT_RUN_REVERSED
+  QUEUE_CHANGED
+  MANAGER_OVERRIDE
+}
+
+model WodIvcsOrder {
+  id                        String                   @id @default(cuid())
+  documentNumber            String
+  documentNumberNormalized  String                   @unique
+  operationalQueue          WodIvcsOperationalQueue  @default(NEEDS_ACTION)
+  operationalStatus         WodIvcsOperationalStatus @default(OPEN)
+  assignedToId              String?
+  assignedTo                User?                    @relation("WodIvcsOrderAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  customerName              String?
+  customerEmail             String?
+  presenceNetSuite          WodIvcsPresenceState     @default(UNKNOWN)
+  presenceAging             WodIvcsPresenceState     @default(UNKNOWN)
+  lastSeenInNetSuiteAt      DateTime?
+  lastSeenInAgingAt         DateTime?
+  droppedFromNetSuiteAt     DateTime?
+  droppedFromAgingAt        DateTime?
+  orderDateFromNetSuiteReport DateTime?
+  netSuiteDaysOld           Int?
+  agingIsFivePlus           Boolean                  @default(false)
+  agingDaysOldInvalidCashSale Int?
+  agingDateRangeRaw         String?
+  isCityBeauty              Boolean                  @default(false)
+  itemSummaryJson           Json?
+  latestNetSuiteSnapshotJson Json?
+  latestAgingSnapshotJson   Json?
+  awaitingDropOffStartedAt  DateTime?
+  awaitingDropOffDeadlineAt DateTime?
+  processedReship           Boolean?
+  replacementOrderNumber    String?
+  createdByImportRunId      String?
+  createdByImportRun        WodIvcsImportRun?        @relation("WodIvcsOrderCreatedByImport", fields: [createdByImportRunId], references: [id], onDelete: SetNull)
+  updatedByImportRunId      String?
+  updatedByImportRun        WodIvcsImportRun?        @relation("WodIvcsOrderUpdatedByImport", fields: [updatedByImportRunId], references: [id], onDelete: SetNull)
+  archivedAt                DateTime?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+
+  cases           WodIvcsCase[]
+  importRows      WodIvcsImportRow[]
+  presenceEvents  WodIvcsReportPresenceEvent[]
+  actionEvents    WodIvcsActionEvent[]
+
+  @@index([operationalQueue, operationalStatus])
+  @@index([isCityBeauty, agingIsFivePlus])
+  @@index([presenceNetSuite, presenceAging])
+  @@index([assignedToId])
+}
+
+model WodIvcsCase {
+  id                       String                  @id @default(cuid())
+  orderId                  String
+  order                    WodIvcsOrder            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sourceReportType         WodIvcsSourceReportType
+  documentNumberNormalized String
+  presenceState            WodIvcsPresenceState    @default(UNKNOWN)
+  lastImportRunId          String?
+  lastImportRun            WodIvcsImportRun?       @relation(fields: [lastImportRunId], references: [id], onDelete: SetNull)
+  lastSeenAt               DateTime?
+  rawSnapshotJson          Json
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+
+  importRows WodIvcsImportRow[]
+
+  @@unique([documentNumberNormalized, sourceReportType])
+  @@index([orderId])
+  @@index([lastImportRunId])
+}
+
+model WodIvcsImportRun {
+  id                  String                   @id @default(cuid())
+  sourceReportType    WodIvcsSourceReportType
+  fileName            String
+  fileSha256          String?
+  status              WodIvcsImportRunStatus   @default(PENDING)
+  isDryRun            Boolean                  @default(false)
+  importedById        String
+  importedBy          User                     @relation("WodIvcsImportRunImporter", fields: [importedById], references: [id], onDelete: Restrict)
+  totalRows           Int                      @default(0)
+  parsedRows          Int                      @default(0)
+  createdOrders       Int                      @default(0)
+  updatedOrders       Int                      @default(0)
+  skippedRows         Int                      @default(0)
+  errorRows           Int                      @default(0)
+  summaryJson         Json?
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  reversedAt          DateTime?
+  reversedById        String?
+  reversedBy          User?                    @relation("WodIvcsImportRunReverser", fields: [reversedById], references: [id], onDelete: SetNull)
+  reversalReason      String?                  @db.Text
+  reversalPreviewJson Json?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  rows                WodIvcsImportRow[]
+  cases               WodIvcsCase[]
+  presenceEvents      WodIvcsReportPresenceEvent[]
+  actionEvents        WodIvcsActionEvent[]
+  ordersCreated       WodIvcsOrder[]           @relation("WodIvcsOrderCreatedByImport")
+  ordersUpdated       WodIvcsOrder[]           @relation("WodIvcsOrderUpdatedByImport")
+
+  @@index([sourceReportType, createdAt])
+  @@index([status])
+  @@index([importedById])
+}
+
+model WodIvcsImportRow {
+  id                       String                @id @default(cuid())
+  importRunId              String
+  importRun                WodIvcsImportRun      @relation(fields: [importRunId], references: [id], onDelete: Cascade)
+  rowNumber                Int
+  rawRowJson               Json
+  normalizedRowJson        Json?
+  status                   WodIvcsImportRowStatus
+  errorMessage             String?               @db.Text
+  documentNumberNormalized String?
+  orderId                  String?
+  order                    WodIvcsOrder?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  caseId                   String?
+  case                     WodIvcsCase?          @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  createdAt                DateTime              @default(now())
+
+  @@index([importRunId, rowNumber])
+  @@index([importRunId, documentNumberNormalized])
+}
+
+model WodIvcsReportPresenceEvent {
+  id               String                  @id @default(cuid())
+  orderId          String
+  order            WodIvcsOrder            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sourceReportType WodIvcsSourceReportType
+  importRunId      String
+  importRun        WodIvcsImportRun        @relation(fields: [importRunId], references: [id], onDelete: Cascade)
+  presenceState    WodIvcsPresenceState
+  observedAt       DateTime                @default(now())
+  metadataJson     Json?
+
+  @@index([orderId, sourceReportType, observedAt])
+  @@index([importRunId])
+}
+
+model WodIvcsBrandRule {
+  id               String                  @id @default(cuid())
+  sourceReportType WodIvcsSourceReportType
+  matchField       String
+  matchValue       String
+  isInclusive      Boolean                 @default(true)
+  isActive         Boolean                 @default(true)
+  priority         Int                     @default(100)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  @@index([sourceReportType, isActive, priority])
+}
+
+model WodIvcsActionEvent {
+  id             String              @id @default(cuid())
+  orderId        String?
+  order          WodIvcsOrder?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  importRunId    String?
+  importRun      WodIvcsImportRun?   @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  actorId        String
+  actor          User                @relation("WodIvcsActionEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+  actionType     WodIvcsActionType
+  fromQueue      WodIvcsOperationalQueue?
+  toQueue        WodIvcsOperationalQueue?
+  payloadJson    Json?
+  idempotencyKey String?             @unique
+  createdAt      DateTime            @default(now())
+
+  @@index([orderId, createdAt])
+  @@index([importRunId])
+  @@index([actorId, createdAt])
 }
 
 /////////////////////////////////////

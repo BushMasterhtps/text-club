@@ -17,6 +17,8 @@ import {
 // Import existing components we'll reuse
 import { AssistanceRequestsSection } from "@/app/manager/_components/AssistanceRequestsSection";
 import { CsvImportSection } from "./_components/CsvImportSection";
+import { WodIvcsV2Phase1Section } from "./_components/WodIvcsV2Phase1Section";
+import { isWodIvcsV2EnabledClient } from "@/lib/wod-ivcs/client-feature-flag";
 import { WodIvcsTasksSection } from "./_components/WodIvcsTasksSection";
 import { AnalyticsSection } from "./_components/AnalyticsSection";
 import UnifiedSettings from '@/app/_components/UnifiedSettings';
@@ -515,6 +517,7 @@ function UsersAdminSection() {
 }
 
 function WodIvcsDashboardContent() {
+  const wodV2Enabled = isWodIvcsV2EnabledClient();
   const { activeSection, setActiveSection } = useDashboardNavigation();
   const [loading, setLoading] = useState(false);
   const [overviewData, setOverviewData] = useState({
@@ -1012,8 +1015,11 @@ function WodIvcsDashboardContent() {
         {/* Task Management Section */}
         {activeSection === "tasks" && (
           <div className="space-y-8">
-                   {/* CSV Import Section */}
-                   <CsvImportSection onImportComplete={loadOverviewData} />
+            {wodV2Enabled ? (
+              <WodIvcsV2Phase1Section />
+            ) : (
+              <>
+                <CsvImportSection onImportComplete={loadOverviewData} />
 
             {/* Assign Tasks Section (matching Text Club) */}
             <Card className="p-5 space-y-4">
@@ -1180,6 +1186,8 @@ function WodIvcsDashboardContent() {
 
             {/* Pending Tasks */}
             <WodIvcsTasksSection taskType="WOD_IVCS" />
+              </>
+            )}
           </div>
         )}
 
