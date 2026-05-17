@@ -656,6 +656,14 @@ enum WodIvcsWorkflowConfigAuditAction {
   RESTORED_DRAFT
 }
 
+enum WodIvcsWorkflowDropOffBehavior {
+  NO_AUTOMATIC_CHANGE
+  MARK_COMPLETED
+  NEEDS_REVIEW
+  ARCHIVE_ORDER
+  REMAIN_AWAITING_DROP_OFF
+}
+
 model WodIvcsOrder {
   id                        String                   @id @default(cuid())
   documentNumber            String
@@ -842,7 +850,8 @@ model WodIvcsWorkflowDefinition {
   createdById   String?
   createdBy     User?    @relation("WodIvcsWorkflowDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  versions WodIvcsWorkflowVersion[]
+  versions  WodIvcsWorkflowVersion[]
+  catalogs  WodIvcsWorkflowCatalog[]
 
   @@index([isActive])
 }
@@ -857,6 +866,8 @@ model WodIvcsWorkflowVersion {
   publishedAt   DateTime?
   publishedById String?
   publishedBy   User?                      @relation("WodIvcsWorkflowVersionPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  compiledAt    DateTime?
+  routingMatrixHash String?
   createdAt     DateTime                   @default(now())
   updatedAt     DateTime                   @updatedAt
   createdById   String?
@@ -864,31 +875,40 @@ model WodIvcsWorkflowVersion {
 
   steps        WodIvcsWorkflowStep[]
   outcomeRules WodIvcsWorkflowOutcomeRule[]
+  routingRules WodIvcsWorkflowRoutingRule[]
 
   @@unique([workflowId, version])
   @@index([workflowId, status])
 }
 
 model WodIvcsWorkflowCatalog {
-  id          String                   @id @default(cuid())
-  catalogType WodIvcsWorkflowCatalogType
-  slug        String
-  displayName String
-  isActive    Boolean                  @default(true)
-  createdAt   DateTime                 @default(now())
-  updatedAt   DateTime                 @updatedAt
+  id                   String                   @id @default(cuid())
+  catalogType          WodIvcsWorkflowCatalogType
+  slug                 String
+  displayName          String
+  workflowDefinitionId String?
+  workflowDefinition   WodIvcsWorkflowDefinition? @relation(fields: [workflowDefinitionId], references: [id], onDelete: SetNull)
+  groupKey             String?
+  displayOrder         Int                      @default(0)
+  isActive             Boolean                  @default(true)
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
 
   options WodIvcsWorkflowCatalogOption[]
   steps   WodIvcsWorkflowStep[]
 
   @@unique([catalogType, slug])
   @@index([catalogType, isActive])
+  @@index([workflowDefinitionId, groupKey])
 }
 
 model WodIvcsWorkflowCatalogOption {
   id           String               @id @default(cuid())
   catalogId    String
   catalog      WodIvcsWorkflowCatalog @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  parentOptionId String?
+  parent       WodIvcsWorkflowCatalogOption?  @relation("CatalogOptionParent", fields: [parentOptionId], references: [id], onDelete: SetNull)
+  children     WodIvcsWorkflowCatalogOption[] @relation("CatalogOptionParent")
   value        String
   label        String
   sortOrder    Int                  @default(100)
@@ -897,8 +917,63 @@ model WodIvcsWorkflowCatalogOption {
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
 
+  routingRulesAsRootCause       WodIvcsWorkflowRoutingRule[] @relation("RoutingRuleRootCause")
+  routingRulesAsCashSaleExists  WodIvcsWorkflowRoutingRule[] @relation("RoutingRuleCashSaleExists")
+  routingRulesAsMerchant        WodIvcsWorkflowRoutingRule[] @relation("RoutingRuleMerchant")
+  routingRulesAsFixType         WodIvcsWorkflowRoutingRule[] @relation("RoutingRuleFixType")
+
   @@unique([catalogId, value])
   @@index([catalogId, isActive, sortOrder])
+  @@index([parentOptionId])
+}
+
+model WodIvcsWorkflowRoutingRule {
+  id                             String                         @id @default(cuid())
+  versionId                      String
+  version                        WodIvcsWorkflowVersion         @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  displayOrder                   Int
+  isActive                       Boolean                        @default(true)
+  label                          String?
+  rootCauseOptionId              String?
+  rootCauseOption                WodIvcsWorkflowCatalogOption?  @relation("RoutingRuleRootCause", fields: [rootCauseOptionId], references: [id], onDelete: SetNull)
+  cashSaleExistsOptionId         String?
+  cashSaleExistsOption           WodIvcsWorkflowCatalogOption?  @relation("RoutingRuleCashSaleExists", fields: [cashSaleExistsOptionId], references: [id], onDelete: SetNull)
+  merchantOptionId               String?
+  merchantOption                 WodIvcsWorkflowCatalogOption?  @relation("RoutingRuleMerchant", fields: [merchantOptionId], references: [id], onDelete: SetNull)
+  fixTypeOptionId                String?
+  fixTypeOption                  WodIvcsWorkflowCatalogOption?  @relation("RoutingRuleFixType", fields: [fixTypeOptionId], references: [id], onDelete: SetNull)
+  subDispositionRequired         Boolean                        @default(false)
+  subDispositionQuestion         String?                        @db.Text
+  requiresRetriggerConfirmation  Boolean                        @default(false)
+  requiresItEscalation             Boolean                        @default(false)
+  requiresReplacementOrderNumber Boolean                        @default(false)
+  requiresProcessedReship        Boolean                        @default(false)
+  itEscalationPrompt             String?                        @db.Text
+  targetQueue                    WodIvcsOperationalQueue
+  operationalCompletionMode      WodIvcsOperationalCompletionMode @default(REMAIN_OPEN)
+  productivityCreditMode         WodIvcsProductivityCreditMode  @default(NONE)
+  dropOffBehavior                WodIvcsWorkflowDropOffBehavior   @default(NO_AUTOMATIC_CHANGE)
+  compiledOutcomeRulePriority    Int?
+  metadataJson                   Json?
+  createdAt                      DateTime                       @default(now())
+  updatedAt                      DateTime                       @updatedAt
+
+  subDispositionOptions WodIvcsWorkflowRoutingSubDispositionOption[]
+
+  @@index([versionId, isActive, displayOrder])
+}
+
+model WodIvcsWorkflowRoutingSubDispositionOption {
+  id             String                   @id @default(cuid())
+  routingRuleId  String
+  routingRule    WodIvcsWorkflowRoutingRule @relation(fields: [routingRuleId], references: [id], onDelete: Cascade)
+  label          String
+  displayOrder   Int
+  isActive       Boolean                  @default(true)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@index([routingRuleId, isActive, displayOrder])
 }
 
 model WodIvcsWorkflowStep {

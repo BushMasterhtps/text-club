@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { assertWodIvcsV2Enabled } from "@/lib/wod-ivcs/api-guard";
+import { RoutingMatrixError } from "@/lib/wod-ivcs/routing-matrix-service";
 import { WorkflowConfigError } from "@/lib/wod-ivcs/workflow-config-service";
 import { prisma } from "@/lib/prisma";
 
@@ -18,7 +19,7 @@ export async function handleWorkflowApi<T>(
     const data = await handler({ userId: auth.userId, request });
     return NextResponse.json({ success: true, ...data });
   } catch (error) {
-    if (error instanceof WorkflowConfigError) {
+    if (error instanceof WorkflowConfigError || error instanceof RoutingMatrixError) {
       return NextResponse.json(
         { success: false, error: error.message, code: error.code },
         { status: error.statusCode }

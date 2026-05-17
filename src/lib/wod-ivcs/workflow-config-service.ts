@@ -115,7 +115,7 @@ export async function writeWorkflowConfigAudit(
   });
 }
 
-async function requireWorkflowDefinition(prisma: PrismaClient) {
+export async function requireWorkflowDefinition(prisma: PrismaClient) {
   const def = await prisma.wodIvcsWorkflowDefinition.findUnique({
     where: { slug: WORKFLOW_SLUG },
   });
