@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     return {
       version: graph.version,
       catalogs: graph.catalogs,
+      cloneSummary: graph.cloneSummary,
     };
   });
 }

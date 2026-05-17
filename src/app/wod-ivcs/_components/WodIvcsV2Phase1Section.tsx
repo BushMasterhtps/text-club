@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
 
@@ -450,10 +451,17 @@ export function WodIvcsV2Phase1Section() {
   return (
     <div className="space-y-6">
       <Card className="p-4 bg-sky-500/10 border border-sky-500/30">
-        <p className="text-sm text-sky-200">
-          WOD/IVCS v2 — import, order view, and scoped per-run reversal. Use Reverse on a completed
-          import to undo that file only (replaces legacy Clear All).
-        </p>
+        <div className="flex flex-wrap justify-between items-start gap-3">
+          <p className="text-sm text-sky-200">
+            WOD/IVCS v2 — import, order view, and scoped per-run reversal. Use Reverse on a completed
+            import to undo that file only (replaces legacy Clear All).
+          </p>
+          <Link href="/wod-ivcs/workflow">
+            <SmallButton className="bg-violet-600 hover:bg-violet-700 whitespace-nowrap">
+              Configure Routing Matrix
+            </SmallButton>
+          </Link>
+        </div>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

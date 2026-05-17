@@ -466,21 +466,126 @@ export async function createDraftVersion(
             },
           });
         }
+
+        const routingRules = await tx.wodIvcsWorkflowRoutingRule.findMany({
+          where: { versionId: sourceVersionId },
+          include: {
+            subDispositionOptions: { orderBy: { displayOrder: "asc" } },
+          },
+          orderBy: { displayOrder: "asc" },
+        });
+
+        for (const routingRule of routingRules) {
+          await tx.wodIvcsWorkflowRoutingRule.create({
+            data: {
+              versionId: created.id,
+              displayOrder: routingRule.displayOrder,
+              isActive: routingRule.isActive,
+              label: routingRule.label,
+              rootCauseOptionId: routingRule.rootCauseOptionId,
+              cashSaleExistsOptionId: routingRule.cashSaleExistsOptionId,
+              merchantOptionId: routingRule.merchantOptionId,
+              fixTypeOptionId: routingRule.fixTypeOptionId,
+              subDispositionRequired: routingRule.subDispositionRequired,
+              subDispositionQuestion: routingRule.subDispositionQuestion,
+              requiresRetriggerConfirmation: routingRule.requiresRetriggerConfirmation,
+              requiresItEscalation: routingRule.requiresItEscalation,
+              requiresReplacementOrderNumber: routingRule.requiresReplacementOrderNumber,
+              requiresProcessedReship: routingRule.requiresProcessedReship,
+              itEscalationPrompt: routingRule.itEscalationPrompt,
+              targetQueue: routingRule.targetQueue,
+              operationalCompletionMode: routingRule.operationalCompletionMode,
+              productivityCreditMode: routingRule.productivityCreditMode,
+              dropOffBehavior: routingRule.dropOffBehavior,
+              compiledOutcomeRulePriority: routingRule.compiledOutcomeRulePriority,
+              metadataJson: routingRule.metadataJson ?? undefined,
+              subDispositionOptions: routingRule.subDispositionOptions.length
+                ? {
+                    create: routingRule.subDispositionOptions.map((o) => ({
+                      label: o.label,
+                      displayOrder: o.displayOrder,
+                      isActive: o.isActive,
+                    })),
+                  }
+                : undefined,
+            },
+          });
+        }
       }
     }
 
     return created;
   });
 
+  let sourceRoutingRuleCount = 0;
+  let clonedRoutingRuleCount = 0;
+  if (sourceVersionId) {
+    sourceRoutingRuleCount = await prisma.wodIvcsWorkflowRoutingRule.count({
+      where: { versionId: sourceVersionId },
+    });
+    clonedRoutingRuleCount = await prisma.wodIvcsWorkflowRoutingRule.count({
+      where: { versionId: draft.id },
+    });
+  }
+
   await writeWorkflowConfigAudit(prisma, {
     actorId: input.actorId,
     action: "CREATED",
     entityType: "WORKFLOW_VERSION",
     entityId: draft.id,
-    afterJson: { version: draft.version, status: draft.status, clonedFrom: sourceVersionId },
+    afterJson: {
+      version: draft.version,
+      status: draft.status,
+      clonedFrom: sourceVersionId,
+      sourceRoutingRuleCount,
+      clonedRoutingRuleCount,
+    },
   });
 
-  return getWorkflowVersionGraph(prisma, draft.id);
+  const graph = await getWorkflowVersionGraph(prisma, draft.id);
+  return {
+    ...graph,
+    cloneSummary: {
+      sourceVersionId,
+      sourceRoutingRuleCount,
+      clonedRoutingRuleCount,
+    },
+  };
+}
+
+export async function discardDraftVersion(
+  prisma: PrismaClient,
+  versionId: string,
+  actorId: string
+) {
+  const version = await requireDraftVersion(prisma, versionId);
+
+  const routingRuleCount = await prisma.wodIvcsWorkflowRoutingRule.count({
+    where: { versionId },
+  });
+
+  await writeWorkflowConfigAudit(prisma, {
+    actorId,
+    action: "ARCHIVED",
+    entityType: "WORKFLOW_VERSION",
+    entityId: versionId,
+    beforeJson: {
+      version: version.version,
+      status: version.status,
+      routingRuleCount,
+    },
+    reason: "Draft discarded by manager",
+  });
+
+  await prisma.wodIvcsWorkflowVersion.delete({
+    where: { id: versionId },
+  });
+
+  return {
+    discardedVersionId: versionId,
+    discardedVersionNumber: version.version,
+    routingRuleCount,
+  };
 }
 
 export async function updateDraftVersionMetadata(

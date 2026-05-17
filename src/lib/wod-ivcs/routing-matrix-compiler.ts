@@ -7,6 +7,12 @@ import {
   type WodIvcsWorkflowStepFieldType,
 } from "@prisma/client";
 import type { WorkflowMatchJson } from "./workflow-engine";
+import {
+  buildFollowUpMetadata,
+  getFollowUpQuestionsForRule,
+  ruleHasFollowUpQuestions,
+  validateFollowUpQuestions,
+} from "./follow-up-questions";
 
 export type RoutingRuleCompileInput = {
   id: string;
@@ -140,16 +146,29 @@ export function validateRoutingMatrix(rules: RoutingRuleCompileInput[]): Routing
       }
     }
 
-    if (rule.subDispositionRequired) {
+    const followUpQuestions = getFollowUpQuestionsForRule({
+      metadataJson: rule.metadataJson,
+      subDispositionRequired: rule.subDispositionRequired,
+      subDispositionQuestion: rule.subDispositionQuestion,
+      subDispositionOptions: rule.subDispositionOptions,
+    });
+
+    if (followUpQuestions.length > 0) {
+      const followUpError = validateFollowUpQuestions(
+        followUpQuestions,
+        `Rule "${rule.label ?? rule.id}"`
+      );
+      if (followUpError) errors.push(followUpError);
+    } else if (rule.subDispositionRequired) {
       if (!rule.subDispositionQuestion?.trim()) {
         errors.push(
-          `Rule "${rule.label ?? rule.id}" requires a sub-disposition question when sub-disposition is enabled.`
+          `Rule "${rule.label ?? rule.id}" requires a follow-up question when follow-up questions are enabled.`
         );
       }
       const activeSubs = rule.subDispositionOptions.filter((o) => o.isActive);
       if (activeSubs.length === 0) {
         errors.push(
-          `Rule "${rule.label ?? rule.id}" requires at least one active sub-disposition option.`
+          `Rule "${rule.label ?? rule.id}" requires at least one answer choice for the follow-up question.`
         );
       }
     }
@@ -245,7 +264,14 @@ export function compileRoutingMatrix(
 
   let sortOrder = 50;
 
-  const subDispFixTypes = fixTypeValues(active, (r) => r.subDispositionRequired);
+  const subDispFixTypes = fixTypeValues(active, (r) =>
+    ruleHasFollowUpQuestions({
+      metadataJson: r.metadataJson,
+      subDispositionRequired: r.subDispositionRequired,
+      subDispositionQuestion: r.subDispositionQuestion,
+      subDispositionOptions: r.subDispositionOptions,
+    })
+  );
   if (subDispFixTypes.length > 0) {
     steps.push({
       slug: "sub_disposition",
@@ -353,6 +379,15 @@ export function compileRoutingMatrix(
         ? { ...(rule.metadataJson as Record<string, unknown>) }
         : {};
 
+    const followUpQuestions = getFollowUpQuestionsForRule({
+      metadataJson: rule.metadataJson,
+      subDispositionRequired: rule.subDispositionRequired,
+      subDispositionQuestion: rule.subDispositionQuestion,
+      subDispositionOptions: rule.subDispositionOptions,
+    });
+
+    const effectsMeta = buildFollowUpMetadata(followUpQuestions, meta);
+
     return {
       priority,
       name: rule.label ?? `Routing rule ${index + 1}`,
@@ -365,7 +400,7 @@ export function compileRoutingMatrix(
       requiresItEscalation: rule.requiresItEscalation,
       requiresRetriggerConfirmation: rule.requiresRetriggerConfirmation,
       effectsJson: {
-        ...meta,
+        ...effectsMeta,
         routingRuleId: rule.id,
         dropOffBehavior: rule.dropOffBehavior,
       },
