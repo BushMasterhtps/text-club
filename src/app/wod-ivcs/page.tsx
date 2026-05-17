@@ -18,6 +18,7 @@ import {
 import { AssistanceRequestsSection } from "@/app/manager/_components/AssistanceRequestsSection";
 import { CsvImportSection } from "./_components/CsvImportSection";
 import { WodIvcsV2Phase1Section } from "./_components/WodIvcsV2Phase1Section";
+import { WodIvcsV2OverviewSection } from "./_components/WodIvcsV2OverviewSection";
 import { isWodIvcsV2EnabledClient } from "@/lib/wod-ivcs/client-feature-flag";
 import { WodIvcsTasksSection } from "./_components/WodIvcsTasksSection";
 import { AnalyticsSection } from "./_components/AnalyticsSection";
@@ -611,15 +612,15 @@ function WodIvcsDashboardContent() {
   };
 
   useEffect(() => {
-    if (activeSection === "overview") {
+    if (activeSection === "overview" && !wodV2Enabled) {
       loadOverviewData();
       loadImportAnalytics(); // Load last 3 import sessions
     }
-    if (activeSection === "tasks") {
+    if (activeSection === "tasks" && !wodV2Enabled) {
       loadAgents();
       loadAgentWorkloads();
     }
-  }, [activeSection]);
+  }, [activeSection, wodV2Enabled]);
 
   // Assignment functions (copied from Text Club)
   async function loadAgents() {
@@ -798,6 +799,15 @@ function WodIvcsDashboardContent() {
     <>
       <ThemeToggle />
       <SessionTimer timeLeft={timeLeft} onExtend={extendSession} />
+      {wodV2Enabled && (
+        <a
+          href="/wod-ivcs/workflow"
+          className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-violet-600/80 text-white hover:bg-violet-600"
+          title="Configure agent routing and workflow rules"
+        >
+          Configure Routing Matrix
+        </a>
+      )}
       <SmallButton 
         onClick={() => window.location.href = '/agent'}
         className="bg-green-600 hover:bg-green-700 text-white"
@@ -816,7 +826,9 @@ function WodIvcsDashboardContent() {
 
       <div className="space-y-8">
         {/* Overview Section */}
-        {activeSection === "overview" && (
+        {activeSection === "overview" && wodV2Enabled && <WodIvcsV2OverviewSection />}
+
+        {activeSection === "overview" && !wodV2Enabled && (
           <div className="space-y-8">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">WOD/IVCS Overview</h2>

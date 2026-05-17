@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
+import type { WodIvcsQueuesSummary } from "@/lib/wod-ivcs/queues-summary-service";
 
 type DryRunData = {
   totalRows: number;
@@ -368,6 +368,7 @@ export function WodIvcsV2Phase1Section() {
   const [reversalError, setReversalError] = useState("");
   const [reversalReason, setReversalReason] = useState("");
   const [reversalConfirming, setReversalConfirming] = useState(false);
+  const [queuePreview, setQueuePreview] = useState<WodIvcsQueuesSummary | null>(null);
 
   const refresh = useCallback(async () => {
     const [runsRes, ordersRes] = await Promise.all([
@@ -378,6 +379,14 @@ export function WodIvcsV2Phase1Section() {
     const ordersData = await ordersRes.json();
     if (runsData.success) setRuns(runsData.runs);
     if (ordersData.success) setOrders(ordersData.orders);
+
+    try {
+      const summaryRes = await fetch("/api/manager/wod-ivcs/v2/queues/summary", { cache: "no-store" });
+      const summaryJson = await summaryRes.json();
+      if (summaryJson.success) setQueuePreview(summaryJson.data);
+    } catch {
+      /* preview is optional */
+    }
   }, []);
 
   useEffect(() => {
@@ -450,18 +459,42 @@ export function WodIvcsV2Phase1Section() {
 
   return (
     <div className="space-y-6">
-      <Card className="p-4 bg-sky-500/10 border border-sky-500/30">
-        <div className="flex flex-wrap justify-between items-start gap-3">
-          <p className="text-sm text-sky-200">
-            WOD/IVCS v2 — import, order view, and scoped per-run reversal. Use Reverse on a completed
-            import to undo that file only (replaces legacy Clear All).
+      <div>
+        <h2 className="text-xl font-semibold">Task Management</h2>
+        <p className="text-sm text-white/50 mt-1">
+          Imports and queue work — operational assignment arrives in Phase 3E-3
+        </p>
+      </div>
+
+      {queuePreview && (
+        <Card className="p-4 border border-white/10">
+          <h3 className="font-semibold text-white/90 mb-3">Operational queues (preview)</h3>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <span className="px-3 py-1.5 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/25">
+              Needs Action: {queuePreview.unassignedNeedsAction} unassigned
+            </span>
+            <span className="px-3 py-1.5 rounded-lg bg-sky-500/15 text-sky-200 border border-sky-500/25">
+              Assigned: {queuePreview.assigned}
+            </span>
+            <span className="px-3 py-1.5 rounded-lg bg-blue-500/15 text-blue-200 border border-blue-500/25">
+              In Progress: {queuePreview.inProgress}
+            </span>
+            <span className="px-3 py-1.5 rounded-lg bg-violet-500/15 text-violet-200 border border-violet-500/25">
+              Awaiting Drop-Off: {queuePreview.awaitingDropOff}
+            </span>
+          </div>
+          <p className="text-xs text-white/40 mt-3">
+            Full queue board and assignment UI coming in Phase 3E-3. See Overview for complete
+            breakdown.
           </p>
-          <Link href="/wod-ivcs/workflow">
-            <SmallButton className="bg-violet-600 hover:bg-violet-700 whitespace-nowrap">
-              Configure Routing Matrix
-            </SmallButton>
-          </Link>
-        </div>
+        </Card>
+      )}
+
+      <Card className="p-4 bg-sky-500/10 border border-sky-500/30">
+        <p className="text-sm text-sky-200">
+          Import NetSuite and Aging reports below. Use Reverse on a completed import to undo that file
+          only (replaces legacy Clear All).
+        </p>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -479,6 +512,7 @@ export function WodIvcsV2Phase1Section() {
         />
       </div>
 
+      {/* TODO(Phase 3E-3): Move import history to Overview / Import & Diagnostics */}
       <Card className="p-4">
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-semibold">Import history</h3>
@@ -532,6 +566,7 @@ export function WodIvcsV2Phase1Section() {
         </div>
       </Card>
 
+      {/* TODO(Phase 3E-3): Move read-only order inspector to Import & Diagnostics */}
       <Card className="p-4">
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-semibold">Orders (read-only)</h3>
