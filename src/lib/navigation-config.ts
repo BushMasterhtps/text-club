@@ -69,7 +69,14 @@ export const commonNavigationItems: NavigationItem[] = [
 // Dashboard-specific navigation items
 export const dashboardSpecificItems: Record<DashboardType, NavigationItem[]> = {
   'text-club': [],
-  'wod-ivcs': [],
+  'wod-ivcs': [
+    {
+      id: 'import-diagnostics',
+      label: 'Import & Diagnostics',
+      icon: '🔍',
+      description: 'Import history, reversal, and order inspection',
+    },
+  ],
   'email-requests': [
     {
       id: 'disposition-review',

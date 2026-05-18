@@ -18,6 +18,7 @@ import {
 import { AssistanceRequestsSection } from "@/app/manager/_components/AssistanceRequestsSection";
 import { CsvImportSection } from "./_components/CsvImportSection";
 import { WodIvcsV2Phase1Section } from "./_components/WodIvcsV2Phase1Section";
+import { WodIvcsImportDiagnosticsSection } from "./_components/WodIvcsImportDiagnosticsSection";
 import { WodIvcsV2OverviewSection } from "./_components/WodIvcsV2OverviewSection";
 import { isWodIvcsV2EnabledClient } from "@/lib/wod-ivcs/client-feature-flag";
 import { WodIvcsTasksSection } from "./_components/WodIvcsTasksSection";
@@ -1022,6 +1023,10 @@ function WodIvcsDashboardContent() {
               </div>
             </Card>
           </div>
+        )}
+
+        {activeSection === "import-diagnostics" && wodV2Enabled && (
+          <WodIvcsImportDiagnosticsSection />
         )}
 
         {/* Task Management Section */}

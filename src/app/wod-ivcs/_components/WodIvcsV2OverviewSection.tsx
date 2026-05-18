@@ -193,8 +193,7 @@ export function WodIvcsV2OverviewSection() {
           ))}
         </div>
         <p className="text-xs text-white/40 mt-4">
-          Operational queue board and assignment arrive in Phase 3E-3. Use Task Management for
-          imports in the meantime.
+          Use Task Management for morning imports and queue assignment.
         </p>
       </Card>
 
@@ -270,8 +269,7 @@ export function WodIvcsV2OverviewSection() {
           <ImportSummaryCard title="Last Aging import" item={data.recentImportSummary.lastAging} />
         </div>
         <p className="text-xs text-white/40 mt-4">
-          Full import history and reversal controls are in Task Management for now. Phase 3E-3 will
-          move diagnostics to a dedicated area.
+          Full import history, reversal, and order inspection are in Import & Diagnostics.
         </p>
       </Card>
     </div>

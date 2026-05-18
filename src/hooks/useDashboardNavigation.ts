@@ -9,6 +9,7 @@ import {
   dashboardSpecificItems,
   dashboardConfigs,
 } from '@/lib/navigation-config';
+import { isWodIvcsV2EnabledClient } from '@/lib/wod-ivcs/client-feature-flag';
 
 export function useDashboardNavigation() {
   const pathname = usePathname();
@@ -40,9 +41,29 @@ export function useDashboardNavigation() {
       return true;
     });
 
-    const specific = dashboardSpecificItems[currentDashboard] || [];
+    const v2Enabled = isWodIvcsV2EnabledClient();
+    const specific = (dashboardSpecificItems[currentDashboard] || []).filter(
+      (item) => item.id !== 'import-diagnostics' || v2Enabled
+    );
 
-    return [...common, ...specific];
+    const items = [...common, ...specific];
+
+    if (currentDashboard === 'wod-ivcs' && v2Enabled) {
+      const diagnostics = items.find((i) => i.id === 'import-diagnostics');
+      if (diagnostics) {
+        const without = items.filter((i) => i.id !== 'import-diagnostics');
+        const tasksIdx = without.findIndex((i) => i.id === 'tasks');
+        if (tasksIdx >= 0) {
+          return [
+            ...without.slice(0, tasksIdx + 1),
+            diagnostics,
+            ...without.slice(tasksIdx + 1),
+          ];
+        }
+      }
+    }
+
+    return items;
   }, [currentDashboard]);
 
   return {
