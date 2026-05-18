@@ -285,3 +285,75 @@ export function followUpQuestionsSummary(questions: FollowUpQuestion[]): string 
   }
   return `${questions.length} follow-up questions`;
 }
+
+export function followUpAnswerKey(questionId: string): string {
+  return `follow_up.${questionId}`;
+}
+
+export function followUpNotesKey(questionId: string): string {
+  return `follow_up.${questionId}_notes`;
+}
+
+type FollowUpAnswers = Record<string, unknown>;
+
+function normalizeFollowUpAnswerValue(value: unknown): string | string[] | null {
+  if (value === undefined || value === null) return null;
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
+}
+
+/** Whether a follow-up should be shown given current answers (matches agent-workflow-service). */
+export function isFollowUpQuestionVisibleForAnswers(
+  question: FollowUpQuestion,
+  answers: FollowUpAnswers
+): boolean {
+  if (!question.showWhen?.questionId) return true;
+  const priorKey = followUpAnswerKey(question.showWhen.questionId);
+  const prior = normalizeFollowUpAnswerValue(answers[priorKey] ?? answers.sub_disposition);
+  const priorList = prior === null ? [] : Array.isArray(prior) ? prior : [prior];
+  return priorList.includes(question.showWhen.value);
+}
+
+/**
+ * Legacy compiled step `sub_disposition` expects the first answered follow-up
+ * (first select/multi-select in rule order, else first text) — same convention as
+ * syncLegacySubDispositionFields.
+ */
+export function resolveSubDispositionFromFollowUpAnswers(
+  answers: FollowUpAnswers,
+  questions: FollowUpQuestion[]
+): string | null {
+  for (const q of questions) {
+    if (!isFollowUpQuestionVisibleForAnswers(q, answers)) continue;
+
+    if (q.type === "single_select" || q.type === "multi_select") {
+      const raw = answers[followUpAnswerKey(q.id)];
+      if (typeof raw === "string" && raw.trim()) return raw.trim();
+      if (Array.isArray(raw) && raw.length > 0) {
+        const first = String(raw[0]).trim();
+        if (first) return first;
+      }
+      continue;
+    }
+
+    if (q.type === "text") {
+      const raw = answers[followUpAnswerKey(q.id)];
+      if (typeof raw === "string" && raw.trim()) return raw.trim();
+    }
+  }
+
+  return null;
+}
+
+/** Adds `sub_disposition` when follow-up answers satisfy the legacy compiled step. */
+export function enrichAnswersWithSubDisposition<T extends FollowUpAnswers>(
+  answers: T,
+  questions: FollowUpQuestion[] | null | undefined
+): T {
+  if (!questions?.length) return answers;
+  const derived = resolveSubDispositionFromFollowUpAnswers(answers, questions);
+  if (!derived) return answers;
+  if (answers.sub_disposition === derived) return answers;
+  return { ...answers, sub_disposition: derived };
+}

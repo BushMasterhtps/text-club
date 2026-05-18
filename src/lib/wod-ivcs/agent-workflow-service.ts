@@ -7,9 +7,14 @@ import type {
 } from "@prisma/client";
 import { isWodIvcsV2Enabled } from "./feature-flag";
 import {
+  enrichAnswersWithSubDisposition,
   getFollowUpQuestionsForRule,
   type FollowUpQuestion,
 } from "./follow-up-questions";
+import {
+  findBestMatchingRoutingRule,
+  type RoutingRulePathRef,
+} from "./routing-rule-match";
 import { getRoutingRules } from "./routing-matrix-service";
 import { getActiveWorkflowDefinition, simulateWorkflowVersion } from "./workflow-config-service";
 import { type WorkflowAnswers } from "./workflow-engine";
@@ -78,19 +83,6 @@ export type MatchedOutcomeSummary = {
   requiresRetriggerConfirmation: boolean;
 };
 
-function isCatchAllRoutingRule(rule: {
-  rootCauseOptionId: string | null;
-  fixTypeOptionId: string | null;
-  metadataJson: unknown;
-}): boolean {
-  const meta =
-    rule.metadataJson && typeof rule.metadataJson === "object"
-      ? (rule.metadataJson as Record<string, unknown>)
-      : {};
-  if (meta.isCatchAll === true) return true;
-  return !rule.rootCauseOptionId && !rule.fixTypeOptionId;
-}
-
 function assertV2Enabled() {
   if (!isWodIvcsV2Enabled()) {
     throw new AgentWorkflowError("WOD/IVCS v2 is not enabled", 503, "V2_DISABLED");
@@ -132,36 +124,13 @@ function isEmptyAnswer(value: string | string[] | null): boolean {
   return value.trim() === "";
 }
 
-function ruleMatchesCorePath(rule: RoutingRuleWithOptions, answers: WorkflowAnswers): boolean {
-  if (isCatchAllRoutingRule(rule)) return false;
-
-  const dimensions: Array<[keyof WorkflowAnswers, string | undefined]> = [
-    ["root_cause", rule.rootCauseOption?.value],
-    ["cash_sale_exists", rule.cashSaleExistsOption?.value],
-    ["merchant", rule.merchantOption?.value],
-    ["fix_type", rule.fixTypeOption?.value],
-  ];
-
-  for (const [slug, expected] of dimensions) {
-    if (!expected) continue;
-    const actual = normalizeAnswerValue(answers[slug]);
-    if (isEmptyAnswer(actual)) return false;
-    const actualList = Array.isArray(actual) ? actual : [actual];
-    if (!actualList.includes(expected)) return false;
-  }
-
-  return Boolean(rule.rootCauseOption?.value && rule.fixTypeOption?.value);
-}
-
 export function findMatchingRoutingRule(
   rules: RoutingRuleWithOptions[],
   answers: WorkflowAnswers
 ): RoutingRuleWithOptions | null {
-  const active = rules.filter((r) => r.isActive).sort((a, b) => a.displayOrder - b.displayOrder);
-  const specific = active.find((r) => ruleMatchesCorePath(r, answers));
-  if (specific) return specific;
-  const catchAll = active.find((r) => isCatchAllRoutingRule(r));
-  return catchAll ?? null;
+  return findBestMatchingRoutingRule(rules as RoutingRulePathRef[], answers) as
+    | RoutingRuleWithOptions
+    | null;
 }
 
 function followUpAnswerKey(questionId: string): string {
@@ -446,19 +415,24 @@ export async function previewAgentWodIvcsWorkflow(
   const { rules } = await getRoutingRules(prisma, versionId);
   const matchedRoutingRule = findMatchingRoutingRule(rules as RoutingRuleWithOptions[], answers);
 
-  const simulation = await runWorkflowSimulation(prisma, versionId, answers);
+  const followUpsForEnrichment = matchedRoutingRule
+    ? getFollowUpQuestionsForRule({
+        metadataJson: matchedRoutingRule.metadataJson,
+        subDispositionRequired: matchedRoutingRule.subDispositionRequired,
+        subDispositionQuestion: matchedRoutingRule.subDispositionQuestion,
+        subDispositionOptions: matchedRoutingRule.subDispositionOptions,
+      })
+    : [];
+
+  const enrichedAnswers = enrichAnswersWithSubDisposition(answers, followUpsForEnrichment);
+
+  const simulation = await runWorkflowSimulation(prisma, versionId, enrichedAnswers);
 
   const allErrors = [...simulation.validation.errors];
   if (matchedRoutingRule) {
-    const followUps = getFollowUpQuestionsForRule({
-      metadataJson: matchedRoutingRule.metadataJson,
-      subDispositionRequired: matchedRoutingRule.subDispositionRequired,
-      subDispositionQuestion: matchedRoutingRule.subDispositionQuestion,
-      subDispositionOptions: matchedRoutingRule.subDispositionOptions,
-    });
     const followUpVal = validateFollowUpAnswers(
-      followUps,
-      answers,
+      followUpsForEnrichment,
+      enrichedAnswers,
       matchedRoutingRule.label ?? "Routing rule"
     );
     allErrors.push(...followUpVal.errors);
@@ -467,7 +441,7 @@ export async function previewAgentWodIvcsWorkflow(
   return {
     order: toOrderSummary(order),
     workflowVersionId: versionId,
-    answers,
+    answers: enrichedAnswers,
     validation: { valid: allErrors.length === 0, errors: allErrors },
     visibleSteps: simulation.visibleSteps,
     matchedRoutingRule: matchedRoutingRule
@@ -516,19 +490,24 @@ export async function submitAgentWodIvcsWorkflow(
   const { rules } = await getRoutingRules(prisma, versionId);
   const matchedRoutingRule = findMatchingRoutingRule(rules as RoutingRuleWithOptions[], answers);
 
-  const simulation = await runWorkflowSimulation(prisma, versionId, answers);
+  const followUpsForEnrichment = matchedRoutingRule
+    ? getFollowUpQuestionsForRule({
+        metadataJson: matchedRoutingRule.metadataJson,
+        subDispositionRequired: matchedRoutingRule.subDispositionRequired,
+        subDispositionQuestion: matchedRoutingRule.subDispositionQuestion,
+        subDispositionOptions: matchedRoutingRule.subDispositionOptions,
+      })
+    : [];
+
+  const enrichedAnswers = enrichAnswersWithSubDisposition(answers, followUpsForEnrichment);
+
+  const simulation = await runWorkflowSimulation(prisma, versionId, enrichedAnswers);
   const errors = [...simulation.validation.errors];
 
   if (matchedRoutingRule) {
-    const followUps = getFollowUpQuestionsForRule({
-      metadataJson: matchedRoutingRule.metadataJson,
-      subDispositionRequired: matchedRoutingRule.subDispositionRequired,
-      subDispositionQuestion: matchedRoutingRule.subDispositionQuestion,
-      subDispositionOptions: matchedRoutingRule.subDispositionOptions,
-    });
     const followUpVal = validateFollowUpAnswers(
-      followUps,
-      answers,
+      followUpsForEnrichment,
+      enrichedAnswers,
       matchedRoutingRule.label ?? "Routing rule"
     );
     errors.push(...followUpVal.errors);
@@ -544,11 +523,11 @@ export async function submitAgentWodIvcsWorkflow(
   const now = new Date();
 
   const replacementFromAnswers =
-    typeof answers.replacement_order_number === "string"
-      ? answers.replacement_order_number.trim()
+    typeof enrichedAnswers.replacement_order_number === "string"
+      ? enrichedAnswers.replacement_order_number.trim()
       : null;
 
-  const processedReshipAnswer = answers.processed_reship_confirmation;
+  const processedReshipAnswer = enrichedAnswers.processed_reship_confirmation;
   const processedReship =
     processedReshipAnswer === true || processedReshipAnswer === "true"
       ? true
@@ -562,7 +541,7 @@ export async function submitAgentWodIvcsWorkflow(
         orderId: input.orderId,
         workflowVersionId: versionId,
         submittedById: input.actorId,
-        answersJson: answers as Prisma.InputJsonValue,
+        answersJson: enrichedAnswers as Prisma.InputJsonValue,
         matchedRoutingRuleId: matchedRoutingRule?.id ?? null,
         matchedOutcomeRuleName: matched.name,
         matchedOutcomeRulePriority: matched.priority,

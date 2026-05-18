@@ -3,6 +3,8 @@
  */
 
 import { parseFetchJsonSafely } from "@/lib/safe-fetch-json";
+import type { AgentActiveWorkflow } from "./agent-workflow-form-utils";
+import type { FollowUpQuestion } from "./follow-up-questions";
 
 export class AgentWodIvcsApiError extends Error {
   constructor(
@@ -111,7 +113,56 @@ export async function startAgentWodIvcsOrder(orderId: string): Promise<{
   return parseAgentResponse(res);
 }
 
-export async function fetchAgentWodIvcsActiveWorkflow(): Promise<{ active: unknown }> {
+export type AgentWorkflowPreviewResult = {
+  workflowVersionId: string;
+  validation: { valid: boolean; errors: string[] };
+  visibleSteps: string[];
+  matchedRoutingRule: {
+    id: string;
+    label: string | null;
+    targetQueue: string;
+    requiresRetriggerConfirmation: boolean;
+    requiresItEscalation: boolean;
+    requiresReplacementOrderNumber: boolean;
+    requiresProcessedReship: boolean;
+    followUpQuestions: FollowUpQuestion[];
+  } | null;
+  matchedOutcome: {
+    name: string;
+    priority: number;
+    matchedBy: string;
+    targetQueue: string;
+    operationalCompletionMode: string;
+    requiresReplacementOrderNumber: boolean;
+    requiresProcessedReship: boolean;
+    requiresItEscalation: boolean;
+    requiresRetriggerConfirmation: boolean;
+  };
+  predictedTargetQueue: string;
+  requiredConfirmations: {
+    requiresRetriggerConfirmation: boolean;
+    requiresItEscalation: boolean;
+    requiresReplacementOrderNumber: boolean;
+    requiresProcessedReship: boolean;
+  };
+};
+
+export async function fetchAgentWodIvcsActiveWorkflow(): Promise<{
+  active: AgentActiveWorkflow;
+}> {
   const res = await fetch(`${BASE}/workflow/active`, { cache: "no-store" });
-  return parseAgentResponse(res);
+  const data = await parseAgentResponse<{ active: AgentActiveWorkflow }>(res);
+  return { active: data.active };
+}
+
+export async function previewAgentWodIvcsWorkflow(
+  orderId: string,
+  answers: Record<string, unknown>
+): Promise<AgentWorkflowPreviewResult> {
+  const res = await fetch(`${BASE}/orders/${orderId}/workflow/preview`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ answers }),
+  });
+  return parseAgentResponse<AgentWorkflowPreviewResult>(res);
 }

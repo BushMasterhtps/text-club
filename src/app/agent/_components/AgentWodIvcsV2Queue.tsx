@@ -10,6 +10,8 @@ import {
   type AgentWodIvcsOrderDetail,
   type AgentWodIvcsOrderListItem,
 } from "@/lib/wod-ivcs/agent-api-client";
+import type { AgentActiveWorkflow } from "@/lib/wod-ivcs/agent-workflow-form-utils";
+import { AgentWodIvcsGuidedWorkflowForm } from "./AgentWodIvcsGuidedWorkflowForm";
 import { AgentWodIvcsOrderSummary } from "./AgentWodIvcsOrderSummary";
 
 type QueueFilter = "all" | "ASSIGNED" | "IN_PROGRESS";
@@ -76,6 +78,7 @@ export default function AgentWodIvcsV2Queue({ onOpenCountChange }: Props) {
   const [workflowStatus, setWorkflowStatus] = useState<"idle" | "loading" | "loaded" | "error">(
     "idle"
   );
+  const [activeWorkflow, setActiveWorkflow] = useState<AgentActiveWorkflow | null>(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -118,10 +121,16 @@ export default function AgentWodIvcsV2Queue({ onOpenCountChange }: Props) {
     (async () => {
       setWorkflowStatus("loading");
       try {
-        await fetchAgentWodIvcsActiveWorkflow();
-        if (!cancelled) setWorkflowStatus("loaded");
+        const { active } = await fetchAgentWodIvcsActiveWorkflow();
+        if (!cancelled) {
+          setActiveWorkflow(active);
+          setWorkflowStatus("loaded");
+        }
       } catch {
-        if (!cancelled) setWorkflowStatus("error");
+        if (!cancelled) {
+          setActiveWorkflow(null);
+          setWorkflowStatus("error");
+        }
       }
     })();
     return () => {
@@ -212,8 +221,8 @@ export default function AgentWodIvcsV2Queue({ onOpenCountChange }: Props) {
           )}
           {workflowStatus === "error" && (
             <p className="text-xs text-amber-300/90 mt-2">
-              Workflow configuration could not be loaded. Form steps may be unavailable in a later
-              update.
+              Workflow configuration could not be loaded. The guided form will be unavailable until
+              this is resolved.
             </p>
           )}
         </div>
@@ -500,23 +509,17 @@ export default function AgentWodIvcsV2Queue({ onOpenCountChange }: Props) {
                   </div>
                 )}
 
-                <div className="rounded-lg border border-dashed border-white/15 bg-neutral-950/80 p-5">
-                  <p className="text-sm font-medium text-white/85">
-                    Guided routing questions from the Routing Matrix will appear here in Phase 4A.4.
-                  </p>
-                  <p className="text-sm text-white/60 mt-3 leading-relaxed">
-                    Next step: Root Cause → Cash Sale Exists → Merchant → Fix Type → follow-up
-                    questions.
-                  </p>
-                  <p className="text-xs text-white/45 mt-3">
-                    Submit and queue completion are planned for Phase 4A.5.
-                  </p>
-                  {panelOrder.operationalQueue === "IN_PROGRESS" && (
-                    <span className="inline-flex mt-4 items-center rounded-lg bg-amber-500/15 px-4 py-2 text-sm text-amber-100 ring-1 ring-amber-500/35">
-                      Continue here once the guided form is available
-                    </span>
-                  )}
-                </div>
+                {panelOrder.operationalQueue === "IN_PROGRESS" && activeWorkflow ? (
+                  <AgentWodIvcsGuidedWorkflowForm
+                    orderId={panelOrder.id}
+                    active={activeWorkflow}
+                  />
+                ) : panelOrder.operationalQueue === "IN_PROGRESS" ? (
+                  <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-4 text-sm text-amber-100/90">
+                    Guided workflow form is unavailable because routing configuration could not be
+                    loaded. Try refreshing the page.
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
