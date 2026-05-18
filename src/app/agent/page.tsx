@@ -8,6 +8,9 @@ import KnowledgeSection from '@/app/_components/KnowledgeSection';
 import { Toast } from '@/app/_components/Toast';
 import { useTaskStore, type Task } from '@/stores/useTaskStore';
 import KanbanBoard from '@/app/agent/_components/KanbanBoard';
+import AgentWodIvcsV2Queue from '@/app/agent/_components/AgentWodIvcsV2Queue';
+import { useWodIvcsV2Enabled } from '@/app/agent/WodIvcsV2FlagContext';
+import { fetchAgentWodIvcsOrders } from '@/lib/wod-ivcs/agent-api-client';
 import { generateTestTasks } from '@/lib/test-data-generator';
 import { parseFetchJsonSafely } from '@/lib/safe-fetch-json';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
@@ -115,7 +118,9 @@ interface AgentStats {
 export default function AgentPage() {
   // SECURITY: Middleware handles auth - client-side guard removed to prevent login loops
   // The middleware already verifies JWT and role, which is sufficient protection
-  
+
+  const wodIvcsV2Enabled = useWodIvcsV2Enabled();
+
   const [email, setEmail] = useState<string>("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [stats, setStats] = useState<AgentStats | null>(null);
@@ -161,6 +166,40 @@ export default function AgentPage() {
   
   // Task filtering state
   const [selectedTaskType, setSelectedTaskType] = useState<string>("ALL");
+  const [wodIvcsV2OpenCount, setWodIvcsV2OpenCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    console.debug("[agent/WOD_IVCS v2]", {
+      selectedTaskType,
+      wodIvcsV2Enabled,
+      nextPublicBundleFlag: process.env.NEXT_PUBLIC_WOD_IVCS_V2_ENABLED,
+      shouldRenderV2Queue: selectedTaskType === "WOD_IVCS" && wodIvcsV2Enabled,
+    });
+  }, [selectedTaskType, wodIvcsV2Enabled]);
+
+  useEffect(() => {
+    if (!wodIvcsV2Enabled || !email) {
+      setWodIvcsV2OpenCount(null);
+      return;
+    }
+    let cancelled = false;
+    const refreshV2Count = async () => {
+      try {
+        const { total } = await fetchAgentWodIvcsOrders({ take: 1 });
+        if (!cancelled) setWodIvcsV2OpenCount(total);
+      } catch {
+        if (!cancelled) setWodIvcsV2OpenCount(0);
+      }
+    };
+    void refreshV2Count();
+    const interval = setInterval(refreshV2Count, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [wodIvcsV2Enabled, email]);
+
   const [taskCounts, setTaskCounts] = useState<{
     TEXT_CLUB: number;
     WOD_IVCS: number;
@@ -1447,7 +1486,11 @@ export default function AgentPage() {
                 : "bg-white/5 text-white/70 hover:bg-white/10 ring-1 ring-white/10"
             }`}
           >
-            📦 WOD/IVCS ({taskCounts.WOD_IVCS})
+            📦 WOD/IVCS (
+            {wodIvcsV2Enabled
+              ? wodIvcsV2OpenCount ?? "…"
+              : taskCounts.WOD_IVCS}
+            )
           </button>
           <button
             onClick={() => setSelectedTaskType("EMAIL_REQUESTS")}
@@ -1490,6 +1533,16 @@ export default function AgentPage() {
             💰 Standalone Refunds ({taskCounts.STANDALONE_REFUNDS})
           </button>
         </div>
+        {wodIvcsV2Enabled && (
+          <p className="text-xs text-sky-200/80 mt-3 leading-relaxed">
+            WOD/IVCS uses the new assigned order queue.
+            {wodIvcsV2OpenCount != null && wodIvcsV2OpenCount > 0
+              ? ` You have ${wodIvcsV2OpenCount} open order${wodIvcsV2OpenCount === 1 ? "" : "s"} assigned or in progress.`
+              : wodIvcsV2OpenCount === 0
+                ? " No open v2 orders right now."
+                : ""}
+          </p>
+        )}
       </Card>
 
       {/* Completion Stats */}
@@ -2294,7 +2347,12 @@ export default function AgentPage() {
         )}
       </Card>
 
-      {/* Tasks List */}
+      {/* Tasks List — WOD/IVCS v2 queue when flag on; legacy tasks otherwise */}
+      {selectedTaskType === "WOD_IVCS" && wodIvcsV2Enabled ? (
+        <Card className="p-5">
+          <AgentWodIvcsV2Queue onOpenCountChange={setWodIvcsV2OpenCount} />
+        </Card>
+      ) : (
       <Card className="p-5">
                 <div className="flex items-center justify-between mb-4">
           <H2>Your Tasks</H2>
@@ -2423,6 +2481,7 @@ export default function AgentPage() {
           </div>
         )}
       </Card>
+      )}
 
       {/* Password Change Modal */}
       <ChangePasswordModal

@@ -304,6 +304,7 @@ export async function executeImport(
     });
 
     const summary: ImportRunSummary = {
+      totalRows: rawRows.length,
       createdOrders,
       updatedOrders,
       parsedRows,

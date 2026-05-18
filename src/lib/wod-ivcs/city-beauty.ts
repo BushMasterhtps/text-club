@@ -1,5 +1,13 @@
-import type { PrismaClient, WodIvcsSourceReportType } from "@prisma/client";
+import type { Prisma, WodIvcsSourceReportType } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { getColumnValue } from "./csv";
+import { normalizeDocumentNumber } from "./normalize";
+
+const DOC_ALIASES = [
+  "Document Number",
+  "DocumentNumber",
+  "document_number",
+];
 
 const DEFAULT_RULES: Array<{
   sourceReportType: WodIvcsSourceReportType;
@@ -9,6 +17,27 @@ const DEFAULT_RULES: Array<{
   { sourceReportType: "NETSUITE_REPORT", matchField: "Brand", matchValue: "City Beauty" },
   { sourceReportType: "AGING_REPORT", matchField: "Subsidiary", matchValue: "City Beauty LLC" },
 ];
+
+/** Document # prefix used for City Beauty (Aging reports may omit Brand/Subsidiary). */
+export function isCityBeautyDocumentNumber(
+  documentNumberNormalized: string | null | undefined
+): boolean {
+  if (!documentNumberNormalized) return false;
+  return documentNumberNormalized.toUpperCase().startsWith("CB");
+}
+
+/**
+ * Orders excluded from Task Management active assignment queues (IT bulk / future Analytics).
+ * Keeps mis-flagged CB-prefix orders out of operational views until re-imported.
+ */
+export function excludeCityBeautyFromOperationalQueues(): Prisma.WodIvcsOrderWhereInput {
+  return {
+    AND: [
+      { isCityBeauty: false },
+      { NOT: { documentNumberNormalized: { startsWith: "CB" } } },
+    ],
+  };
+}
 
 export async function loadBrandRules(prisma: PrismaClient) {
   const rules = await prisma.wodIvcsBrandRule.findMany({
@@ -46,6 +75,9 @@ export function isCityBeautyFromRow(
     isInclusive: boolean;
   }> | null
 ): boolean {
+  const normalized = normalizeDocumentNumber(getColumnValue(row, DOC_ALIASES));
+  if (isCityBeautyDocumentNumber(normalized)) return true;
+
   const active = rules?.filter((r) => r.sourceReportType === sourceReportType && r.isInclusive) ??
     DEFAULT_RULES.filter((r) => r.sourceReportType === sourceReportType).map((r) => ({
       ...r,

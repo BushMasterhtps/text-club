@@ -39,6 +39,7 @@ export function WodIvcsOrderInspectorPanel() {
         take: "100",
         sortBy: "updatedAt",
         sortDir: "desc",
+        includeCityBeauty: "true",
       });
       const res = await fetch(`/api/manager/wod-ivcs/v2/orders?${params}`, { cache: "no-store" });
       const json = await res.json();

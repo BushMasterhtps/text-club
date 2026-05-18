@@ -1,5 +1,6 @@
-import type { PrismaClient, WodIvcsOperationalQueue } from "@prisma/client";
+import type { Prisma, PrismaClient, WodIvcsOperationalQueue } from "@prisma/client";
 import { getAgentReportingDayBoundsUtc } from "@/lib/agent-reporting-day-bounds";
+import { excludeCityBeautyFromOperationalQueues } from "./city-beauty";
 
 const QUEUE_KEYS: WodIvcsOperationalQueue[] = [
   "NEEDS_ACTION",
@@ -99,10 +100,14 @@ function mapImportRun(
   };
 }
 
-const AGE_OPEN_WHERE = {
+const OPERATIONAL_EXCLUDE_CB: Prisma.WodIvcsOrderWhereInput =
+  excludeCityBeautyFromOperationalQueues();
+
+const AGE_OPEN_WHERE: Prisma.WodIvcsOrderWhereInput = {
   archivedAt: null,
   operationalQueue: { in: OPEN_QUEUES },
-} as const;
+  ...OPERATIONAL_EXCLUDE_CB,
+};
 
 export async function buildWodIvcsQueuesSummary(
   prisma: PrismaClient
@@ -131,7 +136,7 @@ export async function buildWodIvcsQueuesSummary(
     }),
     prisma.wodIvcsOrder.groupBy({
       by: ["operationalQueue"],
-      where: notArchived,
+      where: { ...notArchived, ...OPERATIONAL_EXCLUDE_CB },
       _count: { _all: true },
     }),
     prisma.wodIvcsOrder.count({
@@ -145,6 +150,7 @@ export async function buildWodIvcsQueuesSummary(
       where: {
         ...notArchived,
         operationalQueue: { in: ["ASSIGNED", "IN_PROGRESS"] },
+        ...OPERATIONAL_EXCLUDE_CB,
       },
     }),
     prisma.wodIvcsOrder.count({
@@ -152,6 +158,7 @@ export async function buildWodIvcsQueuesSummary(
         ...notArchived,
         operationalQueue: "NEEDS_ACTION",
         assignedToId: null,
+        ...OPERATIONAL_EXCLUDE_CB,
       },
     }),
     prisma.wodIvcsOrder.count({
@@ -191,6 +198,7 @@ export async function buildWodIvcsQueuesSummary(
         ...notArchived,
         assignedToId: { not: null },
         operationalQueue: { in: ["ASSIGNED", "IN_PROGRESS"] },
+        ...OPERATIONAL_EXCLUDE_CB,
       },
       _count: { _all: true },
     }),

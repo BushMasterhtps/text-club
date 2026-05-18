@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import type { Prisma, WodIvcsOperationalQueue } from "@prisma/client";
+import { excludeCityBeautyFromOperationalQueues } from "@/lib/wod-ivcs/city-beauty";
 import { handleAgentWodApi, prisma } from "../_lib/handle-agent-wod-api";
 import {
   AGENT_ORDER_LIST_SELECT,
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
       { assignedToId: userId },
       { archivedAt: null },
       { operationalQueue: queueFilter ? queueFilter : { in: DEFAULT_QUEUES } },
+      excludeCityBeautyFromOperationalQueues(),
     ];
 
     if (q) {

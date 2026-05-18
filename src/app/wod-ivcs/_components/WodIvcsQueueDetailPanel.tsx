@@ -21,6 +21,8 @@ import { PresenceBadge } from "./WodIvcsQueueUiBits";
 
 type ReportSourceFilter = "" | "on_netsuite" | "on_aging";
 
+const PAGE_SIZE = 100;
+
 type Props = {
   queue: WodIvcsOperationalQueueKey;
   globalSearchQuery: string;
@@ -46,7 +48,9 @@ export function WodIvcsQueueDetailPanel({
   const [search, setSearch] = useState("");
   const [fivePlus, setFivePlus] = useState(false);
   const [unassignedOnly, setUnassignedOnly] = useState(false);
+  const [assignedAgentFilter, setAssignedAgentFilter] = useState("");
   const [reportSource, setReportSource] = useState<ReportSourceFilter>("");
+  const [page, setPage] = useState(1);
 
   const [message, setMessage] = useState<{
     tone: "success" | "error" | "info";
@@ -91,8 +95,10 @@ export function WodIvcsQueueDetailPanel({
     setLoading(true);
     setMessage(null);
     try {
+      const skip = (page - 1) * PAGE_SIZE;
       const params = new URLSearchParams({
-        take: "200",
+        take: String(PAGE_SIZE),
+        skip: String(skip),
         sortBy: "netSuiteDaysOld",
         sortDir: "desc",
       });
@@ -106,7 +112,13 @@ export function WodIvcsQueueDetailPanel({
       }
 
       if (fivePlus) params.set("fivePlus", "true");
-      if (unassignedOnly) params.set("unassignedOnly", "true");
+      if (assignedAgentFilter === "__unassigned__") {
+        params.set("unassignedOnly", "true");
+      } else if (assignedAgentFilter) {
+        params.set("assignedToId", assignedAgentFilter);
+      } else if (unassignedOnly) {
+        params.set("unassignedOnly", "true");
+      }
       if (reportSource) params.set("reportPresence", reportSource);
 
       const res = await fetch(`/api/manager/wod-ivcs/v2/orders?${params}`, { cache: "no-store" });
@@ -131,9 +143,11 @@ export function WodIvcsQueueDetailPanel({
     search,
     fivePlus,
     unassignedOnly,
+    assignedAgentFilter,
     reportSource,
     isGlobalSearch,
     globalSearchQuery,
+    page,
   ]);
 
   useEffect(() => {
@@ -141,9 +155,13 @@ export function WodIvcsQueueDetailPanel({
   }, [loadAgents]);
 
   useEffect(() => {
+    setPage(1);
+  }, [queue, search, fivePlus, unassignedOnly, assignedAgentFilter, reportSource, searchNonce]);
+
+  useEffect(() => {
     clearSelection();
     loadOrders();
-  }, [queue, loadOrders, clearSelection, searchNonce]);
+  }, [queue, loadOrders, clearSelection, searchNonce, page]);
 
   const selectedIds = useMemo(() => Array.from(selected), [selected]);
 
@@ -269,6 +287,12 @@ export function WodIvcsQueueDetailPanel({
     }
   };
 
+  const pageStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const pageEnd = total === 0 ? 0 : Math.min(page * PAGE_SIZE, total);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const canGoPrev = page > 1;
+  const canGoNext = page < totalPages;
+
   return (
     <Card className="p-5 space-y-4">
       <div>
@@ -300,7 +324,14 @@ export function WodIvcsQueueDetailPanel({
               className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm placeholder:text-white/30"
             />
           </label>
-          <SmallButton onClick={loadOrders} disabled={loading || busy} className="bg-blue-600 hover:bg-blue-700">
+          <SmallButton
+            onClick={() => {
+              if (page === 1) void loadOrders();
+              else setPage(1);
+            }}
+            disabled={loading || busy}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
             Apply filters
           </SmallButton>
         </div>
@@ -311,7 +342,10 @@ export function WodIvcsQueueDetailPanel({
             <input
               type="checkbox"
               checked={fivePlus}
-              onChange={(e) => setFivePlus(e.target.checked)}
+              onChange={(e) => {
+                setFivePlus(e.target.checked);
+                setPage(1);
+              }}
               className="accent-red-500"
             />
             5+ day / urgent
@@ -320,7 +354,10 @@ export function WodIvcsQueueDetailPanel({
             <input
               type="checkbox"
               checked={unassignedOnly}
-              onChange={(e) => setUnassignedOnly(e.target.checked)}
+              onChange={(e) => {
+                setUnassignedOnly(e.target.checked);
+                setPage(1);
+              }}
               className="accent-sky-500"
             />
             Unassigned only
@@ -331,7 +368,10 @@ export function WodIvcsQueueDetailPanel({
           Report Source
           <select
             value={reportSource}
-            onChange={(e) => setReportSource(e.target.value as ReportSourceFilter)}
+            onChange={(e) => {
+              setReportSource(e.target.value as ReportSourceFilter);
+              setPage(1);
+            }}
             className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
           >
             <option value="">All Orders</option>
@@ -341,6 +381,28 @@ export function WodIvcsQueueDetailPanel({
           <span className="text-white/40 font-normal">
             Filter by which morning report the order appeared on.
           </span>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[200px] max-w-xs">
+          Assigned agent
+          <select
+            value={assignedAgentFilter}
+            onChange={(e) => {
+              setAssignedAgentFilter(e.target.value);
+              setPage(1);
+            }}
+            disabled={agentsLoading}
+            className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
+          >
+            <option value="">All agents</option>
+            <option value="__unassigned__">Unassigned only</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name || a.email}
+                {a.isLive === false ? " (inactive)" : ""}
+              </option>
+            ))}
+          </select>
         </label>
       </div>
 
@@ -477,6 +539,29 @@ export function WodIvcsQueueDetailPanel({
               })}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-white/60">
+        <span>
+          Showing {pageStart}–{pageEnd} of {total}
+          {total > PAGE_SIZE ? ` · Page ${page} of ${totalPages}` : ""}
+        </span>
+        <div className="flex gap-2">
+          <SmallButton
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={loading || busy || !canGoPrev}
+            className="bg-white/10 hover:bg-white/20"
+          >
+            Previous
+          </SmallButton>
+          <SmallButton
+            onClick={() => setPage((p) => p + 1)}
+            disabled={loading || busy || !canGoNext}
+            className="bg-white/10 hover:bg-white/20"
+          >
+            Next
+          </SmallButton>
+        </div>
       </div>
 
       {detailId && (

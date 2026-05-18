@@ -10,6 +10,7 @@ import {
   invalidAssigneeRoleMessage,
   isUserEligibleForTaskType,
 } from "@/lib/agent-specialization";
+import { isCityBeautyDocumentNumber } from "./city-beauty";
 
 const TERMINAL_QUEUES: WodIvcsOperationalQueue[] = ["COMPLETED", "ARCHIVED"];
 const ASSIGN_SOURCE_QUEUES: WodIvcsOperationalQueue[] = ["NEEDS_ACTION", "ASSIGNED"];
@@ -47,7 +48,8 @@ export type OrderMutationSkipCode =
   | "SOURCE_TERMINAL_BLOCKED"
   | "NO_CHANGE"
   | "AGENT_NOT_FOUND"
-  | "AGENT_INELIGIBLE";
+  | "AGENT_INELIGIBLE"
+  | "CITY_BEAUTY_EXCLUDED";
 
 export type OrderMutationSkip = {
   orderId: string;
@@ -97,6 +99,20 @@ async function writeOrderAuditEvent(
   });
 }
 
+type OrderMutationRow = {
+  id: string;
+  documentNumber: string;
+  documentNumberNormalized: string;
+  isCityBeauty: boolean;
+  operationalQueue: WodIvcsOperationalQueue;
+  operationalStatus: string;
+  assignedToId: string | null;
+  archivedAt: Date | null;
+  workStartedAt: Date | null;
+  workStartedById: string | null;
+  activeWorkflowVersionId: string | null;
+};
+
 async function loadOrdersByIds(prisma: PrismaClient, orderIds: string[]) {
   const unique = [...new Set(orderIds.filter(Boolean))];
   const orders = await prisma.wodIvcsOrder.findMany({
@@ -104,13 +120,42 @@ async function loadOrdersByIds(prisma: PrismaClient, orderIds: string[]) {
     select: {
       id: true,
       documentNumber: true,
+      documentNumberNormalized: true,
+      isCityBeauty: true,
       operationalQueue: true,
+      operationalStatus: true,
       assignedToId: true,
       archivedAt: true,
+      workStartedAt: true,
+      workStartedById: true,
+      activeWorkflowVersionId: true,
     },
   });
-  const byId = new Map(orders.map((o) => [o.id, o]));
+  const byId = new Map(orders.map((o) => [o.id, o as OrderMutationRow]));
   return { unique, byId };
+}
+
+/** Reset agent work session so reassigned agents must Start again (no completion credit). */
+function clearedWorkSessionUpdate() {
+  return {
+    workStartedAt: null,
+    workStartedById: null,
+    activeWorkflowVersionId: null,
+  };
+}
+
+function clearedWorkSessionAuditFields(order: OrderMutationRow) {
+  const clearedWorkSessionFields: string[] = [];
+  if (order.workStartedAt) clearedWorkSessionFields.push("workStartedAt");
+  if (order.workStartedById) clearedWorkSessionFields.push("workStartedById");
+  if (order.activeWorkflowVersionId) clearedWorkSessionFields.push("activeWorkflowVersionId");
+
+  return {
+    clearedWorkSessionFields,
+    previousWorkStartedAt: order.workStartedAt?.toISOString() ?? null,
+    previousWorkStartedById: order.workStartedById,
+    previousActiveWorkflowVersionId: order.activeWorkflowVersionId,
+  };
 }
 
 async function validateAssigneeAgent(prisma: PrismaClient, agentId: string) {
@@ -171,6 +216,56 @@ export async function assignWodIvcsOrdersToAgent(
           code: "TERMINAL_QUEUE",
           reason: `Cannot assign orders in ${order.operationalQueue}`,
         });
+        continue;
+      }
+
+      if (
+        order.isCityBeauty ||
+        isCityBeautyDocumentNumber(order.documentNumberNormalized)
+      ) {
+        skipped.push({
+          orderId,
+          code: "CITY_BEAUTY_EXCLUDED",
+          reason:
+            "City Beauty orders are routed to IT bulk processing and cannot be assigned through active queues",
+        });
+        continue;
+      }
+
+      if (order.operationalQueue === "IN_PROGRESS") {
+        const fromQueue = order.operationalQueue;
+        const toQueue: WodIvcsOperationalQueue = "ASSIGNED";
+        const previousAgentId = order.assignedToId;
+
+        await tx.wodIvcsOrder.update({
+          where: { id: orderId },
+          data: {
+            assignedToId: input.agentId,
+            operationalQueue: toQueue,
+            ...clearedWorkSessionUpdate(),
+          },
+        });
+
+        await writeOrderAuditEvent(tx, {
+          orderId,
+          actorId: input.actorId,
+          actionType: "MANAGER_OVERRIDE",
+          fromQueue,
+          toQueue,
+          payloadJson: {
+            action: "FORCE_REASSIGN_IN_PROGRESS",
+            previousAgentId,
+            newAgentId: input.agentId,
+            agentEmail: agent.email,
+            agentName: agent.name,
+            previousQueue: fromQueue,
+            targetQueue: toQueue,
+            documentNumber: order.documentNumber,
+            ...clearedWorkSessionAuditFields(order),
+          },
+        });
+
+        assigned++;
         continue;
       }
 
@@ -258,11 +353,36 @@ export async function unassignWodIvcsOrders(
       }
 
       if (order.operationalQueue === "IN_PROGRESS") {
-        skipped.push({
-          orderId,
-          code: "IN_PROGRESS_BLOCKED",
-          reason: "Cannot unassign while order is In Progress",
+        const fromQueue = order.operationalQueue;
+        const toQueue: WodIvcsOperationalQueue = "NEEDS_ACTION";
+        const previousAgentId = order.assignedToId;
+
+        await tx.wodIvcsOrder.update({
+          where: { id: orderId },
+          data: {
+            assignedToId: null,
+            operationalQueue: toQueue,
+            ...clearedWorkSessionUpdate(),
+          },
         });
+
+        await writeOrderAuditEvent(tx, {
+          orderId,
+          actorId: input.actorId,
+          actionType: "MANAGER_OVERRIDE",
+          fromQueue,
+          toQueue,
+          payloadJson: {
+            action: "FORCE_UNASSIGN_IN_PROGRESS",
+            previousAgentId,
+            previousQueue: fromQueue,
+            targetQueue: toQueue,
+            documentNumber: order.documentNumber,
+            ...clearedWorkSessionAuditFields(order),
+          },
+        });
+
+        unassigned++;
         continue;
       }
 

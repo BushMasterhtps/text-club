@@ -5,6 +5,7 @@ import type { Prisma, WodIvcsPresenceState } from "@prisma/client";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertWodIvcsV2Enabled } from "@/lib/wod-ivcs/api-guard";
+import { excludeCityBeautyFromOperationalQueues } from "@/lib/wod-ivcs/city-beauty";
 import { isWodIvcsOperationalQueue } from "@/lib/wod-ivcs/order-mutation-service";
 
 const OPERATIONAL_QUEUES_FOR_ASSIGNMENT = [
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
     const q = (url.searchParams.get("q") ?? "").trim();
     const queue = url.searchParams.get("queue");
     const cityBeauty = url.searchParams.get("cityBeauty");
+    const includeCityBeauty = url.searchParams.get("includeCityBeauty") === "true";
     const fivePlus = url.searchParams.get("fivePlus");
     const unassignedOnly = url.searchParams.get("unassignedOnly") === "true";
     const assignedToId = (url.searchParams.get("assignedToId") ?? "").trim();
@@ -60,7 +62,11 @@ export async function GET(request: NextRequest) {
       // Task Management global search — excludes COMPLETED/ARCHIVED (see Analytics/Reporting TODOs in wod-ivcs-queue-config.ts).
       and.push({ operationalQueue: { in: [...OPERATIONAL_QUEUES_FOR_ASSIGNMENT] } });
     }
-    if (cityBeauty === "true") and.push({ isCityBeauty: true });
+    if (cityBeauty === "true") {
+      and.push({ isCityBeauty: true });
+    } else if (!includeCityBeauty) {
+      and.push(excludeCityBeautyFromOperationalQueues());
+    }
     if (fivePlus === "true") and.push({ agingIsFivePlus: true });
     if (unassignedOnly) and.push({ assignedToId: null });
     if (assignedToId) and.push({ assignedToId });

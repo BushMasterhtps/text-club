@@ -5,6 +5,7 @@
  * - Completed: date range, disposition/fix type, time from agent completion to report drop-off
  * - Archived: date range
  * - City Beauty IT Export: date/import filter, CB vs all-order counts, CSV export for IT bulk action
+ *   (CB orders are excluded from Task Management active queues; use includeCityBeauty on inspector API)
  * Completed/Archived counts remain on Overview summary; history tables belong in Analytics.
  */
 
@@ -97,10 +98,10 @@ export const QUEUE_CARD_CONFIG: Array<{
   {
     key: "IN_PROGRESS",
     label: "In Progress",
-    description: "Agent is working",
+    description: "Agent is working — manager can override assign/unassign",
     cardClass: "bg-blue-500/10 border-blue-500/30 hover:border-blue-500/50",
     ringClass: "ring-blue-400",
-    assignable: false,
+    assignable: true,
     readOnly: false,
   },
   {

@@ -70,9 +70,11 @@ export function WodIvcsBulkAssignBar({
         </div>
 
         {inProgressNote && selectedCount > 0 && (
-          <p className="text-xs text-blue-200/80">
-            In Progress orders cannot be unassigned from the manager queue until agent workflow
-            supports handoff (Phase 4).
+          <p className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
+            Manager override: unassigning moves work back to Needs Action; reassigning moves it
+            back to Assigned for the new agent (they must Start work again). Prior agent work
+            session is cleared — no completion credit.
+            {/* TODO: optional manager reason/note on override */}
           </p>
         )}
 
@@ -168,15 +170,13 @@ function BulkActionsForm({
       )}
 
       <div className="flex flex-wrap items-end gap-2 border-t border-white/10 pt-3">
-        {!inProgressNote && (
-          <SmallButton
-            onClick={onUnassign}
-            disabled={busy}
-            className="bg-white/10 hover:bg-white/20 text-red-200"
-          >
-            Unassign selected
-          </SmallButton>
-        )}
+        <SmallButton
+          onClick={onUnassign}
+          disabled={busy}
+          className="bg-white/10 hover:bg-white/20 text-red-200"
+        >
+          Unassign selected
+        </SmallButton>
 
         <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[180px]">
           Move to queue

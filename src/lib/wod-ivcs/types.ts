@@ -66,9 +66,13 @@ export type DryRunResult = {
 };
 
 export type ImportRunSummary = {
+  /** Raw CSV data rows (before per-document aggregation). */
+  totalRows: number;
   createdOrders: number;
   updatedOrders: number;
+  /** Unique document numbers processed (after aggregation/dedupe). */
   parsedRows: number;
+  /** Extra CSV rows merged into an existing document (e.g. multi-line Aging). */
   skippedRows: number;
   errorRows: number;
   droppedOrders: number;

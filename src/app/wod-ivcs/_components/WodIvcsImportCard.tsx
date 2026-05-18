@@ -1,9 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
+import { parseFetchJsonSafely } from "@/lib/safe-fetch-json";
 import type { WodIvcsImportDryRunData } from "./wod-ivcs-import-types";
+
+type ImportSummary = {
+  totalRows?: number;
+  parsedRows?: number;
+  createdOrders?: number;
+  updatedOrders?: number;
+  skippedRows?: number;
+  errorRows?: number;
+};
 
 type Props = {
   title: string;
@@ -12,11 +22,44 @@ type Props = {
   onDone: () => void;
 };
 
+function formatImportResultMessage(summary: ImportSummary): string {
+  const totalRows = summary.totalRows ?? 0;
+  const uniqueOrders = summary.parsedRows ?? 0;
+  const created = summary.createdOrders ?? 0;
+  const updated = summary.updatedOrders ?? 0;
+  const merged = summary.skippedRows ?? 0;
+  const errors = summary.errorRows ?? 0;
+
+  const parts = [
+    "Import complete.",
+    `${totalRows} row${totalRows === 1 ? "" : "s"} parsed`,
+    `${uniqueOrders} unique order${uniqueOrders === 1 ? "" : "s"} processed`,
+    `${created} created`,
+    `${updated} updated`,
+  ];
+  if (merged > 0) {
+    parts.push(`${merged} duplicate row${merged === 1 ? "" : "s"} merged into existing orders`);
+  }
+  if (errors > 0) {
+    parts.push(`${errors} row error${errors === 1 ? "" : "s"}`);
+  }
+  return parts.join(" · ");
+}
+
 export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState<"dry" | "import" | null>(null);
   const [dryRun, setDryRun] = useState<WodIvcsImportDryRunData | null>(null);
   const [importMsg, setImportMsg] = useState("");
+  const [importMsgTone, setImportMsgTone] = useState<"success" | "error">("success");
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const runDryRun = async () => {
     if (!file) return;
@@ -31,34 +74,74 @@ export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone 
         method: "POST",
         body: fd,
       });
-      const data = await res.json();
+      const parsed = await parseFetchJsonSafely(res);
+      const data = parsed.data as { success?: boolean; error?: string; data?: WodIvcsImportDryRunData };
       if (!res.ok || !data.success) throw new Error(data.error || "Dry-run failed");
-      setDryRun(data.data);
+      if (mountedRef.current) setDryRun(data.data ?? null);
     } catch (e) {
-      setImportMsg(e instanceof Error ? e.message : "Dry-run failed");
+      if (mountedRef.current) {
+        setImportMsgTone("error");
+        setImportMsg(e instanceof Error ? e.message : "Dry-run failed");
+      }
     } finally {
-      setBusy(null);
+      if (mountedRef.current) setBusy(null);
     }
   };
 
   const runImport = async () => {
-    if (!file) return;
+    if (!file || busy !== null) return;
     setBusy("import");
     setImportMsg("");
+    let succeeded = false;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 30 * 60 * 1000);
+
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch(importPath, { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Import failed");
-      setImportMsg(
-        `Import complete: ${data.summary.createdOrders} created, ${data.summary.updatedOrders} updated, ${data.summary.errorRows} errors`
-      );
-      onDone();
+      const res = await fetch(importPath, {
+        method: "POST",
+        body: fd,
+        signal: controller.signal,
+      });
+      const parsed = await parseFetchJsonSafely(res);
+      const data = parsed.data as {
+        success?: boolean;
+        error?: string;
+        summary?: ImportSummary;
+      };
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Import failed");
+      }
+
+      const summary = data.summary ?? {};
+      succeeded = true;
+      if (mountedRef.current) {
+        setImportMsgTone("success");
+        setImportMsg(formatImportResultMessage(summary));
+      }
     } catch (e) {
-      setImportMsg(e instanceof Error ? e.message : "Import failed");
+      if (mountedRef.current) {
+        setImportMsgTone("error");
+        const msg =
+          e instanceof Error && e.name === "AbortError"
+            ? "Import timed out on the client. Check Import & Diagnostics — the server may still have finished."
+            : e instanceof Error
+              ? e.message
+              : "Import failed";
+        setImportMsg(msg);
+      }
     } finally {
-      setBusy(null);
+      window.clearTimeout(timeoutId);
+      if (mountedRef.current) setBusy(null);
+      if (succeeded) {
+        try {
+          onDone();
+        } catch {
+          /* parent refresh must not block import UI reset */
+        }
+      }
     }
   };
 
@@ -76,11 +159,11 @@ export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone 
         className="w-full text-sm text-white/80 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-sky-600 file:text-white"
       />
       <div className="flex gap-2 flex-wrap">
-        <SmallButton onClick={runDryRun} disabled={!file || busy !== null}>
+        <SmallButton onClick={() => void runDryRun()} disabled={!file || busy !== null}>
           {busy === "dry" ? "Validating…" : "Dry-run"}
         </SmallButton>
         <SmallButton
-          onClick={runImport}
+          onClick={() => void runImport()}
           disabled={!file || busy !== null}
           className="bg-green-600 hover:bg-green-700"
         >
@@ -106,7 +189,13 @@ export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone 
           ))}
         </div>
       )}
-      {importMsg && <p className="text-sm text-white/80">{importMsg}</p>}
+      {importMsg && (
+        <p
+          className={`text-sm ${importMsgTone === "success" ? "text-green-300/90" : "text-red-300"}`}
+        >
+          {importMsg}
+        </p>
+      )}
     </Card>
   );
 }
