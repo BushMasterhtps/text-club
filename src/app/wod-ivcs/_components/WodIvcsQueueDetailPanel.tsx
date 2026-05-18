@@ -18,6 +18,7 @@ import {
   type WodIvcsQueueKey,
 } from "./wod-ivcs-queue-config";
 import { PresenceBadge } from "./WodIvcsQueueUiBits";
+import { WodIvcsManagerOrderDetailModal } from "./WodIvcsManagerOrderDetailModal";
 
 type ReportSourceFilter = "" | "on_netsuite" | "on_aging";
 
@@ -59,8 +60,6 @@ export function WodIvcsQueueDetailPanel({
   const [skipped, setSkipped] = useState<OrderMutationSkip[]>([]);
 
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [detailOrder, setDetailOrder] = useState<Record<string, unknown> | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
 
   const {
     selected,
@@ -165,17 +164,8 @@ export function WodIvcsQueueDetailPanel({
 
   const selectedIds = useMemo(() => Array.from(selected), [selected]);
 
-  const openDetail = async (id: string) => {
+  const openDetail = (id: string) => {
     setDetailId(id);
-    setDetailLoading(true);
-    setDetailOrder(null);
-    try {
-      const res = await fetch(`/api/manager/wod-ivcs/v2/orders/${id}`);
-      const json = await res.json();
-      if (json.success) setDetailOrder(json.order);
-    } finally {
-      setDetailLoading(false);
-    }
   };
 
   const afterMutation = (text: string, skipList: OrderMutationSkip[]) => {
@@ -565,43 +555,10 @@ export function WodIvcsQueueDetailPanel({
       </div>
 
       {detailId && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex justify-end">
-          <Card className="w-full max-w-md h-full overflow-y-auto p-6 m-0 rounded-none border-l border-white/10">
-            <div className="flex justify-between items-start mb-4">
-              <h4 className="text-lg font-semibold text-white">Order details</h4>
-              <SmallButton onClick={() => setDetailId(null)}>Close</SmallButton>
-            </div>
-            {detailLoading && <p className="text-white/50">Loading…</p>}
-            {detailOrder && (
-              <div className="space-y-3 text-sm text-white/80">
-                <p>
-                  <span className="text-white/50">Document:</span>{" "}
-                  <span className="font-mono text-white">
-                    {String(detailOrder.documentNumber ?? "")}
-                  </span>
-                </p>
-                <p>
-                  <span className="text-white/50">Customer:</span>{" "}
-                  {String(detailOrder.customerName ?? "—")}
-                </p>
-                <p>
-                  <span className="text-white/50">Email:</span>{" "}
-                  {String(detailOrder.customerEmail ?? "—")}
-                </p>
-                <div className="flex gap-2 flex-wrap">
-                  <PresenceBadge
-                    label="NetSuite"
-                    state={String(detailOrder.presenceNetSuite ?? "UNKNOWN")}
-                  />
-                  <PresenceBadge
-                    label="Aging"
-                    state={String(detailOrder.presenceAging ?? "UNKNOWN")}
-                  />
-                </div>
-              </div>
-            )}
-          </Card>
-        </div>
+        <WodIvcsManagerOrderDetailModal
+          orderId={detailId}
+          onClose={() => setDetailId(null)}
+        />
       )}
     </Card>
   );

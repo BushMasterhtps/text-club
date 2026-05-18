@@ -258,3 +258,87 @@ export function hasAnyCoreAnswer(answers: WorkflowAnswersState): boolean {
     return v !== undefined && v !== null && v !== "";
   });
 }
+
+export function areCoreAnswersComplete(answers: WorkflowAnswersState): boolean {
+  return CORE_STEP_ORDER.every((slug) => {
+    const v = answers[slug];
+    return v !== undefined && v !== null && v !== "";
+  });
+}
+
+function isAnswerFilled(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === "boolean") return true;
+  if (Array.isArray(value)) return value.length > 0;
+  return String(value).trim() !== "";
+}
+
+/** Client-side gate for enabling Submit (server preview/submit remain source of truth). */
+export function canSubmitAgentWorkflow(input: {
+  answers: WorkflowAnswersState;
+  preview: {
+    validation: { valid: boolean };
+    matchedRoutingRule: unknown | null;
+    predictedTargetQueue: string | null | undefined;
+    requiredConfirmations?: {
+      requiresRetriggerConfirmation: boolean;
+      requiresItEscalation: boolean;
+      requiresReplacementOrderNumber: boolean;
+      requiresProcessedReship: boolean;
+    };
+    visibleSteps?: string[];
+  } | null;
+  previewLoading: boolean;
+  previewError: string;
+  followUpQuestions: FollowUpQuestion[];
+}): boolean {
+  if (input.previewLoading || input.previewError) return false;
+  if (!input.preview) return false;
+  if (!input.preview.validation.valid) return false;
+  if (!input.preview.matchedRoutingRule) return false;
+  if (!input.preview.predictedTargetQueue) return false;
+  if (!areCoreAnswersComplete(input.answers)) return false;
+
+  for (const q of input.followUpQuestions) {
+    if (!isFollowUpQuestionVisible(q, input.answers)) continue;
+    if (!q.required) continue;
+    const key = followUpAnswerKey(q.id);
+    if (!isAnswerFilled(input.answers[key])) return false;
+    if (q.type === "single_select" || q.type === "multi_select") {
+      if (selectedOptionRequiresNotes(q, input.answers[key] as string | string[])) {
+        const notesKey = followUpNotesKey(q.id);
+        if (!isAnswerFilled(input.answers[notesKey])) return false;
+      }
+    }
+  }
+
+  const req = input.preview.requiredConfirmations;
+  const visible = new Set(input.preview.visibleSteps ?? []);
+
+  if (
+    (visible.has("retrigger_confirmation") || req?.requiresRetriggerConfirmation) &&
+    input.answers.retrigger_confirmation !== true
+  ) {
+    return false;
+  }
+  if (
+    (visible.has("replacement_order_number") || req?.requiresReplacementOrderNumber) &&
+    !isAnswerFilled(input.answers.replacement_order_number)
+  ) {
+    return false;
+  }
+  if (
+    (visible.has("processed_reship_confirmation") || req?.requiresProcessedReship) &&
+    input.answers.processed_reship_confirmation !== true
+  ) {
+    return false;
+  }
+  if (
+    (visible.has("it_escalation_note") || req?.requiresItEscalation) &&
+    !isAnswerFilled(input.answers.it_escalation_note)
+  ) {
+    return false;
+  }
+
+  return true;
+}

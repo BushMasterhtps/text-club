@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertWodIvcsV2Enabled } from "@/lib/wod-ivcs/api-guard";
+import { buildManagerOrderDetail } from "@/lib/wod-ivcs/manager-order-detail-service";
 
 export async function GET(
   request: NextRequest,
@@ -17,42 +18,19 @@ export async function GET(
 
   try {
     const { id } = await params;
-    const order = await prisma.wodIvcsOrder.findUnique({
-      where: { id },
-      include: {
-        cases: true,
-        assignedTo: { select: { id: true, name: true, email: true } },
-        createdByImportRun: { select: { id: true, fileName: true, createdAt: true } },
-        updatedByImportRun: { select: { id: true, fileName: true, createdAt: true } },
-      },
-    });
+    const detail = await buildManagerOrderDetail(prisma, id);
 
-    if (!order) {
+    if (!detail) {
       return NextResponse.json({ success: false, error: "Order not found" }, { status: 404 });
     }
 
     return NextResponse.json({
       success: true,
-      order: {
-        ...order,
-        orderDateFromNetSuiteReport:
-          order.orderDateFromNetSuiteReport?.toISOString() ?? null,
-        lastSeenInNetSuiteAt: order.lastSeenInNetSuiteAt?.toISOString() ?? null,
-        lastSeenInAgingAt: order.lastSeenInAgingAt?.toISOString() ?? null,
-        droppedFromNetSuiteAt: order.droppedFromNetSuiteAt?.toISOString() ?? null,
-        droppedFromAgingAt: order.droppedFromAgingAt?.toISOString() ?? null,
-        awaitingDropOffStartedAt: order.awaitingDropOffStartedAt?.toISOString() ?? null,
-        awaitingDropOffDeadlineAt: order.awaitingDropOffDeadlineAt?.toISOString() ?? null,
-        archivedAt: order.archivedAt?.toISOString() ?? null,
-        createdAt: order.createdAt.toISOString(),
-        updatedAt: order.updatedAt.toISOString(),
-        cases: order.cases.map((c) => ({
-          ...c,
-          lastSeenAt: c.lastSeenAt?.toISOString() ?? null,
-          createdAt: c.createdAt.toISOString(),
-          updatedAt: c.updatedAt.toISOString(),
-        })),
-      },
+      order: detail.order,
+      synopsisRows: detail.synopsisRows,
+      managerRows: detail.managerRows,
+      latestSubmission: detail.latestSubmission,
+      awaitingDropOffReview: detail.awaitingDropOffReview,
     });
   } catch (error) {
     console.error("[wod-ivcs/v2/orders/[id]]", error);

@@ -166,3 +166,72 @@ export async function previewAgentWodIvcsWorkflow(
   });
   return parseAgentResponse<AgentWorkflowPreviewResult>(res);
 }
+
+export type AgentWorkflowSubmitResult = {
+  submissionId: string;
+  targetQueue: string;
+  matchedRoutingRule: { id: string; label: string | null } | null;
+  matchedOutcome: {
+    name: string;
+    priority: number;
+    matchedBy: string;
+    targetQueue: string;
+    operationalCompletionMode: string;
+  };
+  order: {
+    id: string;
+    documentNumber: string;
+    operationalQueue: string;
+    operationalStatus: string;
+    assignedToId: string | null;
+    activeWorkflowVersionId: string | null;
+    workStartedAt: string | null;
+    workStartedById: string | null;
+  };
+};
+
+export async function submitAgentWodIvcsWorkflow(
+  orderId: string,
+  answers: Record<string, unknown>
+): Promise<AgentWorkflowSubmitResult> {
+  const res = await fetch(`${BASE}/orders/${orderId}/submit`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ answers }),
+  });
+  return parseAgentResponse<AgentWorkflowSubmitResult>(res);
+}
+
+/** Friendly agent-facing message for submit API errors. */
+export function formatAgentWorkflowSubmitError(error: unknown): string {
+  if (!(error instanceof AgentWodIvcsApiError)) {
+    return "Could not submit the workflow. Please try again.";
+  }
+
+  switch (error.code) {
+    case "VALIDATION_FAILED":
+      return error.message || "Please complete all required fields before submitting.";
+    case "NOT_ASSIGNED_TO_ACTOR":
+      return "This order is no longer assigned to you.";
+    case "INVALID_QUEUE_FOR_SUBMIT":
+      return "This order is no longer in progress. Refresh your queue and try again.";
+    case "NO_ACTIVE_WORKFLOW_VERSION":
+      return "Work was not started on a workflow version. Start work again, then submit.";
+    case "NO_PUBLISHED_VERSION":
+    case "WORKFLOW_NOT_COMPILED":
+      return "Workflow configuration is unavailable. Ask a manager to check the Routing Matrix.";
+    case "ORDER_NOT_FOUND":
+      return "This order could not be found. Refresh your queue.";
+    case "VERSION_NOT_FOUND":
+      return "The workflow version for this order is missing. Refresh and try again.";
+    case "V2_DISABLED":
+      return "WOD/IVCS v2 is not enabled in this environment.";
+    case "INVALID_BODY":
+      return "Invalid submit request. Refresh the page and try again.";
+    default:
+      if (error.statusCode && error.statusCode >= 500) {
+        return "The server could not submit your workflow. Please try again in a moment.";
+      }
+      return error.message || "Could not submit the workflow.";
+  }
+}

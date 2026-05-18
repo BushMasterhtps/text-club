@@ -9,6 +9,10 @@ import { normalizeDocumentNumber } from "./normalize";
 import { getColumnValue } from "./csv";
 import type { ImportRunSummary, NormalizedNetSuiteRow } from "./types";
 
+// TODO(import-queue-reevaluation): After NetSuite/Aging imports, reevaluate operational queues:
+// Needs Action orders no longer on reports, Awaiting Drop-Off auto-promote per dropOffBehavior,
+// and analytics for orders that dropped without agent action.
+
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }

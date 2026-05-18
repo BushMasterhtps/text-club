@@ -10,7 +10,9 @@ import {
   type AgentWodIvcsOrderDetail,
   type AgentWodIvcsOrderListItem,
 } from "@/lib/wod-ivcs/agent-api-client";
+import type { AgentWorkflowSubmitResult } from "@/lib/wod-ivcs/agent-api-client";
 import type { AgentActiveWorkflow } from "@/lib/wod-ivcs/agent-workflow-form-utils";
+import { labelFor, operationalQueueLabel } from "@/lib/wod-ivcs/routing-matrix-labels";
 import { AgentWodIvcsGuidedWorkflowForm } from "./AgentWodIvcsGuidedWorkflowForm";
 import { AgentWodIvcsOrderSummary } from "./AgentWodIvcsOrderSummary";
 
@@ -59,6 +61,26 @@ function PresenceBadge({ label, state }: { label: string; state: string }) {
 
 function isOrderLocked(order: { operationalQueue: string }): boolean {
   return order.operationalQueue === "ASSIGNED";
+}
+
+function isActiveAgentQueue(queue: string): boolean {
+  return queue === "ASSIGNED" || queue === "IN_PROGRESS";
+}
+
+function workflowSubmitSuccessMessage(targetQueue: string): string {
+  const queueLabel = labelFor(operationalQueueLabel, targetQueue);
+  switch (targetQueue) {
+    case "AWAITING_DROP_OFF":
+      return "Workflow submitted. Order moved to Awaiting Drop-Off.";
+    case "NEEDS_REVIEW":
+    case "IT_REVIEW":
+      return "Workflow submitted. Order routed for review.";
+    case "COMPLETED":
+    case "ARCHIVED":
+      return "Workflow submitted. Order completed.";
+    default:
+      return `Workflow submitted. Order routed to ${queueLabel}.`;
+  }
 }
 
 /** Shown on ASSIGNED cards/panels — no document # or customer data before Start. */
@@ -199,6 +221,30 @@ export default function AgentWodIvcsV2Queue({ onOpenCountChange }: Props) {
     }
     void loadDetail(order.id);
   };
+
+  const handleWorkflowSubmitted = useCallback(
+    (result: AgentWorkflowSubmitResult) => {
+      setSuccessMessage(workflowSubmitSuccessMessage(result.targetQueue));
+      setActionError("");
+
+      const stillActive = isActiveAgentQueue(result.order.operationalQueue);
+
+      if (!stillActive) {
+        setSelectedOrderId(null);
+        setDetail(null);
+        setOrders((prev) => prev.filter((o) => o.id !== result.order.id));
+      }
+
+      void loadOrders();
+    },
+    [loadOrders]
+  );
+
+  const handleWorkflowSubmitStale = useCallback(() => {
+    setSelectedOrderId(null);
+    setDetail(null);
+    void loadOrders();
+  }, [loadOrders]);
 
   const selectedFromList = selectedOrderId
     ? orders.find((o) => o.id === selectedOrderId) ?? null
@@ -513,6 +559,8 @@ export default function AgentWodIvcsV2Queue({ onOpenCountChange }: Props) {
                   <AgentWodIvcsGuidedWorkflowForm
                     orderId={panelOrder.id}
                     active={activeWorkflow}
+                    onSubmitSuccess={handleWorkflowSubmitted}
+                    onSubmitStale={handleWorkflowSubmitStale}
                   />
                 ) : panelOrder.operationalQueue === "IN_PROGRESS" ? (
                   <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-4 text-sm text-amber-100/90">

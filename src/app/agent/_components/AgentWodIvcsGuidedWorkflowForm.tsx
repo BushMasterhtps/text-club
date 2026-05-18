@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AgentWodIvcsApiError,
+  formatAgentWorkflowSubmitError,
   previewAgentWodIvcsWorkflow,
+  submitAgentWodIvcsWorkflow,
   type AgentWorkflowPreviewResult,
+  type AgentWorkflowSubmitResult,
 } from "@/lib/wod-ivcs/agent-api-client";
 import {
   buildPreviewAnswersPayload,
+  canSubmitAgentWorkflow,
   CORE_STEP_ORDER,
   filterFixTypeCatalogOptions,
   findMatchingAgentRoutingRule,
@@ -38,6 +42,9 @@ const PREVIEW_DEBOUNCE_MS = 450;
 type Props = {
   orderId: string;
   active: AgentActiveWorkflow;
+  onSubmitSuccess: (result: AgentWorkflowSubmitResult) => void;
+  /** Called when submit fails due to stale assignment/queue state. */
+  onSubmitStale?: () => void;
 };
 
 function stepDisplayLabel(step: AgentWorkflowStep): string {
@@ -218,13 +225,21 @@ function FollowUpQuestionField({
   );
 }
 
-export function AgentWodIvcsGuidedWorkflowForm({ orderId, active }: Props) {
+export function AgentWodIvcsGuidedWorkflowForm({
+  orderId,
+  active,
+  onSubmitSuccess,
+  onSubmitStale,
+}: Props) {
   const [answers, setAnswers] = useState<WorkflowAnswersState>({});
   const [preview, setPreview] = useState<AgentWorkflowPreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const lastMatchedRuleId = useRef<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewPanelRef = useRef<HTMLDivElement | null>(null);
 
   const coreSteps = useMemo(() => getCoreSteps(active), [active]);
 
@@ -265,6 +280,8 @@ export function AgentWodIvcsGuidedWorkflowForm({ orderId, active }: Props) {
     setAnswers({});
     setPreview(null);
     setPreviewError("");
+    setSubmitError("");
+    setSubmitting(false);
   }, [orderId]);
 
   useEffect(() => {
@@ -328,6 +345,46 @@ export function AgentWodIvcsGuidedWorkflowForm({ orderId, active }: Props) {
       ? active.routingRules.find((r) => r.id === preview.matchedRoutingRule?.id)?.itEscalationPrompt
       : null;
 
+  const submitReady = canSubmitAgentWorkflow({
+    answers,
+    preview,
+    previewLoading,
+    previewError,
+    followUpQuestions,
+  });
+
+  const handleSubmit = async () => {
+    if (submitting || previewLoading) return;
+
+    if (!submitReady) {
+      setSubmitError("Complete all required answers and wait for a valid routing preview.");
+      previewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      const payload = buildPreviewAnswersPayload(answers, {
+        routingRules: active.routingRules,
+      });
+      const result = await submitAgentWodIvcsWorkflow(orderId, payload);
+      onSubmitSuccess(result);
+    } catch (e) {
+      setSubmitError(formatAgentWorkflowSubmitError(e));
+      if (
+        e instanceof AgentWodIvcsApiError &&
+        ["INVALID_QUEUE_FOR_SUBMIT", "NOT_ASSIGNED_TO_ACTOR", "ORDER_NOT_FOUND"].includes(
+          e.code ?? ""
+        )
+      ) {
+        onSubmitStale?.();
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-white/10 bg-neutral-950/50 p-5 space-y-6">
       <div>
@@ -371,7 +428,10 @@ export function AgentWodIvcsGuidedWorkflowForm({ orderId, active }: Props) {
       </div>
 
       {(previewLoading || preview || previewError) && (
-        <div className="rounded-lg border border-white/10 bg-neutral-900/80 p-4 space-y-3">
+        <div
+          ref={previewPanelRef}
+          className="rounded-lg border border-white/10 bg-neutral-900/80 p-4 space-y-3"
+        >
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-white/45">
               Routing preview
@@ -517,18 +577,31 @@ export function AgentWodIvcsGuidedWorkflowForm({ orderId, active }: Props) {
         </div>
       )}
 
-      <div className="border-t border-white/10 pt-4">
+      <div className="border-t border-white/10 pt-4 space-y-3">
+        {submitError && (
+          <p className="text-sm text-rose-200/90 bg-rose-500/10 border border-rose-500/25 rounded-lg px-3 py-2">
+            {submitError}
+          </p>
+        )}
+
         <button
           type="button"
-          disabled
-          className="w-full rounded-lg bg-neutral-800 px-4 py-3 text-sm font-medium text-white/40 ring-1 ring-white/10 cursor-not-allowed"
-          title="Final submit is planned for Phase 4A.5"
+          disabled={!submitReady || submitting || previewLoading}
+          onClick={() => void handleSubmit()}
+          className={`w-full rounded-lg px-4 py-3 text-sm font-semibold transition-colors ${
+            submitReady && !submitting && !previewLoading
+              ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950/30"
+              : "bg-neutral-800 text-white/40 ring-1 ring-white/10 cursor-not-allowed"
+          }`}
         >
-          Submit workflow — coming in Phase 4A.5
+          {submitting ? "Submitting…" : "Complete and route order"}
         </button>
-        <p className="text-xs text-white/40 text-center mt-2">
-          Answers stay on this device until submit is enabled in the next phase.
-        </p>
+
+        {!submitReady && !submitting && (
+          <p className="text-xs text-white/45 text-center">
+            Complete all required answers and resolve preview validation to enable submit.
+          </p>
+        )}
       </div>
     </div>
   );
