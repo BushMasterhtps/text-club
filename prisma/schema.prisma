@@ -155,6 +155,8 @@ model User {
   taskWorkSessions               TaskWorkSession[]
 
   wodIvcsOrdersAssigned          WodIvcsOrder[]       @relation("WodIvcsOrderAssignee")
+  wodIvcsOrdersWorkStarted       WodIvcsOrder[]       @relation("WodIvcsOrderWorkStartedBy")
+  wodIvcsWorkflowSubmissions     WodIvcsWorkflowSubmission[] @relation("WodIvcsWorkflowSubmissionSubmittedBy")
   wodIvcsImportRuns              WodIvcsImportRun[]   @relation("WodIvcsImportRunImporter")
   wodIvcsImportRunsReversed      WodIvcsImportRun[]   @relation("WodIvcsImportRunReverser")
   wodIvcsActionEvents            WodIvcsActionEvent[] @relation("WodIvcsActionEventActor")
@@ -601,6 +603,8 @@ enum WodIvcsActionType {
   IMPORT_RUN_REVERSED
   QUEUE_CHANGED
   MANAGER_OVERRIDE
+  AGENT_WORK_STARTED
+  WORKFLOW_SUBMITTED
 }
 
 enum WodIvcsWorkflowVersionStatus {
@@ -698,6 +702,11 @@ model WodIvcsOrder {
   updatedByImportRunId      String?
   updatedByImportRun        WodIvcsImportRun?        @relation("WodIvcsOrderUpdatedByImport", fields: [updatedByImportRunId], references: [id], onDelete: SetNull)
   archivedAt                DateTime?
+  activeWorkflowVersionId   String?
+  activeWorkflowVersion     WodIvcsWorkflowVersion?  @relation("WodIvcsOrderActiveWorkflowVersion", fields: [activeWorkflowVersionId], references: [id], onDelete: SetNull)
+  workStartedAt             DateTime?
+  workStartedById           String?
+  workStartedBy             User?                    @relation("WodIvcsOrderWorkStartedBy", fields: [workStartedById], references: [id], onDelete: SetNull)
   createdAt                 DateTime                 @default(now())
   updatedAt                 DateTime                 @updatedAt
 
@@ -705,6 +714,7 @@ model WodIvcsOrder {
   importRows      WodIvcsImportRow[]
   presenceEvents  WodIvcsReportPresenceEvent[]
   actionEvents    WodIvcsActionEvent[]
+  workflowSubmissions WodIvcsWorkflowSubmission[]
 
   @@index([operationalQueue, operationalStatus])
   @@index([isCityBeauty, agingIsFivePlus])
@@ -876,9 +886,35 @@ model WodIvcsWorkflowVersion {
   steps        WodIvcsWorkflowStep[]
   outcomeRules WodIvcsWorkflowOutcomeRule[]
   routingRules WodIvcsWorkflowRoutingRule[]
+  ordersWithActiveWorkflow WodIvcsOrder[] @relation("WodIvcsOrderActiveWorkflowVersion")
+  workflowSubmissions      WodIvcsWorkflowSubmission[]
 
   @@unique([workflowId, version])
   @@index([workflowId, status])
+}
+
+model WodIvcsWorkflowSubmission {
+  id                       String                   @id @default(cuid())
+  orderId                  String
+  order                    WodIvcsOrder             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  workflowVersionId        String
+  workflowVersion          WodIvcsWorkflowVersion   @relation(fields: [workflowVersionId], references: [id], onDelete: Restrict)
+  submittedById            String
+  submittedBy              User                     @relation("WodIvcsWorkflowSubmissionSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  submittedAt              DateTime                 @default(now())
+  answersJson              Json
+  matchedRoutingRuleId     String?
+  matchedRoutingRule       WodIvcsWorkflowRoutingRule? @relation(fields: [matchedRoutingRuleId], references: [id], onDelete: SetNull)
+  matchedOutcomeRuleName   String?
+  matchedOutcomeRulePriority Int?
+  targetQueue              WodIvcsOperationalQueue
+  routingMatrixHash        String?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+
+  @@index([orderId, submittedAt])
+  @@index([workflowVersionId])
+  @@index([submittedById])
 }
 
 model WodIvcsWorkflowCatalog {
@@ -959,6 +995,7 @@ model WodIvcsWorkflowRoutingRule {
   updatedAt                      DateTime                       @updatedAt
 
   subDispositionOptions WodIvcsWorkflowRoutingSubDispositionOption[]
+  workflowSubmissions   WodIvcsWorkflowSubmission[]
 
   @@index([versionId, isActive, displayOrder])
 }
