@@ -7,6 +7,15 @@ import { prisma } from "@/lib/prisma";
 import { assertWodIvcsV2Enabled } from "@/lib/wod-ivcs/api-guard";
 import { isWodIvcsOperationalQueue } from "@/lib/wod-ivcs/order-mutation-service";
 
+const OPERATIONAL_QUEUES_FOR_ASSIGNMENT = [
+  "NEEDS_ACTION",
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "AWAITING_DROP_OFF",
+  "NEEDS_REVIEW",
+  "IT_REVIEW",
+] as const;
+
 function parsePresenceFilter(value: string | null): WodIvcsPresenceState | null {
   if (!value) return null;
   if (value === "PRESENT" || value === "DROPPED" || value === "UNKNOWN") return value;
@@ -32,6 +41,8 @@ export async function GET(request: NextRequest) {
     const assignedToId = (url.searchParams.get("assignedToId") ?? "").trim();
     const presenceNetSuite = parsePresenceFilter(url.searchParams.get("presenceNetSuite"));
     const presenceAging = parsePresenceFilter(url.searchParams.get("presenceAging"));
+    const reportPresence = url.searchParams.get("reportPresence");
+    const operationalQueuesOnly = url.searchParams.get("operationalQueuesOnly") === "true";
     const sortBy = url.searchParams.get("sortBy") ?? "updatedAt";
     const sortDir = url.searchParams.get("sortDir") === "asc" ? "asc" : "desc";
 
@@ -45,6 +56,9 @@ export async function GET(request: NextRequest) {
         );
       }
       and.push({ operationalQueue: queue });
+    } else if (operationalQueuesOnly) {
+      // Task Management global search — excludes COMPLETED/ARCHIVED (see Analytics/Reporting TODOs in wod-ivcs-queue-config.ts).
+      and.push({ operationalQueue: { in: [...OPERATIONAL_QUEUES_FOR_ASSIGNMENT] } });
     }
     if (cityBeauty === "true") and.push({ isCityBeauty: true });
     if (fivePlus === "true") and.push({ agingIsFivePlus: true });
@@ -52,6 +66,14 @@ export async function GET(request: NextRequest) {
     if (assignedToId) and.push({ assignedToId });
     if (presenceNetSuite) and.push({ presenceNetSuite });
     if (presenceAging) and.push({ presenceAging });
+    if (reportPresence === "on_netsuite") and.push({ presenceNetSuite: "PRESENT" });
+    if (reportPresence === "on_aging") and.push({ presenceAging: "PRESENT" });
+    if (reportPresence === "netsuite_only") {
+      and.push({ presenceNetSuite: "PRESENT", presenceAging: { not: "PRESENT" } });
+    }
+    if (reportPresence === "aging_only") {
+      and.push({ presenceAging: "PRESENT", presenceNetSuite: { not: "PRESENT" } });
+    }
     if (q) {
       and.push({
         OR: [
