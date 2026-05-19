@@ -7,11 +7,11 @@ import { parseAndAggregateAgingCsv } from "./parse-aging";
 import { parseNetSuiteRow } from "./parse-netsuite";
 import { normalizeDocumentNumber } from "./normalize";
 import { getColumnValue } from "./csv";
+import { reevaluateAwaitingDropOffAfterImport } from "./import-reevaluation-service";
 import type { ImportRunSummary, NormalizedNetSuiteRow } from "./types";
 
-// TODO(import-queue-reevaluation): After NetSuite/Aging imports, reevaluate operational queues:
-// Needs Action orders no longer on reports, Awaiting Drop-Off auto-promote per dropOffBehavior,
-// and analytics for orders that dropped without agent action.
+// TODO(import-queue-reevaluation): Needs Action dropped-without-action, assigned warnings,
+// stale awaiting deadline → Needs Review (see drop-off-check.ts).
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
@@ -307,6 +307,12 @@ export async function executeImport(
       actorId: input.importedById,
     });
 
+    const reevaluation = await reevaluateAwaitingDropOffAfterImport(prisma, {
+      importRunId: importRun.id,
+      sourceReportType: input.sourceReportType,
+      actorId: input.importedById,
+    });
+
     const summary: ImportRunSummary = {
       totalRows: rawRows.length,
       createdOrders,
@@ -316,6 +322,7 @@ export async function executeImport(
       errorRows,
       droppedOrders,
       presencePresent: presentDocs.size,
+      reevaluation,
     };
 
     await prisma.wodIvcsImportRun.update({

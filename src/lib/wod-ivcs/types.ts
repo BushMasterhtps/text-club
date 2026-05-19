@@ -65,6 +65,20 @@ export type DryRunResult = {
   sampleNormalizedRows: Record<string, unknown>[];
 };
 
+export type ImportRunReevaluationSummary = {
+  awaitingDropOffChecked: number;
+  dropOffConfirmed: number;
+  movedToCompleted: number;
+  movedToArchived: number;
+  movedToNeedsReview: number;
+  noAutomaticChange: number;
+  skippedCityBeauty: number;
+  skippedMissingSubmission: number;
+  skippedMissingRule: number;
+  skippedNotFullyDropped: number;
+  skippedNoRequiredReports: number;
+};
+
 export type ImportRunSummary = {
   /** Raw CSV data rows (before per-document aggregation). */
   totalRows: number;
@@ -77,4 +91,6 @@ export type ImportRunSummary = {
   errorRows: number;
   droppedOrders: number;
   presencePresent: number;
+  /** Awaiting Drop-Off reevaluation after presence reconcile (Phase 4C.2a). */
+  reevaluation?: ImportRunReevaluationSummary;
 };

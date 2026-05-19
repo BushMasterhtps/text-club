@@ -63,7 +63,14 @@ export function buildAgentOrderSynopsis(input: AgentOrderSynopsisInput): AgentOr
     "Warehouse Status",
     "WMS Status",
   ]);
-  const netSuiteDate = getColumnValue(ns, ["Date", "Order Date"]);
+  const orderProcessingStatus = getColumnValue(ns, ["Order Processing Status"]);
+  const netSuiteDate = getColumnValue(ns, [
+    "Date Ordered",
+    "Date",
+    "Order Date",
+    "Date Created",
+    "Last Modified",
+  ]);
   const agingDateRange = getColumnValue(ag, ["DateRange", "Date Range"]);
   const agingDaysOld = getColumnValue(ag, [
     "Days_old_invalid_CashSale",
@@ -83,6 +90,9 @@ export function buildAgentOrderSynopsis(input: AgentOrderSynopsisInput): AgentOr
   if (webTotal) rows.push({ label: "NetSuite / web total", value: webTotal });
   if (webDifference) rows.push({ label: "Difference / discrepancy", value: webDifference });
   if (warehouseStatus) rows.push({ label: "Warehouse Edge status", value: warehouseStatus });
+  if (orderProcessingStatus) {
+    rows.push({ label: "Order processing status", value: orderProcessingStatus });
+  }
   if (netSuiteDate) rows.push({ label: "NetSuite order date", value: netSuiteDate });
   if (agingDateRange) rows.push({ label: "Aging date range", value: agingDateRange });
   if (agingDaysOld) rows.push({ label: "Aging days (invalid cash sale)", value: agingDaysOld });

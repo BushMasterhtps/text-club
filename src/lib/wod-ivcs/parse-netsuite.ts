@@ -9,18 +9,32 @@ import {
 } from "./normalize";
 import type { NormalizedNetSuiteRow } from "./types";
 
+/**
+ * NetSuite/Kyle CSV import — header-based mapping only (column order may vary).
+ * Supports legacy scheduled-export columns (Date, Memo optional) and the on-demand
+ * saved-search export (e.g. GHPendingInvalidCashSaleExportableReportResults188.csv).
+ */
+
 const DOC_ALIASES = ["Document Number", "DocumentNumber", "document_number"];
-const DATE_ALIASES = ["Date"];
+
+/** Prefer Date Ordered; legacy Date and other timestamps are fallbacks only. */
+const ORDER_DATE_ALIASES = [
+  "Date Ordered",
+  "Date",
+  "Date Created",
+  "Last Modified",
+];
+
 const BRAND_ALIASES = ["Brand"];
 const NAME_ALIASES = ["Name", "Customer", "Customer Name"];
 const EMAIL_ALIASES = ["Email", "E-mail"];
-const AMOUNT_ALIASES = ["Amount", "Web total Difference", "Web Total"];
+const AMOUNT_ALIASES = ["Amount"];
 
 export function validateNetSuiteHeaders(headers: string[]): string | null {
   const docCol = getFirstColumnByAliases(headers, DOC_ALIASES);
-  if (!docCol) return 'Missing required column: Document Number or DocumentNumber';
-  const dateCol = getFirstColumnByAliases(headers, DATE_ALIASES);
-  if (!dateCol) return 'Missing required column: Date';
+  if (!docCol) {
+    return "Missing required column: Document Number (or DocumentNumber)";
+  }
   return null;
 }
 
@@ -35,9 +49,7 @@ export function parseNetSuiteRow(
     return { ok: false, error: `Row ${rowNumber}: missing document number` };
   }
 
-  const headers = Object.keys(row);
-  const dateHeader = getFirstColumnByAliases(headers, DATE_ALIASES);
-  const dateRaw = dateHeader ? row[dateHeader] : null;
+  const dateRaw = getColumnValue(row, ORDER_DATE_ALIASES);
   const orderDate = parseFlexibleDate(dateRaw);
   const asOf = new Date();
 
