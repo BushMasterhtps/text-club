@@ -16,6 +16,15 @@ type ImportReevaluationSummary = {
   movedNeedsActionToArchived?: number;
 };
 
+type ImportImpactSummary = {
+  queueSnapshots?: {
+    before?: { needsAction?: number };
+    after?: { needsAction?: number };
+  };
+  needsActionDelta?: number;
+  narrative?: string;
+};
+
 type ImportSummary = {
   totalRows?: number;
   parsedRows?: number;
@@ -24,6 +33,7 @@ type ImportSummary = {
   skippedRows?: number;
   errorRows?: number;
   reevaluation?: ImportReevaluationSummary;
+  impact?: ImportImpactSummary;
 };
 
 type Props = {
@@ -107,7 +117,16 @@ function ImportRunningProgressPanel({ elapsedMs }: { elapsedMs: number }) {
   );
 }
 
-function formatImportResultMessage(summary: ImportSummary): string {
+function formatSignedDelta(delta: number): string {
+  if (delta > 0) return `(+${delta})`;
+  if (delta < 0) return `(${delta})`;
+  return "(no change)";
+}
+
+function formatImportResultMessage(summary: ImportSummary): {
+  text: string;
+  narrative?: string;
+} {
   const totalRows = summary.totalRows ?? 0;
   const uniqueOrders = summary.parsedRows ?? 0;
   const created = summary.createdOrders ?? 0;
@@ -127,6 +146,15 @@ function formatImportResultMessage(summary: ImportSummary): string {
   }
   if (errors > 0) {
     parts.push(`${errors} row error${errors === 1 ? "" : "s"}`);
+  }
+
+  const impact = summary.impact;
+  if (impact?.queueSnapshots?.before && impact.queueSnapshots.after) {
+    const before = impact.queueSnapshots.before.needsAction ?? 0;
+    const after = impact.queueSnapshots.after.needsAction ?? 0;
+    const delta =
+      impact.needsActionDelta ?? after - before;
+    parts.push(`Needs Action: ${before} → ${after} ${formatSignedDelta(delta)}`);
   }
 
   const reeval = summary.reevaluation;
@@ -154,7 +182,10 @@ function formatImportResultMessage(summary: ImportSummary): string {
     );
   }
 
-  return parts.join(" · ");
+  return {
+    text: parts.join(" · "),
+    narrative: impact?.narrative?.trim() || undefined,
+  };
 }
 
 function parseImportApiResponse(parsed: {
@@ -186,6 +217,7 @@ export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone 
   const [busy, setBusy] = useState<"dry" | "import" | null>(null);
   const [dryRun, setDryRun] = useState<WodIvcsImportDryRunData | null>(null);
   const [importMsg, setImportMsg] = useState("");
+  const [importNarrative, setImportNarrative] = useState("");
   const [importMsgTone, setImportMsgTone] = useState<"success" | "error" | "warning">("success");
   const [importStartedAt, setImportStartedAt] = useState<number | null>(null);
   const [importElapsedMs, setImportElapsedMs] = useState(0);
@@ -237,6 +269,7 @@ export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone 
     setBusy("dry");
     setDryRun(null);
     setImportMsg("");
+    setImportNarrative("");
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -267,11 +300,13 @@ export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone 
     setImportStartedAt(Date.now());
     setImportElapsedMs(0);
     setImportMsg("");
+    setImportNarrative("");
 
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), IMPORT_CLIENT_TIMEOUT_MS);
 
     let successMessage: string | null = null;
+    let successNarrative: string | undefined;
 
     try {
       const fd = new FormData();
@@ -288,7 +323,9 @@ export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone 
         throw new Error(outcome.error || "Import failed");
       }
 
-      successMessage = formatImportResultMessage(outcome.summary ?? {});
+      const formatted = formatImportResultMessage(outcome.summary ?? {});
+      successMessage = formatted.text;
+      successNarrative = formatted.narrative;
     } catch (e) {
       if (importRunIdRef.current !== runId) return;
 
@@ -316,6 +353,7 @@ export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone 
     if (mountedRef.current) {
       setImportMsgTone("success");
       setImportMsg(successMessage ?? "Import complete.");
+      setImportNarrative(successNarrative ?? "");
     }
 
     window.setTimeout(() => {
@@ -343,6 +381,7 @@ export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone 
           setFile(e.target.files?.[0] ?? null);
           setDryRun(null);
           setImportMsg("");
+          setImportNarrative("");
         }}
         className="w-full text-sm text-white/80 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-sky-600 file:text-white disabled:opacity-50 disabled:cursor-not-allowed"
       />
@@ -381,6 +420,9 @@ export function WodIvcsImportCard({ title, sourceReportType, importPath, onDone 
         </div>
       )}
       {importMsg && <p className={`text-sm ${msgColorClass}`}>{importMsg}</p>}
+      {importNarrative && (
+        <p className="text-xs text-white/55 leading-relaxed">{importNarrative}</p>
+      )}
     </Card>
   );
 }

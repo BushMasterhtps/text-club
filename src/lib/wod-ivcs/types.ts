@@ -88,6 +88,32 @@ export type ImportRunReevaluationSummary = {
   skippedNeedsActionNoRequiredReports: number;
 };
 
+/** Operational queue counts (Task Management rules: archivedAt null, City Beauty excluded). */
+export type ImportRunQueueSnapshot = {
+  needsAction: number;
+  assigned: number;
+  inProgress: number;
+  awaitingDropOff: number;
+  needsReview: number;
+  itReview: number;
+  completed: number;
+  archived: number;
+};
+
+/** Phase 4C.3 — import impact visibility stored in summaryJson. */
+export type ImportRunImpactSummary = {
+  queueSnapshots: {
+    before: ImportRunQueueSnapshot;
+    after: ImportRunQueueSnapshot;
+  };
+  needsActionDelta: number;
+  /** Unique City Beauty orders processed in this import file. */
+  cityBeautyRowsInFile: number;
+  /** Aging imports only — unique orders flagged 5+ days. */
+  fivePlusRowsInFile?: number;
+  narrative: string;
+};
+
 export type ImportRunSummary = {
   /** Raw CSV data rows (before per-document aggregation). */
   totalRows: number;
@@ -102,4 +128,6 @@ export type ImportRunSummary = {
   presencePresent: number;
   /** Awaiting Drop-Off reevaluation after presence reconcile (Phase 4C.2a). */
   reevaluation?: ImportRunReevaluationSummary;
+  /** Phase 4C.3a — queue snapshots and plain-English impact explanation. */
+  impact?: ImportRunImpactSummary;
 };

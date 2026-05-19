@@ -7,8 +7,12 @@ import { parseAndAggregateAgingCsv } from "./parse-aging";
 import { parseNetSuiteRow } from "./parse-netsuite";
 import { normalizeDocumentNumber } from "./normalize";
 import { getColumnValue } from "./csv";
+import {
+  buildImportRunImpact,
+  snapshotOperationalQueueCounts,
+} from "./import-impact-service";
 import { reevaluateAfterImport } from "./import-reevaluation-service";
-import type { ImportRunSummary, NormalizedNetSuiteRow } from "./types";
+import type { AggregatedAgingOrder, ImportRunSummary, NormalizedNetSuiteRow } from "./types";
 
 // TODO(import-queue-reevaluation): assigned warnings, stale awaiting deadline → Needs Review (see drop-off-check.ts).
 
@@ -187,7 +191,11 @@ export async function executeImport(
   let parsedRows = 0;
   let skippedRows = 0;
   let errorRows = 0;
+  let cityBeautyRowsInFile = 0;
+  let fivePlusRowsInFile: number | undefined;
   const presentDocs = new Set<string>();
+
+  const queueBefore = await snapshotOperationalQueueCounts(prisma);
 
   try {
     if (input.sourceReportType === "NETSUITE_REPORT") {
@@ -212,6 +220,7 @@ export async function executeImport(
 
         const match = result.data;
         parsedRows++;
+        if (match.isCityBeauty) cityBeautyRowsInFile++;
         presentDocs.add(match.documentNumberNormalized);
         const { orderId, caseId, created } = await upsertNetSuiteOrder(
           prisma,
@@ -261,8 +270,11 @@ export async function executeImport(
         rowsByDoc.get(doc)!.push(i + 1);
       });
 
+      fivePlusRowsInFile = aggregated.filter((a) => a.agingIsFivePlus).length;
+
       for (const agg of aggregated) {
         parsedRows++;
+        if (agg.isCityBeauty) cityBeautyRowsInFile++;
         presentDocs.add(agg.documentNumberNormalized);
         const { orderId, caseId, created } = await upsertAgingOrder(
           prisma,
@@ -312,7 +324,9 @@ export async function executeImport(
       actorId: input.importedById,
     });
 
-    const summary: ImportRunSummary = {
+    const queueAfter = await snapshotOperationalQueueCounts(prisma);
+
+    const summaryWithoutImpact: ImportRunSummary = {
       totalRows: rawRows.length,
       createdOrders,
       updatedOrders,
@@ -322,6 +336,19 @@ export async function executeImport(
       droppedOrders,
       presencePresent: presentDocs.size,
       reevaluation,
+    };
+
+    const impact = buildImportRunImpact({
+      queueBefore,
+      queueAfter,
+      cityBeautyRowsInFile,
+      fivePlusRowsInFile,
+      summary: summaryWithoutImpact,
+    });
+
+    const summary: ImportRunSummary = {
+      ...summaryWithoutImpact,
+      impact,
     };
 
     await prisma.wodIvcsImportRun.update({
