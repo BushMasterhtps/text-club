@@ -83,6 +83,7 @@ export function WodIvcsV2Phase1Section() {
           queue={selectedQueue}
           globalSearchQuery={globalSearchQuery}
           searchNonce={searchNonce}
+          refreshKey={queueRefreshKey}
           onMutated={refreshQueues}
         />
       )}

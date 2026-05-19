@@ -28,6 +28,8 @@ type Props = {
   queue: WodIvcsOperationalQueueKey;
   globalSearchQuery: string;
   searchNonce: number;
+  /** Bumped after import / board refresh so the list reloads with updated counts. */
+  refreshKey?: number;
   onMutated: () => void;
 };
 
@@ -35,6 +37,7 @@ export function WodIvcsQueueDetailPanel({
   queue,
   globalSearchQuery,
   searchNonce,
+  refreshKey = 0,
   onMutated,
 }: Props) {
   const isGlobalSearch = globalSearchQuery.length > 0;
@@ -160,7 +163,7 @@ export function WodIvcsQueueDetailPanel({
   useEffect(() => {
     clearSelection();
     loadOrders();
-  }, [queue, loadOrders, clearSelection, searchNonce, page]);
+  }, [queue, loadOrders, clearSelection, searchNonce, page, refreshKey]);
 
   const selectedIds = useMemo(() => Array.from(selected), [selected]);
 

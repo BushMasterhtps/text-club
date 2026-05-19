@@ -96,6 +96,10 @@ function ReevaluationSection({ reeval }: { reeval: ImportRunReevaluationSummary 
       label: "Dropped without action (archived)",
       value: reeval.movedNeedsActionToArchived || reeval.droppedWithoutAction,
     },
+    {
+      label: "Stale Awaiting Drop-Off → Needs Review",
+      value: reeval.awaitingDropOffMovedToNeedsReview,
+    },
   ];
 
   const skipRows: Array<{ label: string; value: number }> = [];
@@ -121,6 +125,24 @@ function ReevaluationSection({ reeval }: { reeval: ImportRunReevaluationSummary 
     skipRows.push({
       label: "Skipped (not fully dropped)",
       value: reeval.skippedNeedsActionNotFullyDropped,
+    });
+  }
+  if (reeval.skippedAwaitingDropOffNoDeadline > 0) {
+    skipRows.push({
+      label: "Skipped (no drop-off deadline)",
+      value: reeval.skippedAwaitingDropOffNoDeadline,
+    });
+  }
+  if (reeval.skippedAwaitingDropOffNotPastDeadline > 0) {
+    skipRows.push({
+      label: "Skipped (deadline not passed)",
+      value: reeval.skippedAwaitingDropOffNotPastDeadline,
+    });
+  }
+  if (reeval.skippedAwaitingDropOffCityBeauty > 0) {
+    skipRows.push({
+      label: "Skipped (City Beauty, stale drop-off)",
+      value: reeval.skippedAwaitingDropOffCityBeauty,
     });
   }
 

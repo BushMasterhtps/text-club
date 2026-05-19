@@ -14,6 +14,7 @@ type ImportReevaluationSummary = {
   noAutomaticChange?: number;
   droppedWithoutAction?: number;
   movedNeedsActionToArchived?: number;
+  awaitingDropOffMovedToNeedsReview?: number;
 };
 
 type ImportImpactSummary = {
@@ -179,6 +180,13 @@ function formatImportResultMessage(summary: ImportSummary): {
   if (archivedWithoutAction > 0) {
     parts.push(
       `Dropped without action: ${archivedWithoutAction} archived`
+    );
+  }
+
+  const staleAwaitingDropOff = reeval?.awaitingDropOffMovedToNeedsReview ?? 0;
+  if (staleAwaitingDropOff > 0) {
+    parts.push(
+      `Stale Awaiting Drop-Off: ${staleAwaitingDropOff} moved to Needs Review`
     );
   }
 

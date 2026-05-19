@@ -115,6 +115,13 @@ export function buildImportImpactNarrative(input: {
     );
   }
 
+  const staleMoved = input.reevaluation?.awaitingDropOffMovedToNeedsReview ?? 0;
+  if (staleMoved > 0) {
+    parts.push(
+      `${staleMoved} Awaiting Drop-Off order${staleMoved === 1 ? "" : "s"} passed their deadline and were moved to Needs Review.`
+    );
+  }
+
   const dropOffConfirmed = input.reevaluation?.dropOffConfirmed ?? 0;
   if (dropOffConfirmed > 0) {
     const detail: string[] = [];

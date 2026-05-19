@@ -7,6 +7,10 @@ import type {
   WodIvcsWorkflowDropOffBehavior,
 } from "@prisma/client";
 import { isCityBeautyDocumentNumber } from "./city-beauty";
+import {
+  isStillPresentOnParticipatingReports,
+  shouldPromoteToNeedsReview,
+} from "./drop-off-check";
 import { isWodIvcsV2Enabled } from "./feature-flag";
 import type { ImportRunReevaluationSummary } from "./types";
 
@@ -21,6 +25,8 @@ export type OrderForDropOffCheck = {
   droppedFromNetSuiteAt: Date | null;
   droppedFromAgingAt: Date | null;
   assignedToId: string | null;
+  awaitingDropOffStartedAt: Date | null;
+  awaitingDropOffDeadlineAt: Date | null;
   cases: Array<{ sourceReportType: WodIvcsSourceReportType }>;
 };
 
@@ -210,7 +216,55 @@ function emptyReevaluationSummary(): ImportRunReevaluationSummary {
     skippedNeedsActionAssigned: 0,
     skippedNeedsActionCityBeauty: 0,
     skippedNeedsActionNoRequiredReports: 0,
+    awaitingDropOffStaleChecked: 0,
+    awaitingDropOffMovedToNeedsReview: 0,
+    skippedAwaitingDropOffNoDeadline: 0,
+    skippedAwaitingDropOffNotPastDeadline: 0,
+    skippedAwaitingDropOffFullyDropped: 0,
+    skippedAwaitingDropOffCityBeauty: 0,
+    skippedAwaitingDropOffNoRequiredReports: 0,
   };
+}
+
+async function writeStaleAwaitingDropOffQueueChanged(
+  tx: Prisma.TransactionClient,
+  input: {
+    orderId: string;
+    actorId: string;
+    importRunId: string;
+    sourceReportType: WodIvcsSourceReportType;
+    order: OrderForDropOffCheck;
+    requiredReports: WodIvcsSourceReportType[];
+  }
+) {
+  await tx.wodIvcsActionEvent.create({
+    data: {
+      orderId: input.orderId,
+      importRunId: input.importRunId,
+      actorId: input.actorId,
+      actionType: "QUEUE_CHANGED",
+      fromQueue: "AWAITING_DROP_OFF",
+      toQueue: "NEEDS_REVIEW",
+      payloadJson: {
+        reason: "IMPORT_REEVALUATION",
+        subreason: "AWAITING_DROP_OFF_STALE",
+        importRunId: input.importRunId,
+        sourceReportType: input.sourceReportType,
+        previousQueue: "AWAITING_DROP_OFF",
+        targetQueue: "NEEDS_REVIEW",
+        presenceNetSuite: input.order.presenceNetSuite,
+        presenceAging: input.order.presenceAging,
+        requiredReports: input.requiredReports,
+        awaitingDropOffStartedAt:
+          input.order.awaitingDropOffStartedAt?.toISOString() ?? null,
+        awaitingDropOffDeadlineAt:
+          input.order.awaitingDropOffDeadlineAt?.toISOString() ?? null,
+        droppedFromNetSuiteAt: input.order.droppedFromNetSuiteAt?.toISOString() ?? null,
+        droppedFromAgingAt: input.order.droppedFromAgingAt?.toISOString() ?? null,
+        documentNumber: input.order.documentNumber,
+      },
+    },
+  });
 }
 
 const AGENT_TOUCH_ACTION_TYPES = ["AGENT_WORK_STARTED", "WORKFLOW_SUBMITTED"] as const;
@@ -425,7 +479,7 @@ export async function reevaluateNeedsActionDroppedWithoutActionAfterImport(
   return summary;
 }
 
-/** Post-import queue reevaluation (Awaiting Drop-Off + Needs Action dropped-without-action). */
+/** Post-import queue reevaluation (drop-off, stale Awaiting Drop-Off, Needs Action archive). */
 export async function reevaluateAfterImport(
   prisma: PrismaClient,
   input: {
@@ -447,8 +501,9 @@ export async function reevaluateAfterImport(
 }
 
 /**
- * After presence reconcile, confirm Awaiting Drop-Off orders that dropped from all participating
- * reports and apply dropOffBehavior from the latest workflow submission's matched routing rule.
+ * After presence reconcile, for AWAITING_DROP_OFF orders:
+ * 1) Confirm drop-off from all participating reports → apply dropOffBehavior.
+ * 2) Else if past awaitingDropOffDeadlineAt and still PRESENT on a participating report → NEEDS_REVIEW.
  */
 export async function reevaluateAwaitingDropOffAfterImport(
   prisma: PrismaClient,
@@ -482,6 +537,8 @@ export async function reevaluateAwaitingDropOffAfterImport(
       droppedFromNetSuiteAt: true,
       droppedFromAgingAt: true,
       assignedToId: true,
+      awaitingDropOffStartedAt: true,
+      awaitingDropOffDeadlineAt: true,
       cases: { select: { sourceReportType: true } },
     },
   });
@@ -491,17 +548,87 @@ export async function reevaluateAwaitingDropOffAfterImport(
 
     if (isCityBeautyExcludedFromReevaluation(order)) {
       summary.skippedCityBeauty++;
+      summary.skippedAwaitingDropOffCityBeauty++;
       continue;
     }
 
     const { confirmed, requiredReports } = hasConfirmedDropOff(order);
     if (requiredReports.length === 0) {
       summary.skippedNoRequiredReports++;
+      summary.skippedAwaitingDropOffNoRequiredReports++;
       continue;
     }
 
     if (!confirmed) {
-      summary.skippedNotFullyDropped++;
+      summary.awaitingDropOffStaleChecked++;
+
+      if (!order.awaitingDropOffDeadlineAt) {
+        summary.skippedAwaitingDropOffNoDeadline++;
+        summary.skippedNotFullyDropped++;
+        continue;
+      }
+
+      if (now.getTime() <= order.awaitingDropOffDeadlineAt.getTime()) {
+        summary.skippedAwaitingDropOffNotPastDeadline++;
+        summary.skippedNotFullyDropped++;
+        continue;
+      }
+
+      const stillPresent = isStillPresentOnParticipatingReports({
+        presenceNetSuite: order.presenceNetSuite,
+        presenceAging: order.presenceAging,
+        requiredReports,
+      });
+
+      if (
+        !shouldPromoteToNeedsReview({
+          operationalQueue: order.operationalQueue,
+          awaitingDropOffDeadlineAt: order.awaitingDropOffDeadlineAt,
+          stillPresentOnRelevantReport: stillPresent,
+          now,
+        })
+      ) {
+        summary.skippedNotFullyDropped++;
+        continue;
+      }
+
+      const staleMoved = await prisma.$transaction(async (tx) => {
+        const current = await tx.wodIvcsOrder.findUnique({
+          where: { id: order.id },
+          select: { operationalQueue: true, operationalStatus: true, archivedAt: true },
+        });
+        if (
+          !current ||
+          current.operationalQueue !== "AWAITING_DROP_OFF" ||
+          current.archivedAt != null ||
+          current.operationalStatus !== "OPEN"
+        ) {
+          return false;
+        }
+
+        await tx.wodIvcsOrder.update({
+          where: { id: order.id },
+          data: {
+            operationalQueue: "NEEDS_REVIEW",
+            operationalStatus: "OPEN",
+          },
+        });
+
+        await writeStaleAwaitingDropOffQueueChanged(tx, {
+          orderId: order.id,
+          actorId: input.actorId,
+          importRunId: input.importRunId,
+          sourceReportType: input.sourceReportType,
+          order,
+          requiredReports,
+        });
+
+        return true;
+      });
+
+      if (staleMoved) {
+        summary.awaitingDropOffMovedToNeedsReview++;
+      }
       continue;
     }
 

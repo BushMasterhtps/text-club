@@ -86,6 +86,14 @@ export type ImportRunReevaluationSummary = {
   skippedNeedsActionAssigned: number;
   skippedNeedsActionCityBeauty: number;
   skippedNeedsActionNoRequiredReports: number;
+  /** Phase 4C.2c — stale Awaiting Drop-Off past deadline, still on report(s). */
+  awaitingDropOffStaleChecked: number;
+  awaitingDropOffMovedToNeedsReview: number;
+  skippedAwaitingDropOffNoDeadline: number;
+  skippedAwaitingDropOffNotPastDeadline: number;
+  skippedAwaitingDropOffFullyDropped: number;
+  skippedAwaitingDropOffCityBeauty: number;
+  skippedAwaitingDropOffNoRequiredReports: number;
 };
 
 /** Operational queue counts (Task Management rules: archivedAt null, City Beauty excluded). */

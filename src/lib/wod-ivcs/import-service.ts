@@ -14,7 +14,7 @@ import {
 import { reevaluateAfterImport } from "./import-reevaluation-service";
 import type { AggregatedAgingOrder, ImportRunSummary, NormalizedNetSuiteRow } from "./types";
 
-// TODO(import-queue-reevaluation): assigned warnings, stale awaiting deadline → Needs Review (see drop-off-check.ts).
+// TODO(import-queue-reevaluation): assigned warnings after import.
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
