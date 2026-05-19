@@ -77,6 +77,15 @@ export type ImportRunReevaluationSummary = {
   skippedMissingRule: number;
   skippedNotFullyDropped: number;
   skippedNoRequiredReports: number;
+  /** Phase 4C.2b — Needs Action dropped from all participating reports, no agent work. */
+  needsActionChecked: number;
+  droppedWithoutAction: number;
+  movedNeedsActionToArchived: number;
+  skippedNeedsActionNotFullyDropped: number;
+  skippedNeedsActionTouchedByAgent: number;
+  skippedNeedsActionAssigned: number;
+  skippedNeedsActionCityBeauty: number;
+  skippedNeedsActionNoRequiredReports: number;
 };
 
 export type ImportRunSummary = {

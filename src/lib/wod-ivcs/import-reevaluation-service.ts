@@ -202,7 +202,248 @@ function emptyReevaluationSummary(): ImportRunReevaluationSummary {
     skippedMissingRule: 0,
     skippedNotFullyDropped: 0,
     skippedNoRequiredReports: 0,
+    needsActionChecked: 0,
+    droppedWithoutAction: 0,
+    movedNeedsActionToArchived: 0,
+    skippedNeedsActionNotFullyDropped: 0,
+    skippedNeedsActionTouchedByAgent: 0,
+    skippedNeedsActionAssigned: 0,
+    skippedNeedsActionCityBeauty: 0,
+    skippedNeedsActionNoRequiredReports: 0,
   };
+}
+
+const AGENT_TOUCH_ACTION_TYPES = ["AGENT_WORK_STARTED", "WORKFLOW_SUBMITTED"] as const;
+
+async function loadOrderIdsTouchedByAgent(
+  prisma: PrismaClient,
+  orderIds: string[]
+): Promise<Set<string>> {
+  const touched = new Set<string>();
+  if (orderIds.length === 0) return touched;
+
+  const [submissions, events] = await Promise.all([
+    prisma.wodIvcsWorkflowSubmission.findMany({
+      where: { orderId: { in: orderIds } },
+      select: { orderId: true },
+    }),
+    prisma.wodIvcsActionEvent.findMany({
+      where: {
+        orderId: { in: orderIds },
+        actionType: { in: [...AGENT_TOUCH_ACTION_TYPES] },
+      },
+      select: { orderId: true },
+    }),
+  ]);
+
+  for (const s of submissions) touched.add(s.orderId);
+  for (const e of events) touched.add(e.orderId);
+  return touched;
+}
+
+async function writeDroppedWithoutActionQueueChanged(
+  tx: Prisma.TransactionClient,
+  input: {
+    orderId: string;
+    actorId: string;
+    importRunId: string;
+    sourceReportType: WodIvcsSourceReportType;
+    order: OrderForDropOffCheck;
+    requiredReports: WodIvcsSourceReportType[];
+  }
+) {
+  await tx.wodIvcsActionEvent.create({
+    data: {
+      orderId: input.orderId,
+      importRunId: input.importRunId,
+      actorId: input.actorId,
+      actionType: "QUEUE_CHANGED",
+      fromQueue: "NEEDS_ACTION",
+      toQueue: "ARCHIVED",
+      payloadJson: {
+        reason: "IMPORT_REEVALUATION",
+        subreason: "DROPPED_WITHOUT_ACTION",
+        importRunId: input.importRunId,
+        sourceReportType: input.sourceReportType,
+        previousQueue: "NEEDS_ACTION",
+        targetQueue: "ARCHIVED",
+        presenceNetSuite: input.order.presenceNetSuite,
+        presenceAging: input.order.presenceAging,
+        requiredReports: input.requiredReports,
+        droppedFromNetSuiteAt: input.order.droppedFromNetSuiteAt?.toISOString() ?? null,
+        droppedFromAgingAt: input.order.droppedFromAgingAt?.toISOString() ?? null,
+        documentNumber: input.order.documentNumber,
+        hadWorkflowSubmission: false,
+        hadAgentStart: false,
+      },
+    },
+  });
+}
+
+/**
+ * Archive untouched Needs Action orders that dropped from all participating reports.
+ */
+export async function reevaluateNeedsActionDroppedWithoutActionAfterImport(
+  prisma: PrismaClient,
+  input: {
+    importRunId: string;
+    sourceReportType: WodIvcsSourceReportType;
+    actorId: string;
+  }
+): Promise<Pick<
+  ImportRunReevaluationSummary,
+  | "needsActionChecked"
+  | "droppedWithoutAction"
+  | "movedNeedsActionToArchived"
+  | "skippedNeedsActionNotFullyDropped"
+  | "skippedNeedsActionTouchedByAgent"
+  | "skippedNeedsActionAssigned"
+  | "skippedNeedsActionCityBeauty"
+  | "skippedNeedsActionNoRequiredReports"
+>> {
+  const summary = {
+    needsActionChecked: 0,
+    droppedWithoutAction: 0,
+    movedNeedsActionToArchived: 0,
+    skippedNeedsActionNotFullyDropped: 0,
+    skippedNeedsActionTouchedByAgent: 0,
+    skippedNeedsActionAssigned: 0,
+    skippedNeedsActionCityBeauty: 0,
+    skippedNeedsActionNoRequiredReports: 0,
+  };
+
+  if (!isWodIvcsV2Enabled()) {
+    return summary;
+  }
+
+  const now = new Date();
+
+  const orders = await prisma.wodIvcsOrder.findMany({
+    where: {
+      operationalQueue: "NEEDS_ACTION",
+      archivedAt: null,
+    },
+    select: {
+      id: true,
+      documentNumber: true,
+      documentNumberNormalized: true,
+      isCityBeauty: true,
+      operationalQueue: true,
+      presenceNetSuite: true,
+      presenceAging: true,
+      droppedFromNetSuiteAt: true,
+      droppedFromAgingAt: true,
+      assignedToId: true,
+      cases: { select: { sourceReportType: true } },
+    },
+  });
+
+  const touchedByAgent = await loadOrderIdsTouchedByAgent(
+    prisma,
+    orders.map((o) => o.id)
+  );
+
+  for (const order of orders) {
+    summary.needsActionChecked++;
+
+    if (order.operationalQueue !== "NEEDS_ACTION") {
+      continue;
+    }
+
+    if (isCityBeautyExcludedFromReevaluation(order)) {
+      summary.skippedNeedsActionCityBeauty++;
+      continue;
+    }
+
+    if (order.assignedToId != null) {
+      summary.skippedNeedsActionAssigned++;
+      continue;
+    }
+
+    if (touchedByAgent.has(order.id)) {
+      summary.skippedNeedsActionTouchedByAgent++;
+      continue;
+    }
+
+    const { confirmed, requiredReports } = hasConfirmedDropOff(order);
+    if (requiredReports.length === 0) {
+      summary.skippedNeedsActionNoRequiredReports++;
+      continue;
+    }
+
+    if (!confirmed) {
+      summary.skippedNeedsActionNotFullyDropped++;
+      continue;
+    }
+
+    const moved = await prisma.$transaction(async (tx) => {
+      const current = await tx.wodIvcsOrder.findUnique({
+        where: { id: order.id },
+        select: {
+          operationalQueue: true,
+          assignedToId: true,
+          archivedAt: true,
+        },
+      });
+      if (
+        !current ||
+        current.operationalQueue !== "NEEDS_ACTION" ||
+        current.archivedAt != null ||
+        current.assignedToId != null
+      ) {
+        return false;
+      }
+
+      await tx.wodIvcsOrder.update({
+        where: { id: order.id },
+        data: {
+          operationalQueue: "ARCHIVED",
+          operationalStatus: "ARCHIVED",
+          archivedAt: now,
+          ...(current.assignedToId != null ? { assignedToId: null } : {}),
+        },
+      });
+
+      await writeDroppedWithoutActionQueueChanged(tx, {
+        orderId: order.id,
+        actorId: input.actorId,
+        importRunId: input.importRunId,
+        sourceReportType: input.sourceReportType,
+        order,
+        requiredReports,
+      });
+
+      return true;
+    });
+
+    if (!moved) continue;
+
+    summary.droppedWithoutAction++;
+    summary.movedNeedsActionToArchived++;
+  }
+
+  return summary;
+}
+
+/** Post-import queue reevaluation (Awaiting Drop-Off + Needs Action dropped-without-action). */
+export async function reevaluateAfterImport(
+  prisma: PrismaClient,
+  input: {
+    importRunId: string;
+    sourceReportType: WodIvcsSourceReportType;
+    actorId: string;
+  }
+): Promise<ImportRunReevaluationSummary> {
+  if (!isWodIvcsV2Enabled()) {
+    return emptyReevaluationSummary();
+  }
+
+  const [dropOff, needsAction] = await Promise.all([
+    reevaluateAwaitingDropOffAfterImport(prisma, input),
+    reevaluateNeedsActionDroppedWithoutActionAfterImport(prisma, input),
+  ]);
+
+  return { ...dropOff, ...needsAction };
 }
 
 /**

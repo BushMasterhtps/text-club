@@ -12,6 +12,8 @@ type ImportReevaluationSummary = {
   movedToArchived?: number;
   movedToNeedsReview?: number;
   noAutomaticChange?: number;
+  droppedWithoutAction?: number;
+  movedNeedsActionToArchived?: number;
 };
 
 type ImportSummary = {
@@ -142,6 +144,14 @@ function formatImportResultMessage(summary: ImportSummary): string {
       reevalParts.push(`${reeval.noAutomaticChange} unchanged (no auto change)`);
     }
     parts.push(`Drop-off reevaluation: ${reevalParts.join(" · ")}`);
+  }
+
+  const archivedWithoutAction =
+    reeval?.movedNeedsActionToArchived ?? reeval?.droppedWithoutAction ?? 0;
+  if (archivedWithoutAction > 0) {
+    parts.push(
+      `Dropped without action: ${archivedWithoutAction} archived`
+    );
   }
 
   return parts.join(" · ");
