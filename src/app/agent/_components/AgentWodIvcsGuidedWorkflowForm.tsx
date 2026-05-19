@@ -13,12 +13,11 @@ import {
   buildPreviewAnswersPayload,
   canSubmitAgentWorkflow,
   CORE_STEP_ORDER,
-  filterFixTypeCatalogOptions,
   findMatchingAgentRoutingRule,
+  getFilteredCoreStepOptions,
   followUpAnswerKey,
   followUpNotesKey,
   getCoreSteps,
-  getStepOptions,
   isFollowUpQuestionVisible,
   pruneAnswersAfterCoreChange,
   pruneAnswersAfterRuleChange,
@@ -401,14 +400,11 @@ export function AgentWodIvcsGuidedWorkflowForm({
 
       <div className="space-y-4">
         {coreSteps.map((step) => {
-          const options =
-            step.slug === "fix_type"
-              ? filterFixTypeCatalogOptions(
-                  getStepOptions(step),
-                  active.routingRules,
-                  answers
-                )
-              : getStepOptions(step);
+          const options = getFilteredCoreStepOptions(
+            step,
+            active.routingRules,
+            answers
+          );
 
           const value = typeof answers[step.slug] === "string" ? answers[step.slug] : "";
 

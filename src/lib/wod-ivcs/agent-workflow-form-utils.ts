@@ -12,6 +12,7 @@ import {
 } from "./follow-up-questions";
 import {
   findBestMatchingRoutingRule,
+  isCatchAllRoutingRule,
   rulePartiallyMatchesAgentCorePath,
 } from "./routing-rule-match";
 
@@ -134,6 +135,104 @@ export function rulePartiallyMatchesCorePath(
   return rulePartiallyMatchesAgentCorePath(rule, answers);
 }
 
+type RuleDimensionOption = { id: string; value: string; label: string } | null;
+
+function collectOptionIdsFromRules(
+  routingRules: AgentRoutingRuleRef[],
+  getOption: (rule: AgentRoutingRuleRef) => RuleDimensionOption,
+  options?: {
+    skipCatchAll?: boolean;
+    partialMatchAnswers?: WorkflowAnswersState;
+  }
+): Set<string> {
+  const ids = new Set<string>();
+  for (const rule of routingRules) {
+    if (options?.skipCatchAll !== false && isCatchAllRoutingRule(rule)) continue;
+    if (
+      options?.partialMatchAnswers &&
+      !rulePartiallyMatchesCorePath(rule, options.partialMatchAnswers)
+    ) {
+      continue;
+    }
+    const opt = getOption(rule);
+    if (opt?.id) ids.add(opt.id);
+  }
+  return ids;
+}
+
+function filterCatalogOptionsByAllowedIds(
+  allOptions: AgentCatalogOption[],
+  allowedIds: Set<string>
+): AgentCatalogOption[] {
+  if (allowedIds.size === 0) return [];
+  return allOptions.filter((o) => allowedIds.has(o.id));
+}
+
+/** Root cause option IDs referenced by at least one active non-catch-all routing rule. */
+export function collectRootCauseOptionIdsFromRules(
+  routingRules: AgentRoutingRuleRef[]
+): Set<string> {
+  return collectOptionIdsFromRules(routingRules, (rule) => rule.rootCauseOption);
+}
+
+/**
+ * Root cause options limited to those used by the published routing matrix.
+ * Catalog labels/values are preserved; options not referenced by any active rule are hidden.
+ */
+export function filterRootCauseCatalogOptions(
+  allOptions: AgentCatalogOption[],
+  routingRules: AgentRoutingRuleRef[]
+): AgentCatalogOption[] {
+  return filterCatalogOptionsByAllowedIds(
+    allOptions,
+    collectRootCauseOptionIdsFromRules(routingRules)
+  );
+}
+
+/** Cash sale option IDs from rules that partially match the selected root cause path. */
+export function collectCashSaleExistsOptionIdsFromRules(
+  routingRules: AgentRoutingRuleRef[],
+  answers: WorkflowAnswersState
+): Set<string> {
+  return collectOptionIdsFromRules(routingRules, (rule) => rule.cashSaleExistsOption, {
+    partialMatchAnswers: answers,
+  });
+}
+
+export function filterCashSaleExistsCatalogOptions(
+  allOptions: AgentCatalogOption[],
+  routingRules: AgentRoutingRuleRef[],
+  answers: WorkflowAnswersState
+): AgentCatalogOption[] {
+  if (!answerString(answers.root_cause)) return [];
+  return filterCatalogOptionsByAllowedIds(
+    allOptions,
+    collectCashSaleExistsOptionIdsFromRules(routingRules, answers)
+  );
+}
+
+/** Merchant option IDs from rules that partially match root cause / cash sale path. */
+export function collectMerchantOptionIdsFromRules(
+  routingRules: AgentRoutingRuleRef[],
+  answers: WorkflowAnswersState
+): Set<string> {
+  return collectOptionIdsFromRules(routingRules, (rule) => rule.merchantOption, {
+    partialMatchAnswers: answers,
+  });
+}
+
+export function filterMerchantCatalogOptions(
+  allOptions: AgentCatalogOption[],
+  routingRules: AgentRoutingRuleRef[],
+  answers: WorkflowAnswersState
+): AgentCatalogOption[] {
+  if (!answerString(answers.root_cause)) return [];
+  return filterCatalogOptionsByAllowedIds(
+    allOptions,
+    collectMerchantOptionIdsFromRules(routingRules, answers)
+  );
+}
+
 /** Collect fix-type values from routing rules that match the current partial core path. */
 export function collectFixTypeValuesFromRules(
   routingRules: AgentRoutingRuleRef[],
@@ -149,21 +248,41 @@ export function collectFixTypeValuesFromRules(
 }
 
 /**
- * Filter fix-type catalog options using published routing rules.
- * Falls back to full catalog when filtering would hide everything.
+ * Filter fix-type catalog options using published routing rules for the partial core path.
+ * Does not fall back to the full catalog when no rules match (avoids showing invalid fix types).
  */
 export function filterFixTypeCatalogOptions(
   allOptions: AgentCatalogOption[],
   routingRules: AgentRoutingRuleRef[],
   answers: WorkflowAnswersState
 ): AgentCatalogOption[] {
-  if (!answerString(answers.root_cause)) return allOptions;
+  if (!answerString(answers.root_cause)) return [];
 
   const allowed = collectFixTypeValuesFromRules(routingRules, answers);
-  if (allowed.size === 0) return allOptions;
+  if (allowed.size === 0) return [];
 
-  const filtered = allOptions.filter((o) => allowed.has(o.value));
-  return filtered.length > 0 ? filtered : allOptions;
+  return allOptions.filter((o) => allowed.has(o.value));
+}
+
+/** Core step options filtered by the active published routing matrix. */
+export function getFilteredCoreStepOptions(
+  step: AgentWorkflowStep,
+  routingRules: AgentRoutingRuleRef[],
+  answers: WorkflowAnswersState
+): AgentCatalogOption[] {
+  const allOptions = getStepOptions(step);
+  switch (step.slug) {
+    case "root_cause":
+      return filterRootCauseCatalogOptions(allOptions, routingRules);
+    case "cash_sale_exists":
+      return filterCashSaleExistsCatalogOptions(allOptions, routingRules, answers);
+    case "merchant":
+      return filterMerchantCatalogOptions(allOptions, routingRules, answers);
+    case "fix_type":
+      return filterFixTypeCatalogOptions(allOptions, routingRules, answers);
+    default:
+      return allOptions;
+  }
 }
 
 export function isFollowUpQuestionVisible(
