@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/app/_components/Card";
 import { SmallButton } from "@/app/_components/SmallButton";
+import { formatImportRunImpactCompactLine } from "@/lib/wod-ivcs/import-impact-service";
+import { WodIvcsImportRunDetailModal } from "./WodIvcsImportRunDetailModal";
 import { WodIvcsReversalPreviewModal } from "./WodIvcsReversalPreviewModal";
 import type { WodIvcsImportRun, WodIvcsReversalPreview } from "./wod-ivcs-import-types";
 
@@ -27,6 +29,7 @@ function RunStatusBadge({ status }: { status: string }) {
 export function WodIvcsImportHistoryPanel() {
   const [runs, setRuns] = useState<WodIvcsImportRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [detailRun, setDetailRun] = useState<WodIvcsImportRun | null>(null);
   const [reversalRun, setReversalRun] = useState<WodIvcsImportRun | null>(null);
   const [reversalPreview, setReversalPreview] = useState<WodIvcsReversalPreview | null>(null);
   const [reversalLoading, setReversalLoading] = useState(false);
@@ -109,7 +112,7 @@ export function WodIvcsImportHistoryPanel() {
           <div>
             <h3 className="text-lg font-semibold text-white">Import history & reversal</h3>
             <p className="text-sm text-white/50 mt-1">
-              Use this area to review import runs and reverse a specific run if needed.
+              Review import impact summaries and reverse a specific run if needed.
             </p>
           </div>
           <SmallButton onClick={loadRuns} disabled={loading} className="bg-white/10 hover:bg-white/20">
@@ -144,37 +147,60 @@ export function WodIvcsImportHistoryPanel() {
                   </td>
                 </tr>
               )}
-              {runs.map((r) => (
-                <tr key={r.id} className="hover:bg-white/[0.03]">
-                  <td className="px-3 py-2">{new Date(r.createdAt).toLocaleString()}</td>
-                  <td className="px-3 py-2">
-                    {r.sourceReportType === "NETSUITE_REPORT" ? "NetSuite" : "Aging"}
-                  </td>
-                  <td className="px-3 py-2 max-w-[200px] truncate" title={r.fileName}>
-                    {r.fileName}
-                  </td>
-                  <td className="px-3 py-2">
-                    <RunStatusBadge status={r.status} />
-                  </td>
-                  <td className="px-3 py-2">
-                    {r.createdOrders}/{r.updatedOrders} ({r.errorRows} err)
-                  </td>
-                  <td className="px-3 py-2">
-                    {r.status === "COMPLETED" && (
-                      <SmallButton
-                        onClick={() => openReversalPreview(r)}
-                        className="bg-red-600/80 hover:bg-red-700 text-xs"
-                      >
-                        Reverse
-                      </SmallButton>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {runs.map((r) => {
+                const impactLine =
+                  r.impactCompact != null
+                    ? formatImportRunImpactCompactLine(r.impactCompact)
+                    : null;
+                return (
+                  <tr key={r.id} className="hover:bg-white/[0.03]">
+                    <td className="px-3 py-2 align-top">{new Date(r.createdAt).toLocaleString()}</td>
+                    <td className="px-3 py-2 align-top">
+                      {r.sourceReportType === "NETSUITE_REPORT" ? "NetSuite" : "Aging"}
+                    </td>
+                    <td className="px-3 py-2 align-top max-w-[220px]">
+                      <div className="truncate" title={r.fileName}>
+                        {r.fileName}
+                      </div>
+                      {impactLine && (
+                        <p className="text-xs text-sky-200/80 mt-1 leading-snug">{impactLine}</p>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      <RunStatusBadge status={r.status} />
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      {r.createdOrders}/{r.updatedOrders} ({r.errorRows} err)
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      <div className="flex flex-col gap-1.5 items-end">
+                        <SmallButton
+                          onClick={() => setDetailRun(r)}
+                          className="bg-white/10 hover:bg-white/20 text-xs"
+                        >
+                          View details
+                        </SmallButton>
+                        {r.status === "COMPLETED" && (
+                          <SmallButton
+                            onClick={() => openReversalPreview(r)}
+                            className="bg-red-600/80 hover:bg-red-700 text-xs"
+                          >
+                            Reverse
+                          </SmallButton>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </Card>
+
+      {detailRun && (
+        <WodIvcsImportRunDetailModal run={detailRun} onClose={() => setDetailRun(null)} />
+      )}
 
       {reversalRun && (
         <WodIvcsReversalPreviewModal

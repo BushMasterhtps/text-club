@@ -1,5 +1,12 @@
 /** Shared types for v2 import + reversal UI. */
 
+export type WodIvcsImportRunImpactCompact = {
+  needsActionBefore: number;
+  needsActionAfter: number;
+  needsActionDelta: number;
+  droppedWithoutAction: number;
+};
+
 export type WodIvcsImportRun = {
   id: string;
   sourceReportType: string;
@@ -11,6 +18,21 @@ export type WodIvcsImportRun = {
   updatedOrders: number;
   errorRows: number;
   createdAt: string;
+  impactCompact?: WodIvcsImportRunImpactCompact | null;
+};
+
+export type WodIvcsImportRunDetailRun = WodIvcsImportRun & {
+  summaryJson?: unknown;
+  skippedRows?: number;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  importedBy?: { id: string; name: string | null; email: string } | null;
+};
+
+export type WodIvcsImportRunDetail = {
+  run: WodIvcsImportRunDetailRun;
+  rowStats: Array<{ status: string; _count: { status: number } }>;
+  errorSamples: Array<{ rowNumber: number; errorMessage: string | null }>;
 };
 
 export type WodIvcsReversalPreviewOrder = {

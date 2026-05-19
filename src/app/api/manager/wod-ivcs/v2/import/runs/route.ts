@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiAuthDeniedResponse, requireManagerApiAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertWodIvcsV2Enabled } from "@/lib/wod-ivcs/api-guard";
+import { parseImportRunImpactCompact } from "@/lib/wod-ivcs/import-impact-service";
 
 export async function GET(request: NextRequest) {
   const disabled = assertWodIvcsV2Enabled();
@@ -24,7 +25,21 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: "desc" },
         take,
         skip,
-        include: {
+        select: {
+          id: true,
+          sourceReportType: true,
+          fileName: true,
+          status: true,
+          totalRows: true,
+          parsedRows: true,
+          createdOrders: true,
+          updatedOrders: true,
+          errorRows: true,
+          skippedRows: true,
+          summaryJson: true,
+          startedAt: true,
+          finishedAt: true,
+          createdAt: true,
           importedBy: { select: { id: true, name: true, email: true } },
         },
       }),
@@ -48,6 +63,7 @@ export async function GET(request: NextRequest) {
         finishedAt: r.finishedAt?.toISOString() ?? null,
         createdAt: r.createdAt.toISOString(),
         importedBy: r.importedBy,
+        impactCompact: parseImportRunImpactCompact(r.summaryJson),
       })),
     });
   } catch (error) {

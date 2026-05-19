@@ -183,3 +183,41 @@ export function buildImportRunImpact(input: {
 
   return { ...impactBase, narrative };
 }
+
+export type ImportRunImpactCompact = {
+  needsActionBefore: number;
+  needsActionAfter: number;
+  needsActionDelta: number;
+  droppedWithoutAction: number;
+};
+
+/** Compact impact line for import history list (from stored summaryJson). */
+export function parseImportRunImpactCompact(
+  summaryJson: unknown
+): ImportRunImpactCompact | null {
+  if (!summaryJson || typeof summaryJson !== "object") return null;
+  const summary = summaryJson as ImportRunSummary;
+  const impact = summary.impact;
+  if (!impact?.queueSnapshots?.before || !impact.queueSnapshots.after) return null;
+  return {
+    needsActionBefore: impact.queueSnapshots.before.needsAction,
+    needsActionAfter: impact.queueSnapshots.after.needsAction,
+    needsActionDelta: impact.needsActionDelta,
+    droppedWithoutAction:
+      summary.reevaluation?.movedNeedsActionToArchived ??
+      summary.reevaluation?.droppedWithoutAction ??
+      0,
+  };
+}
+
+export function formatImportRunImpactCompactLine(
+  compact: ImportRunImpactCompact
+): string {
+  const delta = compact.needsActionDelta;
+  const deltaStr = delta > 0 ? `(+${delta})` : delta < 0 ? `(${delta})` : "";
+  let line = `NA ${compact.needsActionBefore} → ${compact.needsActionAfter}${deltaStr ? ` ${deltaStr}` : ""}`;
+  if (compact.droppedWithoutAction > 0) {
+    line += ` · Dropped without action: ${compact.droppedWithoutAction}`;
+  }
+  return line;
+}
