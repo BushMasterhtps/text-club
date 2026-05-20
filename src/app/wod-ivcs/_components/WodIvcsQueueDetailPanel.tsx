@@ -22,10 +22,14 @@ import {
   defaultSortDirForField,
   type WodIvcsOrdersSortField,
 } from "@/lib/wod-ivcs/orders-list-sort";
+import type {
+  WodIvcsAgeBucket,
+  WodIvcsReportPresenceFilter,
+} from "@/lib/wod-ivcs/orders-list-query";
 import { PresenceBadge } from "./WodIvcsQueueUiBits";
 import { WodIvcsManagerOrderDetailModal } from "./WodIvcsManagerOrderDetailModal";
 
-type ReportSourceFilter = "" | "on_netsuite" | "on_aging";
+type ReportPresenceUi = "" | WodIvcsReportPresenceFilter;
 
 type SortState = {
   sortBy: WodIvcsOrdersSortField;
@@ -95,10 +99,12 @@ export function WodIvcsQueueDetailPanel({
   const [agentsLoading, setAgentsLoading] = useState(true);
 
   const [search, setSearch] = useState("");
-  const [fivePlus, setFivePlus] = useState(false);
+  const [ageBucket, setAgeBucket] = useState<WodIvcsAgeBucket>("all");
   const [unassignedOnly, setUnassignedOnly] = useState(false);
   const [assignedAgentFilter, setAssignedAgentFilter] = useState("");
-  const [reportSource, setReportSource] = useState<ReportSourceFilter>("");
+  const [reportPresence, setReportPresence] = useState<ReportPresenceUi>("");
+  const [orderDateFrom, setOrderDateFrom] = useState("");
+  const [orderDateTo, setOrderDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<SortState>(DEFAULT_WOD_IVCS_ORDERS_SORT);
 
@@ -110,14 +116,28 @@ export function WodIvcsQueueDetailPanel({
 
   const [detailId, setDetailId] = useState<string | null>(null);
 
+  /** Same rows that render a checkbox — indices must match useRangeSelection's items array. */
+  const selectableOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const rowConfig = queueConfig(order.operationalQueue as WodIvcsQueueKey);
+      return isGlobalSearch ? rowConfig.assignable : !config.readOnly;
+    });
+  }, [orders, isGlobalSearch, config.readOnly]);
+
+  const selectableIndexById = useMemo(() => {
+    const map = new Map<string, number>();
+    selectableOrders.forEach((order, index) => map.set(order.id, index));
+    return map;
+  }, [selectableOrders]);
+
   const {
     selected,
     selectedCount,
     toggleSelection,
     clearSelection,
+    selectAll: selectAllOnPage,
     isSelected,
-    setSelected,
-  } = useRangeSelection(orders, (o) => o.id);
+  } = useRangeSelection(selectableOrders, (o) => o.id);
 
   const loadAgents = useCallback(async () => {
     setAgentsLoading(true);
@@ -159,7 +179,7 @@ export function WodIvcsQueueDetailPanel({
         if (search.trim()) params.set("q", search.trim());
       }
 
-      if (fivePlus) params.set("fivePlus", "true");
+      if (ageBucket !== "all") params.set("ageBucket", ageBucket);
       if (assignedAgentFilter === "__unassigned__") {
         params.set("unassignedOnly", "true");
       } else if (assignedAgentFilter) {
@@ -167,7 +187,9 @@ export function WodIvcsQueueDetailPanel({
       } else if (unassignedOnly) {
         params.set("unassignedOnly", "true");
       }
-      if (reportSource) params.set("reportPresence", reportSource);
+      if (reportPresence) params.set("reportPresence", reportPresence);
+      if (orderDateFrom) params.set("orderDateFrom", orderDateFrom);
+      if (orderDateTo) params.set("orderDateTo", orderDateTo);
 
       const res = await fetch(`/api/manager/wod-ivcs/v2/orders?${params}`, { cache: "no-store" });
       const json = await res.json();
@@ -189,10 +211,12 @@ export function WodIvcsQueueDetailPanel({
   }, [
     queue,
     search,
-    fivePlus,
+    ageBucket,
     unassignedOnly,
     assignedAgentFilter,
-    reportSource,
+    reportPresence,
+    orderDateFrom,
+    orderDateTo,
     isGlobalSearch,
     globalSearchQuery,
     page,
@@ -215,9 +239,25 @@ export function WodIvcsQueueDetailPanel({
     loadAgents();
   }, [loadAgents]);
 
+  const applyFilters = () => {
+    clearSelection();
+    if (page === 1) void loadOrders();
+    else setPage(1);
+  };
+
   useEffect(() => {
     setPage(1);
-  }, [queue, search, fivePlus, unassignedOnly, assignedAgentFilter, reportSource, searchNonce]);
+    clearSelection();
+  }, [
+    queue,
+    ageBucket,
+    unassignedOnly,
+    assignedAgentFilter,
+    reportPresence,
+    orderDateFrom,
+    orderDateTo,
+    searchNonce,
+  ]);
 
   useEffect(() => {
     clearSelection();
@@ -331,11 +371,12 @@ export function WodIvcsQueueDetailPanel({
   };
 
   const toggleSelectAllPage = () => {
-    const allSelected = orders.length > 0 && orders.every((o) => isSelected(o.id));
+    const allSelected =
+      selectableOrders.length > 0 && selectableOrders.every((o) => isSelected(o.id));
     if (allSelected) {
       clearSelection();
     } else {
-      setSelected(new Set(orders.map((o) => o.id)));
+      selectAllOnPage();
     }
   };
 
@@ -378,10 +419,7 @@ export function WodIvcsQueueDetailPanel({
             />
           </label>
           <SmallButton
-            onClick={() => {
-              if (page === 1) void loadOrders();
-              else setPage(1);
-            }}
+            onClick={applyFilters}
             disabled={loading || busy}
             className="bg-blue-600 hover:bg-blue-700"
           >
@@ -390,73 +428,97 @@ export function WodIvcsQueueDetailPanel({
         </div>
         )}
 
-        <div className="flex flex-wrap gap-4 text-sm text-white/70">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={fivePlus}
-              onChange={(e) => {
-                setFivePlus(e.target.checked);
-                setPage(1);
-              }}
-              className="accent-red-500"
-            />
-            5+ day / urgent
+        <div className="flex flex-wrap gap-3 items-end">
+          <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[140px]">
+            Age
+            <select
+              value={ageBucket}
+              onChange={(e) => setAgeBucket(e.target.value as WodIvcsAgeBucket)}
+              className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
+            >
+              <option value="all">All ages</option>
+              <option value="0_1">0–1 days</option>
+              <option value="2_4">2–4 days</option>
+              <option value="5_plus">5+ days / urgent</option>
+            </select>
           </label>
-          <label className="flex items-center gap-2 cursor-pointer">
+
+          <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[180px] flex-1 max-w-xs">
+            Report presence
+            <select
+              value={reportPresence}
+              onChange={(e) => setReportPresence(e.target.value as ReportPresenceUi)}
+              className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
+            >
+              <option value="">All orders</option>
+              <option value="on_netsuite">On NetSuite</option>
+              <option value="on_aging">On Aging</option>
+              <option value="both">On both reports</option>
+              <option value="netsuite_only">NetSuite only</option>
+              <option value="aging_only">Aging only</option>
+              <option value="dropped_netsuite">Dropped from NetSuite</option>
+              <option value="dropped_aging">Dropped from Aging</option>
+              <option value="unknown_netsuite">Unknown NetSuite</option>
+              <option value="unknown_aging">Unknown Aging</option>
+            </select>
+          </label>
+
+          {queue !== "NEEDS_ACTION" && (
+            <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[160px] max-w-xs">
+              Assigned agent
+              <select
+                value={assignedAgentFilter}
+                onChange={(e) => setAssignedAgentFilter(e.target.value)}
+                disabled={agentsLoading}
+                className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
+              >
+                <option value="">All agents</option>
+                <option value="__unassigned__">Unassigned only</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name || a.email}
+                    {a.isLive === false ? " (inactive)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-white/70 pb-2 shrink-0">
             <input
               type="checkbox"
               checked={unassignedOnly}
-              onChange={(e) => {
-                setUnassignedOnly(e.target.checked);
-                setPage(1);
-              }}
+              onChange={(e) => setUnassignedOnly(e.target.checked)}
               className="accent-sky-500"
             />
             Unassigned only
           </label>
         </div>
 
-        <label className="flex flex-col gap-1 text-xs text-white/60 max-w-xs">
-          Report Source
-          <select
-            value={reportSource}
-            onChange={(e) => {
-              setReportSource(e.target.value as ReportSourceFilter);
-              setPage(1);
-            }}
-            className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
-          >
-            <option value="">All Orders</option>
-            <option value="on_netsuite">NetSuite Report</option>
-            <option value="on_aging">Aging Report</option>
-          </select>
-          <span className="text-white/40 font-normal">
-            Filter by which morning report the order appeared on.
-          </span>
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[200px] max-w-xs">
-          Assigned agent
-          <select
-            value={assignedAgentFilter}
-            onChange={(e) => {
-              setAssignedAgentFilter(e.target.value);
-              setPage(1);
-            }}
-            disabled={agentsLoading}
-            className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
-          >
-            <option value="">All agents</option>
-            <option value="__unassigned__">Unassigned only</option>
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name || a.email}
-                {a.isLive === false ? " (inactive)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="flex flex-wrap gap-3 items-end">
+          <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[140px]">
+            Date from
+            <input
+              type="date"
+              value={orderDateFrom}
+              onChange={(e) => setOrderDateFrom(e.target.value)}
+              className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm [color-scheme:dark]"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[140px]">
+            Date to
+            <input
+              type="date"
+              value={orderDateTo}
+              onChange={(e) => setOrderDateTo(e.target.value)}
+              className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm [color-scheme:dark]"
+            />
+          </label>
+          <p className="text-xs text-white/40 pb-2 max-w-md">
+            Filters by NetSuite report order date. Combine with Apply filters after changing search
+            text.
+          </p>
+        </div>
       </div>
 
       <WodIvcsBulkAssignBar
@@ -480,11 +542,14 @@ export function WodIvcsQueueDetailPanel({
           <thead className="bg-white/[0.04] text-white/60 text-left">
             <tr>
               <th className="px-3 py-2 w-10">
-                {(!config.readOnly || isGlobalSearch) && orders.length > 0 && (
+                {(!config.readOnly || isGlobalSearch) && selectableOrders.length > 0 && (
                   <input
                     type="checkbox"
                     className="accent-sky-500"
-                    checked={orders.length > 0 && orders.every((o) => isSelected(o.id))}
+                    checked={
+                      selectableOrders.length > 0 &&
+                      selectableOrders.every((o) => isSelected(o.id))
+                    }
                     onChange={toggleSelectAllPage}
                     disabled={busy}
                     aria-label="Select all on page"
@@ -542,7 +607,9 @@ export function WodIvcsQueueDetailPanel({
                         className="accent-sky-500"
                         checked={isSelected(order.id)}
                         onChange={() => {}}
-                        onClick={(e) => toggleSelection(order.id, index, e)}
+                        onClick={(e) =>
+                          toggleSelection(order.id, selectableIndexById.get(order.id)!, e)
+                        }
                         disabled={busy}
                       />
                     )}

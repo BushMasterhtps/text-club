@@ -1,9 +1,18 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+
+function eventHasShiftKey(
+  event?: React.MouseEvent | React.ChangeEvent<HTMLInputElement>
+): boolean {
+  if (!event) return false;
+  if ("shiftKey" in event && event.shiftKey) return true;
+  const native = event.nativeEvent;
+  return native instanceof MouseEvent && native.shiftKey;
+}
 
 /**
  * Custom hook for handling shift+click range selection
- * 
- * @param items Array of items with unique IDs
+ *
+ * @param items Array of items with unique IDs (current visible page)
  * @param getItemId Function to extract ID from an item
  * @returns Object with selection state and handlers
  */
@@ -13,45 +22,56 @@ export function useRangeSelection<T>(
 ) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastSelectedIndex = useRef<number | null>(null);
+  const itemsRef = useRef(items);
 
-  const toggleSelection = useCallback((itemId: string, index: number, event?: React.MouseEvent) => {
-    setSelected((prevSelected) => {
-      const newSelected = new Set(prevSelected);
-      
-      // If shift is held and we have a previous selection
-      if (event?.shiftKey && lastSelectedIndex.current !== null) {
-        const start = Math.min(lastSelectedIndex.current, index);
-        const end = Math.max(lastSelectedIndex.current, index);
-        
-        // Determine if we should select or deselect the range
-        // If the clicked item is already selected, we'll deselect the range
-        // Otherwise, we'll select the range
-        const clickedItemSelected = prevSelected.has(itemId);
-        
-        // Select/deselect all items in the range
-        for (let i = start; i <= end; i++) {
-          const id = getItemId(items[i]);
-          if (clickedItemSelected) {
-            newSelected.delete(id);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  const toggleSelection = useCallback(
+    (
+      itemId: string,
+      index: number,
+      event?: React.MouseEvent | React.ChangeEvent<HTMLInputElement>
+    ) => {
+      const shiftKey = eventHasShiftKey(event);
+      const anchorIndex = lastSelectedIndex.current;
+      const pageItems = itemsRef.current;
+
+      setSelected((prevSelected) => {
+        const newSelected = new Set(prevSelected);
+
+        if (shiftKey && anchorIndex !== null) {
+          const start = Math.min(anchorIndex, index);
+          const end = Math.max(anchorIndex, index);
+          const clickedItemSelected = prevSelected.has(itemId);
+
+          for (let i = start; i <= end; i++) {
+            const row = pageItems[i];
+            if (!row) continue;
+            const id = getItemId(row);
+            if (clickedItemSelected) {
+              newSelected.delete(id);
+            } else {
+              newSelected.add(id);
+            }
+          }
+        } else {
+          if (newSelected.has(itemId)) {
+            newSelected.delete(itemId);
           } else {
-            newSelected.add(id);
+            newSelected.add(itemId);
           }
         }
-      } else {
-        // Normal click - toggle single item
-        if (newSelected.has(itemId)) {
-          newSelected.delete(itemId);
-        } else {
-          newSelected.add(itemId);
-        }
-      }
-      
-      // Update last selected index
+
+        return newSelected;
+      });
+
+      // Anchor must update synchronously (Text Club pattern); do not defer to setState flush.
       lastSelectedIndex.current = index;
-      
-      return newSelected;
-    });
-  }, [items, getItemId]);
+    },
+    [getItemId]
+  );
 
   const clearSelection = useCallback(() => {
     setSelected(new Set());
@@ -59,12 +79,13 @@ export function useRangeSelection<T>(
   }, []);
 
   const selectAll = useCallback(() => {
-    const allIds = new Set(items.map(getItemId));
+    const pageItems = itemsRef.current;
+    const allIds = new Set(pageItems.map(getItemId));
     setSelected(allIds);
-    if (items.length > 0) {
-      lastSelectedIndex.current = items.length - 1;
+    if (pageItems.length > 0) {
+      lastSelectedIndex.current = pageItems.length - 1;
     }
-  }, [items, getItemId]);
+  }, [getItemId]);
 
   const deselectAll = useCallback(() => {
     setSelected(new Set());
@@ -87,5 +108,4 @@ export function useRangeSelection<T>(
     isSelected,
     setSelected, // Allow external control if needed
   };
-}
-
+};

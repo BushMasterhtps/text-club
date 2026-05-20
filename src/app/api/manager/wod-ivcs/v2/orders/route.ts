@@ -56,11 +56,32 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "INVALID_QUEUE") {
-      return NextResponse.json(
-        { success: false, error: "Invalid queue filter", code: "INVALID_QUERY" },
-        { status: 400 }
-      );
+    if (error instanceof Error) {
+      if (error.message === "INVALID_QUEUE") {
+        return NextResponse.json(
+          { success: false, error: "Invalid queue filter", code: "INVALID_QUERY" },
+          { status: 400 }
+        );
+      }
+      if (error.message === "INVALID_DATE") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Invalid order date filter. Use YYYY-MM-DD for orderDateFrom and orderDateTo.",
+            code: "INVALID_QUERY",
+          },
+          { status: 400 }
+        );
+      }
+      if (
+        error.message === "INVALID_AGE_BUCKET" ||
+        error.message === "INVALID_REPORT_PRESENCE"
+      ) {
+        return NextResponse.json(
+          { success: false, error: "Invalid filter parameter", code: "INVALID_QUERY" },
+          { status: 400 }
+        );
+      }
     }
     console.error("[wod-ivcs/v2/orders]", error);
     return NextResponse.json(

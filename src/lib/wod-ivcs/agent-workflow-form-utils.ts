@@ -101,6 +101,8 @@ const CONFIRMATION_STEP_SLUGS = new Set([
 
 export const CORE_STEP_ORDER = [...CORE_STEP_SLUGS] as const;
 
+type CoreStepSlug = (typeof CORE_STEP_ORDER)[number];
+
 export function isConfirmationStepSlug(slug: string): boolean {
   return CONFIRMATION_STEP_SLUGS.has(slug);
 }
@@ -110,8 +112,8 @@ export function getCoreSteps(active: AgentActiveWorkflow): AgentWorkflowStep[] {
     .filter((s) => (CORE_STEP_ORDER as readonly string[]).includes(s.slug))
     .sort(
       (a, b) =>
-        CORE_STEP_ORDER.indexOf(a.slug as (typeof CORE_STEP_ORDER)[number]) -
-        CORE_STEP_ORDER.indexOf(b.slug as (typeof CORE_STEP_ORDER)[number])
+        CORE_STEP_ORDER.indexOf(a.slug as CoreStepSlug) -
+        CORE_STEP_ORDER.indexOf(b.slug as CoreStepSlug)
     );
 }
 
@@ -137,42 +139,134 @@ export function rulePartiallyMatchesCorePath(
 
 type RuleDimensionOption = { id: string; value: string; label: string } | null;
 
-function collectOptionIdsFromRules(
+function ruleDimensionValue(opt: RuleDimensionOption): string | null {
+  const v = opt?.value?.trim();
+  return v ? v : null;
+}
+
+/**
+ * True when upstream routing dimensions (before targetStep) match agent answers.
+ * Unset rule dimensions (manager "Any") are wildcards and are not compared.
+ * Agent answers are catalog option values (see SelectField value={o.value}).
+ */
+export function ruleMatchesUpstreamBeforeTargetStep(
+  rule: AgentRoutingRuleRef,
+  answers: WorkflowAnswersState,
+  targetStep: CoreStepSlug
+): boolean {
+  if (isCatchAllRoutingRule(rule)) return false;
+
+  const rootExpected = ruleDimensionValue(rule.rootCauseOption);
+  if (!rootExpected) return false;
+
+  const rootAnswer = answerString(answers.root_cause);
+  if (!rootAnswer || rootAnswer !== rootExpected) return false;
+
+  if (targetStep === "cash_sale_exists") return true;
+
+  const cashExpected = ruleDimensionValue(rule.cashSaleExistsOption);
+  if (cashExpected) {
+    const cashAnswer = answerString(answers.cash_sale_exists);
+    if (!cashAnswer || cashAnswer !== cashExpected) return false;
+  }
+
+  if (targetStep === "merchant") return true;
+
+  const merchantExpected = ruleDimensionValue(rule.merchantOption);
+  if (merchantExpected) {
+    const merchantAnswer = answerString(answers.merchant);
+    if (!merchantAnswer || merchantAnswer !== merchantExpected) return false;
+  }
+
+  return true;
+}
+
+/**
+ * @deprecated Use ruleMatchesUpstreamBeforeTargetStep — kept for tests/scripts.
+ */
+export function ruleMatchesUpstreamForOptionCollection(
+  rule: AgentRoutingRuleRef,
+  answers: WorkflowAnswersState,
+  targetStep: "cash_sale_exists" | "merchant" | "fix_type"
+): boolean {
+  return ruleMatchesUpstreamBeforeTargetStep(rule, answers, targetStep);
+}
+
+type StepOptionCollection = {
+  /** Catalog option values (slugs) allowed for the step. */
+  values: Set<string>;
+  /** At least one matching rule has manager "Any" on this dimension. */
+  hasWildcard: boolean;
+};
+
+/**
+ * Collect allowed catalog values for a core step from routing rules.
+ * Matching uses option values (agent answers are values, not option IDs).
+ */
+export function collectCoreStepOptionValuesFromRules(
   routingRules: AgentRoutingRuleRef[],
-  getOption: (rule: AgentRoutingRuleRef) => RuleDimensionOption,
-  options?: {
-    skipCatchAll?: boolean;
-    partialMatchAnswers?: WorkflowAnswersState;
-  }
-): Set<string> {
-  const ids = new Set<string>();
+  answers: WorkflowAnswersState,
+  targetStep: CoreStepSlug,
+  getOption: (rule: AgentRoutingRuleRef) => RuleDimensionOption
+): StepOptionCollection {
+  const values = new Set<string>();
+  let hasWildcard = false;
+
   for (const rule of routingRules) {
-    if (options?.skipCatchAll !== false && isCatchAllRoutingRule(rule)) continue;
-    if (
-      options?.partialMatchAnswers &&
-      !rulePartiallyMatchesCorePath(rule, options.partialMatchAnswers)
-    ) {
-      continue;
+    if (!ruleMatchesUpstreamBeforeTargetStep(rule, answers, targetStep)) continue;
+
+    const value = ruleDimensionValue(getOption(rule));
+    if (value) {
+      values.add(value);
+    } else {
+      hasWildcard = true;
     }
-    const opt = getOption(rule);
-    if (opt?.id) ids.add(opt.id);
   }
-  return ids;
+
+  return { values, hasWildcard };
 }
 
-function filterCatalogOptionsByAllowedIds(
+function filterCatalogOptionsByAllowedValues(
   allOptions: AgentCatalogOption[],
-  allowedIds: Set<string>
+  allowedValues: Set<string>
 ): AgentCatalogOption[] {
-  if (allowedIds.size === 0) return [];
-  return allOptions.filter((o) => allowedIds.has(o.id));
+  if (allowedValues.size === 0) return [];
+  return allOptions.filter((o) => allowedValues.has(o.value));
 }
 
-/** Root cause option IDs referenced by at least one active non-catch-all routing rule. */
-export function collectRootCauseOptionIdsFromRules(
+function filterCoreStepCatalogOptions(
+  allOptions: AgentCatalogOption[],
+  routingRules: AgentRoutingRuleRef[],
+  answers: WorkflowAnswersState,
+  targetStep: CoreStepSlug,
+  getOption: (rule: AgentRoutingRuleRef) => RuleDimensionOption
+): AgentCatalogOption[] {
+  const { values, hasWildcard } = collectCoreStepOptionValuesFromRules(
+    routingRules,
+    answers,
+    targetStep,
+    getOption
+  );
+
+  // Manager "Any" on this dimension: show active step catalog options (not matrix-wide fallback).
+  if (hasWildcard) {
+    return allOptions;
+  }
+
+  return filterCatalogOptionsByAllowedValues(allOptions, values);
+}
+
+/** Root cause values referenced by at least one active non-catch-all routing rule. */
+export function collectRootCauseOptionValuesFromRules(
   routingRules: AgentRoutingRuleRef[]
 ): Set<string> {
-  return collectOptionIdsFromRules(routingRules, (rule) => rule.rootCauseOption);
+  const values = new Set<string>();
+  for (const rule of routingRules) {
+    if (isCatchAllRoutingRule(rule)) continue;
+    const v = ruleDimensionValue(rule.rootCauseOption);
+    if (v) values.add(v);
+  }
+  return values;
 }
 
 /**
@@ -183,20 +277,22 @@ export function filterRootCauseCatalogOptions(
   allOptions: AgentCatalogOption[],
   routingRules: AgentRoutingRuleRef[]
 ): AgentCatalogOption[] {
-  return filterCatalogOptionsByAllowedIds(
+  return filterCatalogOptionsByAllowedValues(
     allOptions,
-    collectRootCauseOptionIdsFromRules(routingRules)
+    collectRootCauseOptionValuesFromRules(routingRules)
   );
 }
 
-/** Cash sale option IDs from rules that partially match the selected root cause path. */
-export function collectCashSaleExistsOptionIdsFromRules(
-  routingRules: AgentRoutingRuleRef[],
-  answers: WorkflowAnswersState
+/** @deprecated Prefer collectCoreStepOptionValuesFromRules — values, not IDs. */
+export function collectRootCauseOptionIdsFromRules(
+  routingRules: AgentRoutingRuleRef[]
 ): Set<string> {
-  return collectOptionIdsFromRules(routingRules, (rule) => rule.cashSaleExistsOption, {
-    partialMatchAnswers: answers,
-  });
+  const ids = new Set<string>();
+  for (const rule of routingRules) {
+    if (isCatchAllRoutingRule(rule)) continue;
+    if (rule.rootCauseOption?.id) ids.add(rule.rootCauseOption.id);
+  }
+  return ids;
 }
 
 export function filterCashSaleExistsCatalogOptions(
@@ -205,20 +301,26 @@ export function filterCashSaleExistsCatalogOptions(
   answers: WorkflowAnswersState
 ): AgentCatalogOption[] {
   if (!answerString(answers.root_cause)) return [];
-  return filterCatalogOptionsByAllowedIds(
+  return filterCoreStepCatalogOptions(
     allOptions,
-    collectCashSaleExistsOptionIdsFromRules(routingRules, answers)
+    routingRules,
+    answers,
+    "cash_sale_exists",
+    (rule) => rule.cashSaleExistsOption
   );
 }
 
-/** Merchant option IDs from rules that partially match root cause / cash sale path. */
-export function collectMerchantOptionIdsFromRules(
+/** @deprecated Prefer value-based collection. */
+export function collectCashSaleExistsOptionIdsFromRules(
   routingRules: AgentRoutingRuleRef[],
   answers: WorkflowAnswersState
 ): Set<string> {
-  return collectOptionIdsFromRules(routingRules, (rule) => rule.merchantOption, {
-    partialMatchAnswers: answers,
-  });
+  const ids = new Set<string>();
+  for (const rule of routingRules) {
+    if (!ruleMatchesUpstreamBeforeTargetStep(rule, answers, "cash_sale_exists")) continue;
+    if (rule.cashSaleExistsOption?.id) ids.add(rule.cashSaleExistsOption.id);
+  }
+  return ids;
 }
 
 export function filterMerchantCatalogOptions(
@@ -227,10 +329,27 @@ export function filterMerchantCatalogOptions(
   answers: WorkflowAnswersState
 ): AgentCatalogOption[] {
   if (!answerString(answers.root_cause)) return [];
-  return filterCatalogOptionsByAllowedIds(
+  if (!answerString(answers.cash_sale_exists)) return [];
+  return filterCoreStepCatalogOptions(
     allOptions,
-    collectMerchantOptionIdsFromRules(routingRules, answers)
+    routingRules,
+    answers,
+    "merchant",
+    (rule) => rule.merchantOption
   );
+}
+
+/** @deprecated Prefer value-based collection. */
+export function collectMerchantOptionIdsFromRules(
+  routingRules: AgentRoutingRuleRef[],
+  answers: WorkflowAnswersState
+): Set<string> {
+  const ids = new Set<string>();
+  for (const rule of routingRules) {
+    if (!ruleMatchesUpstreamBeforeTargetStep(rule, answers, "merchant")) continue;
+    if (rule.merchantOption?.id) ids.add(rule.merchantOption.id);
+  }
+  return ids;
 }
 
 /** Collect fix-type values from routing rules that match the current partial core path. */
@@ -238,13 +357,12 @@ export function collectFixTypeValuesFromRules(
   routingRules: AgentRoutingRuleRef[],
   answers: WorkflowAnswersState
 ): Set<string> {
-  const values = new Set<string>();
-  for (const rule of routingRules) {
-    if (!rule.fixTypeOption?.value) continue;
-    if (!rulePartiallyMatchesCorePath(rule, answers)) continue;
-    values.add(rule.fixTypeOption.value);
-  }
-  return values;
+  return collectCoreStepOptionValuesFromRules(
+    routingRules,
+    answers,
+    "fix_type",
+    (rule) => rule.fixTypeOption
+  ).values;
 }
 
 /**
@@ -307,7 +425,7 @@ function keysToClearBeyondCore(changedIndex: number): string[] {
 
 /** Clear downstream core answers, follow-ups, and confirmations after a core answer changes. */
 export function pruneAnswersAfterCoreChange(
-  changedSlug: (typeof CORE_STEP_ORDER)[number],
+  changedSlug: CoreStepSlug,
   answers: WorkflowAnswersState
 ): WorkflowAnswersState {
   const idx = CORE_STEP_ORDER.indexOf(changedSlug);
