@@ -10,6 +10,11 @@ import {
   type WodIvcsQueueKey,
 } from "./wod-ivcs-queue-config";
 import { InlineMessage } from "./WodIvcsQueueUiBits";
+import {
+  BULK_SKIPPED_LIST_MAX_VISIBLE,
+  skippedOrderDisplayLabel,
+  type SelectedOrderLabel,
+} from "./wod-ivcs-bulk-mutation-messages";
 
 const SHIFT_CLICK_TIP =
   "Tip: Shift-click checkboxes to select a range on the current page.";
@@ -25,6 +30,8 @@ type Props = {
   currentQueue: WodIvcsQueueKey;
   /** When true, results span multiple queues; bulk actions use operational rules. */
   searchMode?: boolean;
+  /** Snapshot of row labels at mutation time (survives selection clear). */
+  skippedOrderLabels: Map<string, SelectedOrderLabel>;
   agents: AssignableAgent[];
   agentsLoading: boolean;
   busy: boolean;
@@ -35,12 +42,44 @@ type Props = {
   onMove: (targetQueue: WodIvcsQueueKey, agentId?: string) => void;
   onClear: () => void;
   onRefresh: () => void;
+  onDismissFeedback?: () => void;
 };
+
+function BulkSkippedList({
+  skipped,
+  labelByOrderId,
+}: {
+  skipped: OrderMutationSkip[];
+  labelByOrderId: Map<string, SelectedOrderLabel>;
+}) {
+  const visible = skipped.slice(0, BULK_SKIPPED_LIST_MAX_VISIBLE);
+  const remaining = skipped.length - visible.length;
+
+  return (
+    <div className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 max-h-40 overflow-y-auto">
+      <p className="font-medium mb-1.5">
+        Skipped ({skipped.length})
+      </p>
+      <ul className="space-y-1.5">
+        {visible.map((s) => (
+          <li key={s.orderId} className="leading-snug">
+            <span className="font-mono text-amber-100/95">{skippedOrderDisplayLabel(s, labelByOrderId)}</span>
+            <span className="text-amber-200/75"> — {s.reason}</span>
+          </li>
+        ))}
+      </ul>
+      {remaining > 0 && (
+        <p className="mt-2 text-amber-200/70">+ {remaining} more skipped</p>
+      )}
+    </div>
+  );
+}
 
 export function WodIvcsBulkAssignBar({
   selectedCount,
   currentQueue,
   searchMode = false,
+  skippedOrderLabels,
   agents,
   agentsLoading,
   busy,
@@ -51,8 +90,10 @@ export function WodIvcsBulkAssignBar({
   onMove,
   onClear,
   onRefresh,
+  onDismissFeedback,
 }: Props) {
   const config = queueConfig(currentQueue);
+  const hasFeedback = Boolean(message) || skipped.length > 0;
   const canAssign = searchMode ? true : config.assignable && !config.readOnly;
   const canMutate = searchMode ? true : !config.readOnly;
   const inProgressNote = !searchMode && currentQueue === "IN_PROGRESS";
@@ -63,6 +104,28 @@ export function WodIvcsBulkAssignBar({
 
   return (
     <div className="space-y-3">
+      {hasFeedback && (
+        <div className="space-y-2">
+          {message && (
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <InlineMessage tone={message.tone}>{message.text}</InlineMessage>
+              {onDismissFeedback && (
+                <SmallButton
+                  onClick={onDismissFeedback}
+                  disabled={busy}
+                  className="bg-white/10 hover:bg-white/20 shrink-0"
+                >
+                  Dismiss
+                </SmallButton>
+              )}
+            </div>
+          )}
+          {skipped.length > 0 && (
+            <BulkSkippedList skipped={skipped} labelByOrderId={skippedOrderLabels} />
+          )}
+        </div>
+      )}
+
       <div className="p-4 rounded-xl bg-white/[0.04] border border-white/10 space-y-3">
         {selectedCount > 0 ? (
           <div className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2.5">
@@ -125,21 +188,6 @@ export function WodIvcsBulkAssignBar({
           </p>
         )}
       </div>
-
-      {message && <InlineMessage tone={message.tone}>{message.text}</InlineMessage>}
-
-      {skipped.length > 0 && (
-        <div className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 max-h-32 overflow-y-auto">
-          <p className="font-medium mb-1">Some orders were skipped:</p>
-          <ul className="space-y-1 list-disc pl-4">
-            {skipped.map((s) => (
-              <li key={s.orderId}>
-                {s.reason}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

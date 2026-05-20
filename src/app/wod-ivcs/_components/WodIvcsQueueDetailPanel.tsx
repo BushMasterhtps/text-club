@@ -28,6 +28,11 @@ import type {
 } from "@/lib/wod-ivcs/orders-list-query";
 import { PresenceBadge } from "./WodIvcsQueueUiBits";
 import { WodIvcsManagerOrderDetailModal } from "./WodIvcsManagerOrderDetailModal";
+import {
+  buildSelectedOrderLabelMap,
+  formatBulkMutationError,
+  formatBulkMutationMessage,
+} from "./wod-ivcs-bulk-mutation-messages";
 
 type ReportPresenceUi = "" | WodIvcsReportPresenceFilter;
 
@@ -113,6 +118,9 @@ export function WodIvcsQueueDetailPanel({
     text: string;
   } | null>(null);
   const [skipped, setSkipped] = useState<OrderMutationSkip[]>([]);
+  const [skippedOrderLabels, setSkippedOrderLabels] = useState(
+    () => new Map<string, { documentNumber: string; customerName: string | null }>()
+  );
 
   const [detailId, setDetailId] = useState<string | null>(null);
 
@@ -159,9 +167,14 @@ export function WodIvcsQueueDetailPanel({
     }
   }, []);
 
+  const clearMutationFeedback = useCallback(() => {
+    setMessage(null);
+    setSkipped([]);
+    setSkippedOrderLabels(new Map());
+  }, []);
+
   const loadOrders = useCallback(async () => {
     setLoading(true);
-    setMessage(null);
     try {
       const skip = (page - 1) * PAGE_SIZE;
       const params = new URLSearchParams({
@@ -232,6 +245,7 @@ export function WodIvcsQueueDetailPanel({
       return { sortBy: field, sortDir: defaultSortDirForField(field) };
     });
     setPage(1);
+    clearMutationFeedback();
     clearSelection();
   };
 
@@ -240,6 +254,7 @@ export function WodIvcsQueueDetailPanel({
   }, [loadAgents]);
 
   const applyFilters = () => {
+    clearMutationFeedback();
     clearSelection();
     if (page === 1) void loadOrders();
     else setPage(1);
@@ -247,6 +262,7 @@ export function WodIvcsQueueDetailPanel({
 
   useEffect(() => {
     setPage(1);
+    clearMutationFeedback();
     clearSelection();
   }, [
     queue,
@@ -266,13 +282,23 @@ export function WodIvcsQueueDetailPanel({
 
   const selectedIds = useMemo(() => Array.from(selected), [selected]);
 
+  const selectedOrderLabels = useMemo(
+    () => buildSelectedOrderLabelMap(orders, selected),
+    [orders, selected]
+  );
+
   const openDetail = (id: string) => {
     setDetailId(id);
   };
 
-  const afterMutation = (text: string, skipList: OrderMutationSkip[]) => {
-    setMessage({ tone: skipList.length > 0 && !text.includes("Assigned") ? "info" : "success", text });
+  const afterMutation = (
+    result: { text: string; tone: "success" | "info" },
+    skipList: OrderMutationSkip[],
+    labelSnapshot: Map<string, { documentNumber: string; customerName: string | null }>
+  ) => {
+    setMessage({ tone: result.tone, text: result.text });
     setSkipped(skipList);
+    setSkippedOrderLabels(labelSnapshot);
     clearSelection();
     loadOrders();
     onMutated();
@@ -280,6 +306,8 @@ export function WodIvcsQueueDetailPanel({
 
   const handleAssign = async (agentId: string) => {
     if (selectedIds.length === 0) return;
+    const selectedTotal = selectedIds.length;
+    const labelSnapshot = new Map(selectedOrderLabels);
     setBusy(true);
     setSkipped([]);
     try {
@@ -294,14 +322,20 @@ export function WodIvcsQueueDetailPanel({
       }
       const agent = agents.find((a) => a.id === agentId);
       const name = agent?.name || agent?.email || "agent";
-      afterMutation(
-        `Assigned ${json.assigned} order${json.assigned === 1 ? "" : "s"} to ${name}.`,
-        json.skipped ?? []
-      );
+      const skipList = (json.skipped ?? []) as OrderMutationSkip[];
+      const { text, tone } = formatBulkMutationMessage({
+        verb: "Assigned",
+        succeeded: json.assigned as number,
+        selectedTotal,
+        skippedCount: skipList.length,
+        detail: `to ${name}`,
+      });
+      afterMutation({ text, tone }, skipList, labelSnapshot);
     } catch (e) {
+      const detail = e instanceof Error ? e.message : "Assign failed";
       setMessage({
         tone: "error",
-        text: e instanceof Error ? e.message : "Assign failed",
+        text: formatBulkMutationError("assignment", detail),
       });
     } finally {
       setBusy(false);
@@ -310,6 +344,8 @@ export function WodIvcsQueueDetailPanel({
 
   const handleUnassign = async () => {
     if (selectedIds.length === 0) return;
+    const selectedTotal = selectedIds.length;
+    const labelSnapshot = new Map(selectedOrderLabels);
     setBusy(true);
     setSkipped([]);
     try {
@@ -322,14 +358,19 @@ export function WodIvcsQueueDetailPanel({
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Unassign failed");
       }
-      afterMutation(
-        `Unassigned ${json.unassigned} order${json.unassigned === 1 ? "" : "s"}.`,
-        json.skipped ?? []
-      );
+      const skipList = (json.skipped ?? []) as OrderMutationSkip[];
+      const { text, tone } = formatBulkMutationMessage({
+        verb: "Unassigned",
+        succeeded: json.unassigned as number,
+        selectedTotal,
+        skippedCount: skipList.length,
+      });
+      afterMutation({ text, tone }, skipList, labelSnapshot);
     } catch (e) {
+      const detail = e instanceof Error ? e.message : "Unassign failed";
       setMessage({
         tone: "error",
-        text: e instanceof Error ? e.message : "Unassign failed",
+        text: formatBulkMutationError("unassignment", detail),
       });
     } finally {
       setBusy(false);
@@ -338,6 +379,8 @@ export function WodIvcsQueueDetailPanel({
 
   const handleMove = async (targetQueue: WodIvcsQueueKey, moveAgentId?: string) => {
     if (selectedIds.length === 0) return;
+    const selectedTotal = selectedIds.length;
+    const labelSnapshot = new Map(selectedOrderLabels);
     setBusy(true);
     setSkipped([]);
     try {
@@ -356,14 +399,20 @@ export function WodIvcsQueueDetailPanel({
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Move failed");
       }
-      afterMutation(
-        `Moved ${json.moved} order${json.moved === 1 ? "" : "s"} to ${queueConfig(targetQueue).label}.`,
-        json.skipped ?? []
-      );
+      const skipList = (json.skipped ?? []) as OrderMutationSkip[];
+      const { text, tone } = formatBulkMutationMessage({
+        verb: "Moved",
+        succeeded: json.moved as number,
+        selectedTotal,
+        skippedCount: skipList.length,
+        detail: `to ${queueConfig(targetQueue).label}`,
+      });
+      afterMutation({ text, tone }, skipList, labelSnapshot);
     } catch (e) {
+      const detail = e instanceof Error ? e.message : "Move failed";
       setMessage({
         tone: "error",
-        text: e instanceof Error ? e.message : "Move failed",
+        text: formatBulkMutationError("move", detail),
       });
     } finally {
       setBusy(false);
@@ -525,6 +574,7 @@ export function WodIvcsQueueDetailPanel({
         selectedCount={selectedCount}
         currentQueue={queue}
         searchMode={isGlobalSearch}
+        skippedOrderLabels={skippedOrderLabels}
         agents={agents}
         agentsLoading={agentsLoading}
         busy={busy}
@@ -535,6 +585,7 @@ export function WodIvcsQueueDetailPanel({
         onMove={handleMove}
         onClear={clearSelection}
         onRefresh={loadOrders}
+        onDismissFeedback={clearMutationFeedback}
       />
 
       <div className="overflow-x-auto rounded-lg border border-white/10">
