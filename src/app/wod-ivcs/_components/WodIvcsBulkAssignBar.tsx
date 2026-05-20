@@ -11,6 +11,15 @@ import {
 } from "./wod-ivcs-queue-config";
 import { InlineMessage } from "./WodIvcsQueueUiBits";
 
+const SHIFT_CLICK_TIP =
+  "Tip: Shift-click checkboxes to select a range on the current page.";
+
+const IN_PROGRESS_MOVE_DISABLED_COPY =
+  "Move is disabled for In Progress work. Use Assign or Unassign to override active work.";
+
+const SEARCH_MODE_SKIP_COPY =
+  "Search results may include multiple queues. Some selected orders may be skipped depending on their current queue.";
+
 type Props = {
   selectedCount: number;
   currentQueue: WodIvcsQueueKey;
@@ -47,26 +56,39 @@ export function WodIvcsBulkAssignBar({
   const canAssign = searchMode ? true : config.assignable && !config.readOnly;
   const canMutate = searchMode ? true : !config.readOnly;
   const inProgressNote = !searchMode && currentQueue === "IN_PROGRESS";
+  const hideUnassign = !searchMode && currentQueue === "NEEDS_ACTION";
+  const disableMove = !searchMode && currentQueue === "IN_PROGRESS";
+  const canUnassign = canMutate && !hideUnassign;
+  const canMove = canMutate && !disableMove;
 
   return (
     <div className="space-y-3">
       <div className="p-4 rounded-xl bg-white/[0.04] border border-white/10 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm font-medium text-white">
-            {selectedCount === 0
-              ? "Select orders below to assign or move"
-              : `${selectedCount} order${selectedCount === 1 ? "" : "s"} selected`}
-          </span>
-          <div className="flex flex-wrap gap-2">
-            <SmallButton onClick={onRefresh} disabled={busy} className="bg-white/10 hover:bg-white/20">
-              Refresh
-            </SmallButton>
-            {selectedCount > 0 && (
-              <SmallButton onClick={onClear} disabled={busy} className="bg-white/10 hover:bg-white/20">
-                Clear selection
-              </SmallButton>
-            )}
+        {selectedCount > 0 ? (
+          <div className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+              <span className="text-sm font-semibold text-white">
+                {selectedCount} order{selectedCount === 1 ? "" : "s"} selected
+              </span>
+              <span className="text-xs text-white/55">{SHIFT_CLICK_TIP}</span>
+            </div>
           </div>
+        ) : (
+          <div className="space-y-1">
+            <p className="text-sm text-white/70">Select orders below to assign or move</p>
+            <p className="text-xs text-white/45">{SHIFT_CLICK_TIP}</p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <SmallButton onClick={onRefresh} disabled={busy} className="bg-white/10 hover:bg-white/20">
+            Refresh
+          </SmallButton>
+          {selectedCount > 0 && (
+            <SmallButton onClick={onClear} disabled={busy} className="bg-white/10 hover:bg-white/20">
+              Clear selection
+            </SmallButton>
+          )}
         </div>
 
         {inProgressNote && selectedCount > 0 && (
@@ -78,16 +100,22 @@ export function WodIvcsBulkAssignBar({
           </p>
         )}
 
+        {searchMode && selectedCount > 0 && (
+          <p className="text-xs text-white/50">{SEARCH_MODE_SKIP_COPY}</p>
+        )}
+
         {selectedCount > 0 && canMutate && (
           <BulkActionsForm
             canAssign={canAssign}
+            canUnassign={canUnassign}
+            canMove={canMove}
+            moveDisabledCopy={disableMove ? IN_PROGRESS_MOVE_DISABLED_COPY : undefined}
             agents={agents}
             agentsLoading={agentsLoading}
             busy={busy}
             onAssign={onAssign}
             onUnassign={onUnassign}
             onMove={onMove}
-            inProgressNote={inProgressNote}
           />
         )}
 
@@ -118,22 +146,26 @@ export function WodIvcsBulkAssignBar({
 
 function BulkActionsForm({
   canAssign,
+  canUnassign,
+  canMove,
+  moveDisabledCopy,
   agents,
   agentsLoading,
   busy,
   onAssign,
   onUnassign,
   onMove,
-  inProgressNote,
 }: {
   canAssign: boolean;
+  canUnassign: boolean;
+  canMove: boolean;
+  moveDisabledCopy?: string;
   agents: AssignableAgent[];
   agentsLoading: boolean;
   busy: boolean;
   onAssign: (agentId: string) => void;
   onUnassign: () => void;
   onMove: (targetQueue: WodIvcsQueueKey, agentId?: string) => void;
-  inProgressNote: boolean;
 }) {
   const [agentId, setAgentId] = useState("");
   const [moveTarget, setMoveTarget] = useState<WodIvcsQueueKey>("NEEDS_REVIEW");
@@ -169,60 +201,74 @@ function BulkActionsForm({
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-2 border-t border-white/10 pt-3">
-        <SmallButton
-          onClick={onUnassign}
-          disabled={busy}
-          className="bg-white/10 hover:bg-white/20 text-red-200"
-        >
-          Unassign selected
-        </SmallButton>
+      {(canUnassign || canMove || moveDisabledCopy) && (
+        <div className="flex flex-col gap-2 border-t border-white/10 pt-3">
+          <div className="flex flex-wrap items-end gap-2">
+            {canUnassign && (
+              <SmallButton
+                onClick={onUnassign}
+                disabled={busy}
+                className="bg-white/10 hover:bg-white/20 text-red-200"
+              >
+                Unassign selected
+              </SmallButton>
+            )}
 
-        <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[180px]">
-          Move to queue
-          <select
-            value={moveTarget}
-            onChange={(e) => setMoveTarget(e.target.value as WodIvcsQueueKey)}
-            disabled={busy}
-            className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
-          >
-            {MOVE_QUEUE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            {canMove && (
+              <>
+                <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[180px]">
+                  Move to queue
+                  <select
+                    value={moveTarget}
+                    onChange={(e) => setMoveTarget(e.target.value as WodIvcsQueueKey)}
+                    disabled={busy}
+                    className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
+                  >
+                    {MOVE_QUEUE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-        {moveTarget === "ASSIGNED" && (
-          <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[180px]">
-            Agent for Assigned
-            <select
-              value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
-              disabled={agentsLoading || busy}
-              className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
-            >
-              <option value="">Select agent…</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name || a.email}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+                {moveTarget === "ASSIGNED" && (
+                  <label className="flex flex-col gap-1 text-xs text-white/60 min-w-[180px]">
+                    Agent for Assigned
+                    <select
+                      value={agentId}
+                      onChange={(e) => setAgentId(e.target.value)}
+                      disabled={agentsLoading || busy}
+                      className="px-3 py-2 rounded-lg bg-neutral-800 border border-white/15 text-white text-sm"
+                    >
+                      <option value="">Select agent…</option>
+                      {agents.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name || a.email}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
 
-        <SmallButton
-          onClick={() =>
-            onMove(moveTarget, moveTarget === "ASSIGNED" ? agentId || undefined : undefined)
-          }
-          disabled={busy || (moveTarget === "ASSIGNED" && !agentId)}
-          className="bg-violet-600/80 hover:bg-violet-600 text-white"
-        >
-          Move selected
-        </SmallButton>
-      </div>
+                <SmallButton
+                  onClick={() =>
+                    onMove(moveTarget, moveTarget === "ASSIGNED" ? agentId || undefined : undefined)
+                  }
+                  disabled={busy || (moveTarget === "ASSIGNED" && !agentId)}
+                  className="bg-violet-600/80 hover:bg-violet-600 text-white"
+                >
+                  Move selected
+                </SmallButton>
+              </>
+            )}
+          </div>
+
+          {moveDisabledCopy && (
+            <p className="text-xs text-white/50">{moveDisabledCopy}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

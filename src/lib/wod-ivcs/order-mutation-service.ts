@@ -36,6 +36,9 @@ const ALL_OPERATIONAL_QUEUES: WodIvcsOperationalQueue[] = [
   "ARCHIVED",
 ];
 
+/** Max orders per interactive Prisma transaction (update + audit each). */
+export const BULK_ORDER_MUTATION_CHUNK_SIZE = 25;
+
 export type OrderMutationSkipCode =
   | "ORDER_NOT_FOUND"
   | "TERMINAL_QUEUE"
@@ -74,6 +77,14 @@ export type MoveOrdersResult = {
 
 export function isWodIvcsOperationalQueue(value: string): value is WodIvcsOperationalQueue {
   return (ALL_OPERATIONAL_QUEUES as string[]).includes(value);
+}
+
+export function chunkOrderIds(orderIds: string[], chunkSize = BULK_ORDER_MUTATION_CHUNK_SIZE): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < orderIds.length; i += chunkSize) {
+    chunks.push(orderIds.slice(i, i + chunkSize));
+  }
+  return chunks;
 }
 
 async function writeOrderAuditEvent(
@@ -158,6 +169,12 @@ function clearedWorkSessionAuditFields(order: OrderMutationRow) {
   };
 }
 
+type ValidatedAssigneeAgent = {
+  id: string;
+  name: string | null;
+  email: string;
+};
+
 async function validateAssigneeAgent(prisma: PrismaClient, agentId: string) {
   const agent = await prisma.user.findUnique({
     where: { id: agentId },
@@ -184,6 +201,353 @@ async function validateAssigneeAgent(prisma: PrismaClient, agentId: string) {
   return { ok: true as const, agent };
 }
 
+async function assignOrderIdsInTransaction(
+  tx: Prisma.TransactionClient,
+  orderIds: string[],
+  byId: Map<string, OrderMutationRow>,
+  input: { agentId: string; actorId: string },
+  agent: ValidatedAssigneeAgent
+): Promise<{ assigned: number; skipped: OrderMutationSkip[] }> {
+  const skipped: OrderMutationSkip[] = [];
+  let assigned = 0;
+
+  for (const orderId of orderIds) {
+    const order = byId.get(orderId);
+    if (!order) {
+      skipped.push({
+        orderId,
+        code: "ORDER_NOT_FOUND",
+        reason: "Order not found",
+      });
+      continue;
+    }
+
+    if (TERMINAL_QUEUES.includes(order.operationalQueue)) {
+      skipped.push({
+        orderId,
+        code: "TERMINAL_QUEUE",
+        reason: `Cannot assign orders in ${order.operationalQueue}`,
+      });
+      continue;
+    }
+
+    if (order.isCityBeauty || isCityBeautyDocumentNumber(order.documentNumberNormalized)) {
+      skipped.push({
+        orderId,
+        code: "CITY_BEAUTY_EXCLUDED",
+        reason:
+          "City Beauty orders are routed to IT bulk processing and cannot be assigned through active queues",
+      });
+      continue;
+    }
+
+    if (order.operationalQueue === "IN_PROGRESS") {
+      const fromQueue = order.operationalQueue;
+      const toQueue: WodIvcsOperationalQueue = "ASSIGNED";
+      const previousAgentId = order.assignedToId;
+
+      await tx.wodIvcsOrder.update({
+        where: { id: orderId },
+        data: {
+          assignedToId: input.agentId,
+          operationalQueue: toQueue,
+          ...clearedWorkSessionUpdate(),
+        },
+      });
+
+      await writeOrderAuditEvent(tx, {
+        orderId,
+        actorId: input.actorId,
+        actionType: "MANAGER_OVERRIDE",
+        fromQueue,
+        toQueue,
+        payloadJson: {
+          action: "FORCE_REASSIGN_IN_PROGRESS",
+          previousAgentId,
+          newAgentId: input.agentId,
+          agentEmail: agent.email,
+          agentName: agent.name,
+          previousQueue: fromQueue,
+          targetQueue: toQueue,
+          documentNumber: order.documentNumber,
+          ...clearedWorkSessionAuditFields(order),
+        },
+      });
+
+      assigned++;
+      continue;
+    }
+
+    if (!ASSIGN_SOURCE_QUEUES.includes(order.operationalQueue)) {
+      skipped.push({
+        orderId,
+        code: "INVALID_SOURCE_QUEUE",
+        reason: `Assignment is only allowed from Needs Action or Assigned (current: ${order.operationalQueue})`,
+      });
+      continue;
+    }
+
+    const sameAssignee =
+      order.assignedToId === input.agentId && order.operationalQueue === "ASSIGNED";
+    if (sameAssignee) {
+      skipped.push({
+        orderId,
+        code: "NO_CHANGE",
+        reason: "Order is already assigned to this agent",
+      });
+      continue;
+    }
+
+    const fromQueue = order.operationalQueue;
+    const toQueue: WodIvcsOperationalQueue = "ASSIGNED";
+
+    await tx.wodIvcsOrder.update({
+      where: { id: orderId },
+      data: {
+        assignedToId: input.agentId,
+        operationalQueue: toQueue,
+      },
+    });
+
+    const queueChanged = fromQueue !== toQueue;
+    await writeOrderAuditEvent(tx, {
+      orderId,
+      actorId: input.actorId,
+      actionType: queueChanged ? "QUEUE_CHANGED" : "MANAGER_OVERRIDE",
+      fromQueue,
+      toQueue: queueChanged ? toQueue : fromQueue,
+      payloadJson: {
+        action: "ASSIGN",
+        agentId: agent.id,
+        agentEmail: agent.email,
+        agentName: agent.name,
+        documentNumber: order.documentNumber,
+      },
+    });
+
+    assigned++;
+  }
+
+  return { assigned, skipped };
+}
+
+async function unassignOrderIdsInTransaction(
+  tx: Prisma.TransactionClient,
+  orderIds: string[],
+  byId: Map<string, OrderMutationRow>,
+  actorId: string
+): Promise<{ unassigned: number; skipped: OrderMutationSkip[] }> {
+  const skipped: OrderMutationSkip[] = [];
+  let unassigned = 0;
+
+  for (const orderId of orderIds) {
+    const order = byId.get(orderId);
+    if (!order) {
+      skipped.push({
+        orderId,
+        code: "ORDER_NOT_FOUND",
+        reason: "Order not found",
+      });
+      continue;
+    }
+
+    if (TERMINAL_QUEUES.includes(order.operationalQueue)) {
+      skipped.push({
+        orderId,
+        code: "TERMINAL_QUEUE",
+        reason: `Cannot unassign orders in ${order.operationalQueue}`,
+      });
+      continue;
+    }
+
+    if (order.operationalQueue === "IN_PROGRESS") {
+      const fromQueue = order.operationalQueue;
+      const toQueue: WodIvcsOperationalQueue = "NEEDS_ACTION";
+      const previousAgentId = order.assignedToId;
+
+      await tx.wodIvcsOrder.update({
+        where: { id: orderId },
+        data: {
+          assignedToId: null,
+          operationalQueue: toQueue,
+          ...clearedWorkSessionUpdate(),
+        },
+      });
+
+      await writeOrderAuditEvent(tx, {
+        orderId,
+        actorId,
+        actionType: "MANAGER_OVERRIDE",
+        fromQueue,
+        toQueue,
+        payloadJson: {
+          action: "FORCE_UNASSIGN_IN_PROGRESS",
+          previousAgentId,
+          previousQueue: fromQueue,
+          targetQueue: toQueue,
+          documentNumber: order.documentNumber,
+          ...clearedWorkSessionAuditFields(order),
+        },
+      });
+
+      unassigned++;
+      continue;
+    }
+
+    if (!order.assignedToId) {
+      skipped.push({
+        orderId,
+        code: "NOT_ASSIGNED",
+        reason: "Order is not assigned to an agent",
+      });
+      continue;
+    }
+
+    const fromQueue = order.operationalQueue;
+    const toQueue: WodIvcsOperationalQueue =
+      fromQueue === "ASSIGNED" ? "NEEDS_ACTION" : fromQueue;
+
+    await tx.wodIvcsOrder.update({
+      where: { id: orderId },
+      data: {
+        assignedToId: null,
+        operationalQueue: toQueue,
+      },
+    });
+
+    await writeOrderAuditEvent(tx, {
+      orderId,
+      actorId,
+      actionType: fromQueue !== toQueue ? "QUEUE_CHANGED" : "MANAGER_OVERRIDE",
+      fromQueue,
+      toQueue,
+      payloadJson: {
+        action: "UNASSIGN",
+        previousAgentId: order.assignedToId,
+        documentNumber: order.documentNumber,
+      },
+    });
+
+    unassigned++;
+  }
+
+  return { unassigned, skipped };
+}
+
+async function moveOrderIdsInTransaction(
+  tx: Prisma.TransactionClient,
+  orderIds: string[],
+  byId: Map<string, OrderMutationRow>,
+  input: {
+    targetQueue: WodIvcsOperationalQueue;
+    actorId: string;
+    note?: string;
+    assignAgent: ValidatedAssigneeAgent | null;
+  }
+): Promise<{ moved: number; skipped: OrderMutationSkip[] }> {
+  const skipped: OrderMutationSkip[] = [];
+  let moved = 0;
+
+  for (const orderId of orderIds) {
+    const order = byId.get(orderId);
+    if (!order) {
+      skipped.push({
+        orderId,
+        code: "ORDER_NOT_FOUND",
+        reason: "Order not found",
+      });
+      continue;
+    }
+
+    if (TERMINAL_QUEUES.includes(order.operationalQueue)) {
+      skipped.push({
+        orderId,
+        code: "SOURCE_TERMINAL_BLOCKED",
+        reason: `Cannot move orders from ${order.operationalQueue}`,
+      });
+      continue;
+    }
+
+    if (order.operationalQueue === "IN_PROGRESS") {
+      skipped.push({
+        orderId,
+        code: "IN_PROGRESS_MOVE_BLOCKED",
+        reason: "Cannot move orders while In Progress",
+      });
+      continue;
+    }
+
+    if (input.targetQueue === "ASSIGNED" && !input.assignAgent) {
+      skipped.push({
+        orderId,
+        code: "ASSIGNED_REQUIRES_AGENT",
+        reason: "agentId is required when moving to Assigned",
+      });
+      continue;
+    }
+
+    const fromQueue = order.operationalQueue;
+    const toQueue = input.targetQueue;
+
+    if (fromQueue === toQueue && order.assignedToId === (input.assignAgent?.id ?? order.assignedToId)) {
+      if (toQueue !== "NEEDS_ACTION" || !order.assignedToId) {
+        skipped.push({
+          orderId,
+          code: "NO_CHANGE",
+          reason: "Order is already in the target queue",
+        });
+        continue;
+      }
+    }
+
+    const updateData: Prisma.WodIvcsOrderUpdateInput = {
+      operationalQueue: toQueue,
+    };
+
+    if (toQueue === "NEEDS_ACTION") {
+      updateData.assignedTo = { disconnect: true };
+    } else if (toQueue === "ASSIGNED" && input.assignAgent) {
+      updateData.assignedTo = { connect: { id: input.assignAgent.id } };
+    } else if (
+      toQueue === "NEEDS_REVIEW" ||
+      toQueue === "IT_REVIEW" ||
+      toQueue === "AWAITING_DROP_OFF" ||
+      toQueue === "COMPLETED" ||
+      toQueue === "ARCHIVED"
+    ) {
+      // Keep assignee unless moving to NEEDS_ACTION (handled above).
+    }
+
+    if (toQueue === "ARCHIVED") {
+      updateData.archivedAt = new Date();
+      updateData.operationalStatus = "ARCHIVED";
+    }
+
+    await tx.wodIvcsOrder.update({
+      where: { id: orderId },
+      data: updateData,
+    });
+
+    await writeOrderAuditEvent(tx, {
+      orderId,
+      actorId: input.actorId,
+      actionType: "QUEUE_CHANGED",
+      fromQueue,
+      toQueue,
+      payloadJson: {
+        action: "MOVE_QUEUE",
+        note: input.note?.trim() || null,
+        agentId: input.assignAgent?.id ?? null,
+        documentNumber: order.documentNumber,
+      },
+    });
+
+    moved++;
+  }
+
+  return { moved, skipped };
+}
+
 export async function assignWodIvcsOrdersToAgent(
   prisma: PrismaClient,
   input: { orderIds: string[]; agentId: string; actorId: string }
@@ -198,127 +562,13 @@ export async function assignWodIvcsOrdersToAgent(
   const skipped: OrderMutationSkip[] = [];
   let assigned = 0;
 
-  await prisma.$transaction(async (tx) => {
-    for (const orderId of unique) {
-      const order = byId.get(orderId);
-      if (!order) {
-        skipped.push({
-          orderId,
-          code: "ORDER_NOT_FOUND",
-          reason: "Order not found",
-        });
-        continue;
-      }
-
-      if (TERMINAL_QUEUES.includes(order.operationalQueue)) {
-        skipped.push({
-          orderId,
-          code: "TERMINAL_QUEUE",
-          reason: `Cannot assign orders in ${order.operationalQueue}`,
-        });
-        continue;
-      }
-
-      if (
-        order.isCityBeauty ||
-        isCityBeautyDocumentNumber(order.documentNumberNormalized)
-      ) {
-        skipped.push({
-          orderId,
-          code: "CITY_BEAUTY_EXCLUDED",
-          reason:
-            "City Beauty orders are routed to IT bulk processing and cannot be assigned through active queues",
-        });
-        continue;
-      }
-
-      if (order.operationalQueue === "IN_PROGRESS") {
-        const fromQueue = order.operationalQueue;
-        const toQueue: WodIvcsOperationalQueue = "ASSIGNED";
-        const previousAgentId = order.assignedToId;
-
-        await tx.wodIvcsOrder.update({
-          where: { id: orderId },
-          data: {
-            assignedToId: input.agentId,
-            operationalQueue: toQueue,
-            ...clearedWorkSessionUpdate(),
-          },
-        });
-
-        await writeOrderAuditEvent(tx, {
-          orderId,
-          actorId: input.actorId,
-          actionType: "MANAGER_OVERRIDE",
-          fromQueue,
-          toQueue,
-          payloadJson: {
-            action: "FORCE_REASSIGN_IN_PROGRESS",
-            previousAgentId,
-            newAgentId: input.agentId,
-            agentEmail: agent.email,
-            agentName: agent.name,
-            previousQueue: fromQueue,
-            targetQueue: toQueue,
-            documentNumber: order.documentNumber,
-            ...clearedWorkSessionAuditFields(order),
-          },
-        });
-
-        assigned++;
-        continue;
-      }
-
-      if (!ASSIGN_SOURCE_QUEUES.includes(order.operationalQueue)) {
-        skipped.push({
-          orderId,
-          code: "INVALID_SOURCE_QUEUE",
-          reason: `Assignment is only allowed from Needs Action or Assigned (current: ${order.operationalQueue})`,
-        });
-        continue;
-      }
-
-      const sameAssignee =
-        order.assignedToId === input.agentId && order.operationalQueue === "ASSIGNED";
-      if (sameAssignee) {
-        skipped.push({
-          orderId,
-          code: "NO_CHANGE",
-          reason: "Order is already assigned to this agent",
-        });
-        continue;
-      }
-
-      const fromQueue = order.operationalQueue;
-      const toQueue: WodIvcsOperationalQueue = "ASSIGNED";
-
-      await tx.wodIvcsOrder.update({
-        where: { id: orderId },
-        data: {
-          assignedToId: input.agentId,
-          operationalQueue: toQueue,
-        },
-      });
-
-      const queueChanged = fromQueue !== toQueue;
-      await writeOrderAuditEvent(tx, {
-        orderId,
-        actorId: input.actorId,
-        actionType: queueChanged ? "QUEUE_CHANGED" : "MANAGER_OVERRIDE",
-        fromQueue,
-        toQueue: queueChanged ? toQueue : fromQueue,
-        payloadJson: {
-          action: "ASSIGN",
-          agentId: agent.id,
-          agentEmail: agent.email,
-          agentName: agent.name,
-          documentNumber: order.documentNumber,
-        },
-      });
-
-      assigned++;
-    }
-  });
+  for (const chunk of chunkOrderIds(unique)) {
+    const chunkResult = await prisma.$transaction((tx) =>
+      assignOrderIdsInTransaction(tx, chunk, byId, input, agent)
+    );
+    assigned += chunkResult.assigned;
+    skipped.push(...chunkResult.skipped);
+  }
 
   return { assigned, skipped };
 }
@@ -331,98 +581,13 @@ export async function unassignWodIvcsOrders(
   const skipped: OrderMutationSkip[] = [];
   let unassigned = 0;
 
-  await prisma.$transaction(async (tx) => {
-    for (const orderId of unique) {
-      const order = byId.get(orderId);
-      if (!order) {
-        skipped.push({
-          orderId,
-          code: "ORDER_NOT_FOUND",
-          reason: "Order not found",
-        });
-        continue;
-      }
-
-      if (TERMINAL_QUEUES.includes(order.operationalQueue)) {
-        skipped.push({
-          orderId,
-          code: "TERMINAL_QUEUE",
-          reason: `Cannot unassign orders in ${order.operationalQueue}`,
-        });
-        continue;
-      }
-
-      if (order.operationalQueue === "IN_PROGRESS") {
-        const fromQueue = order.operationalQueue;
-        const toQueue: WodIvcsOperationalQueue = "NEEDS_ACTION";
-        const previousAgentId = order.assignedToId;
-
-        await tx.wodIvcsOrder.update({
-          where: { id: orderId },
-          data: {
-            assignedToId: null,
-            operationalQueue: toQueue,
-            ...clearedWorkSessionUpdate(),
-          },
-        });
-
-        await writeOrderAuditEvent(tx, {
-          orderId,
-          actorId: input.actorId,
-          actionType: "MANAGER_OVERRIDE",
-          fromQueue,
-          toQueue,
-          payloadJson: {
-            action: "FORCE_UNASSIGN_IN_PROGRESS",
-            previousAgentId,
-            previousQueue: fromQueue,
-            targetQueue: toQueue,
-            documentNumber: order.documentNumber,
-            ...clearedWorkSessionAuditFields(order),
-          },
-        });
-
-        unassigned++;
-        continue;
-      }
-
-      if (!order.assignedToId) {
-        skipped.push({
-          orderId,
-          code: "NOT_ASSIGNED",
-          reason: "Order is not assigned to an agent",
-        });
-        continue;
-      }
-
-      const fromQueue = order.operationalQueue;
-      const toQueue: WodIvcsOperationalQueue =
-        fromQueue === "ASSIGNED" ? "NEEDS_ACTION" : fromQueue;
-
-      await tx.wodIvcsOrder.update({
-        where: { id: orderId },
-        data: {
-          assignedToId: null,
-          operationalQueue: toQueue,
-        },
-      });
-
-      await writeOrderAuditEvent(tx, {
-        orderId,
-        actorId: input.actorId,
-        actionType: fromQueue !== toQueue ? "QUEUE_CHANGED" : "MANAGER_OVERRIDE",
-        fromQueue,
-        toQueue,
-        payloadJson: {
-          action: "UNASSIGN",
-          previousAgentId: order.assignedToId,
-          documentNumber: order.documentNumber,
-        },
-      });
-
-      unassigned++;
-    }
-  });
+  for (const chunk of chunkOrderIds(unique)) {
+    const chunkResult = await prisma.$transaction((tx) =>
+      unassignOrderIdsInTransaction(tx, chunk, byId, input.actorId)
+    );
+    unassigned += chunkResult.unassigned;
+    skipped.push(...chunkResult.skipped);
+  }
 
   return { unassigned, skipped };
 }
@@ -448,7 +613,7 @@ export async function moveWodIvcsOrdersToQueue(
     };
   }
 
-  let assignAgent: { id: string; email: string; name: string | null } | null = null;
+  let assignAgent: ValidatedAssigneeAgent | null = null;
   if (input.targetQueue === "ASSIGNED") {
     const agentId = input.agentId;
     if (!agentId) {
@@ -470,104 +635,20 @@ export async function moveWodIvcsOrdersToQueue(
   const skipped: OrderMutationSkip[] = [];
   let moved = 0;
 
-  await prisma.$transaction(async (tx) => {
-    for (const orderId of unique) {
-      const order = byId.get(orderId);
-      if (!order) {
-        skipped.push({
-          orderId,
-          code: "ORDER_NOT_FOUND",
-          reason: "Order not found",
-        });
-        continue;
-      }
+  const moveInput = {
+    targetQueue: input.targetQueue,
+    actorId: input.actorId,
+    note: input.note,
+    assignAgent,
+  };
 
-      if (TERMINAL_QUEUES.includes(order.operationalQueue)) {
-        skipped.push({
-          orderId,
-          code: "SOURCE_TERMINAL_BLOCKED",
-          reason: `Cannot move orders from ${order.operationalQueue}`,
-        });
-        continue;
-      }
-
-      if (order.operationalQueue === "IN_PROGRESS") {
-        skipped.push({
-          orderId,
-          code: "IN_PROGRESS_MOVE_BLOCKED",
-          reason: "Cannot move orders while In Progress",
-        });
-        continue;
-      }
-
-      if (input.targetQueue === "ASSIGNED" && !assignAgent) {
-        skipped.push({
-          orderId,
-          code: "ASSIGNED_REQUIRES_AGENT",
-          reason: "agentId is required when moving to Assigned",
-        });
-        continue;
-      }
-
-      const fromQueue = order.operationalQueue;
-      const toQueue = input.targetQueue;
-
-      if (fromQueue === toQueue && order.assignedToId === (assignAgent?.id ?? order.assignedToId)) {
-        if (toQueue !== "NEEDS_ACTION" || !order.assignedToId) {
-          skipped.push({
-            orderId,
-            code: "NO_CHANGE",
-            reason: "Order is already in the target queue",
-          });
-          continue;
-        }
-      }
-
-      const updateData: Prisma.WodIvcsOrderUpdateInput = {
-        operationalQueue: toQueue,
-      };
-
-      if (toQueue === "NEEDS_ACTION") {
-        updateData.assignedTo = { disconnect: true };
-      } else if (toQueue === "ASSIGNED" && assignAgent) {
-        updateData.assignedTo = { connect: { id: assignAgent.id } };
-      } else if (
-        toQueue === "NEEDS_REVIEW" ||
-        toQueue === "IT_REVIEW" ||
-        toQueue === "AWAITING_DROP_OFF" ||
-        toQueue === "COMPLETED" ||
-        toQueue === "ARCHIVED"
-      ) {
-        // Keep assignee unless moving to NEEDS_ACTION (handled above).
-      }
-
-      if (toQueue === "ARCHIVED") {
-        updateData.archivedAt = new Date();
-        updateData.operationalStatus = "ARCHIVED";
-      }
-
-      await tx.wodIvcsOrder.update({
-        where: { id: orderId },
-        data: updateData,
-      });
-
-      await writeOrderAuditEvent(tx, {
-        orderId,
-        actorId: input.actorId,
-        actionType: "QUEUE_CHANGED",
-        fromQueue,
-        toQueue,
-        payloadJson: {
-          action: "MOVE_QUEUE",
-          note: input.note?.trim() || null,
-          agentId: assignAgent?.id ?? null,
-          documentNumber: order.documentNumber,
-        },
-      });
-
-      moved++;
-    }
-  });
+  for (const chunk of chunkOrderIds(unique)) {
+    const chunkResult = await prisma.$transaction((tx) =>
+      moveOrderIdsInTransaction(tx, chunk, byId, moveInput)
+    );
+    moved += chunkResult.moved;
+    skipped.push(...chunkResult.skipped);
+  }
 
   return { moved, skipped };
 }
