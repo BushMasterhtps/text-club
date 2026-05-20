@@ -17,12 +17,57 @@ import {
   type WodIvcsOperationalQueueKey,
   type WodIvcsQueueKey,
 } from "./wod-ivcs-queue-config";
+import {
+  DEFAULT_WOD_IVCS_ORDERS_SORT,
+  defaultSortDirForField,
+  type WodIvcsOrdersSortField,
+} from "@/lib/wod-ivcs/orders-list-sort";
 import { PresenceBadge } from "./WodIvcsQueueUiBits";
 import { WodIvcsManagerOrderDetailModal } from "./WodIvcsManagerOrderDetailModal";
 
 type ReportSourceFilter = "" | "on_netsuite" | "on_aging";
 
+type SortState = {
+  sortBy: WodIvcsOrdersSortField;
+  sortDir: "asc" | "desc";
+};
+
 const PAGE_SIZE = 100;
+
+function SortableTh({
+  label,
+  field,
+  sort,
+  onSort,
+  className = "",
+}: {
+  label: string;
+  field: WodIvcsOrdersSortField;
+  sort: SortState;
+  onSort: (field: WodIvcsOrdersSortField) => void;
+  className?: string;
+}) {
+  const active = sort.sortBy === field;
+  const indicator = active ? (sort.sortDir === "asc" ? "↑" : "↓") : "↕";
+
+  return (
+    <th className={`px-3 py-2 ${className}`}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className={`inline-flex items-center gap-1 font-medium transition-colors ${
+          active ? "text-white" : "text-white/60 hover:text-white/85"
+        }`}
+        title={active ? `Sorted ${sort.sortDir === "asc" ? "ascending" : "descending"}` : `Sort by ${label}`}
+      >
+        <span>{label}</span>
+        <span className={`text-xs ${active ? "text-sky-300" : "text-white/30"}`} aria-hidden>
+          {indicator}
+        </span>
+      </button>
+    </th>
+  );
+}
 
 type Props = {
   queue: WodIvcsOperationalQueueKey;
@@ -55,6 +100,7 @@ export function WodIvcsQueueDetailPanel({
   const [assignedAgentFilter, setAssignedAgentFilter] = useState("");
   const [reportSource, setReportSource] = useState<ReportSourceFilter>("");
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<SortState>(DEFAULT_WOD_IVCS_ORDERS_SORT);
 
   const [message, setMessage] = useState<{
     tone: "success" | "error" | "info";
@@ -101,8 +147,8 @@ export function WodIvcsQueueDetailPanel({
       const params = new URLSearchParams({
         take: String(PAGE_SIZE),
         skip: String(skip),
-        sortBy: "netSuiteDaysOld",
-        sortDir: "desc",
+        sortBy: sort.sortBy,
+        sortDir: sort.sortDir,
       });
 
       if (isGlobalSearch) {
@@ -150,7 +196,20 @@ export function WodIvcsQueueDetailPanel({
     isGlobalSearch,
     globalSearchQuery,
     page,
+    sort.sortBy,
+    sort.sortDir,
   ]);
+
+  const handleSort = (field: WodIvcsOrdersSortField) => {
+    setSort((prev) => {
+      if (prev.sortBy === field) {
+        return { sortBy: field, sortDir: prev.sortDir === "asc" ? "desc" : "asc" };
+      }
+      return { sortBy: field, sortDir: defaultSortDirForField(field) };
+    });
+    setPage(1);
+    clearSelection();
+  };
 
   useEffect(() => {
     loadAgents();
@@ -285,6 +344,7 @@ export function WodIvcsQueueDetailPanel({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const canGoPrev = page > 1;
   const canGoNext = page < totalPages;
+  const tableColSpan = isGlobalSearch ? 11 : 10;
 
   return (
     <Card className="p-5 space-y-4">
@@ -431,28 +491,36 @@ export function WodIvcsQueueDetailPanel({
                   />
                 )}
               </th>
-              {isGlobalSearch && <th className="px-3 py-2">Queue</th>}
-              <th className="px-3 py-2">Document #</th>
-              <th className="px-3 py-2">Customer</th>
-              <th className="px-3 py-2">Brand</th>
-              <th className="px-3 py-2">Reports</th>
-              <th className="px-3 py-2">Age</th>
-              <th className="px-3 py-2">Assignee</th>
-              <th className="px-3 py-2">Updated</th>
-              <th className="px-3 py-2">Actions</th>
+              {isGlobalSearch && (
+                <SortableTh
+                  label="Queue"
+                  field="operationalQueue"
+                  sort={sort}
+                  onSort={handleSort}
+                />
+              )}
+              <SortableTh label="Document #" field="documentNumber" sort={sort} onSort={handleSort} />
+              <SortableTh label="Customer" field="customerName" sort={sort} onSort={handleSort} />
+              <th className="px-3 py-2 text-white/60 font-medium">Brand</th>
+              <SortableTh label="NS" field="presenceNetSuite" sort={sort} onSort={handleSort} />
+              <SortableTh label="Aging" field="presenceAging" sort={sort} onSort={handleSort} />
+              <SortableTh label="Age" field="netSuiteDaysOld" sort={sort} onSort={handleSort} />
+              <SortableTh label="Assignee" field="assignedToName" sort={sort} onSort={handleSort} />
+              <SortableTh label="Updated" field="updatedAt" sort={sort} onSort={handleSort} />
+              <th className="px-3 py-2 text-white/60 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {loading && (
               <tr>
-                <td colSpan={isGlobalSearch ? 10 : 9} className="px-3 py-8 text-center text-white/50">
+                <td colSpan={tableColSpan} className="px-3 py-8 text-center text-white/50">
                   Loading orders…
                 </td>
               </tr>
             )}
             {!loading && orders.length === 0 && (
               <tr>
-                <td colSpan={isGlobalSearch ? 10 : 9} className="px-3 py-8 text-center text-white/50">
+                <td colSpan={tableColSpan} className="px-3 py-8 text-center text-white/50">
                   {isGlobalSearch
                     ? "No matching orders in active queues."
                     : "No orders in this queue match your filters."}
@@ -496,8 +564,10 @@ export function WodIvcsQueueDetailPanel({
                   <td className="px-3 py-2 text-white/70">
                     {order.isCityBeauty ? "City Beauty" : "—"}
                   </td>
-                  <td className="px-3 py-2 space-x-1 whitespace-nowrap">
+                  <td className="px-3 py-2 whitespace-nowrap">
                     <PresenceBadge label="NS" state={order.presenceNetSuite} />
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
                     <PresenceBadge label="AG" state={order.presenceAging} />
                   </td>
                   <td className="px-3 py-2">
